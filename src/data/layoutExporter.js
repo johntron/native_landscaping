@@ -1,4 +1,4 @@
-const LAYOUT_HEADER = ['id', 'botanical_name', 'x_ft', 'y_ft', 'width_ft', 'height_ft', 'growth_shape'];
+const LAYOUT_HEADER = ['id', 'botanical_name', 'x_ft', 'y_ft'];
 
 /**
  * Convert the current in-memory plants into a planting_layout.csv payload.
@@ -15,9 +15,6 @@ export function buildLayoutCsv(plants) {
       escapeCell(plant.botanicalName),
       formatNumber(plant.x),
       formatNumber(plant.y),
-      formatNumber(plant.width),
-      formatNumber(plant.height),
-      escapeCell(plant.growthShape),
     ].join(','));
   });
 

@@ -20,14 +20,14 @@ test('parses species seasonal month ranges and foliage palette', () => {
   assert.equal(plant.botanicalKey, 'malvaviscus arboreus var. drummondii');
 });
 
-test('builds plants by matching layout botanical_name to species and applies overrides', () => {
+test('builds plants by matching layout botanical_name to species dimensions and structure', () => {
   const speciesCsv = `${speciesHeader}\n`
     + 'b,Lyme grass,Elymus arenarius,11-2,4-5,,,,,white,2,2,groundcover\n'
     + 'c,Autumn sage,Salvia greggii,3-11,3-11,,,,,red,3,3,mound';
-  const layoutHeader = 'id,botanical_name,x_ft,y_ft,width_ft,height_ft,growth_shape';
+  const layoutHeader = 'id,botanical_name,x_ft,y_ft';
   const layoutCsv = `${layoutHeader}\n`
-    + 'a,Elymus arenarius,10,5,,,\n'
-    + 'b,Salvia greggii,20,6,4,4,vertical';
+    + 'a,Elymus arenarius,10,5\n'
+    + 'b,Salvia greggii,20,6';
 
   const plants = buildPlantsFromCsv(speciesCsv, layoutCsv);
 
@@ -38,9 +38,9 @@ test('builds plants by matching layout botanical_name to species and applies ove
   assert.equal(plants[0].x, 10);
   assert.equal(plants[0].y, 5);
 
-  assert.equal(plants[1].growthShape, 'vertical');
-  assert.equal(plants[1].width, 4);
-  assert.equal(plants[1].height, 4);
+  assert.equal(plants[1].growthShape, 'mound');
+  assert.equal(plants[1].width, 3);
+  assert.equal(plants[1].height, 3);
   assert.equal(plants[1].botanicalName, 'Salvia greggii');
 });
 

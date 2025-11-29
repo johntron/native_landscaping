@@ -57,11 +57,6 @@ export function parsePlantLayoutCsv(csvText) {
     speciesEpithet: (row.species_epithet || row.species || '').toLowerCase(),
     x: pickNumber(row, numberFieldAliases.x) ?? 0,
     y: pickNumber(row, numberFieldAliases.y) ?? 0,
-    width: pickNumber(row, numberFieldAliases.width),
-    height: pickNumber(row, numberFieldAliases.height),
-    growthShapeOverride: row.growth_shape || row.shape
-      ? normalizeGrowthShape(row.growth_shape || row.shape)
-      : null,
   }));
 }
 
@@ -96,19 +91,15 @@ export function buildPlantsFromCsv(speciesCsvText, layoutCsvText) {
       throw new Error(`Unknown plant "${missing}" in layout row ${placement.id}`);
     }
 
-    const width = placement.width ?? speciesEntry.width ?? 1;
-    const height = placement.height ?? speciesEntry.height ?? 1;
-    const growthShape = placement.growthShapeOverride || speciesEntry.growthShape;
-
     return {
       id: placement.id || `plant-${idx + 1}`,
       commonName: speciesEntry.commonName,
       botanicalName: speciesEntry.botanicalName,
       x: placement.x,
       y: placement.y,
-      width,
-      height,
-      growthShape,
+      width: speciesEntry.width ?? 1,
+      height: speciesEntry.height ?? 1,
+      growthShape: speciesEntry.growthShape,
       growingMonths: speciesEntry.growingMonths,
       floweringMonths: speciesEntry.floweringMonths,
       flowerColor: speciesEntry.flowerColor,

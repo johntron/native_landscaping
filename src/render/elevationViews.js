@@ -1,9 +1,11 @@
 import {
   DEFAULT_PIXELS_PER_INCH,
   ELEVATION_VIEWBOX,
-  FRONT_VIEW_BOTTOM_OFFSET_PX,
-  SIDE_VIEW_BOTTOM_OFFSET_PX,
   INCHES_PER_FOOT,
+  SOUTH_ELEVATION_BOTTOM_OFFSET_PX,
+  SOUTH_ELEVATION_LEFT_OFFSET_PX,
+  WEST_ELEVATION_BOTTOM_OFFSET_PX,
+  WEST_ELEVATION_LEFT_OFFSET_PX,
 } from '../constants.js';
 import { appendTooltip, clearSvg, createSvgElement } from './svgUtils.js';
 import { buildTooltipLines } from './tooltip.js';
@@ -15,7 +17,14 @@ import { buildTooltipLines } from './tooltip.js';
  * @param {number} pixelsPerInch
  */
 export function renderSouthElevation(svg, plantStates, pixelsPerInch = DEFAULT_PIXELS_PER_INCH) {
-  renderElevation(svg, plantStates, 'x', pixelsPerInch, FRONT_VIEW_BOTTOM_OFFSET_PX);
+  renderElevation(
+    svg,
+    plantStates,
+    'x',
+    pixelsPerInch,
+    SOUTH_ELEVATION_BOTTOM_OFFSET_PX,
+    SOUTH_ELEVATION_LEFT_OFFSET_PX
+  );
 }
 
 /**
@@ -25,16 +34,31 @@ export function renderSouthElevation(svg, plantStates, pixelsPerInch = DEFAULT_P
  * @param {number} pixelsPerInch
  */
 export function renderWestElevation(svg, plantStates, pixelsPerInch = DEFAULT_PIXELS_PER_INCH) {
-  renderElevation(svg, plantStates, 'y', pixelsPerInch, SIDE_VIEW_BOTTOM_OFFSET_PX);
+  renderElevation(
+    svg,
+    plantStates,
+    'y',
+    pixelsPerInch,
+    WEST_ELEVATION_BOTTOM_OFFSET_PX,
+    WEST_ELEVATION_LEFT_OFFSET_PX
+  );
 }
 
-function renderElevation(svg, plantStates, axisKey, pixelsPerInch, bottomOffsetPx = 0) {
+function renderElevation(
+  svg,
+  plantStates,
+  axisKey,
+  pixelsPerInch,
+  bottomOffsetPx = 0,
+  leftOffsetPx = 0
+) {
   clearSvg(svg);
   const toPixels = (feet) => feet * INCHES_PER_FOOT * pixelsPerInch;
 
   plantStates.forEach(({ plant, state }) => {
     const group = createSvgElement('g', { 'data-name': plant.commonName });
-    const cx = toPixels(axisKey === 'x' ? plant.x : plant.y);
+    const axisValue = axisKey === 'x' ? plant.x : plant.y;
+    const cx = toPixels(axisValue) + leftOffsetPx;
     const width = toPixels(plant.width);
     const height = toPixels(plant.height);
     const groundY = ELEVATION_VIEWBOX.height - bottomOffsetPx;
