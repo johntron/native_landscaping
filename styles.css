@@ -57,9 +57,10 @@ select {
 .view {
   position: relative;
   width: 100%;
-  /* Maintain a 3:2 aspect ratio using padding trick */
-  padding-top: 66.6667%;
-  background-size: cover;
+  /* Maintain a 3:2 aspect ratio matching the orthographic backgrounds */
+  aspect-ratio: 3 / 2;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
   background-position: center;
   border: 1px solid #ddd8d1;
   border-radius: 4px;

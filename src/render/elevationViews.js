@@ -1,3 +1,4 @@
+import { ELEVATION_VIEWBOX } from '../constants.js';
 import { appendTooltip, clearSvg, createSvgElement } from './svgUtils.js';
 import { buildTooltipLines } from './tooltip.js';
 
@@ -25,7 +26,7 @@ function renderElevation(svg, plantStates, axisKey) {
   plantStates.forEach(({ plant, state }) => {
     const group = createSvgElement('g', { 'data-name': plant.commonName });
     const cx = axisKey === 'x' ? plant.x : plant.y;
-    const groundY = 100;
+    const groundY = ELEVATION_VIEWBOX.height;
 
     const profile = createProfileShape(plant, state, cx, groundY);
     group.appendChild(profile);
