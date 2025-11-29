@@ -17,6 +17,13 @@
           <label for="scaleInput">Scale (px/in):</label>
           <input id="scaleInput" type="number" inputmode="decimal" step="0.01" min="0.01" />
           <input id="scaleSlider" type="range" step="0.01" min="0.01" aria-label="Scale slider" />
+          <label class="lock-toggle" for="lockToggle">
+            <input id="lockToggle" type="checkbox" checked />
+            <span class="lock-toggle__label">
+              <span class="lock-toggle__status" id="lockStatusText">Positions locked</span>
+              <span class="lock-toggle__hint">(unlock to drag plants)</span>
+            </span>
+          </label>
         </div>
         <div class="scale-indicator" id="scaleIndicator">
           <div class="scale-indicator__title">Scale reference</div>
