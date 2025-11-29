@@ -43,3 +43,23 @@ test('builds plants by matching layout botanical_name to species and applies ove
   assert.equal(plants[1].height, 4);
   assert.equal(plants[1].botanicalName, 'Salvia greggii');
 });
+
+test('parses wraparound seasonal ranges across year end', () => {
+  const csv = `${speciesHeader}\n`
+    + 'd,Seedbox,Ludwigia alternifolia,11-2,12-1,#5f7b6a,#587161,#c27f4d,#9e7b5e,yellow,2,3,mound';
+
+  const [species] = parseSpeciesCsv(csv);
+  assert.deepStrictEqual(species.growingMonths, [11, 12, 1, 2]);
+  assert.deepStrictEqual(species.floweringMonths, [12, 1]);
+});
+
+test('throws when layout references unknown species', () => {
+  const speciesCsv = `${speciesHeader}\n`
+    + 'e,Coreopsis,Coreopsis tinctoria,4-9,5-7,,,,,yellow,2,2,mound';
+  const layoutCsv = 'id,botanical_name,x_ft,y_ft\nmissing,Nonexistent plant,1,1';
+
+  assert.throws(
+    () => buildPlantsFromCsv(speciesCsv, layoutCsv),
+    /Unknown plant "nonexistent plant" in layout row missing/
+  );
+});

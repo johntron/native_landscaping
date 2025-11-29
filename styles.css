@@ -41,6 +41,23 @@ h1 {
   gap: 0.5rem;
 }
 
+.button {
+  padding: 0.45rem 0.75rem;
+  border: 1px solid #3d6b7b;
+  background-color: #4f8a9b;
+  color: #fff;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button:disabled {
+  background-color: #cfd9dc;
+  border-color: #cfd9dc;
+  color: #6b7377;
+  cursor: not-allowed;
+}
+
 .lock-toggle {
   display: inline-flex;
   align-items: center;
