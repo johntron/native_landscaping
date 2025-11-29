@@ -16,11 +16,11 @@ export const MONTH_NAMES = [
 export const DORMANT_FOLIAGE_COLOR = '#a38c61';
 
 export const PLAN_VIEWBOX = {
-  width: 120,
-  height: 80,
+  width: 800,
+  height: 600,
 };
 
 export const ELEVATION_VIEWBOX = {
-  width: 120,
-  height: 80,
+  width: 800,
+  height: 600,
 };
