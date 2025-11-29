@@ -1,17 +1,17 @@
 id,botanical_name,x_ft,y_ft,width_ft,height_ft
-beautyberry-north,Callicarpa americana,22,60,6,5
-beautyberry-east,Callicarpa americana,80,62,5.5,4.5
-coralberry-thicket,Symphoricarpos orbiculatus,34,54,5,3.5
-sumac-curve,Rhus aromatica,50,48,5,3.5
-turkscap-shade,Malvaviscus arboreus var. drummondii,28,40,3.5,2.5
-turkscap-kitchen,Malvaviscus arboreus var. drummondii,22,34,3,2.5
-frostweed-drift,Verbesina virginica,64,52,2.5,4.5
-ironweed-spire,Vernonia gigantea,74,56,2.5,5.5
-honeysuckle-obelisk,Lonicera sempervirens,92,44,2,8
-passionflower-trellis,Passiflora incarnata,78,42,3.5,6
-carex-glade,Carex blanda,40,28,1.5,1.2
-horseherb-carpet,Calyptocarpus vialis,52,24,4,0.4
-winecup-edge,Callirhoe involucrata,60,32,3,0.5
-groundsel-drift,Packera obovata,34,24,2,0.8
-blackfoot-daisy-sun,Melampodium leucanthum,70,26,2,1
-four-nerve-daisy-front,Tetraneuris scaposa,64,24,1,1
+beautyberry-north,Callicarpa americana,2.000,13.421,1.737,1.447
+beautyberry-east,Callicarpa americana,18.789,14.000,1.592,1.303
+coralberry-thicket,Symphoricarpos orbiculatus,5.474,11.684,1.447,1.013
+sumac-curve,Rhus aromatica,10.105,9.947,1.447,1.013
+turkscap-shade,Malvaviscus arboreus var. drummondii,3.737,7.632,1.013,0.724
+turkscap-kitchen,Malvaviscus arboreus var. drummondii,2.000,5.895,0.868,0.724
+frostweed-drift,Verbesina virginica,14.158,11.105,0.724,1.303
+ironweed-spire,Vernonia gigantea,17.053,12.263,0.724,1.592
+honeysuckle-obelisk,Lonicera sempervirens,22.263,8.789,0.579,2.316
+passionflower-trellis,Passiflora incarnata,18.211,8.211,1.013,1.737
+carex-glade,Carex blanda,7.211,4.158,0.435,0.347
+horseherb-carpet,Calyptocarpus vialis,10.684,3.000,1.158,0.115
+winecup-edge,Callirhoe involucrata,13.000,5.316,0.868,0.145
+groundsel-drift,Packera obovata,5.474,3.000,0.579,0.232
+blackfoot-daisy-sun,Melampodium leucanthum,15.895,3.579,0.579,0.289
+four-nerve-daisy-front,Tetraneuris scaposa,14.158,3.000,0.289,0.289

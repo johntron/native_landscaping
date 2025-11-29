@@ -27,15 +27,72 @@ h1 {
   font-size: 1.5rem;
 }
 
+.controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
 .controls {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.5rem;
 }
 
 select {
   font-size: 1rem;
   padding: 0.25rem 0.5rem;
+}
+
+#scaleInput {
+  width: 5rem;
+}
+
+#scaleSlider {
+  width: 160px;
+}
+
+.scale-indicator {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.5rem 0.75rem;
+  background-color: #fff;
+  border: 1px solid #e0dcd5;
+  border-radius: 4px;
+  min-width: 180px;
+}
+
+.scale-indicator__title {
+  font-size: 0.85rem;
+  color: #4b463e;
+}
+
+.scale-indicator__bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.scale-indicator__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.scale-indicator__line {
+  height: 6px;
+  background: linear-gradient(90deg, #3d6b7b 0%, #7eb3c2 100%);
+  border-radius: 3px;
+  min-width: 6px;
+}
+
+.scale-indicator__item span {
+  font-size: 0.8rem;
+  color: #5b4f43;
 }
 
 .data-note {

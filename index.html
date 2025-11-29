@@ -10,9 +10,31 @@
   <body>
     <header>
       <h1>Backyard Visualization</h1>
-      <div class="controls">
-        <label for="monthSelect">Select month:</label>
-        <select id="monthSelect"></select>
+      <div class="controls-row">
+        <div class="controls">
+          <label for="monthSelect">Select month:</label>
+          <select id="monthSelect"></select>
+          <label for="scaleInput">Scale (px/in):</label>
+          <input id="scaleInput" type="number" inputmode="decimal" step="0.01" min="0.01" />
+          <input id="scaleSlider" type="range" step="0.01" min="0.01" aria-label="Scale slider" />
+        </div>
+        <div class="scale-indicator" id="scaleIndicator">
+          <div class="scale-indicator__title">Scale reference</div>
+          <div class="scale-indicator__bars">
+            <div class="scale-indicator__item" data-inches="3">
+              <div class="scale-indicator__line"></div>
+              <span>3 in</span>
+            </div>
+            <div class="scale-indicator__item" data-feet="1">
+              <div class="scale-indicator__line"></div>
+              <span>1 ft</span>
+            </div>
+            <div class="scale-indicator__item" data-feet="10">
+              <div class="scale-indicator__line"></div>
+              <span>10 ft</span>
+            </div>
+          </div>
+        </div>
       </div>
       <p class="data-note">
         Plant data is fetched from plants.csv (species) and planting_layout.csv (yard layout). Run these files through a local web server to avoid
