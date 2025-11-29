@@ -189,3 +189,17 @@ When the user delegates work, here are examples of useful tasks:
 - “Add a small legend explaining colors and shapes for plants and beds.”
 - “Write unit tests for the CSV parsing and seasonal state logic (if a test
   framework is added).”
+
+---
+
+## Tooling
+
+- Tests use Node's built-in test runner: `npm test` (alias for `node --test`).
+- No external dependencies are required to execute the suite.
+
+## Important Code
+
+- `src/data/plantParser.js` parses `plants.csv` into normalized plant objects and
+  applies seasonal palettes; updates here ripple through every view.
+- `src/state/seasonalState.js` converts month selection into growth/flowering
+  flags and chosen colors that the renderers rely on.

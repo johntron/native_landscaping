@@ -1,0 +1,12 @@
+{
+  "name": "native_landscaping",
+  "version": "1.0.0",
+  "description": "Backyard seasonal visualization",
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
