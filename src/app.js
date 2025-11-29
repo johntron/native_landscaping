@@ -1,4 +1,4 @@
-import { MONTH_NAMES } from './constants.js';
+import { ELEVATION_VIEWBOX, MONTH_NAMES, PLAN_VIEWBOX } from './constants.js';
 import { fetchCsv } from './data/csvLoader.js';
 import { parsePlantsFromCsv } from './data/plantParser.js';
 import { computePlantState } from './state/seasonalState.js';
@@ -16,6 +16,8 @@ async function init() {
     southSvg: document.getElementById('frontSvg'),
     westSvg: document.getElementById('sideSvg'),
   };
+
+  configureViewBoxes(svgRefs);
 
   initMonthSelector(monthSelect, appState.month);
 
@@ -39,7 +41,19 @@ async function init() {
   };
 
   monthSelect.addEventListener('change', update);
+  window.addEventListener('resize', update);
   update();
+}
+
+function configureViewBoxes(svgRefs) {
+  const { topSvg, southSvg, westSvg } = svgRefs;
+  topSvg.setAttribute('viewBox', `0 0 ${PLAN_VIEWBOX.width} ${PLAN_VIEWBOX.height}`);
+  southSvg.setAttribute('viewBox', `0 0 ${ELEVATION_VIEWBOX.width} ${ELEVATION_VIEWBOX.height}`);
+  westSvg.setAttribute('viewBox', `0 0 ${ELEVATION_VIEWBOX.width} ${ELEVATION_VIEWBOX.height}`);
+
+  [topSvg, southSvg, westSvg].forEach((svg) => {
+    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  });
 }
 
 function initMonthSelector(selectEl, initialMonth) {

@@ -1,3 +1,4 @@
+import { PLAN_VIEWBOX } from '../constants.js';
 import { appendTooltip, clearSvg, createSvgElement } from './svgUtils.js';
 import { buildTooltipLines } from './tooltip.js';
 
@@ -13,7 +14,7 @@ export function renderTopView(svg, plantStates) {
     const group = createSvgElement('g', { 'data-name': plant.commonName });
 
     const cx = plant.x;
-    const cy = 100 - plant.y; // origin bottom-left for yard coordinates
+    const cy = PLAN_VIEWBOX.height - plant.y; // origin bottom-left for yard coordinates
     const radius = plant.width / 2;
 
     const foliage = createSvgElement('circle', {
