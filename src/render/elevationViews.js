@@ -1,4 +1,10 @@
-import { ELEVATION_VIEWBOX } from '../constants.js';
+import {
+  DEFAULT_PIXELS_PER_INCH,
+  ELEVATION_VIEWBOX,
+  FRONT_VIEW_BOTTOM_OFFSET_PX,
+  SIDE_VIEW_BOTTOM_OFFSET_PX,
+  INCHES_PER_FOOT,
+} from '../constants.js';
 import { appendTooltip, clearSvg, createSvgElement } from './svgUtils.js';
 import { buildTooltipLines } from './tooltip.js';
 
@@ -6,37 +12,49 @@ import { buildTooltipLines } from './tooltip.js';
  * South (kitchen) elevation uses the x axis of the yard as horizontal.
  * @param {SVGSVGElement} svg
  * @param {Array<{ plant: any, state: any }>} plantStates
+ * @param {number} pixelsPerInch
  */
-export function renderSouthElevation(svg, plantStates) {
-  renderElevation(svg, plantStates, 'x');
+export function renderSouthElevation(svg, plantStates, pixelsPerInch = DEFAULT_PIXELS_PER_INCH) {
+  renderElevation(svg, plantStates, 'x', pixelsPerInch, FRONT_VIEW_BOTTOM_OFFSET_PX);
 }
 
 /**
  * West (patio) elevation uses the y axis of the yard as horizontal to give depth.
  * @param {SVGSVGElement} svg
  * @param {Array<{ plant: any, state: any }>} plantStates
+ * @param {number} pixelsPerInch
  */
-export function renderWestElevation(svg, plantStates) {
-  renderElevation(svg, plantStates, 'y');
+export function renderWestElevation(svg, plantStates, pixelsPerInch = DEFAULT_PIXELS_PER_INCH) {
+  renderElevation(svg, plantStates, 'y', pixelsPerInch, SIDE_VIEW_BOTTOM_OFFSET_PX);
 }
 
-function renderElevation(svg, plantStates, axisKey) {
+function renderElevation(svg, plantStates, axisKey, pixelsPerInch, bottomOffsetPx = 0) {
   clearSvg(svg);
+  const toPixels = (feet) => feet * INCHES_PER_FOOT * pixelsPerInch;
 
   plantStates.forEach(({ plant, state }) => {
     const group = createSvgElement('g', { 'data-name': plant.commonName });
-    const cx = axisKey === 'x' ? plant.x : plant.y;
-    const groundY = ELEVATION_VIEWBOX.height;
+    const cx = toPixels(axisKey === 'x' ? plant.x : plant.y);
+    const width = toPixels(plant.width);
+    const height = toPixels(plant.height);
+    const groundY = ELEVATION_VIEWBOX.height - bottomOffsetPx;
 
-    const profile = createProfileShape(plant, state, cx, groundY);
+    const profile = createProfileShape({
+      width,
+      height,
+      growthShape: plant.growthShape,
+      fill: state.foliageColor,
+      cx,
+      groundY,
+    });
     group.appendChild(profile);
 
     if (state.flowerColor) {
       const flower = createSvgElement('ellipse', {
         cx,
-        cy: groundY - plant.height,
-        rx: Math.max(plant.width * 0.2, 0.4),
-        ry: Math.max(plant.width * 0.2, 0.4),
+        cy: groundY - height,
+        rx: Math.max(width * 0.2, 0.4),
+        ry: Math.max(width * 0.2, 0.4),
         fill: state.flowerColor,
       });
       group.appendChild(flower);
@@ -47,11 +65,8 @@ function renderElevation(svg, plantStates, axisKey) {
   });
 }
 
-function createProfileShape(plant, state, cx, groundY) {
-  const width = plant.width;
-  const height = plant.height;
-  const shape = plant.growthShape;
-  const fill = state.foliageColor;
+function createProfileShape({ width, height, growthShape, fill, cx, groundY }) {
+  const shape = growthShape;
 
   if (shape === 'vertical' || shape === 'vase' || shape === 'tree') {
     return createSvgElement('rect', {
