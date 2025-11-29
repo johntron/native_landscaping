@@ -41,6 +41,39 @@ h1 {
   gap: 0.5rem;
 }
 
+.lock-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.5rem;
+  background-color: #fff;
+  border: 1px solid #e0dcd5;
+  border-radius: 4px;
+}
+
+.lock-toggle input {
+  margin: 0;
+  width: 1rem;
+  height: 1rem;
+}
+
+.lock-toggle__label {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.lock-toggle__status {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #355a5f;
+}
+
+.lock-toggle__hint {
+  font-size: 0.78rem;
+  color: #5b4f43;
+}
+
 select {
   font-size: 1rem;
   padding: 0.25rem 0.5rem;

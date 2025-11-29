@@ -4,11 +4,13 @@ import { buildPlantsFromCsv } from './data/plantParser.js';
 import { computePlantState } from './state/seasonalState.js';
 import { renderViews } from './render/renderViews.js';
 import { configureViews } from './render/viewConfig.js';
+import { createPlantDragController } from './interaction/dragController.js';
 
 const appState = {
   plants: [],
   month: new Date().getMonth() + 1,
   pixelsPerInch: DEFAULT_PIXELS_PER_INCH,
+  positionsLocked: true,
 };
 
 async function init() {
@@ -26,6 +28,8 @@ async function init() {
     southView: document.getElementById('frontView'),
     westView: document.getElementById('sideView'),
   };
+  const lockToggle = document.getElementById('lockToggle');
+  const lockStatusText = document.getElementById('lockStatusText');
 
   configureViews({ svgRefs, containerRefs });
 
@@ -38,6 +42,25 @@ async function init() {
     render();
   };
   initScaleControls(scaleInput, scaleSlider, applyScale);
+
+  const dragController = createPlantDragController({
+    svg: svgRefs.topSvg,
+    getPlants: () => appState.plants,
+    getPixelsPerInch: () => appState.pixelsPerInch,
+    onPositionsChange: () => render(),
+  });
+
+  const applyLockState = (locked) => {
+    appState.positionsLocked = locked;
+    dragController.setLocked(locked);
+    updateLockStatus(lockStatusText, locked);
+  };
+
+  if (lockToggle) {
+    lockToggle.checked = true;
+    lockToggle.addEventListener('change', (e) => applyLockState(e.target.checked));
+  }
+  applyLockState(true);
 
   try {
     const [speciesCsv, layoutCsv] = await Promise.all([
@@ -142,6 +165,11 @@ function clampScaleValue(value) {
 
 function formatScaleValue(value) {
   return value.toFixed(3);
+}
+
+function updateLockStatus(labelEl, locked) {
+  if (!labelEl) return;
+  labelEl.textContent = locked ? 'Positions locked' : 'Drag to move plants';
 }
 
 function resolveInches(item) {
