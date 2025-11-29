@@ -1,5 +1,7 @@
 import { parseCsv } from './csvLoader.js';
 
+const DEFAULT_LEAF_COLOR = '#6b8e23';
+
 const numberFieldAliases = {
   x: ['x_ft', 'x'],
   y: ['y_ft', 'y'],
@@ -7,28 +9,26 @@ const numberFieldAliases = {
   height: ['height_ft', 'height'],
 };
 
-const DEFAULT_LEAF_COLOR = '#6b8e23';
-
 /**
- * Convert CSV text into a normalised list of plant objects ready for state calculations.
- * The parser tolerates both the original column names and the newer AGENTS.md schema.
+ * Parse species-level data (no coordinates) from CSV.
  * @param {string} csvText
  */
-export function parsePlantsFromCsv(csvText) {
+export function parseSpeciesCsv(csvText) {
   const rows = parseCsv(csvText);
   return rows.map((row, idx) => {
+    const botanicalName = row.botanical_name || row.botanicalName || '';
+    const normalizedBotanicalName = normalizeBotanicalName(botanicalName);
+    const speciesEpithet = (row.species_epithet || deriveSpeciesEpithet(botanicalName) || '').toLowerCase();
     const baseLeaf = row.leafColor || row.foliage_color_summer || DEFAULT_LEAF_COLOR;
-    const id = row.id || row.name || `plant-${idx + 1}`;
+    const id = row.id || normalizedBotanicalName || speciesEpithet || `species-${idx + 1}`;
     const commonName = row.common_name || row.name || id;
 
     return {
       id,
+      speciesEpithet,
+      botanicalKey: normalizedBotanicalName,
       commonName,
-      botanicalName: row.botanical_name || row.botanicalName || '',
-      x: pickNumber(row, numberFieldAliases.x) ?? 0,
-      y: pickNumber(row, numberFieldAliases.y) ?? 0,
-      width: pickNumber(row, numberFieldAliases.width) ?? 1,
-      height: pickNumber(row, numberFieldAliases.height) ?? 1,
+      botanicalName,
       growthShape: normalizeGrowthShape(row.growth_shape || row.shape),
       growingMonths: parseMonthField(row.growing_season_months, row.growthStart, row.growthEnd),
       floweringMonths: parseMonthField(row.flowering_season_months, row.flowerStart, row.flowerEnd),
@@ -39,6 +39,85 @@ export function parsePlantsFromCsv(csvText) {
       sunPref: row.sun_pref || row.sunPref || '',
       waterPref: row.water_pref || row.waterPref || '',
       soilPref: row.soil_pref || row.soilPref || '',
+      width: pickNumber(row, numberFieldAliases.width),
+      height: pickNumber(row, numberFieldAliases.height),
+    };
+  });
+}
+
+/**
+ * Parse the yard layout CSV that references species by epithet.
+ * @param {string} csvText
+ */
+export function parsePlantLayoutCsv(csvText) {
+  const rows = parseCsv(csvText);
+  return rows.map((row, idx) => ({
+    id: row.id || row.name || `plant-${idx + 1}`,
+    botanicalKey: normalizeBotanicalName(row.botanical_name || row.botanicalName || ''),
+    speciesEpithet: (row.species_epithet || row.species || '').toLowerCase(),
+    x: pickNumber(row, numberFieldAliases.x) ?? 0,
+    y: pickNumber(row, numberFieldAliases.y) ?? 0,
+    width: pickNumber(row, numberFieldAliases.width),
+    height: pickNumber(row, numberFieldAliases.height),
+    growthShapeOverride: row.growth_shape || row.shape
+      ? normalizeGrowthShape(row.growth_shape || row.shape)
+      : null,
+  }));
+}
+
+/**
+ * Merge species data with per-plant layout rows into renderable plant instances.
+ * @param {string} speciesCsvText
+ * @param {string} layoutCsvText
+ */
+export function buildPlantsFromCsv(speciesCsvText, layoutCsvText) {
+  const species = parseSpeciesCsv(speciesCsvText);
+  const layout = parsePlantLayoutCsv(layoutCsvText);
+
+  const speciesByEpithet = new Map();
+  const speciesByBotanical = new Map();
+  species.forEach((entry) => {
+    if (entry.speciesEpithet) speciesByEpithet.set(entry.speciesEpithet, entry);
+    if (entry.botanicalKey) speciesByBotanical.set(entry.botanicalKey, entry);
+  });
+
+  return layout.map((placement, idx) => {
+    const botanicalKey = placement.botanicalKey || (placement.speciesEpithet ? null : '');
+    if (!botanicalKey && !placement.speciesEpithet) {
+      throw new Error(`Layout row ${placement.id} is missing botanical_name`);
+    }
+
+    const speciesEntry =
+      (botanicalKey ? speciesByBotanical.get(botanicalKey) : null) ||
+      (placement.speciesEpithet ? speciesByEpithet.get(placement.speciesEpithet) : null);
+
+    if (!speciesEntry) {
+      const missing = botanicalKey || placement.speciesEpithet || 'unknown';
+      throw new Error(`Unknown plant "${missing}" in layout row ${placement.id}`);
+    }
+
+    const width = placement.width ?? speciesEntry.width ?? 1;
+    const height = placement.height ?? speciesEntry.height ?? 1;
+    const growthShape = placement.growthShapeOverride || speciesEntry.growthShape;
+
+    return {
+      id: placement.id || `plant-${idx + 1}`,
+      commonName: speciesEntry.commonName,
+      botanicalName: speciesEntry.botanicalName,
+      x: placement.x,
+      y: placement.y,
+      width,
+      height,
+      growthShape,
+      growingMonths: speciesEntry.growingMonths,
+      floweringMonths: speciesEntry.floweringMonths,
+      flowerColor: speciesEntry.flowerColor,
+      leafColor: speciesEntry.leafColor,
+      foliageColors: speciesEntry.foliageColors,
+      dormantColor: speciesEntry.dormantColor,
+      sunPref: speciesEntry.sunPref,
+      waterPref: speciesEntry.waterPref,
+      soilPref: speciesEntry.soilPref,
     };
   });
 }
@@ -123,4 +202,14 @@ function clampMonth(month) {
   if (month < 1) return 1;
   if (month > 12) return 12;
   return month;
+}
+
+function deriveSpeciesEpithet(botanicalName) {
+  if (!botanicalName) return '';
+  const parts = botanicalName.trim().split(/\s+/);
+  return parts[parts.length - 1];
+}
+
+function normalizeBotanicalName(name) {
+  return (name || '').trim().toLowerCase();
 }
