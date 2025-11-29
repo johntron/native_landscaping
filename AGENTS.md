@@ -32,7 +32,8 @@ The priority is **ecological legibility and usability**, not UI flashiness.
   - `index.html` – main page and layout shell.
   - `styles.css` – layout, backgrounds, and visual styling.
   - `script.js` – CSV loading, state management, SVG rendering.
-  - `plants.csv` – primary data source for plant instances.
+  - `plants.csv` – species database (botanical + seasonal attributes).
+  - `planting_layout.csv` – per-plant placements referencing `botanical_name`.
   - Background images (PNG/SVG) for:
     - top-down view,
     - south elevation,
@@ -76,7 +77,7 @@ document the commands in this file under a new “Tooling” section.
 
 ### 2. Plant Data (CSV)
 
-`plants.csv` should remain the **single source of truth** for plants.
+`plants.csv` is the **single source of truth** for species attributes; `planting_layout.csv` holds per-plant coordinates and optional overrides and should reference species by full `botanical_name`.
 
 Each row describes one plant clump or individual:
 
@@ -107,7 +108,7 @@ The rendering must be **parametric**: plant visuals are derived from data.
 
 For every selected month:
 
-1. Parse `plants.csv` to an in-memory model.
+1. Parse `plants.csv` (species) and `planting_layout.csv` (placements) to an in-memory model.
 2. For each plant:
    - Compute whether it is in active growth.
    - Compute whether it is flowering.

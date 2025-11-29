@@ -1,9 +1,9 @@
-name,x,y,width,height,shape,growthStart,growthEnd,flowerStart,flowerEnd,flowerColor,leafColor,sunPref,waterPref,soilPref
-Oak Tree,20,80,8,30,tree,3,11,4,4,yellow,green,full-sun,medium,loamy
-Maple Tree,80,80,10,35,tree,3,11,3,4,yellowgreen,green,full-sun,medium,clay
-Rose Bush,40,50,5,10,bush,3,11,5,9,red,darkgreen,full-sun,medium,loamy
-Lavender,70,40,4,8,shrub,4,10,6,8,purple,#8f9779,full-sun,low,sandy
-Sunflower Patch,50,20,6,12,flower,4,9,7,9,yellow,green,full-sun,medium,loamy
-Hydrangea,30,30,6,8,bush,3,10,6,9,pink,green,partial-shade,high,acidic
-Hostas,15,40,4,2,groundcover,4,10,6,8,purple,green,partial-shade,medium,loamy
-Cactus,90,20,3,6,succulent,3,11,5,6,white,green,full-sun,low,sandy
+id,common_name,botanical_name,growth_shape,growing_season_months,flowering_season_months,flower_color,foliage_color_spring,foliage_color_summer,foliage_color_fall,foliage_color_winter,sun_pref,water_pref,soil_pref,width_ft,height_ft
+post-oak,Post oak,Quercus stellata,vertical,3-11,3-4,#d2b55b,#6f854f,#5e7745,#c58f4f,#b08a63,full-sun,medium,clay,20,35
+cedar-elm,Cedar elm,Ulmus crassifolia,vertical,3-11,4-4,#d8c96a,#6b8f55,#5f7c44,#c49c5a,#ad916a,full-sun,medium,clay,18,30
+little-bluestem,Little bluestem,Schizachyrium scoparium,grass,3-11,8-10,#c7a46f,#6f94a6,#4a6b79,#c48356,#bda07a,full-sun,low,loamy,4,4
+autumn-sage,Autumn sage,Salvia greggii,mound,3-11,3-11,#d73c3c,#6fa45f,#4f8c4d,#b66a46,#7a5a43,full-sun,low,loamy,3,3
+inland-sea-oats,Inland sea oats,Chasmanthium latifolium,arch,3-11,7-9,#c1924f,#6a8b67,#4f7353,#c19d5a,#b89a73,part-sun,medium,clay,3,4.5
+turkscap,Turk's cap,Malvaviscus arboreus var. drummondii,vase,3-12,5-11,#d4413f,#6fa45f,#4f8c4d,#9b6b45,#6d5a42,part-sun,medium,clay,4,6
+blue-mistflower,Blue mistflower,Conoclinium coelestinum,mound,3-11,7-10,#9b8de0,#6fa4c4,#4f7c9d,#9d86c4,#7b7596,part-sun,medium,loamy,3,2.5
+frogfruit,Frogfruit,Phyla nodiflora,creeping,3-11,4-10,#d8d5c2,#6d8d68,#5a7a5a,#b19a78,#8a7f6c,full-sun,low,sandy,4,1

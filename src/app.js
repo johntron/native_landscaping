@@ -1,8 +1,9 @@
-import { ELEVATION_VIEWBOX, MONTH_NAMES, PLAN_VIEWBOX } from './constants.js';
+import { MONTH_NAMES } from './constants.js';
 import { fetchCsv } from './data/csvLoader.js';
-import { parsePlantsFromCsv } from './data/plantParser.js';
+import { buildPlantsFromCsv } from './data/plantParser.js';
 import { computePlantState } from './state/seasonalState.js';
 import { renderViews } from './render/renderViews.js';
+import { configureViews } from './render/viewConfig.js';
 
 const appState = {
   plants: [],
@@ -16,16 +17,24 @@ async function init() {
     southSvg: document.getElementById('frontSvg'),
     westSvg: document.getElementById('sideSvg'),
   };
+  const containerRefs = {
+    topView: document.getElementById('topView'),
+    southView: document.getElementById('frontView'),
+    westView: document.getElementById('sideView'),
+  };
 
-  configureViewBoxes(svgRefs);
+  configureViews({ svgRefs, containerRefs });
 
   initMonthSelector(monthSelect, appState.month);
 
   try {
-    const csvText = await fetchCsv(new URL('plants.csv', document.baseURI));
-    appState.plants = parsePlantsFromCsv(csvText);
+    const [speciesCsv, layoutCsv] = await Promise.all([
+      fetchCsv(new URL('plants.csv', document.baseURI)),
+      fetchCsv(new URL('planting_layout.csv', document.baseURI)),
+    ]);
+    appState.plants = buildPlantsFromCsv(speciesCsv, layoutCsv);
   } catch (err) {
-    showLoadError('Unable to load plants data.');
+    showLoadError('Unable to load plants and layout data.');
     console.error(err);
     return;
   }
@@ -43,17 +52,6 @@ async function init() {
   monthSelect.addEventListener('change', update);
   window.addEventListener('resize', update);
   update();
-}
-
-function configureViewBoxes(svgRefs) {
-  const { topSvg, southSvg, westSvg } = svgRefs;
-  topSvg.setAttribute('viewBox', `0 0 ${PLAN_VIEWBOX.width} ${PLAN_VIEWBOX.height}`);
-  southSvg.setAttribute('viewBox', `0 0 ${ELEVATION_VIEWBOX.width} ${ELEVATION_VIEWBOX.height}`);
-  westSvg.setAttribute('viewBox', `0 0 ${ELEVATION_VIEWBOX.width} ${ELEVATION_VIEWBOX.height}`);
-
-  [topSvg, southSvg, westSvg].forEach((svg) => {
-    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-  });
 }
 
 function initMonthSelector(selectEl, initialMonth) {
@@ -74,7 +72,7 @@ function showLoadError(message) {
   }
   const banner = document.createElement('div');
   banner.className = 'error-banner';
-  banner.textContent = `${message} Please serve plants.csv over HTTP (for example, via \`npx serve\`).`;
+  banner.textContent = `${message} Please serve plants.csv and planting_layout.csv over HTTP (for example, via \`npx serve\`).`;
   const main = document.querySelector('main');
   if (main) {
     main.insertAdjacentElement('beforebegin', banner);

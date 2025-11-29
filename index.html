@@ -15,21 +15,21 @@
         <select id="monthSelect"></select>
       </div>
       <p class="data-note">
-        Plant data is fetched from the external plants.csv file. Run these files through a local web server to avoid
+        Plant data is fetched from plants.csv (species) and planting_layout.csv (yard layout). Run these files through a local web server to avoid
         browser restrictions when testing (for example, <code>npx serve</code>).
       </p>
     </header>
     <!-- The views container holds the top‑down, front and side perspectives. -->
     <main class="views">
       <div class="view" id="topView">
-        <!-- The SVG overlay uses a fixed viewBox measured in yard units (0‑100). -->
-        <svg id="topSvg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"></svg>
+        <!-- The SVG overlay uses a fixed viewBox measured in yard units; configured at runtime from constants. -->
+        <svg id="topSvg" xmlns="http://www.w3.org/2000/svg"></svg>
       </div>
       <div class="view" id="frontView">
-        <svg id="frontSvg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"></svg>
+        <svg id="frontSvg" xmlns="http://www.w3.org/2000/svg"></svg>
       </div>
       <div class="view" id="sideView">
-        <svg id="sideSvg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"></svg>
+        <svg id="sideSvg" xmlns="http://www.w3.org/2000/svg"></svg>
       </div>
     </main>
     <!-- The application logic lives in the ES module entry point. -->
