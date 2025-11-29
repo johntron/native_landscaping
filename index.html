@@ -43,15 +43,24 @@
     </header>
     <!-- The views container holds the top‑down, front and side perspectives. -->
     <main class="views">
-      <div class="view" id="topView">
-        <!-- The SVG overlay uses a fixed viewBox measured in yard units; configured at runtime from constants. -->
-        <svg id="topSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="view-panel">
+        <div class="view" id="topView">
+          <!-- The SVG overlay uses a fixed viewBox measured in yard units; configured at runtime from constants. -->
+          <svg id="topSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+        </div>
+        <p class="view-label">Top-down plan</p>
       </div>
-      <div class="view" id="frontView">
-        <svg id="frontSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="view-panel">
+        <div class="view" id="frontView">
+          <svg id="frontSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+        </div>
+        <p class="view-label">South elevation</p>
       </div>
-      <div class="view" id="sideView">
-        <svg id="sideSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="view-panel">
+        <div class="view" id="sideView">
+          <svg id="sideSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+        </div>
+        <p class="view-label">West elevation</p>
       </div>
     </main>
     <!-- The application logic lives in the ES module entry point. -->
