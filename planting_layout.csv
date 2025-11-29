@@ -1,17 +1,25 @@
-id,botanical_name,x_ft,y_ft,width_ft,height_ft,growth_shape
-beautyberry-north,Callicarpa americana,11.665,15.631,1.737,1.447,arch
-beautyberry-east,Callicarpa americana,4.599,7.496,1.592,1.303,arch
-coralberry-thicket,Symphoricarpos orbiculatus,8.062,14.979,1.447,1.013,mound
-sumac-curve,Rhus aromatica,3.727,14.821,1.447,1.013,mound
-turkscap-shade,Malvaviscus arboreus var. drummondii,6.188,11.514,1.013,0.724,vase
-turkscap-kitchen,Malvaviscus arboreus var. drummondii,5.468,4.783,0.868,0.724,vase
-frostweed-drift,Verbesina virginica,6.872,15.998,0.724,1.303,vertical
-ironweed-spire,Vernonia gigantea,3.476,5.714,0.724,1.592,vase
-honeysuckle-obelisk,Lonicera sempervirens,15.597,17.033,0.579,2.316,vertical
-passionflower-trellis,Passiflora incarnata,5.395,12.419,1.013,1.737,arch
-carex-glade,Carex blanda,3.196,9.300,0.435,0.347,grass
-horseherb-carpet,Calyptocarpus vialis,13.133,17.094,1.158,0.115,creeping
-winecup-edge,Callirhoe involucrata,4.647,10.056,0.868,0.145,creeping
-groundsel-drift,Packera obovata,14.015,15.443,0.579,0.232,mound
-blackfoot-daisy-sun,Melampodium leucanthum,9.591,15.911,0.579,0.289,mound
-four-nerve-daisy-front,Tetraneuris scaposa,4.068,4.332,0.289,0.289,mound
+id,botanical_name,x_ft,y_ft
+beautyberry-north,Callicarpa americana,13.385,15.131
+beautyberry-east,Callicarpa americana,5.111,5.693
+turkscap-shade,Malvaviscus arboreus var. drummondii,6.732,11.391
+turkscap-kitchen,Malvaviscus arboreus var. drummondii,10.239,16.293
+frostweed-drift,Verbesina virginica,7.935,16.408
+honeysuckle-obelisk,Lonicera sempervirens,16.095,17.889
+passionflower-trellis,Passiflora incarnata,4.035,9.418
+carex-glade,Carex blanda,2.966,16.145
+carex-glade2,Carex blanda,2.890,14.243
+carex-glade3,Carex blanda,6.222,16.636
+carex-glade,Carex blanda,3.075,9.458
+horseherb-carpet,Calyptocarpus vialis,6.028,14.388
+horseherb-carpet2,Calyptocarpus vialis,14.776,17.471
+horseherb-carpet3,Calyptocarpus vialis,3.325,11.645
+horseherb-carpet4,Calyptocarpus vialis,4.715,15.178
+horseherb-carpet5,Calyptocarpus vialis,10.607,14.785
+horseherb-carpet6,Calyptocarpus vialis,10.607,14.785
+horseherb-carpet7,Calyptocarpus vialis,10.607,14.785
+winecup-edge,Callirhoe involucrata,8.560,14.657
+winecup-edge2,Callirhoe involucrata,15.120,14.550
+winecup-edge3,Callirhoe involucrata,6.863,8.720
+winecup-edge4,Callirhoe involucrata,16.516,15.711
+groundsel-drift,Packera obovata,7.468,13.611
+four-nerve-daisy-front,Tetraneuris scaposa,2.888,3.369
