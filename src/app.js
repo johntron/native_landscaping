@@ -1,6 +1,7 @@
 import { DEFAULT_PIXELS_PER_INCH, MONTH_NAMES, SCALE_LIMITS } from './constants.js';
 import { fetchCsv } from './data/csvLoader.js';
 import { buildPlantsFromCsv } from './data/plantParser.js';
+import { buildLayoutCsv } from './data/layoutExporter.js';
 import { computePlantState } from './state/seasonalState.js';
 import { renderViews } from './render/renderViews.js';
 import { configureViews } from './render/viewConfig.js';
@@ -30,6 +31,7 @@ async function init() {
   };
   const lockToggle = document.getElementById('lockToggle');
   const lockStatusText = document.getElementById('lockStatusText');
+  const exportButton = document.getElementById('exportLayoutBtn');
 
   configureViews({ svgRefs, containerRefs });
 
@@ -61,6 +63,9 @@ async function init() {
     lockToggle.addEventListener('change', (e) => applyLockState(e.target.checked));
   }
   applyLockState(true);
+  if (exportButton) {
+    exportButton.disabled = true;
+  }
 
   try {
     const [speciesCsv, layoutCsv] = await Promise.all([
@@ -68,6 +73,10 @@ async function init() {
       fetchCsv(new URL('planting_layout.csv', document.baseURI)),
     ]);
     appState.plants = buildPlantsFromCsv(speciesCsv, layoutCsv);
+    if (exportButton) {
+      exportButton.disabled = false;
+      exportButton.addEventListener('click', () => downloadLayoutCsv(appState.plants));
+    }
   } catch (err) {
     showLoadError('Unable to load plants and layout data.');
     console.error(err);
@@ -184,6 +193,21 @@ function resolveInches(item) {
     return Number.isFinite(val) ? val * 12 : null;
   }
   return null;
+}
+
+function downloadLayoutCsv(plants) {
+  if (!plants?.length) return;
+  const csv = buildLayoutCsv(plants);
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = 'planting_layout.csv';
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 if (document.readyState === 'loading') {
