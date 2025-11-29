@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Backyard Visualization</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- The main stylesheet defines the page layout and backgrounds for each view. -->
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Backyard Visualization</h1>
+      <div class="controls">
+        <label for="monthSelect">Select month:</label>
+        <select id="monthSelect"></select>
+      </div>
+      <p class="data-note">
+        Plant data is fetched from the external plants.csv file. Run these files through a local web server to avoid
+        browser restrictions when testing (for example, <code>npx serve</code>).
+      </p>
+    </header>
+    <!-- The views container holds the top‑down, front and side perspectives. -->
+    <main class="views">
+      <div class="view" id="topView">
+        <!-- The SVG overlay uses a fixed viewBox measured in yard units (0‑100). -->
+        <svg id="topSvg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"></svg>
+      </div>
+      <div class="view" id="frontView">
+        <svg id="frontSvg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"></svg>
+      </div>
+      <div class="view" id="sideView">
+        <svg id="sideSvg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"></svg>
+      </div>
+    </main>
+    <!-- The application logic lives in the separate JavaScript file. -->
+    <script src="script.js"></script>
+  </body>
+</html>

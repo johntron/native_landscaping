@@ -1,0 +1,108 @@
+/*
+ * Global styles for the backyard visualization.
+ *
+ * The page uses a simple flex and grid layout so the three views stay side‑by‑side
+ * on larger screens but stack neatly on narrow screens. Each view has a
+ * background image specified in the HTML via a class. The SVG overlays
+ * positioned absolutely within each view scale to fit the underlying
+ * background images thanks to the viewBox attribute in the HTML.
+ */
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: sans-serif;
+  background-color: #faf8f6;
+  color: #333;
+}
+
+header {
+  padding: 1rem;
+  background-color: #f5f1eb;
+  border-bottom: 1px solid #e0dcd5;
+}
+
+h1 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.5rem;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+select {
+  font-size: 1rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.data-note {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  color: #5b4f43;
+  max-width: 40rem;
+}
+
+/* Grid layout for the three perspectives */
+.views {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 0.75rem;
+  padding: 0.75rem;
+}
+
+/* Individual view containers share common styles. */
+.view {
+  position: relative;
+  width: 100%;
+  /* Maintain a 3:2 aspect ratio using padding trick */
+  padding-top: 66.6667%;
+  background-size: cover;
+  background-position: center;
+  border: 1px solid #ddd8d1;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+/* Assign each background image to its corresponding view. */
+#topView {
+  background-image: url('img/top_view.png');
+}
+
+#frontView {
+  background-image: url('img/front_view.png');
+}
+
+#sideView {
+  background-image: url('img/side_view.png');
+}
+
+/* The SVG overlays fill their parent divs and are layered on top. */
+.view svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  /* enable pointer events on shapes (groups) so the title attribute triggers the native tooltip */
+  pointer-events: all;
+}
+
+/* Optional styling for tooltip text displayed via title attributes on SVG elements. */
+.view svg [data-name]:hover {
+  cursor: pointer;
+}
+
+/* Lightweight banner for unrecoverable data loading errors. */
+.error-banner {
+  margin: 0.75rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #d36b5c;
+  background-color: #fff4f2;
+  color: #7c2116;
+  border-radius: 4px;
+  font-weight: 600;
+}

@@ -1,0 +1,9 @@
+name,x,y,width,height,shape,growthStart,growthEnd,flowerStart,flowerEnd,flowerColor,leafColor,sunPref,waterPref,soilPref
+Oak Tree,20,80,8,30,tree,3,11,4,4,yellow,green,full-sun,medium,loamy
+Maple Tree,80,80,10,35,tree,3,11,3,4,yellowgreen,green,full-sun,medium,clay
+Rose Bush,40,50,5,10,bush,3,11,5,9,red,darkgreen,full-sun,medium,loamy
+Lavender,70,40,4,8,shrub,4,10,6,8,purple,#8f9779,full-sun,low,sandy
+Sunflower Patch,50,20,6,12,flower,4,9,7,9,yellow,green,full-sun,medium,loamy
+Hydrangea,30,30,6,8,bush,3,10,6,9,pink,green,partial-shade,high,acidic
+Hostas,15,40,4,2,groundcover,4,10,6,8,purple,green,partial-shade,medium,loamy
+Cactus,90,20,3,6,succulent,3,11,5,6,white,green,full-sun,low,sandy
