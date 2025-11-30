@@ -16,7 +16,8 @@ const appState = {
 };
 
 async function init() {
-  const monthSelect = document.getElementById('monthSelect');
+  const monthSlider = document.getElementById('monthSlider');
+  const monthReadout = document.getElementById('monthReadout');
   const scaleInput = document.getElementById('scaleInput');
   const scaleSlider = document.getElementById('scaleSlider');
   const scaleIndicator = document.getElementById('scaleIndicator');
@@ -37,7 +38,7 @@ async function init() {
 
   configureViews({ svgRefs, containerRefs });
 
-  initMonthSelector(monthSelect, appState.month);
+  initMonthSlider(monthSlider, monthReadout, appState.month);
 
   let render = () => {};
   const applyScale = (value) => {
@@ -93,7 +94,7 @@ async function init() {
   }
 
   render = () => {
-    const month = parseInt(monthSelect.value, 10);
+    const month = parseInt(monthSlider.value, 10);
     appState.month = month;
     const plantStates = appState.plants.map((plant) => ({
       plant,
@@ -104,20 +105,28 @@ async function init() {
     });
   };
 
-  monthSelect.addEventListener('change', render);
+  monthSlider.addEventListener('input', (e) => {
+    const month = clampMonthValue(e.target.value);
+    if (month === null) return;
+    monthSlider.value = String(month);
+    monthReadout.textContent = MONTH_NAMES[month - 1] || '';
+    render();
+  });
   window.addEventListener('resize', render);
   updateScaleIndicator(scaleIndicator, appState.pixelsPerInch);
   render();
 }
 
-function initMonthSelector(selectEl, initialMonth) {
-  MONTH_NAMES.forEach((name, idx) => {
-    const option = document.createElement('option');
-    option.value = String(idx + 1);
-    option.textContent = name;
-    selectEl.appendChild(option);
-  });
-  selectEl.value = String(initialMonth);
+function initMonthSlider(sliderEl, readoutEl, initialMonth) {
+  if (!sliderEl) return;
+  sliderEl.min = '1';
+  sliderEl.max = '12';
+  sliderEl.step = '1';
+  const clamped = clampMonthValue(initialMonth);
+  sliderEl.value = String(clamped);
+  if (readoutEl) {
+    readoutEl.textContent = MONTH_NAMES[clamped - 1] || '';
+  }
 }
 
 function initScaleControls(inputEl, sliderEl, onChange) {
@@ -181,6 +190,14 @@ function clampScaleValue(value) {
   if (value < min) return min;
   if (value > max) return max;
   return value;
+}
+
+function clampMonthValue(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  if (parsed < 1) return 1;
+  if (parsed > 12) return 12;
+  return Math.round(parsed);
 }
 
 function formatScaleValue(value) {
