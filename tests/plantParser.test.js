@@ -63,3 +63,32 @@ test('throws when layout references unknown species', () => {
     /Unknown plant "nonexistent plant" in layout row missing/
   );
 });
+
+test('parses inflorescence metadata and carries it through plant instances', () => {
+  const speciesCsv = `${speciesHeader},inflorescence,flower_count_hint,flower_zone\n`
+    + 'f,Goldenrod,solidago speciosa,3-10,8-10,,,,,yellow,3,5,vertical,spike,18,upper\n'
+    + 'g,Gregg\'s mistflower,Conoclinium greggii,3-11,6-10,,,,,purple,3,2,mound,umbel,25,mid\n'
+    + 'h,Maximilian sunflower,Helianthus maximiliani,3-11,8-10,,,,,yellow,3,6,vertical,panicle,30,full';
+
+  const layoutCsv = 'id,botanical_name,x_ft,y_ft\n'
+    + 'plant-f,solidago speciosa,1,1\n'
+    + 'plant-g,Conoclinium greggii,2,2\n'
+    + 'plant-h,Helianthus maximiliani,3,3';
+
+  const [spec1, spec2, spec3] = parseSpeciesCsv(speciesCsv);
+  assert.equal(spec1.inflorescence, 'spike/raceme');
+  assert.equal(spec1.flowerCountHint, 18);
+  assert.equal(spec1.flowerZone, 'upper');
+
+  assert.equal(spec2.inflorescence, 'umbel/head');
+  assert.equal(spec2.flowerCountHint, 25);
+  assert.equal(spec2.flowerZone, 'mid');
+
+  assert.equal(spec3.inflorescence, 'panicle/spray');
+  assert.equal(spec3.flowerZone, 'full');
+
+  const plants = buildPlantsFromCsv(speciesCsv, layoutCsv);
+  assert.equal(plants[0].inflorescence, 'spike/raceme');
+  assert.equal(plants[1].flowerCountHint, 25);
+  assert.equal(plants[2].flowerZone, 'full');
+});

@@ -20,6 +20,9 @@ export function parseSpeciesCsv(csvText) {
     const normalizedBotanicalName = normalizeBotanicalName(botanicalName);
     const speciesEpithet = (row.species_epithet || deriveSpeciesEpithet(botanicalName) || '').toLowerCase();
     const baseLeaf = row.leafColor || row.foliage_color_summer || DEFAULT_LEAF_COLOR;
+    const flowerCountHint = pickNumber(row, ['flower_count_hint', 'flowerCountHint']);
+    const flowerZone = normalizeFlowerZone(row.flower_zone || row.flowerZone);
+    const inflorescence = normalizeInflorescence(row.inflorescence || row.inflorescence_type || row.inflorescenceType);
     const id = row.id || normalizedBotanicalName || speciesEpithet || `species-${idx + 1}`;
     const commonName = row.common_name || row.name || id;
 
@@ -41,6 +44,9 @@ export function parseSpeciesCsv(csvText) {
       soilPref: row.soil_pref || row.soilPref || '',
       width: pickNumber(row, numberFieldAliases.width),
       height: pickNumber(row, numberFieldAliases.height),
+      inflorescence,
+      flowerCountHint,
+      flowerZone,
     };
   });
 }
@@ -109,6 +115,9 @@ export function buildPlantsFromCsv(speciesCsvText, layoutCsvText) {
       sunPref: speciesEntry.sunPref,
       waterPref: speciesEntry.waterPref,
       soilPref: speciesEntry.soilPref,
+      inflorescence: speciesEntry.inflorescence,
+      flowerCountHint: speciesEntry.flowerCountHint,
+      flowerZone: speciesEntry.flowerZone,
     };
   });
 }
@@ -203,4 +212,28 @@ function deriveSpeciesEpithet(botanicalName) {
 
 function normalizeBotanicalName(name) {
   return (name || '').trim().toLowerCase();
+}
+
+function normalizeFlowerZone(value) {
+  const v = (value || '').toLowerCase();
+  if (v === 'upper' || v === 'mid' || v === 'full') return v;
+  return '';
+}
+
+function normalizeInflorescence(value) {
+  const v = (value || '').toLowerCase();
+  if (!v) return '';
+  const aliases = {
+    'umbel': 'umbel/head',
+    'head': 'umbel/head',
+    'umbel/head': 'umbel/head',
+    'panicle': 'panicle/spray',
+    'spray': 'panicle/spray',
+    'panicle/spray': 'panicle/spray',
+    'spike': 'spike/raceme',
+    'raceme': 'spike/raceme',
+    'spike/raceme': 'spike/raceme',
+    'scatter': 'scatter',
+  };
+  return aliases[v] || v;
 }

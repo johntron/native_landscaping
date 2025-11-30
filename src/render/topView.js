@@ -2,6 +2,7 @@ import { DEFAULT_PIXELS_PER_INCH, INCHES_PER_FOOT, PLAN_VIEWBOX } from '../const
 import { makeRng, seedForPlant } from '../utils/rng.js';
 import { appendTooltip, clearSvg, createSvgElement } from './svgUtils.js';
 import { buildTooltipLines } from './tooltip.js';
+import { buildFlowerCenters } from './inflorescenceStrategies.js';
 
 /**
  * Render the plan view using wavy domed foliage silhouettes scaled to plant width.
@@ -29,13 +30,25 @@ export function renderTopView(svg, plantStates, pixelsPerInch = DEFAULT_PIXELS_P
     });
 
     if (state.flowerColor) {
-      const flower = createSvgElement('circle', {
-        cx,
-        cy,
-        r: Math.max(radius * 0.35, 0.6),
-        fill: state.flowerColor,
+      const flowerCenters = buildFlowerCenters({
+        variant: 'plan',
+        canopy: { plan: { cx, cy, radius } },
+        rng: makeRng(seedForPlant(`${plant.id}-flowers`)),
+        inflorescence: plant.inflorescence || plant.inflorescenceType || plant.inflorescence_type,
+        flowerCountHint: plant.flowerCountHint ?? plant.flower_count_hint,
+        flowerZone: plant.flowerZone || plant.flower_zone,
       });
-      group.appendChild(flower);
+      const flowerRadius = computePlanFlowerRadius(radius, flowerCenters.length);
+
+      flowerCenters.forEach((center) => {
+        const flower = createSvgElement('circle', {
+          cx: center.x,
+          cy: center.y,
+          r: flowerRadius,
+          fill: state.flowerColor,
+        });
+        group.appendChild(flower);
+      });
     }
 
     appendTooltip(group, buildTooltipLines(plant, state));
@@ -132,6 +145,12 @@ function buildSmoothPath(points) {
 
 function midpoint(a, b) {
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+
+function computePlanFlowerRadius(canopyRadius, count) {
+  if (!count) return 0;
+  const scaled = (canopyRadius * 0.35) / Math.sqrt(count);
+  return Math.max(scaled, 0.6);
 }
 
 function darkenHex(color, factor) {
