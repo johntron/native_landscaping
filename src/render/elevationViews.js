@@ -57,8 +57,19 @@ function renderElevation(
 ) {
   clearSvg(svg);
   const toPixels = (feet) => feet * INCHES_PER_FOOT * pixelsPerInch;
+  const depthKey = axisKey === 'x' ? 'y' : 'x';
+  const sortedPlantStates = [...plantStates].sort((a, b) => {
+    const depthA = a?.plant?.[depthKey] ?? 0;
+    const depthB = b?.plant?.[depthKey] ?? 0;
+    if (depthA === depthB) {
+      const heightA = a?.plant?.height ?? 0;
+      const heightB = b?.plant?.height ?? 0;
+      return heightB - heightA;
+    }
+    return depthB - depthA;
+  });
 
-  plantStates.forEach(({ plant, state }) => {
+  sortedPlantStates.forEach(({ plant, state }) => {
     const group = createSvgElement('g', { 'data-name': plant.commonName });
     const canopySeed = seedForPlant(plant.id);
     const rng = makeRng(canopySeed);
