@@ -12,6 +12,7 @@ import { appendTooltip, clearSvg, createSvgElement } from './svgUtils.js';
 import { buildTooltipLines } from './tooltip.js';
 import { buildFlowerCenters } from './inflorescenceStrategies.js';
 import { pointInPolygon } from './geometry.js';
+import { buildPlantLabel } from './labels.js';
 
 /**
  * South (kitchen) elevation uses the x axis of the yard as horizontal.
@@ -19,14 +20,20 @@ import { pointInPolygon } from './geometry.js';
  * @param {Array<{ plant: any, state: any }>} plantStates
  * @param {number} pixelsPerInch
  */
-export function renderSouthElevation(svg, plantStates, pixelsPerInch = DEFAULT_PIXELS_PER_INCH) {
+export function renderSouthElevation(
+  svg,
+  plantStates,
+  pixelsPerInch = DEFAULT_PIXELS_PER_INCH,
+  options = {}
+) {
   renderElevation(
     svg,
     plantStates,
     'x',
     pixelsPerInch,
     SOUTH_ELEVATION_BOTTOM_OFFSET_PX,
-    SOUTH_ELEVATION_LEFT_OFFSET_PX
+    SOUTH_ELEVATION_LEFT_OFFSET_PX,
+    options
   );
 }
 
@@ -36,14 +43,20 @@ export function renderSouthElevation(svg, plantStates, pixelsPerInch = DEFAULT_P
  * @param {Array<{ plant: any, state: any }>} plantStates
  * @param {number} pixelsPerInch
  */
-export function renderWestElevation(svg, plantStates, pixelsPerInch = DEFAULT_PIXELS_PER_INCH) {
+export function renderWestElevation(
+  svg,
+  plantStates,
+  pixelsPerInch = DEFAULT_PIXELS_PER_INCH,
+  options = {}
+) {
   renderElevation(
     svg,
     plantStates,
     'y',
     pixelsPerInch,
     WEST_ELEVATION_BOTTOM_OFFSET_PX,
-    WEST_ELEVATION_LEFT_OFFSET_PX
+    WEST_ELEVATION_LEFT_OFFSET_PX,
+    options
   );
 }
 
@@ -53,10 +66,12 @@ function renderElevation(
   axisKey,
   pixelsPerInch,
   bottomOffsetPx = 0,
-  leftOffsetPx = 0
+  leftOffsetPx = 0,
+  options = {}
 ) {
   clearSvg(svg);
   const toPixels = (feet) => feet * INCHES_PER_FOOT * pixelsPerInch;
+  const { showLabels = false } = options;
   const depthKey = axisKey === 'x' ? 'y' : 'x';
   const sortedPlantStates = [...plantStates].sort((a, b) => {
     const depthA = a?.plant?.[depthKey] ?? 0;
@@ -79,11 +94,12 @@ function renderElevation(
     const height = toPixels(plant.height);
     const groundY = ELEVATION_VIEWBOX.height - bottomOffsetPx;
     const profileGeometry = resolveProfileGeometry(width, height, plant.growthShape);
+    const { adjustedWidth, adjustedHeight } = profileGeometry;
     const outlinePoints = buildProfileOutlinePoints({
       cx,
       groundY,
-      width: profileGeometry.adjustedWidth,
-      height: profileGeometry.adjustedHeight,
+      width: adjustedWidth,
+      height: adjustedHeight,
       exponent: profileGeometry.exponent,
       rng: makeRng(canopySeed),
     });
@@ -103,8 +119,6 @@ function renderElevation(
 
     if (state.flowerColor) {
       const flowerRng = makeRng(seedForPlant(`${plant.id}-flowers`));
-      const adjustedWidth = profileGeometry.adjustedWidth;
-      const adjustedHeight = profileGeometry.adjustedHeight;
       const flowerCenters = buildFlowerCenters({
         variant: 'elevation',
         canopy: {
@@ -134,6 +148,28 @@ function renderElevation(
         });
         group.appendChild(flower);
       });
+    }
+
+    if (showLabels) {
+      const label = buildPlantLabel(plant);
+      if (label) {
+        const fontSize = Math.max(Math.min(adjustedWidth * 0.25, 30), 14);
+        const labelY = Math.max(fontSize, groundY - adjustedHeight - fontSize * 0.35);
+        const text = createSvgElement('text', {
+          x: cx,
+          y: labelY,
+          'text-anchor': 'middle',
+          'font-size': fontSize,
+          'font-weight': 700,
+          fill: '#1b1b1b',
+          stroke: '#fff',
+          'stroke-width': Math.max(fontSize * 0.12, 1.2),
+          'paint-order': 'stroke fill',
+          'pointer-events': 'none',
+        });
+        text.textContent = label;
+        group.appendChild(text);
+      }
     }
 
     appendTooltip(group, buildTooltipLines(plant, state));

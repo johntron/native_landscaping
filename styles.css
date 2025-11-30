@@ -91,6 +91,24 @@ h1 {
   color: #5b4f43;
 }
 
+.label-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.5rem;
+  background-color: #fff;
+  border: 1px solid #e0dcd5;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #4b463e;
+}
+
+.label-toggle input {
+  margin: 0;
+  width: 1rem;
+  height: 1rem;
+}
+
 select {
   font-size: 1rem;
   padding: 0.25rem 0.5rem;

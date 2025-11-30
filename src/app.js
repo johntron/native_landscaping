@@ -12,6 +12,7 @@ const appState = {
   month: new Date().getMonth() + 1,
   pixelsPerInch: DEFAULT_PIXELS_PER_INCH,
   positionsLocked: true,
+  showLabels: false,
 };
 
 async function init() {
@@ -32,6 +33,7 @@ async function init() {
   const lockToggle = document.getElementById('lockToggle');
   const lockStatusText = document.getElementById('lockStatusText');
   const exportButton = document.getElementById('exportLayoutBtn');
+  const labelToggle = document.getElementById('labelToggle');
 
   configureViews({ svgRefs, containerRefs });
 
@@ -66,6 +68,13 @@ async function init() {
   if (exportButton) {
     exportButton.disabled = true;
   }
+  if (labelToggle) {
+    labelToggle.checked = appState.showLabels;
+    labelToggle.addEventListener('change', (e) => {
+      appState.showLabels = e.target.checked;
+      render();
+    });
+  }
 
   try {
     const [speciesCsv, layoutCsv] = await Promise.all([
@@ -90,7 +99,9 @@ async function init() {
       plant,
       state: computePlantState(plant, month),
     }));
-    renderViews(svgRefs, plantStates, appState.pixelsPerInch);
+    renderViews(svgRefs, plantStates, appState.pixelsPerInch, {
+      showLabels: appState.showLabels,
+    });
   };
 
   monthSelect.addEventListener('change', render);
