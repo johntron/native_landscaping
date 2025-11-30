@@ -224,6 +224,11 @@ function renderSpeciesTable(plants) {
   });
 
   const rows = Array.from(speciesMap.values()).sort((a, b) => {
+    const labelA = buildPlantLabel(a);
+    const labelB = buildPlantLabel(b);
+    if (labelA && labelB) {
+      return labelA.localeCompare(labelB);
+    }
     const nameA = (a.commonName || a.botanicalName || '').toLowerCase();
     const nameB = (b.commonName || b.botanicalName || '').toLowerCase();
     return nameA.localeCompare(nameB);
@@ -232,8 +237,9 @@ function renderSpeciesTable(plants) {
   const table = document.createElement('table');
   table.className = 'species-table__table';
   const thead = document.createElement('thead');
+  const headers = ['Label', 'Common name', 'Botanical name', 'Height (ft)', 'Width (ft)', 'Growth form', 'Sun', 'Water', 'Soil', 'Bloom months'];
   const headerRow = document.createElement('tr');
-  ['Label', 'Common name', 'Botanical name', 'Height (ft)', 'Width (ft)', 'Growth form', 'Sun', 'Water', 'Soil', 'Bloom months'].forEach((title) => {
+  headers.forEach((title) => {
     const th = document.createElement('th');
     th.textContent = title;
     headerRow.appendChild(th);
@@ -244,50 +250,32 @@ function renderSpeciesTable(plants) {
   const tbody = document.createElement('tbody');
   rows.forEach((plant) => {
     const tr = document.createElement('tr');
-    const labelCell = document.createElement('td');
-    labelCell.className = 'species-table__label';
-    labelCell.textContent = buildPlantLabel(plant);
-    tr.appendChild(labelCell);
+    const cells = [
+      { value: buildPlantLabel(plant), className: 'species-table__label' },
+      { value: plant.commonName || plant.common_name || '' },
+      { value: plant.botanicalName || plant.botanical_name || '' },
+      { value: formatFeet(plant.height) },
+      { value: formatFeet(plant.width) },
+      { value: plant.growthShape || plant.growth_shape || '' },
+      { value: plant.sunPref || plant.sun_pref || '' },
+      { value: plant.waterPref || plant.water_pref || '' },
+      { value: plant.soilPref || plant.soil_pref || '' },
+      {
+        value: formatMonthRange(
+          plant.floweringMonths ||
+            plant.flowering_season_months ||
+            plant.floweringSeasonMonths
+        ),
+      },
+    ];
 
-    const commonCell = document.createElement('td');
-    commonCell.textContent = plant.commonName || plant.common_name || '';
-    tr.appendChild(commonCell);
-
-    const botCell = document.createElement('td');
-    botCell.textContent = plant.botanicalName || plant.botanical_name || '';
-    tr.appendChild(botCell);
-
-    const heightCell = document.createElement('td');
-    heightCell.textContent = formatFeet(plant.height);
-    tr.appendChild(heightCell);
-
-    const widthCell = document.createElement('td');
-    widthCell.textContent = formatFeet(plant.width);
-    tr.appendChild(widthCell);
-
-    const growthCell = document.createElement('td');
-    growthCell.textContent = plant.growthShape || plant.growth_shape || '';
-    tr.appendChild(growthCell);
-
-    const sunCell = document.createElement('td');
-    sunCell.textContent = plant.sunPref || plant.sun_pref || '';
-    tr.appendChild(sunCell);
-
-    const waterCell = document.createElement('td');
-    waterCell.textContent = plant.waterPref || plant.water_pref || '';
-    tr.appendChild(waterCell);
-
-    const soilCell = document.createElement('td');
-    soilCell.textContent = plant.soilPref || plant.soil_pref || '';
-    tr.appendChild(soilCell);
-
-    const bloomCell = document.createElement('td');
-    const bloomSpec =
-      plant.floweringMonths ||
-      plant.flowering_season_months ||
-      plant.floweringSeasonMonths;
-    bloomCell.textContent = formatMonthRange(bloomSpec);
-    tr.appendChild(bloomCell);
+    cells.forEach((cell, idx) => {
+      const td = document.createElement('td');
+      td.textContent = cell.value ?? '';
+      td.dataset.label = headers[idx];
+      if (cell.className) td.className = cell.className;
+      tr.appendChild(td);
+    });
 
     tbody.appendChild(tr);
   });
