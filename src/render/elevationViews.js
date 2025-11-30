@@ -10,6 +10,7 @@ import {
 import { makeRng, seedForPlant } from '../utils/rng.js';
 import { appendTooltip, clearSvg, createSvgElement } from './svgUtils.js';
 import { buildTooltipLines } from './tooltip.js';
+import { buildFlowerCenters } from './inflorescenceStrategies.js';
 
 /**
  * South (kitchen) elevation uses the x axis of the yard as horizontal.
@@ -78,14 +79,29 @@ function renderElevation(
     });
 
     if (state.flowerColor) {
-      const flower = createSvgElement('ellipse', {
-        cx,
-        cy: groundY - height,
-        rx: Math.max(width * 0.2, 0.4),
-        ry: Math.max(width * 0.2, 0.4),
-        fill: state.flowerColor,
+      const flowerCenters = buildFlowerCenters({
+        variant: 'elevation',
+        canopy: {
+          plan: { cx, cy: groundY - height * 0.5, radius: width / 2 },
+          elevation: { cx, width, height, groundY },
+        },
+        rng: makeRng(seedForPlant(`${plant.id}-flowers`)),
+        inflorescence: plant.inflorescence || plant.inflorescenceType || plant.inflorescence_type,
+        flowerCountHint: plant.flowerCountHint ?? plant.flower_count_hint,
+        flowerZone: plant.flowerZone || plant.flower_zone,
       });
-      group.appendChild(flower);
+      const { rx, ry } = computeElevationFlowerRadii(width, height, flowerCenters.length);
+
+      flowerCenters.forEach((center) => {
+        const flower = createSvgElement('ellipse', {
+          cx: center.x,
+          cy: center.y,
+          rx,
+          ry,
+          fill: state.flowerColor,
+        });
+        group.appendChild(flower);
+      });
     }
 
     appendTooltip(group, buildTooltipLines(plant, state));
@@ -230,6 +246,15 @@ function buildWavyProfilePath({ cx, groundY, width, height, exponent, rng }) {
 
 function midpoint(a, b) {
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+
+function computeElevationFlowerRadii(width, height, count) {
+  if (!count) return { rx: 0, ry: 0 };
+  const base = width * 0.2;
+  const scaled = base / Math.sqrt(count);
+  const rx = Math.max(scaled, 0.4);
+  const ry = Math.max(Math.min(scaled * 0.9, height * 0.22), 0.35);
+  return { rx, ry };
 }
 
 function darkenHex(color, factor) {
