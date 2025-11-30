@@ -1,4 +1,4 @@
-import { DORMANT_FOLIAGE_COLOR } from '../constants.js';
+import { DORMANT_FOLIAGE_COLOR, MONTH_NAMES } from '../constants.js';
 
 const monthToSeason = {
   12: 'winter',
@@ -42,4 +42,55 @@ function pickFoliageColor(plant, month) {
     plant.leafColor ||
     DORMANT_FOLIAGE_COLOR
   );
+}
+
+export function formatMonthRange(monthsSpec) {
+  const months = normalizeMonthsForDisplay(monthsSpec);
+  if (!months.length) return '';
+  const spans = [];
+  let start = months[0];
+  let prev = months[0];
+
+  for (let i = 1; i <= months.length; i += 1) {
+    const current = months[i];
+    if (current === prev + 1) {
+      prev = current;
+      continue;
+    }
+    if (start === prev) {
+      spans.push(MONTH_NAMES[start - 1]);
+    } else {
+      spans.push(`${MONTH_NAMES[start - 1]}-${MONTH_NAMES[prev - 1]}`);
+    }
+    start = current;
+    prev = current;
+  }
+  return spans.join(', ');
+}
+
+function normalizeMonthsForDisplay(spec) {
+  if (Array.isArray(spec) && spec.length) {
+    return [...spec].map((m) => Number(m)).filter((m) => Number.isFinite(m) && m >= 1 && m <= 12).sort((a, b) => a - b);
+  }
+  if (typeof spec === 'string') {
+    const parts = spec.split(/[,\s]+/).filter(Boolean);
+    const months = [];
+    parts.forEach((part) => {
+      if (part.includes('-')) {
+        const [a, b] = part.split('-').map(Number);
+        if (Number.isFinite(a) && Number.isFinite(b)) {
+          const start = Math.max(1, Math.min(12, a));
+          const end = Math.max(1, Math.min(12, b));
+          if (end >= start) {
+            for (let m = start; m <= end; m += 1) months.push(m);
+          }
+        }
+      } else {
+        const num = Number(part);
+        if (Number.isFinite(num) && num >= 1 && num <= 12) months.push(num);
+      }
+    });
+    return months.sort((a, b) => a - b);
+  }
+  return [];
 }
