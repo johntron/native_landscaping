@@ -3,6 +3,7 @@ import { makeRng, seedForPlant } from '../utils/rng.js';
 import { appendTooltip, clearSvg, createSvgElement } from './svgUtils.js';
 import { buildTooltipLines } from './tooltip.js';
 import { buildFlowerCenters } from './inflorescenceStrategies.js';
+import { pointInPolygon } from './geometry.js';
 
 /**
  * Render the plan view using wavy domed foliage silhouettes scaled to plant width.
@@ -19,7 +20,9 @@ export function renderTopView(svg, plantStates, pixelsPerInch = DEFAULT_PIXELS_P
     const cx = toPixels(plant.x);
     const cy = PLAN_VIEWBOX.height - toPixels(plant.y); // origin bottom-left for yard coordinates
     const radius = toPixels(plant.width) / 2;
-    const rng = makeRng(seedForPlant(plant.id));
+    const canopySeed = seedForPlant(plant.id);
+    const canopyPoints = buildWavyCirclePoints(cx, cy, radius, makeRng(canopySeed));
+    const rng = makeRng(canopySeed);
 
     renderFoliageDome(group, {
       cx,
@@ -27,24 +30,28 @@ export function renderTopView(svg, plantStates, pixelsPerInch = DEFAULT_PIXELS_P
       radius,
       color: state.foliageColor,
       rng,
+      outlinePoints: canopyPoints,
     });
 
     if (state.flowerColor) {
+      const flowerRng = makeRng(seedForPlant(`${plant.id}-flowers`));
       const flowerCenters = buildFlowerCenters({
         variant: 'plan',
         canopy: { plan: { cx, cy, radius } },
-        rng: makeRng(seedForPlant(`${plant.id}-flowers`)),
+        rng: flowerRng,
         inflorescence: plant.inflorescence || plant.inflorescenceType || plant.inflorescence_type,
         flowerCountHint: plant.flowerCountHint ?? plant.flower_count_hint,
         flowerZone: plant.flowerZone || plant.flower_zone,
+        accept: (point) => pointInPolygon(point, canopyPoints),
       });
       const flowerRadius = computePlanFlowerRadius(radius, flowerCenters.length);
 
       flowerCenters.forEach((center) => {
+        const jitteredRadius = flowerRadius * (0.9 + flowerRng.next() * 0.18);
         const flower = createSvgElement('circle', {
           cx: center.x,
           cy: center.y,
-          r: flowerRadius,
+          r: jitteredRadius,
           fill: state.flowerColor,
         });
         group.appendChild(flower);
@@ -56,8 +63,9 @@ export function renderTopView(svg, plantStates, pixelsPerInch = DEFAULT_PIXELS_P
   });
 }
 
-function renderFoliageDome(group, { cx, cy, radius, color, rng }) {
-  const d = buildWavyCirclePath(cx, cy, radius, rng);
+function renderFoliageDome(group, { cx, cy, radius, color, rng, outlinePoints }) {
+  const points = outlinePoints || buildWavyCirclePoints(cx, cy, radius, rng);
+  const d = buildSmoothPath(points);
 
   const base = createSvgElement('path', {
     d,
@@ -103,6 +111,11 @@ function renderFoliageDome(group, { cx, cy, radius, color, rng }) {
 }
 
 function buildWavyCirclePath(cx, cy, radius, rng) {
+  const points = buildWavyCirclePoints(cx, cy, radius, rng);
+  return buildSmoothPath(points);
+}
+
+function buildWavyCirclePoints(cx, cy, radius, rng) {
   const pointCount = 14 + Math.floor(rng.next() * 6); // 14-19 points
   const angleStep = (Math.PI * 2) / pointCount;
   const wobble = 0.12;
@@ -119,7 +132,7 @@ function buildWavyCirclePath(cx, cy, radius, rng) {
     });
   }
 
-  return buildSmoothPath(points);
+  return points;
 }
 
 function buildSmoothPath(points) {
