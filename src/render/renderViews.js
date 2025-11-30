@@ -3,7 +3,19 @@ import { renderSouthElevation, renderWestElevation } from './elevationViews.js';
 
 export function renderViews(svgRefs, plantStates, pixelsPerInch) {
   const { topSvg, southSvg, westSvg } = svgRefs;
-  renderTopView(topSvg, plantStates, pixelsPerInch);
-  renderSouthElevation(southSvg, plantStates, pixelsPerInch);
-  renderWestElevation(westSvg, plantStates, pixelsPerInch);
+  const ordered = orderPlantStatesForStacking(plantStates);
+  renderTopView(topSvg, ordered, pixelsPerInch);
+  renderSouthElevation(southSvg, ordered, pixelsPerInch);
+  renderWestElevation(westSvg, ordered, pixelsPerInch);
+}
+
+function orderPlantStatesForStacking(plantStates) {
+  // Draw shorter plants first so taller ones naturally layer on top.
+  return [...plantStates].sort((a, b) => {
+    const heightDiff = (a.plant.height ?? 0) - (b.plant.height ?? 0);
+    if (heightDiff !== 0) return heightDiff;
+    const widthDiff = (a.plant.width ?? 0) - (b.plant.width ?? 0);
+    if (widthDiff !== 0) return widthDiff;
+    return String(a.plant.id ?? '').localeCompare(String(b.plant.id ?? ''));
+  });
 }
