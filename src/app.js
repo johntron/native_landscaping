@@ -6,6 +6,8 @@ import { computePlantState } from './state/seasonalState.js';
 import { renderViews } from './render/renderViews.js';
 import { configureViews } from './render/viewConfig.js';
 import { createPlantDragController } from './interaction/dragController.js';
+import { buildPlantLabel } from './render/labels.js';
+import { formatMonthRange } from './state/seasonalState.js';
 
 const appState = {
   plants: [],
@@ -70,11 +72,14 @@ async function init() {
     exportButton.disabled = true;
   }
   if (labelToggle) {
-    labelToggle.checked = appState.showLabels;
+    labelToggle.checked = true;
+    appState.showLabels = true;
     labelToggle.addEventListener('change', (e) => {
       appState.showLabels = e.target.checked;
       render();
     });
+  } else {
+    appState.showLabels = false;
   }
 
   try {
@@ -83,6 +88,7 @@ async function init() {
       fetchCsv(new URL('planting_layout.csv', document.baseURI)),
     ]);
     appState.plants = buildPlantsFromCsv(speciesCsv, layoutCsv);
+    renderSpeciesTable(appState.plants);
     if (exportButton) {
       exportButton.disabled = false;
       exportButton.addEventListener('click', () => downloadLayoutCsv(appState.plants));
@@ -202,6 +208,97 @@ function clampMonthValue(value) {
 
 function formatScaleValue(value) {
   return value.toFixed(3);
+}
+
+function renderSpeciesTable(plants) {
+  const container = document.getElementById('speciesTable');
+  if (!container) return;
+  container.innerHTML = '';
+  if (!plants?.length) return;
+
+  const speciesMap = new Map();
+  plants.forEach((plant) => {
+    const key = plant.botanicalName || plant.botanical_name || plant.commonName || plant.common_name;
+    if (!key || speciesMap.has(key)) return;
+    speciesMap.set(key, plant);
+  });
+
+  const rows = Array.from(speciesMap.values()).sort((a, b) => {
+    const nameA = (a.commonName || a.botanicalName || '').toLowerCase();
+    const nameB = (b.commonName || b.botanicalName || '').toLowerCase();
+    return nameA.localeCompare(nameB);
+  });
+
+  const table = document.createElement('table');
+  table.className = 'species-table__table';
+  const thead = document.createElement('thead');
+  const headerRow = document.createElement('tr');
+  ['Label', 'Common name', 'Botanical name', 'Height (ft)', 'Width (ft)', 'Growth form', 'Sun', 'Water', 'Soil', 'Bloom months'].forEach((title) => {
+    const th = document.createElement('th');
+    th.textContent = title;
+    headerRow.appendChild(th);
+  });
+  thead.appendChild(headerRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  rows.forEach((plant) => {
+    const tr = document.createElement('tr');
+    const labelCell = document.createElement('td');
+    labelCell.className = 'species-table__label';
+    labelCell.textContent = buildPlantLabel(plant);
+    tr.appendChild(labelCell);
+
+    const commonCell = document.createElement('td');
+    commonCell.textContent = plant.commonName || plant.common_name || '';
+    tr.appendChild(commonCell);
+
+    const botCell = document.createElement('td');
+    botCell.textContent = plant.botanicalName || plant.botanical_name || '';
+    tr.appendChild(botCell);
+
+    const heightCell = document.createElement('td');
+    heightCell.textContent = formatFeet(plant.height);
+    tr.appendChild(heightCell);
+
+    const widthCell = document.createElement('td');
+    widthCell.textContent = formatFeet(plant.width);
+    tr.appendChild(widthCell);
+
+    const growthCell = document.createElement('td');
+    growthCell.textContent = plant.growthShape || plant.growth_shape || '';
+    tr.appendChild(growthCell);
+
+    const sunCell = document.createElement('td');
+    sunCell.textContent = plant.sunPref || plant.sun_pref || '';
+    tr.appendChild(sunCell);
+
+    const waterCell = document.createElement('td');
+    waterCell.textContent = plant.waterPref || plant.water_pref || '';
+    tr.appendChild(waterCell);
+
+    const soilCell = document.createElement('td');
+    soilCell.textContent = plant.soilPref || plant.soil_pref || '';
+    tr.appendChild(soilCell);
+
+    const bloomCell = document.createElement('td');
+    const bloomSpec =
+      plant.floweringMonths ||
+      plant.flowering_season_months ||
+      plant.floweringSeasonMonths;
+    bloomCell.textContent = formatMonthRange(bloomSpec);
+    tr.appendChild(bloomCell);
+
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  container.appendChild(table);
+}
+
+function formatFeet(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '';
+  return num.toFixed(1);
 }
 
 function updateLockStatus(labelEl, locked) {

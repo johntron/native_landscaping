@@ -22,6 +22,12 @@ html, body {
   padding: 0 0.75rem 1rem;
 }
 
+.view-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
 header {
   padding: 1rem;
   background-color: #f7f5ef;
@@ -52,6 +58,7 @@ h1 {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.9rem;
+  width: 100%;
 }
 
 .controls-row--primary {
@@ -148,19 +155,19 @@ h1 {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  background-color: #d5d9df;
+  background-color: #dfe3e9;
   color: #2f2f2f;
   padding: 0.35rem 0.75rem 0.35rem 1.9rem;
   border-radius: 999px;
-  border: 1px solid #c1c6cd;
+  border: 1px solid #c7ced8;
   transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
   position: relative;
   min-height: 2.1rem;
 }
 
 .pill-thumb {
-  width: 1.1rem;
-  height: 1.1rem;
+  width: 1.25rem;
+  height: 1.25rem;
   background-color: #fff;
   border-radius: 50%;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
@@ -174,13 +181,14 @@ h1 {
 .pill-content {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.45rem;
 }
 
 .pill-icon {
   width: 1rem;
   height: 1rem;
   color: #2f2f2f;
+  opacity: 0.4;
 }
 
 .pill-icon--text {
@@ -197,6 +205,7 @@ h1 {
   flex-direction: column;
   line-height: 1.1;
   gap: 0.1rem;
+  margin-left: 0.1rem;
 }
 
 .pill-title {
@@ -207,6 +216,33 @@ h1 {
 .pill-hint {
   font-size: 0.78rem;
   color: #4d5055;
+}
+
+.pill-switch[data-variant="lock"] input:not(:checked) + .pill-body {
+  background-color: #d3d8e0;
+  border-color: #c1c8d2;
+  color: #1f2a35;
+}
+
+.pill-switch[data-variant="lock"] input:checked + .pill-body {
+  background-color: #2f7a8c;
+  border-color: #215a64;
+  color: #f7f8fa;
+}
+
+.pill-button {
+  border-radius: 999px;
+  padding: 0.5rem 0.95rem;
+  border: 1px solid #2f7a8c;
+  background-color: #2f7a8c;
+  color: #f7f8fa;
+  box-shadow: none;
+}
+
+.pill-button:disabled {
+  background-color: #dfe3e9;
+  border-color: #c7ced8;
+  color: #6b737a;
 }
 
 .pill-switch input:checked + .pill-body {
@@ -221,6 +257,7 @@ h1 {
 
 .pill-switch input:checked + .pill-body .pill-icon {
   color: #f7f8fa;
+  opacity: 1;
 }
 
 .pill-switch input:checked + .pill-body .pill-thumb {
@@ -320,6 +357,10 @@ select {
   padding: 0.25rem 0 0.75rem;
 }
 
+.view-meta--near {
+  padding: 0.25rem 0 0.25rem;
+}
+
 .legend {
   display: flex;
   align-items: center;
@@ -370,6 +411,46 @@ select {
 .legend__text {
   font-weight: 600;
   color: #3b3f43;
+}
+
+.species-table {
+  margin: 0.5rem 0 1rem;
+  overflow-x: auto;
+}
+
+.species-table__table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: #fdfcf9;
+  border: 1px solid #d6d3cb;
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.species-table__table th,
+.species-table__table td {
+  padding: 0.6rem 0.75rem;
+  text-align: left;
+  font-size: 0.9rem;
+  border-bottom: 1px solid #e5e1d8;
+}
+
+.species-table__table thead th {
+  background-color: #f2f0eb;
+  font-weight: 700;
+  color: #2f2f2f;
+}
+
+.species-table__table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.species-table__label {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #1b1b1b;
+  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
 }
 
 /* Grid layout for the three perspectives */
