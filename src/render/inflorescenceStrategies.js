@@ -33,6 +33,7 @@ const strategyMap = {
  * @param {string} [options.inflorescence]
  * @param {number|string|null} [options.flowerCountHint]
  * @param {'upper'|'mid'|'full'} [options.flowerZone]
+ * @param {(point: { x: number, y: number }) => boolean} [options.accept] optional rejection sampling predicate
  * @returns {Array<{ x: number, y: number }>}
  */
 export function buildFlowerCenters({
@@ -42,18 +43,19 @@ export function buildFlowerCenters({
   inflorescence,
   flowerCountHint,
   flowerZone,
+  accept,
 }) {
   const type = normalizeInflorescence(inflorescence);
   const strategy = strategyMap[type] || scatterStrategy;
   const resolvedZone = normalizeZone(flowerZone) || DEFAULT_ZONE_BY_TYPE[type] || 'full';
   const count = deriveCount(flowerCountHint, canopy);
 
-  return strategy({ variant, canopy, rng, count, zone: resolvedZone });
+  return strategy({ variant, canopy, rng, count, zone: resolvedZone, accept });
 }
 
 export const inflorescenceStrategies = strategyMap;
 
-function spikeStrategy({ variant, canopy, rng, count, zone }) {
+function spikeStrategy({ variant, canopy, rng, count, zone, accept }) {
   if (variant === 'plan') {
     const plan = canopy.plan;
     if (!plan?.radius) return [];
@@ -68,7 +70,7 @@ function spikeStrategy({ variant, canopy, rng, count, zone }) {
       const x = plan.cx + Math.cos(lineAngle) * distance + jitter(rng, jitterMag);
       const y = plan.cy + Math.sin(lineAngle) * distance + jitter(rng, jitterMag);
       return { x, y };
-    });
+    }, accept);
   }
 
   const elevation = canopy.elevation;
@@ -84,10 +86,10 @@ function spikeStrategy({ variant, canopy, rng, count, zone }) {
     const y = base + span * t + jitter(rng, jitterY);
     const x = (elevation?.cx || 0) + jitter(rng, jitterX);
     return { x, y };
-  });
+  }, accept);
 }
 
-function panicleStrategy({ variant, canopy, rng, count, zone }) {
+function panicleStrategy({ variant, canopy, rng, count, zone, accept }) {
   const adjustedCount = clamp(Math.round(count * 1.2), 3, MAX_FLOWERS);
   if (variant === 'plan') {
     const plan = canopy.plan;
@@ -102,7 +104,7 @@ function panicleStrategy({ variant, canopy, rng, count, zone }) {
       const x = baseAnchor.x + Math.cos(angularSpread) * distance + jitter(rng, plan.radius * 0.05);
       const y = baseAnchor.y + Math.sin(angularSpread) * distance + jitter(rng, plan.radius * 0.05);
       return { x, y };
-    });
+    }, accept);
   }
 
   const elevation = canopy.elevation;
@@ -115,10 +117,10 @@ function panicleStrategy({ variant, canopy, rng, count, zone }) {
   return buildList(adjustedCount, () => ({
     x: cx + jitter(rng, width * 0.25),
     y: clamp(anchorY + jitter(rng, height * 0.35), range.min, range.max),
-  }));
+  }), accept);
 }
 
-function umbelStrategy({ variant, canopy, rng, count, zone }) {
+function umbelStrategy({ variant, canopy, rng, count, zone, accept }) {
   if (variant === 'plan') {
     const plan = canopy.plan;
     if (!plan?.radius) return [];
@@ -142,14 +144,14 @@ function umbelStrategy({ variant, canopy, rng, count, zone }) {
   return buildList(count, () => ({
     x: cx + jitter(rng, horizontal),
     y: clamp(anchorY + jitter(rng, vertical), range.min, range.max),
-  }));
+  }), accept);
 }
 
-function scatterStrategy({ variant, canopy, rng, count, zone }) {
+function scatterStrategy({ variant, canopy, rng, count, zone, accept }) {
   if (variant === 'plan') {
     const plan = canopy.plan;
     if (!plan?.radius) return [];
-    return buildList(count, () => samplePlanPoint(rng, plan, zone));
+    return buildList(count, () => samplePlanPoint(rng, plan, zone), accept);
   }
 
   const elevation = canopy.elevation;
@@ -157,7 +159,7 @@ function scatterStrategy({ variant, canopy, rng, count, zone }) {
   if (!range) return [];
   const width = elevation?.width || 0;
 
-  return buildList(count, () => sampleElevationPoint(rng, elevation, range, width * 0.25));
+  return buildList(count, () => sampleElevationPoint(rng, elevation, range, width * 0.25), accept);
 }
 
 function deriveCount(hint, canopy) {
@@ -245,10 +247,24 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-function buildList(count, factory) {
+const MAX_PLACEMENT_ATTEMPTS = 40;
+
+function buildList(count, factory, accept) {
   const items = [];
   for (let i = 0; i < count; i += 1) {
-    items.push(factory(i));
+    let attempts = 0;
+    let candidate = null;
+    let accepted = false;
+
+    while (attempts < MAX_PLACEMENT_ATTEMPTS && !accepted) {
+      candidate = factory(i);
+      attempts += 1;
+      accepted = !accept || accept(candidate);
+    }
+
+    if (candidate) {
+      items.push(candidate);
+    }
   }
   return items;
 }

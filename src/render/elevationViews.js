@@ -11,6 +11,7 @@ import { makeRng, seedForPlant } from '../utils/rng.js';
 import { appendTooltip, clearSvg, createSvgElement } from './svgUtils.js';
 import { buildTooltipLines } from './tooltip.js';
 import { buildFlowerCenters } from './inflorescenceStrategies.js';
+import { pointInPolygon } from './geometry.js';
 
 /**
  * South (kitchen) elevation uses the x axis of the yard as horizontal.
@@ -59,12 +60,22 @@ function renderElevation(
 
   plantStates.forEach(({ plant, state }) => {
     const group = createSvgElement('g', { 'data-name': plant.commonName });
-    const rng = makeRng(seedForPlant(plant.id));
+    const canopySeed = seedForPlant(plant.id);
+    const rng = makeRng(canopySeed);
     const axisValue = axisKey === 'x' ? plant.x : plant.y;
     const cx = toPixels(axisValue) + leftOffsetPx;
     const width = toPixels(plant.width);
     const height = toPixels(plant.height);
     const groundY = ELEVATION_VIEWBOX.height - bottomOffsetPx;
+    const profileGeometry = resolveProfileGeometry(width, height, plant.growthShape);
+    const outlinePoints = buildProfileOutlinePoints({
+      cx,
+      groundY,
+      width: profileGeometry.adjustedWidth,
+      height: profileGeometry.adjustedHeight,
+      exponent: profileGeometry.exponent,
+      rng: makeRng(canopySeed),
+    });
 
     renderProfileSilhouette({
       width,
@@ -76,26 +87,36 @@ function renderElevation(
       rng,
       group,
       clipSuffix: `${axisKey}-${plant.id}`,
+      geometry: profileGeometry,
     });
 
     if (state.flowerColor) {
+      const flowerRng = makeRng(seedForPlant(`${plant.id}-flowers`));
+      const adjustedWidth = profileGeometry.adjustedWidth;
+      const adjustedHeight = profileGeometry.adjustedHeight;
       const flowerCenters = buildFlowerCenters({
         variant: 'elevation',
         canopy: {
-          plan: { cx, cy: groundY - height * 0.5, radius: width / 2 },
-          elevation: { cx, width, height, groundY },
+          plan: { cx, cy: groundY - adjustedHeight * 0.5, radius: adjustedWidth / 2 },
+          elevation: { cx, width: adjustedWidth, height: adjustedHeight, groundY },
         },
-        rng: makeRng(seedForPlant(`${plant.id}-flowers`)),
+        rng: flowerRng,
         inflorescence: plant.inflorescence || plant.inflorescenceType || plant.inflorescence_type,
         flowerCountHint: plant.flowerCountHint ?? plant.flower_count_hint,
         flowerZone: plant.flowerZone || plant.flower_zone,
+        accept: (point) => pointInPolygon(point, outlinePoints),
       });
-      const { rx, ry } = computeElevationFlowerRadii(width, height, flowerCenters.length);
+      const { rx: baseRx, ry: baseRy } = computeElevationFlowerRadii(adjustedWidth, adjustedHeight, flowerCenters.length);
+      const soilY = groundY;
 
       flowerCenters.forEach((center) => {
+        const sizeFactor = 0.9 + flowerRng.next() * 0.2;
+        const rx = baseRx * sizeFactor;
+        const ry = baseRy * (0.9 + flowerRng.next() * 0.18);
+        const cy = Math.min(center.y, soilY - ry);
         const flower = createSvgElement('ellipse', {
           cx: center.x,
-          cy: center.y,
+          cy,
           rx,
           ry,
           fill: state.flowerColor,
@@ -119,8 +140,9 @@ function renderProfileSilhouette({
   rng,
   group,
   clipSuffix,
+  geometry,
 }) {
-  const { adjustedWidth, adjustedHeight, exponent } = resolveProfileGeometry(width, height, growthShape);
+  const { adjustedWidth, adjustedHeight, exponent } = geometry || resolveProfileGeometry(width, height, growthShape);
   const d = buildWavyProfilePath({ cx, groundY, width: adjustedWidth, height: adjustedHeight, exponent, rng });
   const clipId = buildClipId(clipSuffix);
 
@@ -206,7 +228,14 @@ function resolveProfileGeometry(width, height, growthShape) {
   };
 }
 
-function buildWavyProfilePath({ cx, groundY, width, height, exponent, rng }) {
+function buildProfileOutlinePoints({ cx, groundY, width, height, exponent, rng }) {
+  const { topPoints, startX } = buildProfileTopPoints({ cx, groundY, width, height, exponent, rng });
+  if (!topPoints.length) return [];
+  const outline = [{ x: startX, y: groundY }, ...topPoints, { x: cx + width / 2, y: groundY }];
+  return outline;
+}
+
+function buildProfileTopPoints({ cx, groundY, width, height, exponent, rng }) {
   const pointCount = 12 + Math.floor(rng.next() * 5); // 12-16 points along the top
   const startX = cx - width / 2;
   const segments = pointCount;
@@ -222,6 +251,10 @@ function buildWavyProfilePath({ cx, groundY, width, height, exponent, rng }) {
     topPoints.push({ x, y });
   }
 
+  return { topPoints, startX };
+}
+
+function buildProfilePathFromTopPoints({ topPoints, startX, cx, groundY, width }) {
   if (!topPoints.length) return '';
 
   const pathParts = [];
@@ -242,6 +275,11 @@ function buildWavyProfilePath({ cx, groundY, width, height, exponent, rng }) {
   pathParts.push(`L ${(startX).toFixed(2)} ${groundY.toFixed(2)}`);
   pathParts.push('Z');
   return pathParts.join(' ');
+}
+
+function buildWavyProfilePath({ cx, groundY, width, height, exponent, rng }) {
+  const { topPoints, startX } = buildProfileTopPoints({ cx, groundY, width, height, exponent, rng });
+  return buildProfilePathFromTopPoints({ topPoints, startX, cx, groundY, width });
 }
 
 function midpoint(a, b) {
