@@ -10,71 +10,122 @@
   <body>
     <header>
       <h1>Backyard Visualization</h1>
-      <div class="controls-row">
-        <div class="controls">
-          <label for="monthSelect">Select month:</label>
-          <select id="monthSelect"></select>
-          <label for="scaleInput">Scale (px/in):</label>
-          <input id="scaleInput" type="number" inputmode="decimal" step="0.01" min="0.01" />
-          <input id="scaleSlider" type="range" step="0.01" min="0.01" aria-label="Scale slider" />
-          <label class="lock-toggle" for="lockToggle">
-            <input id="lockToggle" type="checkbox" checked />
-            <span class="lock-toggle__label">
-              <span class="lock-toggle__status" id="lockStatusText">Positions locked</span>
-              <span class="lock-toggle__hint">(unlock to drag plants)</span>
-            </span>
-          </label>
-          <label class="label-toggle" for="labelToggle">
-            <input id="labelToggle" type="checkbox" />
-            <span>Show plant labels</span>
-          </label>
-          <button id="exportLayoutBtn" class="button" type="button" disabled>Export layout CSV</button>
-        </div>
-        <div class="scale-indicator" id="scaleIndicator">
-          <div class="scale-indicator__title">Scale reference</div>
-          <div class="scale-indicator__bars">
-            <div class="scale-indicator__item" data-inches="3">
-              <div class="scale-indicator__line"></div>
-              <span>3 in</span>
-            </div>
-            <div class="scale-indicator__item" data-feet="1">
-              <div class="scale-indicator__line"></div>
-              <span>1 ft</span>
-            </div>
-            <div class="scale-indicator__item" data-feet="10">
-              <div class="scale-indicator__line"></div>
-              <span>10 ft</span>
-            </div>
-          </div>
-        </div>
-      </div>
       <p class="data-note">
         Plant data is fetched from plants.csv (species) and planting_layout.csv (yard layout). Run these files through a local web server to avoid
         browser restrictions when testing (for example, <code>npx serve</code>).
       </p>
     </header>
-    <!-- The views container holds the top‑down, front and side perspectives. -->
-    <main class="views">
-      <div class="view-panel">
-        <div class="view" id="topView">
-          <!-- The SVG overlay uses a fixed viewBox measured in yard units; configured at runtime from constants. -->
-          <svg id="topSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div class="page">
+      <!-- The views container holds the top‑down, front and side perspectives. -->
+      <main class="views">
+        <div class="view-panel">
+          <p class="view-label">Top-down plan</p>
+          <div class="view" id="topView">
+            <!-- The SVG overlay uses a fixed viewBox measured in yard units; configured at runtime from constants. -->
+            <svg id="topSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+          </div>
         </div>
-        <p class="view-label">Top-down plan</p>
-      </div>
-      <div class="view-panel">
-        <div class="view" id="frontView">
-          <svg id="frontSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+        <div class="view-panel">
+          <p class="view-label">South elevation</p>
+          <div class="view" id="frontView">
+            <svg id="frontSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+          </div>
         </div>
-        <p class="view-label">South elevation</p>
-      </div>
-      <div class="view-panel">
-        <div class="view" id="sideView">
-          <svg id="sideSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+        <div class="view-panel">
+          <p class="view-label">West elevation</p>
+          <div class="view" id="sideView">
+            <svg id="sideSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+          </div>
         </div>
-        <p class="view-label">West elevation</p>
+      </main>
+      <div class="controls-block">
+        <div class="controls-grid">
+          <div class="controls-row controls-row--primary">
+            <div class="month-control">
+              <div class="control-title">Month</div>
+              <div class="month-slider">
+                <input id="monthSlider" type="range" min="1" max="12" step="1" />
+                <div class="month-readout" id="monthReadout">January</div>
+              </div>
+            </div>
+            <div class="control-pair control-pair--scale">
+              <label for="scaleSlider">Scale (px/in)</label>
+              <div class="scale-inputs">
+                <input id="scaleSlider" type="range" step="0.01" min="0.01" aria-label="Scale slider" />
+                <input id="scaleInput" type="number" inputmode="decimal" step="0.01" min="0.01" />
+              </div>
+            </div>
+          </div>
+          <div class="controls-row controls-row--secondary">
+            <div class="toggle-row">
+              <label class="pill-switch" for="lockToggle">
+                <input id="lockToggle" type="checkbox" checked />
+                <span class="pill-body">
+                  <span class="pill-thumb"></span>
+                  <span class="pill-content">
+                    <svg class="pill-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                      <path d="M12 7V5a4 4 0 0 0-8 0v2H3v8h10V7h-1Zm-6 0V5a2 2 0 0 1 4 0v2H6Z" fill="currentColor"/>
+                    </svg>
+                    <span class="pill-text">
+                      <span class="pill-title" id="lockStatusText">Positions locked</span>
+                      <span class="pill-hint">unlock to drag</span>
+                    </span>
+                  </span>
+                </span>
+              </label>
+              <label class="pill-switch" for="labelToggle">
+                <input id="labelToggle" type="checkbox" />
+                <span class="pill-body">
+                  <span class="pill-thumb"></span>
+                  <span class="pill-content">
+                    <span class="pill-icon pill-icon--text" aria-hidden="true">Aa</span>
+                    <span class="pill-text">
+                      <span class="pill-title">Plant labels</span>
+                      <span class="pill-hint">show initials</span>
+                    </span>
+                  </span>
+                </span>
+              </label>
+            </div>
+            <button id="exportLayoutBtn" class="button" type="button" disabled>Export layout CSV</button>
+          </div>
+        </div>
+        <div class="view-meta">
+          <div class="scale-indicator" id="scaleIndicator">
+            <div class="scale-indicator__title">Scale reference</div>
+            <div class="scale-indicator__bars">
+              <div class="scale-indicator__item" data-inches="3">
+                <div class="scale-indicator__line"></div>
+                <span>3 in</span>
+              </div>
+              <div class="scale-indicator__item" data-feet="1">
+                <div class="scale-indicator__line"></div>
+                <span>1 ft</span>
+              </div>
+              <div class="scale-indicator__item" data-feet="10">
+                <div class="scale-indicator__line"></div>
+                <span>10 ft</span>
+              </div>
+            </div>
+            <div class="scale-indicator__hint">Reference applies to plan and elevations.</div>
+          </div>
+          <div class="legend">
+            <div class="legend__item">
+              <span class="legend__swatch legend__swatch--label">CA</span>
+              <span class="legend__text">Species initials</span>
+            </div>
+            <div class="legend__item">
+              <span class="legend__swatch legend__swatch--flower"></span>
+              <span class="legend__text">Current blooms</span>
+            </div>
+            <div class="legend__item">
+              <span class="legend__swatch legend__swatch--foliage"></span>
+              <span class="legend__text">Foliage canopy</span>
+            </div>
+          </div>
+        </div>
       </div>
-    </main>
+    </div>
     <!-- The application logic lives in the ES module entry point. -->
     <script type="module" src="src/app.js"></script>
   </body>
