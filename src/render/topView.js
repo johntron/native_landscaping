@@ -4,14 +4,22 @@ import { appendTooltip, clearSvg, createSvgElement } from './svgUtils.js';
 import { buildTooltipLines } from './tooltip.js';
 import { buildFlowerCenters } from './inflorescenceStrategies.js';
 import { pointInPolygon } from './geometry.js';
+import { buildPlantLabel } from './labels.js';
 
 /**
  * Render the plan view using wavy domed foliage silhouettes scaled to plant width.
  * @param {SVGSVGElement} svg
  * @param {Array<{ plant: any, state: any }>} plantStates
  * @param {number} pixelsPerInch
+ * @param {{ showLabels?: boolean }} [options]
  */
-export function renderTopView(svg, plantStates, pixelsPerInch = DEFAULT_PIXELS_PER_INCH) {
+export function renderTopView(
+  svg,
+  plantStates,
+  pixelsPerInch = DEFAULT_PIXELS_PER_INCH,
+  options = {}
+) {
+  const { showLabels = false } = options;
   clearSvg(svg);
   const toPixels = (feet) => feet * INCHES_PER_FOOT * pixelsPerInch;
 
@@ -56,6 +64,28 @@ export function renderTopView(svg, plantStates, pixelsPerInch = DEFAULT_PIXELS_P
         });
         group.appendChild(flower);
       });
+    }
+
+    if (showLabels) {
+      const label = buildPlantLabel(plant);
+      if (label) {
+        const fontSize = Math.max(radius * 0.6, 16);
+        const text = createSvgElement('text', {
+          x: cx,
+          y: cy,
+          'text-anchor': 'middle',
+          'dominant-baseline': 'middle',
+          'font-size': fontSize,
+          'font-weight': 700,
+          fill: '#1b1b1b',
+          stroke: '#fff',
+          'stroke-width': Math.max(fontSize * 0.12, 1.2),
+          'paint-order': 'stroke fill',
+          'pointer-events': 'none',
+        });
+        text.textContent = label;
+        group.appendChild(text);
+      }
     }
 
     appendTooltip(group, buildTooltipLines(plant, state));

@@ -1,12 +1,13 @@
 import { renderTopView } from './topView.js';
 import { renderSouthElevation, renderWestElevation } from './elevationViews.js';
 
-export function renderViews(svgRefs, plantStates, pixelsPerInch) {
+export function renderViews(svgRefs, plantStates, pixelsPerInch, options = {}) {
   const { topSvg, southSvg, westSvg } = svgRefs;
+  const { showLabels = false } = options;
   const ordered = orderPlantStatesForStacking(plantStates);
-  renderTopView(topSvg, ordered, pixelsPerInch);
-  renderSouthElevation(southSvg, ordered, pixelsPerInch);
-  renderWestElevation(westSvg, ordered, pixelsPerInch);
+  renderTopView(topSvg, ordered, pixelsPerInch, { showLabels });
+  renderSouthElevation(southSvg, ordered, pixelsPerInch, { showLabels });
+  renderWestElevation(westSvg, ordered, pixelsPerInch, { showLabels });
 }
 
 function orderPlantStatesForStacking(plantStates) {
