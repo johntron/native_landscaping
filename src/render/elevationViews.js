@@ -117,6 +117,9 @@ function renderElevation(
     const groundY = ELEVATION_VIEWBOX.height - bottomOffsetPx;
     const profileGeometry = resolveProfileGeometry(width, height, plant.growthShape);
     const { adjustedWidth, adjustedHeight } = profileGeometry;
+    const canopyBounds = resolveCanopyBounds(plant.growthShape, groundY, adjustedHeight);
+    const topY = canopyBounds.top;
+    const bottomY = canopyBounds.bottom;
     const outlinePoints = buildProfileOutlinePoints({
       cx,
       groundY,
@@ -126,7 +129,7 @@ function renderElevation(
       rng: makeRng(canopySeed),
     });
 
-    renderProfileSilhouette({
+    const silhouetteMeta = renderProfileSilhouette({
       width,
       height,
       growthShape: plant.growthShape,
@@ -138,6 +141,7 @@ function renderElevation(
       clipSuffix: `${axisKey}-${plant.id}`,
       geometry: profileGeometry,
     });
+    const profileClipPath = silhouetteMeta?.clipId ? `url(#${silhouetteMeta.clipId})` : null;
 
     if (state.flowerColor) {
       const flowerRng = makeRng(seedForPlant(`${plant.id}-flowers`));
@@ -145,7 +149,7 @@ function renderElevation(
         variant: 'elevation',
         canopy: {
           plan: { cx, cy: groundY - adjustedHeight * 0.5, radius: adjustedWidth / 2 },
-          elevation: { cx, width: adjustedWidth, height: adjustedHeight, groundY },
+          elevation: { cx, width: adjustedWidth, height: canopyBounds.height, groundY: bottomY },
         },
         rng: flowerRng,
         inflorescence: plant.inflorescence || plant.inflorescenceType || plant.inflorescence_type,
@@ -153,14 +157,13 @@ function renderElevation(
         flowerZone: plant.flowerZone || plant.flower_zone,
         accept: (point) => pointInPolygon(point, outlinePoints),
       });
-      const { rx: baseRx, ry: baseRy } = computeElevationFlowerRadii(adjustedWidth, adjustedHeight, flowerCenters.length);
-      const soilY = groundY;
+      const { rx: baseRx, ry: baseRy } = computeElevationFlowerRadii(adjustedWidth, canopyBounds.height, flowerCenters.length);
 
       flowerCenters.forEach((center) => {
         const sizeFactor = 0.9 + flowerRng.next() * 0.2;
         const rx = baseRx * sizeFactor;
         const ry = baseRy * (0.9 + flowerRng.next() * 0.18);
-        const cy = Math.min(center.y, soilY - ry);
+        const cy = clamp(center.y, topY + ry, bottomY - ry);
         const flower = createSvgElement('ellipse', {
           cx: center.x,
           cy,
@@ -168,6 +171,9 @@ function renderElevation(
           ry,
           fill: state.flowerColor,
         });
+        if (profileClipPath) {
+          flower.setAttribute('clip-path', profileClipPath);
+        }
         group.appendChild(flower);
       });
     }
@@ -178,7 +184,7 @@ function renderElevation(
         variant: 'elevation',
         canopy: {
           plan: { cx, cy: groundY - adjustedHeight * 0.5, radius: adjustedWidth / 2 },
-          elevation: { cx, width: adjustedWidth, height: adjustedHeight, groundY },
+          elevation: { cx, width: adjustedWidth, height: canopyBounds.height, groundY: bottomY },
         },
         rng: fruitRng,
         fruitLoad: plant.fruitLoad,
@@ -186,16 +192,15 @@ function renderElevation(
       });
       const { rx: baseRx, ry: baseRy } = computeElevationFruitRadii(
         adjustedWidth,
-        adjustedHeight,
+        canopyBounds.height,
         fruitCenters.length
       );
-      const soilY = groundY;
 
       fruitCenters.forEach((center) => {
         const sizeFactor = 0.9 + fruitRng.next() * 0.2;
         const rx = baseRx * sizeFactor;
         const ry = baseRy * (0.92 + fruitRng.next() * 0.18);
-        const cy = Math.min(center.y, soilY - ry);
+        const cy = clamp(center.y, topY + ry, bottomY - ry);
         const fruit = createSvgElement('ellipse', {
           cx: center.x,
           cy,
@@ -205,6 +210,9 @@ function renderElevation(
           stroke: darkenHex(state.fruitColor, 0.6),
           'stroke-width': Math.max(rx * 0.35, 0.9),
         });
+        if (profileClipPath) {
+          fruit.setAttribute('clip-path', profileClipPath);
+        }
         group.appendChild(fruit);
       });
     }
@@ -327,6 +335,8 @@ function renderProfileSilhouette({
     'stroke-linejoin': 'round',
   });
   group.appendChild(outline);
+
+  return { clipId };
 }
 
 function resolveProfileGeometry(width, height, growthShape) {
@@ -544,6 +554,28 @@ function computeElevationFruitRadii(width, height, count) {
   const rx = Math.max(scaled, 0.35);
   const ry = Math.max(Math.min(scaled * 0.85, height * 0.18), 0.3);
   return { rx, ry };
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function resolveCanopyBounds(growthShape, groundY, adjustedHeight) {
+  const shape = (growthShape || '').toLowerCase();
+  if (shape === 'tree') {
+    const trunkHeight = adjustedHeight * 0.45;
+    const canopyHeight = adjustedHeight - trunkHeight;
+    const canopyRy = canopyHeight * 0.55;
+    const canopyCenterY = groundY - trunkHeight - canopyHeight * 0.1;
+    const top = canopyCenterY - canopyRy;
+    const bottom = canopyCenterY + canopyRy;
+    return { top, bottom, height: bottom - top };
+  }
+  return {
+    top: groundY - adjustedHeight,
+    bottom: groundY,
+    height: adjustedHeight,
+  };
 }
 
 function darkenHex(color, factor) {
