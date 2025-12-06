@@ -1,4 +1,10 @@
-import { DEFAULT_PIXELS_PER_INCH, MONTH_NAMES, SCALE_LIMITS } from './constants.js';
+import {
+  DEFAULT_PIXELS_PER_INCH,
+  INCHES_PER_FOOT,
+  MONTH_NAMES,
+  PLAN_VIEWBOX,
+  SCALE_LIMITS,
+} from './constants.js';
 import { fetchCsv } from './data/csvLoader.js';
 import { buildPlantsFromCsv } from './data/plantParser.js';
 import { buildLayoutCsv } from './data/layoutExporter.js';
@@ -8,7 +14,8 @@ import { configureViews } from './render/viewConfig.js';
 import { createPlantDragController } from './interaction/dragController.js';
 import { buildPlantLabel } from './render/labels.js';
 import { formatMonthRange } from './state/seasonalState.js';
-import { clampHiddenLayerCount } from './state/layers.js';
+import { clampHiddenLayerCount, classifyPlantLayer } from './state/layers.js';
+import { getSpeciesKey } from './utils/speciesKey.js';
 
 const appState = {
   plants: [],
@@ -17,6 +24,8 @@ const appState = {
   positionsLocked: true,
   showLabels: false,
   hiddenLayerCount: 0,
+  highlightedSpeciesKey: '',
+  targetedPlantId: '',
 };
 
 async function init() {
@@ -46,6 +55,44 @@ async function init() {
   initMonthSlider(monthSlider, monthReadout, appState.month);
 
   let render = () => {};
+  let highlightedRowEl = null;
+
+  const setHighlightedSpecies = (speciesKey, rowEl) => {
+    const normalized = (speciesKey || '').toLowerCase();
+    if (highlightedRowEl && highlightedRowEl !== rowEl) {
+      highlightedRowEl.classList.remove('is-highlighted');
+    }
+    if (normalized && rowEl) {
+      rowEl.classList.add('is-highlighted');
+      highlightedRowEl = rowEl;
+    } else if (!normalized) {
+      if (highlightedRowEl) highlightedRowEl.classList.remove('is-highlighted');
+      highlightedRowEl = null;
+    }
+    if (appState.highlightedSpeciesKey !== normalized) {
+      appState.highlightedSpeciesKey = normalized;
+      render();
+    }
+  };
+
+  const clearHighlightedSpecies = (rowEl) => {
+    if (rowEl && highlightedRowEl && rowEl !== highlightedRowEl) return;
+    if (highlightedRowEl) {
+      highlightedRowEl.classList.remove('is-highlighted');
+      highlightedRowEl = null;
+    }
+    if (appState.highlightedSpeciesKey) {
+      appState.highlightedSpeciesKey = '';
+      render();
+    }
+  };
+
+  const setTargetedPlant = (plantId) => {
+    const normalized = plantId ? String(plantId) : '';
+    if (normalized === appState.targetedPlantId) return;
+    appState.targetedPlantId = normalized;
+    render();
+  };
   const applyScale = (value) => {
     appState.pixelsPerInch = value;
     updateScaleIndicator(scaleIndicator, value);
@@ -58,6 +105,18 @@ async function init() {
     getPlants: () => appState.plants,
     getPixelsPerInch: () => appState.pixelsPerInch,
     onPositionsChange: () => render(),
+  });
+
+  const cloneMenu = createCloneMenu({
+    onClone: (plantId) => {
+      const clone = clonePlantById(appState, plantId);
+      if (clone) {
+        cloneMenu.hide();
+        setTargetedPlant('');
+        render();
+      }
+    },
+    onClose: () => setTargetedPlant(''),
   });
 
   const applyLockState = (locked) => {
@@ -99,7 +158,10 @@ async function init() {
       fetchCsv(new URL('planting_layout.csv', document.baseURI)),
     ]);
     appState.plants = buildPlantsFromCsv(speciesCsv, layoutCsv);
-    renderSpeciesTable(appState.plants);
+    renderSpeciesTable(appState.plants, {
+      onHoverStart: (speciesKey, rowEl) => setHighlightedSpecies(speciesKey, rowEl),
+      onHoverEnd: (_speciesKey, rowEl) => clearHighlightedSpecies(rowEl),
+    });
     if (exportButton) {
       exportButton.disabled = false;
       exportButton.addEventListener('click', () => downloadLayoutCsv(appState.plants));
@@ -120,6 +182,8 @@ async function init() {
     renderViews(svgRefs, plantStates, appState.pixelsPerInch, {
       showLabels: appState.showLabels,
       hiddenLayerCount: appState.hiddenLayerCount,
+      highlightedSpeciesKey: appState.highlightedSpeciesKey,
+      targetedPlantId: appState.targetedPlantId,
     });
   };
 
@@ -131,6 +195,39 @@ async function init() {
     render();
   });
   window.addEventListener('resize', render);
+
+  document.addEventListener('contextmenu', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const group = target.closest('[data-plant-id]');
+    if (!group) {
+      cloneMenu.hide();
+      setTargetedPlant('');
+      return;
+    }
+    event.preventDefault();
+    const plantId = group.getAttribute('data-plant-id');
+    setTargetedPlant(plantId);
+    cloneMenu.show({
+      x: event.clientX,
+      y: event.clientY,
+      plantId,
+    });
+  });
+
+  document.addEventListener('click', (event) => {
+    if (cloneMenu.contains(event.target)) return;
+    cloneMenu.hide();
+    setTargetedPlant('');
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      cloneMenu.hide();
+      setTargetedPlant('');
+    }
+  });
+
   updateScaleIndicator(scaleIndicator, appState.pixelsPerInch);
   render();
 }
@@ -222,7 +319,8 @@ function formatScaleValue(value) {
   return value.toFixed(3);
 }
 
-function renderSpeciesTable(plants) {
+function renderSpeciesTable(plants, handlers = {}) {
+  const { onHoverStart, onHoverEnd } = handlers;
   const container = document.getElementById('speciesTable');
   if (!container) return;
   container.innerHTML = '';
@@ -230,7 +328,8 @@ function renderSpeciesTable(plants) {
 
   const speciesMap = new Map();
   plants.forEach((plant) => {
-    const key = plant.botanicalName || plant.botanical_name || plant.commonName || plant.common_name;
+    const key =
+      getSpeciesKey(plant) || plant.botanicalName || plant.botanical_name || plant.commonName || plant.common_name;
     if (!key || speciesMap.has(key)) return;
     speciesMap.set(key, plant);
   });
@@ -262,6 +361,10 @@ function renderSpeciesTable(plants) {
   const tbody = document.createElement('tbody');
   rows.forEach((plant) => {
     const tr = document.createElement('tr');
+    const speciesKey = getSpeciesKey(plant);
+    tr.dataset.speciesKey = speciesKey;
+    tr.addEventListener('mouseenter', () => onHoverStart?.(speciesKey, tr));
+    tr.addEventListener('mouseleave', () => onHoverEnd?.(speciesKey, tr));
     const cells = [
       { value: buildPlantLabel(plant), className: 'species-table__label' },
       { value: plant.commonName || plant.common_name || '' },
@@ -333,6 +436,90 @@ function downloadLayoutCsv(plants) {
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
+}
+
+function createCloneMenu({ onClone, onClose }) {
+  const menu = document.createElement('div');
+  menu.className = 'context-menu';
+  const list = document.createElement('ul');
+  list.className = 'context-menu__list';
+  const item = document.createElement('li');
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'context-menu__item';
+  button.textContent = 'Clone plant';
+  button.addEventListener('click', () => {
+    const plantId = menu.dataset.plantId;
+    if (plantId) {
+      onClone?.(plantId);
+    }
+  });
+  item.appendChild(button);
+  list.appendChild(item);
+  menu.appendChild(list);
+  document.body.appendChild(menu);
+
+  const api = {
+    show: ({ x, y, plantId }) => {
+      if (!plantId) return;
+      const offsetX = window.scrollX || 0;
+      const offsetY = window.scrollY || 0;
+      const menuWidth = 180;
+      const menuHeight = 48;
+      const maxLeft = offsetX + window.innerWidth - menuWidth - 8;
+      const maxTop = offsetY + window.innerHeight - menuHeight - 8;
+      menu.style.left = `${Math.min(x + offsetX, maxLeft)}px`;
+      menu.style.top = `${Math.min(y + offsetY, maxTop)}px`;
+      menu.dataset.plantId = plantId;
+      menu.classList.add('is-open');
+    },
+    hide: () => {
+      menu.classList.remove('is-open');
+      delete menu.dataset.plantId;
+      onClose?.();
+    },
+    contains: (node) => node instanceof Node && menu.contains(node),
+    isOpen: () => menu.classList.contains('is-open'),
+  };
+
+  return api;
+}
+
+function clonePlantById(state, plantId) {
+  if (!plantId) return null;
+  const source = state.plants.find((p) => String(p.id) === String(plantId));
+  if (!source) return null;
+  const maxXFeet = PLAN_VIEWBOX.width / (INCHES_PER_FOOT * state.pixelsPerInch);
+  const maxYFeet = PLAN_VIEWBOX.height / (INCHES_PER_FOOT * state.pixelsPerInch);
+  const offset = 1.1;
+  const clone = {
+    ...source,
+    id: buildCloneId(state.plants, source.id),
+    x: clampFeet(source.x + offset, 0, maxXFeet),
+    y: clampFeet(source.y + offset * 0.6, 0, maxYFeet),
+  };
+  clone.layer = classifyPlantLayer(clone);
+  state.plants = [...state.plants, clone];
+  return clone;
+}
+
+function buildCloneId(existingPlants, baseId) {
+  const existing = new Set((existingPlants || []).map((p) => String(p.id)));
+  const base = String(baseId || 'plant');
+  let candidate = `${base}-copy`;
+  let counter = 2;
+  while (existing.has(candidate)) {
+    candidate = `${base}-copy-${counter}`;
+    counter += 1;
+  }
+  return candidate;
+}
+
+function clampFeet(value, min, max) {
+  if (!Number.isFinite(value)) return min;
+  if (value < min) return min;
+  if (value > max) return max;
+  return value;
 }
 
 if (document.readyState === 'loading') {

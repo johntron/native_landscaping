@@ -2,7 +2,8 @@ export function buildTooltipLines(plant, state) {
   return [
     plant.commonName,
     plant.botanicalName,
-    `Height: ${plant.height}ft, Width: ${plant.width}ft`,
+    `Height: ${formatFeet(plant.height)}ft, Width: ${formatFeet(plant.width)}ft`,
+    formatPositionLine(plant),
     `Sun: ${plant.sunPref}`,
     `Water: ${plant.waterPref}`,
     `Soil: ${plant.soilPref}`,
@@ -10,6 +11,19 @@ export function buildTooltipLines(plant, state) {
     state?.isFlowering ? 'Flowering' : '',
     formatFruitLine(plant, state),
   ];
+}
+
+function formatPositionLine(plant) {
+  const x = formatFeet(plant.x);
+  const y = formatFeet(plant.y);
+  if (!x && !y) return '';
+  return `Position: x=${x}ft, y=${y}ft`;
+}
+
+function formatFeet(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '';
+  return num.toFixed(1);
 }
 
 function formatInflorescenceLine(plant, state) {

@@ -1,5 +1,6 @@
 import { DEFAULT_PIXELS_PER_INCH, INCHES_PER_FOOT, PLAN_VIEWBOX } from '../constants.js';
 import { makeRng, seedForPlant } from '../utils/rng.js';
+import { getSpeciesKey } from '../utils/speciesKey.js';
 import { appendTooltip, clearSvg, createSvgElement } from './svgUtils.js';
 import { buildTooltipLines } from './tooltip.js';
 import { buildFlowerCenters } from './inflorescenceStrategies.js';
@@ -7,6 +8,11 @@ import { pointInPolygon } from './geometry.js';
 import { buildPlantLabel } from './labels.js';
 import { buildFruitCenters } from './fruitPlacement.js';
 import { buildSmoothPath } from './pathUtils.js';
+
+const HIGHLIGHT_COLOR = '#ef7d1a';
+const HIGHLIGHT_OUTLINE_OPACITY = 0.9;
+const TARGET_COLOR = '#1b74d8';
+const TARGET_OUTLINE_OPACITY = 0.95;
 
 /**
  * Render the plan view using wavy domed foliage silhouettes scaled to plant width.
@@ -21,12 +27,23 @@ export function renderTopView(
   pixelsPerInch = DEFAULT_PIXELS_PER_INCH,
   options = {}
 ) {
-  const { showLabels = false } = options;
+  const { showLabels = false, highlightedSpeciesKey = '', targetedPlantId = '' } = options;
   clearSvg(svg);
+  const normalizedHighlightKey = (highlightedSpeciesKey || '').toLowerCase();
+  const normalizedTargetId = String(targetedPlantId || '');
   const toPixels = (feet) => feet * INCHES_PER_FOOT * pixelsPerInch;
+  const highlightTargets = [];
+  const targetMarkers = [];
 
   plantStates.forEach(({ plant, state }) => {
-    const group = createSvgElement('g', { 'data-name': plant.commonName });
+    const speciesKey = getSpeciesKey(plant);
+    const isHighlighted = Boolean(normalizedHighlightKey && speciesKey === normalizedHighlightKey);
+    const isTargeted = normalizedTargetId && String(plant.id) === normalizedTargetId;
+    const group = createSvgElement('g', {
+      'data-name': plant.commonName,
+      'data-plant-id': plant.id,
+      'data-species-key': speciesKey,
+    });
     const cx = toPixels(plant.x);
     const cy = PLAN_VIEWBOX.height - toPixels(plant.y); // origin bottom-left for yard coordinates
     const radius = toPixels(plant.width) / 2;
@@ -117,7 +134,17 @@ export function renderTopView(
 
     appendTooltip(group, buildTooltipLines(plant, state));
     svg.appendChild(group);
+
+    if (isHighlighted) {
+      highlightTargets.push({ cx, cy, radius });
+    }
+    if (isTargeted) {
+      targetMarkers.push({ cx, cy, radius });
+    }
   });
+
+  highlightTargets.forEach((target) => appendHighlightRing(svg, target));
+  targetMarkers.forEach((target) => appendTargetRing(svg, target));
 }
 
 function renderFoliageDome(group, { cx, cy, radius, color, rng, outlinePoints }) {
@@ -242,4 +269,55 @@ function clampChannel(value) {
   if (value < 0) return 0;
   if (value > 255) return 255;
   return value;
+}
+
+function appendHighlightRing(svg, { cx, cy, radius }) {
+  const outer = createSvgElement('circle', {
+    cx,
+    cy,
+    r: radius * 1.05 + 6,
+    fill: 'none',
+    stroke: HIGHLIGHT_COLOR,
+    'stroke-width': Math.max(radius * 0.12, 3),
+    'stroke-dasharray': '7 6',
+    'stroke-opacity': HIGHLIGHT_OUTLINE_OPACITY,
+    'pointer-events': 'none',
+  });
+  const center = createSvgElement('circle', {
+    cx,
+    cy,
+    r: Math.max(radius * 0.1, 4),
+    fill: HIGHLIGHT_COLOR,
+    'fill-opacity': 0.8,
+    stroke: '#fff',
+    'stroke-width': 2,
+    'pointer-events': 'none',
+  });
+  svg.appendChild(outer);
+  svg.appendChild(center);
+}
+
+function appendTargetRing(svg, { cx, cy, radius }) {
+  const outer = createSvgElement('circle', {
+    cx,
+    cy,
+    r: radius * 1.02 + 4,
+    fill: 'none',
+    stroke: TARGET_COLOR,
+    'stroke-width': Math.max(radius * 0.18, 3.6),
+    'stroke-opacity': TARGET_OUTLINE_OPACITY,
+    'pointer-events': 'none',
+  });
+  const center = createSvgElement('circle', {
+    cx,
+    cy,
+    r: Math.max(radius * 0.16, 5),
+    fill: TARGET_COLOR,
+    'fill-opacity': 0.9,
+    stroke: '#fff',
+    'stroke-width': 2,
+    'pointer-events': 'none',
+  });
+  svg.appendChild(outer);
+  svg.appendChild(center);
 }
