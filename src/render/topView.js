@@ -5,6 +5,7 @@ import { buildTooltipLines } from './tooltip.js';
 import { buildFlowerCenters } from './inflorescenceStrategies.js';
 import { pointInPolygon } from './geometry.js';
 import { buildPlantLabel } from './labels.js';
+import { buildSmoothPath } from './pathUtils.js';
 
 /**
  * Render the plan view using wavy domed foliage silhouettes scaled to plant width.
@@ -163,31 +164,6 @@ function buildWavyCirclePoints(cx, cy, radius, rng) {
   }
 
   return points;
-}
-
-function buildSmoothPath(points) {
-  if (!points.length) return '';
-  const parts = [];
-  const last = points[points.length - 1];
-  const first = points[0];
-  const start = midpoint(last, first);
-  parts.push(`M ${start.x.toFixed(2)} ${start.y.toFixed(2)}`);
-
-  for (let i = 0; i < points.length; i += 1) {
-    const current = points[i];
-    const next = points[(i + 1) % points.length];
-    const mid = midpoint(current, next);
-    parts.push(
-      `Q ${current.x.toFixed(2)} ${current.y.toFixed(2)} ${mid.x.toFixed(2)} ${mid.y.toFixed(2)}`
-    );
-  }
-
-  parts.push('Z');
-  return parts.join(' ');
-}
-
-function midpoint(a, b) {
-  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }
 
 function computePlanFlowerRadius(canopyRadius, count) {
