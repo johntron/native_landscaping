@@ -1,10 +1,10 @@
 id,botanical_name,x_ft,y_ft
 beautyberry-east,Callicarpa americana,12.150,16.273
 turkscap-shade,Malvaviscus arboreus var. drummondii,6.732,11.391
-turkscap-kitchen,Malvaviscus arboreus var. drummondii,6.726,12.944
+turkscap-kitchen,Malvaviscus arboreus var. drummondii,6.401,8.505
 frostweed-drift,Verbesina virginica,14.603,18.132
 honeysuckle-obelisk,Lonicera sempervirens,3.019,3.707
-passionflower-trellis,Passiflora incarnata,4.002,7.759
+passionflower-trellis,Passiflora incarnata,5.237,9.776
 carex-glade,Carex blanda,5.111,12.836
 carex-glade2,Carex blanda,3.799,13.952
 carex-glade3,Carex blanda,7.058,16.891
@@ -36,7 +36,7 @@ winecup-edge3-copy-copy,Callirhoe involucrata,6.908,6.181
 winecup-edge3-copy-copy-copy,Callirhoe involucrata,6.881,4.587
 carex-glade6-copy-copy,Carex blanda,5.448,6.985
 carex-glade6-copy-copy-2,Carex blanda,4.648,7.858
-horseherb-carpet3-copy-2,Calyptocarpus vialis,4.061,7.651
+horseherb-carpet3-copy-2,Calyptocarpus vialis,3.898,7.163
 winecup-edge3-copy-2,Callirhoe involucrata,4.794,6.204
 carex-glade5-copy,Carex blanda,5.915,11.986
 winecup-edge3-copy-3,Callirhoe involucrata,5.594,6.422
@@ -63,4 +63,5 @@ winecup-edge2-copy-copy-copy,Callirhoe involucrata,12.758,15.428
 horseherb-carpet2-copy,Calyptocarpus vialis,15.650,18.435
 carex-glade3-copy-2-copy,Carex blanda,14.457,16.756
 carex-glade3-copy-2-copy-2,Carex blanda,12.749,17.774
-coralberry,Symphoricarpos orbiculatus,9,14.4
+coralberry,Symphoricarpos orbiculatus,9.000,14.400
+fragrant-sumac,Rhus aromatica,5.074,6.148
