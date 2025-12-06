@@ -13,4 +13,4 @@ winecup,Winecup,Callirhoe involucrata,creeping,2-7,3-6,#c02763,#5f8c5a,#6f8c78,#
 golden-groundsel,Golden groundsel,Packera obovata,mound,2-11,3-4,#e6c844,#4f7c55,#5f8c62,#708c6a,#5a6b58,part-sun,medium,clay,2,0.8,umbel/head,30,upper,none,0,none
 blackfoot-daisy,Blackfoot daisy,Melampodium leucanthum,mound,3-11,4-10,#f2f2e6,#7d9a86,#708c7a,#8c8a70,#7a7a68,full-sun,low,sandy,2,1,umbel/head,25,upper,none,0,none
 four-nerve-daisy,Four-nerve daisy,Tetraneuris scaposa,mound,2-12,3-10,#e8c941,#6f8c64,#6f8c64,#7a7a64,#707058,full-sun,low,loamy,1,1,umbel/head,15,upper,none,0,none
-yaupon-holly,American Yaupon Holly,Ilex vomitoria,tree,3-12,3-4,#f1f1e2,#6c8a56,#5b7a4b,#6a7f58,#5a6c52,part-sun,medium,loamy,10,15,umbel/head,200,upper,#b3261e,10-2,heavy
+yaupon-holly,American Yaupon Holly,Ilex vomitoria,tree,3-12,3-4,#f1f1e2,#6c8a56,#5b7a4b,#6a7f58,#5a6c52,part-sun,medium,loamy,10,15,umbel/head,200,upper,#b3261e,10-2,heavyAdd species hover highlighting, coordinate tooltips, and right-click clone targeting for plants
