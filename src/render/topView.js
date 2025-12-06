@@ -1,4 +1,9 @@
-import { DEFAULT_PIXELS_PER_INCH, INCHES_PER_FOOT, PLAN_VIEWBOX } from '../constants.js';
+import {
+  DEFAULT_PIXELS_PER_INCH,
+  INCHES_PER_FOOT,
+  PLAN_VIEWBOX,
+  PLANT_BLEND_OPACITY,
+} from '../constants.js';
 import { makeRng, seedForPlant } from '../utils/rng.js';
 import { getSpeciesKey } from '../utils/speciesKey.js';
 import { appendTooltip, clearSvg, createSvgElement } from './svgUtils.js';
@@ -154,6 +159,7 @@ function renderFoliageDome(group, { cx, cy, radius, color, rng, outlinePoints })
   const base = createSvgElement('path', {
     d,
     fill: color,
+    'fill-opacity': PLANT_BLEND_OPACITY,
   });
   group.appendChild(base);
 

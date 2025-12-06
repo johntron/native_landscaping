@@ -6,6 +6,7 @@ import {
   SOUTH_ELEVATION_LEFT_OFFSET_PX,
   WEST_ELEVATION_BOTTOM_OFFSET_PX,
   WEST_ELEVATION_LEFT_OFFSET_PX,
+  PLANT_BLEND_OPACITY,
 } from '../constants.js';
 import { getSpeciesKey } from '../utils/speciesKey.js';
 import { makeRng, seedForPlant } from '../utils/rng.js';
@@ -322,7 +323,7 @@ function renderProfileSilhouette({
   const d = buildWavyProfilePath({ cx, groundY, width: adjustedWidth, height: adjustedHeight, exponent, rng });
   const clipId = buildClipId(clipSuffix);
 
-  const base = createSvgElement('path', { d, fill: color });
+  const base = createSvgElement('path', { d, fill: color, 'fill-opacity': PLANT_BLEND_OPACITY });
   group.appendChild(base);
 
   const defs = createSvgElement('defs', {});
@@ -519,7 +520,11 @@ function renderTreeProfile({ cx, groundY, width, height, color, rng, clipSuffix,
   const canopyPath = buildSmoothPath(canopyPoints);
   const canopyClipId = buildClipId(`${clipSuffix}-tree`);
 
-  const canopy = createSvgElement('path', { d: canopyPath, fill: color });
+  const canopy = createSvgElement('path', {
+    d: canopyPath,
+    fill: color,
+    'fill-opacity': PLANT_BLEND_OPACITY,
+  });
   group.appendChild(canopy);
 
   const defs = createSvgElement('defs', {});
