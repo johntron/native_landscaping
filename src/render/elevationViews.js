@@ -13,6 +13,7 @@ import { buildTooltipLines } from './tooltip.js';
 import { buildFlowerCenters } from './inflorescenceStrategies.js';
 import { pointInPolygon } from './geometry.js';
 import { buildPlantLabel } from './labels.js';
+import { buildFruitCenters } from './fruitPlacement.js';
 import { buildSmoothPath } from './pathUtils.js';
 
 /**
@@ -168,6 +169,43 @@ function renderElevation(
           fill: state.flowerColor,
         });
         group.appendChild(flower);
+      });
+    }
+
+    if (state.fruitColor) {
+      const fruitRng = makeRng(seedForPlant(`${plant.id}-fruit`));
+      const fruitCenters = buildFruitCenters({
+        variant: 'elevation',
+        canopy: {
+          plan: { cx, cy: groundY - adjustedHeight * 0.5, radius: adjustedWidth / 2 },
+          elevation: { cx, width: adjustedWidth, height: adjustedHeight, groundY },
+        },
+        rng: fruitRng,
+        fruitLoad: plant.fruitLoad,
+        accept: (point) => pointInPolygon(point, outlinePoints),
+      });
+      const { rx: baseRx, ry: baseRy } = computeElevationFruitRadii(
+        adjustedWidth,
+        adjustedHeight,
+        fruitCenters.length
+      );
+      const soilY = groundY;
+
+      fruitCenters.forEach((center) => {
+        const sizeFactor = 0.9 + fruitRng.next() * 0.2;
+        const rx = baseRx * sizeFactor;
+        const ry = baseRy * (0.92 + fruitRng.next() * 0.18);
+        const cy = Math.min(center.y, soilY - ry);
+        const fruit = createSvgElement('ellipse', {
+          cx: center.x,
+          cy,
+          rx,
+          ry,
+          fill: state.fruitColor,
+          stroke: darkenHex(state.fruitColor, 0.6),
+          'stroke-width': Math.max(rx * 0.35, 0.9),
+        });
+        group.appendChild(fruit);
       });
     }
 
@@ -496,6 +534,15 @@ function computeElevationFlowerRadii(width, height, count) {
   const scaled = base / Math.sqrt(count);
   const rx = Math.max(scaled, 0.4);
   const ry = Math.max(Math.min(scaled * 0.9, height * 0.22), 0.35);
+  return { rx, ry };
+}
+
+function computeElevationFruitRadii(width, height, count) {
+  if (!count) return { rx: 0, ry: 0 };
+  const base = width * 0.14;
+  const scaled = base / Math.sqrt(count);
+  const rx = Math.max(scaled, 0.35);
+  const ry = Math.max(Math.min(scaled * 0.85, height * 0.18), 0.3);
   return { rx, ry };
 }
 

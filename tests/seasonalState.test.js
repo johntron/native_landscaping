@@ -37,3 +37,25 @@ test('falls back to dormant palette when outside growth season', () => {
   assert.equal(decemberState.foliageColor, '#998866');
   assert.equal(decemberState.flowerColor, null);
 });
+
+test('computes fruiting with flower dependency and seasonal window', () => {
+  const plantWithFruit = {
+    ...basePlant,
+    floweringMonths: [4, 5],
+    fruitMonths: [8, 9, 10, 11, 12, 1, 2],
+    fruitColor: '#b245cc',
+    fruitLoad: 'heavy',
+  };
+
+  const october = computePlantState(plantWithFruit, 10);
+  assert.equal(october.isFruiting, true);
+  assert.equal(october.fruitColor, '#b245cc');
+
+  const march = computePlantState(plantWithFruit, 3);
+  assert.equal(march.isFruiting, false);
+  assert.equal(march.fruitColor, null);
+
+  const plantWithoutFlowering = { ...plantWithFruit, floweringMonths: [] };
+  const december = computePlantState(plantWithoutFlowering, 12);
+  assert.equal(december.isFruiting, false);
+});
