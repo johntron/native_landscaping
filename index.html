@@ -95,35 +95,48 @@
             </div>
           </div>
           <div class="controls-row controls-row--secondary">
-            <div class="toggle-row">
-              <label class="pill-switch" for="lockToggle" data-variant="lock">
-                <input id="lockToggle" type="checkbox" checked />
-                <span class="pill-body">
-                  <span class="pill-thumb"></span>
-                  <span class="pill-content">
-                    <svg class="pill-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                      <path d="M12 7V5a4 4 0 0 0-8 0v2H3v8h10V7h-1Zm-6 0V5a2 2 0 0 1 4 0v2H6Z" fill="currentColor"/>
-                    </svg>
-                    <span class="pill-text">
-                      <span class="pill-title" id="lockStatusText">Positions locked</span>
-                      <span class="pill-hint">unlock to drag</span>
+            <div class="secondary-controls">
+              <div class="control-pair control-pair--layers">
+                <label for="layerVisibility">Hide upper layers</label>
+                <select id="layerVisibility">
+                  <option value="0">Show all layers</option>
+                  <option value="1">Hide trees</option>
+                  <option value="2">Hide trees + sculptural</option>
+                  <option value="3">Hide through accents</option>
+                  <option value="4">Hide everything (incl. groundcover)</option>
+                </select>
+                <p class="control-hint">Removes layers from the canopy downward so understory plants stay visible.</p>
+              </div>
+              <div class="toggle-row">
+                <label class="pill-switch" for="lockToggle" data-variant="lock">
+                  <input id="lockToggle" type="checkbox" checked />
+                  <span class="pill-body">
+                    <span class="pill-thumb"></span>
+                    <span class="pill-content">
+                      <svg class="pill-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                        <path d="M12 7V5a4 4 0 0 0-8 0v2H3v8h10V7h-1Zm-6 0V5a2 2 0 0 1 4 0v2H6Z" fill="currentColor"/>
+                      </svg>
+                      <span class="pill-text">
+                        <span class="pill-title" id="lockStatusText">Positions locked</span>
+                        <span class="pill-hint">unlock to drag</span>
+                      </span>
                     </span>
                   </span>
-                </span>
-              </label>
-              <label class="pill-switch" for="labelToggle">
-                <input id="labelToggle" type="checkbox" checked />
-                <span class="pill-body">
-                  <span class="pill-thumb"></span>
-                  <span class="pill-content">
-                    <span class="pill-icon pill-icon--text" aria-hidden="true">Aa</span>
-                    <span class="pill-text">
-                      <span class="pill-title">Plant labels</span>
-                      <span class="pill-hint">show initials</span>
+                </label>
+                <label class="pill-switch" for="labelToggle">
+                  <input id="labelToggle" type="checkbox" checked />
+                  <span class="pill-body">
+                    <span class="pill-thumb"></span>
+                    <span class="pill-content">
+                      <span class="pill-icon pill-icon--text" aria-hidden="true">Aa</span>
+                      <span class="pill-text">
+                        <span class="pill-title">Plant labels</span>
+                        <span class="pill-hint">show initials</span>
+                      </span>
                     </span>
                   </span>
-                </span>
-              </label>
+                </label>
+              </div>
             </div>
             <button id="exportLayoutBtn" class="button pill-button" type="button" disabled>Export layout CSV</button>
           </div>

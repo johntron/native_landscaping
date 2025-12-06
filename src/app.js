@@ -8,6 +8,7 @@ import { configureViews } from './render/viewConfig.js';
 import { createPlantDragController } from './interaction/dragController.js';
 import { buildPlantLabel } from './render/labels.js';
 import { formatMonthRange } from './state/seasonalState.js';
+import { clampHiddenLayerCount } from './state/layers.js';
 
 const appState = {
   plants: [],
@@ -15,6 +16,7 @@ const appState = {
   pixelsPerInch: DEFAULT_PIXELS_PER_INCH,
   positionsLocked: true,
   showLabels: false,
+  hiddenLayerCount: 0,
 };
 
 async function init() {
@@ -37,6 +39,7 @@ async function init() {
   const lockStatusText = document.getElementById('lockStatusText');
   const exportButton = document.getElementById('exportLayoutBtn');
   const labelToggle = document.getElementById('labelToggle');
+  const layerVisibilitySelect = document.getElementById('layerVisibility');
 
   configureViews({ svgRefs, containerRefs });
 
@@ -82,6 +85,14 @@ async function init() {
     appState.showLabels = false;
   }
 
+  if (layerVisibilitySelect) {
+    layerVisibilitySelect.value = String(appState.hiddenLayerCount);
+    layerVisibilitySelect.addEventListener('change', (e) => {
+      appState.hiddenLayerCount = clampHiddenLayerCount(Number(e.target.value));
+      render();
+    });
+  }
+
   try {
     const [speciesCsv, layoutCsv] = await Promise.all([
       fetchCsv(new URL('plants.csv', document.baseURI)),
@@ -108,6 +119,7 @@ async function init() {
     }));
     renderViews(svgRefs, plantStates, appState.pixelsPerInch, {
       showLabels: appState.showLabels,
+      hiddenLayerCount: appState.hiddenLayerCount,
     });
   };
 

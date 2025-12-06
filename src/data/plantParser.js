@@ -1,4 +1,5 @@
 import { parseCsv } from './csvLoader.js';
+import { classifyPlantLayer } from '../state/layers.js';
 
 const DEFAULT_LEAF_COLOR = '#6b8e23';
 
@@ -97,7 +98,7 @@ export function buildPlantsFromCsv(speciesCsvText, layoutCsvText) {
       throw new Error(`Unknown plant "${missing}" in layout row ${placement.id}`);
     }
 
-    return {
+    const plant = {
       id: placement.id || `plant-${idx + 1}`,
       commonName: speciesEntry.commonName,
       botanicalName: speciesEntry.botanicalName,
@@ -119,6 +120,8 @@ export function buildPlantsFromCsv(speciesCsvText, layoutCsvText) {
       flowerCountHint: speciesEntry.flowerCountHint,
       flowerZone: speciesEntry.flowerZone,
     };
+
+    return { ...plant, layer: classifyPlantLayer(plant) };
   });
 }
 
