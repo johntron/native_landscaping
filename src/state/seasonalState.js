@@ -26,12 +26,16 @@ export function computePlantState(plant, month) {
     : plant.dormantColor || DORMANT_FOLIAGE_COLOR;
 
   const flowerColor = isFlowering ? plant.flowerColor : null;
+  const isFruiting = computeFruiting(plant, month, { isGrowing });
+  const fruitColor = isFruiting ? plant.fruitColor : null;
 
   return {
     isGrowing,
     isFlowering,
     foliageColor,
     flowerColor,
+    isFruiting,
+    fruitColor,
   };
 }
 
@@ -93,4 +97,15 @@ function normalizeMonthsForDisplay(spec) {
     return months.sort((a, b) => a - b);
   }
   return [];
+}
+
+function computeFruiting(plant, month, { isGrowing }) {
+  const hasFruitMonths = Array.isArray(plant.fruitMonths) && plant.fruitMonths.length > 0;
+  if (!hasFruitMonths) return false;
+  if (!plant.fruitColor || plant.fruitLoad === 'none') return false;
+  if (!plant.floweringMonths || plant.floweringMonths.length === 0) return false;
+  const inSeason = plant.fruitMonths.includes(month);
+  if (!inSeason) return false;
+  // Fruits can persist into dormancy, so we do not require isGrowing to be true.
+  return true;
 }

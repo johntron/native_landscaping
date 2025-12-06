@@ -5,6 +5,7 @@ import { buildTooltipLines } from './tooltip.js';
 import { buildFlowerCenters } from './inflorescenceStrategies.js';
 import { pointInPolygon } from './geometry.js';
 import { buildPlantLabel } from './labels.js';
+import { buildFruitCenters } from './fruitPlacement.js';
 import { buildSmoothPath } from './pathUtils.js';
 
 /**
@@ -64,6 +65,31 @@ export function renderTopView(
           fill: state.flowerColor,
         });
         group.appendChild(flower);
+      });
+    }
+
+    if (state.fruitColor) {
+      const fruitRng = makeRng(seedForPlant(`${plant.id}-fruit`));
+      const fruitCenters = buildFruitCenters({
+        variant: 'plan',
+        canopy: { plan: { cx, cy, radius } },
+        rng: fruitRng,
+        fruitLoad: plant.fruitLoad,
+        accept: (point) => pointInPolygon(point, canopyPoints),
+      });
+      const fruitRadius = computePlanFruitRadius(radius, fruitCenters.length);
+
+      fruitCenters.forEach((center) => {
+        const jitteredRadius = fruitRadius * (0.88 + fruitRng.next() * 0.18);
+        const fruit = createSvgElement('circle', {
+          cx: center.x,
+          cy: center.y,
+          r: jitteredRadius,
+          fill: state.fruitColor,
+          stroke: darkenHex(state.fruitColor, 0.6),
+          'stroke-width': Math.max(jitteredRadius * 0.35, 0.7),
+        });
+        group.appendChild(fruit);
       });
     }
 
@@ -170,6 +196,12 @@ function computePlanFlowerRadius(canopyRadius, count) {
   if (!count) return 0;
   const scaled = (canopyRadius * 0.35) / Math.sqrt(count);
   return Math.max(scaled, 0.6);
+}
+
+function computePlanFruitRadius(canopyRadius, count) {
+  if (!count) return 0;
+  const scaled = (canopyRadius * 0.22) / Math.sqrt(count);
+  return Math.max(scaled, 0.5);
 }
 
 function darkenHex(color, factor) {

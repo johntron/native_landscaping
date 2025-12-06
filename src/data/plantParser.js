@@ -19,13 +19,14 @@ export function parseSpeciesCsv(csvText) {
   return rows.map((row, idx) => {
     const botanicalName = row.botanical_name || row.botanicalName || '';
     const normalizedBotanicalName = normalizeBotanicalName(botanicalName);
-    const speciesEpithet = (row.species_epithet || deriveSpeciesEpithet(botanicalName) || '').toLowerCase();
-    const baseLeaf = row.leafColor || row.foliage_color_summer || DEFAULT_LEAF_COLOR;
-    const flowerCountHint = pickNumber(row, ['flower_count_hint', 'flowerCountHint']);
-    const flowerZone = normalizeFlowerZone(row.flower_zone || row.flowerZone);
-    const inflorescence = normalizeInflorescence(row.inflorescence || row.inflorescence_type || row.inflorescenceType);
-    const id = row.id || normalizedBotanicalName || speciesEpithet || `species-${idx + 1}`;
-    const commonName = row.common_name || row.name || id;
+  const speciesEpithet = (row.species_epithet || deriveSpeciesEpithet(botanicalName) || '').toLowerCase();
+  const baseLeaf = row.leafColor || row.foliage_color_summer || DEFAULT_LEAF_COLOR;
+  const flowerCountHint = pickNumber(row, ['flower_count_hint', 'flowerCountHint']);
+  const flowerZone = normalizeFlowerZone(row.flower_zone || row.flowerZone);
+  const inflorescence = normalizeInflorescence(row.inflorescence || row.inflorescence_type || row.inflorescenceType);
+  const fruitLoad = normalizeFruitLoad(row.fruit_load || row.fruitLoad);
+  const id = row.id || normalizedBotanicalName || speciesEpithet || `species-${idx + 1}`;
+  const commonName = row.common_name || row.name || id;
 
     return {
       id,
@@ -48,6 +49,9 @@ export function parseSpeciesCsv(csvText) {
       inflorescence,
       flowerCountHint,
       flowerZone,
+      fruitColor: normalizeHexColor(row.fruit_color || row.fruitColor),
+      fruitMonths: parseMonthField(row.fruit_season_months, row.fruitStart, row.fruitEnd),
+      fruitLoad,
     };
   });
 }
@@ -119,6 +123,9 @@ export function buildPlantsFromCsv(speciesCsvText, layoutCsvText) {
       inflorescence: speciesEntry.inflorescence,
       flowerCountHint: speciesEntry.flowerCountHint,
       flowerZone: speciesEntry.flowerZone,
+      fruitColor: speciesEntry.fruitColor,
+      fruitMonths: speciesEntry.fruitMonths,
+      fruitLoad: speciesEntry.fruitLoad,
     };
 
     return { ...plant, layer: classifyPlantLayer(plant) };
@@ -151,6 +158,25 @@ function normalizeGrowthShape(value) {
     succulent: 'vertical',
   };
   return aliases[v] || v;
+}
+
+function normalizeFruitLoad(value) {
+  const v = (value || '').toLowerCase();
+  if (v === 'none') return 'none';
+  if (v === 'sparse' || v === 'light') return 'sparse';
+  if (v === 'moderate' || v === 'medium') return 'moderate';
+  if (v === 'heavy' || v === 'abundant') return 'heavy';
+  return '';
+}
+
+function normalizeHexColor(value) {
+  const v = (value || '').trim();
+  if (!v) return '';
+  if (v === 'none') return '';
+  if (/^#?[0-9a-fA-F]{6}$/.test(v)) {
+    return v.startsWith('#') ? v : `#${v}`;
+  }
+  return '';
 }
 
 function buildFoliagePalette(row, fallback) {

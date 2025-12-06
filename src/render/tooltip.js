@@ -8,6 +8,7 @@ export function buildTooltipLines(plant, state) {
     `Soil: ${plant.soilPref}`,
     formatInflorescenceLine(plant, state),
     state?.isFlowering ? 'Flowering' : '',
+    formatFruitLine(plant, state),
   ];
 }
 
@@ -22,4 +23,14 @@ function formatInflorescenceLine(plant, state) {
   if (zone) pieces.push(`${zone} canopy`);
   if (state?.isFlowering === false) pieces.push('(off-cycle)');
   return `Inflorescence: ${pieces.filter(Boolean).join(', ')}`;
+}
+
+function formatFruitLine(plant, state) {
+  if (!plant.fruitColor && !plant.fruitLoad) return '';
+  const pieces = [];
+  if (plant.fruitColor) pieces.push(plant.fruitColor);
+  if (plant.fruitLoad) pieces.push(`${plant.fruitLoad} load`);
+  if (state?.isFruiting === false) pieces.push('(not in season)');
+  if (state?.isFruiting) pieces.push('fruiting');
+  return pieces.length ? `Fruit: ${pieces.join(', ')}` : '';
 }

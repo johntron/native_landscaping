@@ -92,3 +92,21 @@ test('parses inflorescence metadata and carries it through plant instances', () 
   assert.equal(plants[1].flowerCountHint, 25);
   assert.equal(plants[2].flowerZone, 'full');
 });
+
+test('parses fruit metadata and carries it through plant instances', () => {
+  const speciesCsv = `${speciesHeader},fruit_color,fruit_season_months,fruit_load\n`
+    + 'i,Beautyberry,Callicarpa americana,3-11,5-6,,,,,purple,5.5,4.5,arch,#b245cc,8-12,heavy\n'
+    + 'j,Holly,Ilex vomitoria,3-12,3-4,,,,,white,10,15,tree,#b3261e,10-2,moderate\n';
+  const layoutCsv = 'id,botanical_name,x_ft,y_ft\n'
+    + 'berry,Callicarpa americana,2,2\n'
+    + 'holly,Ilex vomitoria,5,5';
+
+  const plants = buildPlantsFromCsv(speciesCsv, layoutCsv);
+  assert.equal(plants[0].fruitColor, '#b245cc');
+  assert.deepStrictEqual(plants[0].fruitMonths, [8, 9, 10, 11, 12]);
+  assert.equal(plants[0].fruitLoad, 'heavy');
+
+  assert.equal(plants[1].fruitColor, '#b3261e');
+  assert.deepStrictEqual(plants[1].fruitMonths, [10, 11, 12, 1, 2]);
+  assert.equal(plants[1].fruitLoad, 'moderate');
+});
