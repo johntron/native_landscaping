@@ -106,6 +106,8 @@ export function buildPlantsFromCsv(speciesCsvText, layoutCsvText) {
       id: placement.id || `plant-${idx + 1}`,
       commonName: speciesEntry.commonName,
       botanicalName: speciesEntry.botanicalName,
+      botanicalKey: speciesEntry.botanicalKey || placement.botanicalKey,
+      speciesEpithet: speciesEntry.speciesEpithet || placement.speciesEpithet,
       x: placement.x,
       y: placement.y,
       width: speciesEntry.width ?? 1,

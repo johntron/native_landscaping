@@ -462,6 +462,12 @@ select {
   background-color: #f7f5ef;
 }
 
+.species-table__table tbody tr.is-highlighted {
+  background-color: #fff4e7;
+  outline: 2px solid #ef7d1a;
+  outline-offset: -2px;
+}
+
 .species-table__table td:nth-child(4),
 .species-table__table td:nth-child(5) {
   text-align: right;
@@ -560,6 +566,46 @@ select {
 /* Optional styling for tooltip text displayed via title attributes on SVG elements. */
 .view svg [data-name]:hover {
   cursor: pointer;
+}
+
+.context-menu {
+  position: absolute;
+  z-index: 20;
+  background: #fffdf8;
+  border: 1px solid #c8c2b8;
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+  padding: 0.25rem 0;
+  min-width: 180px;
+  display: none;
+}
+
+.context-menu.is-open {
+  display: block;
+}
+
+.context-menu__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.context-menu__item {
+  width: 100%;
+  padding: 0.6rem 0.85rem;
+  text-align: left;
+  background: none;
+  border: none;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #2f2f2f;
+  cursor: pointer;
+}
+
+.context-menu__item:hover,
+.context-menu__item:focus-visible {
+  background-color: #fff0dc;
+  outline: none;
 }
 
 @media (max-width: 960px) {

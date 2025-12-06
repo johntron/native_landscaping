@@ -7,6 +7,7 @@ import {
   WEST_ELEVATION_BOTTOM_OFFSET_PX,
   WEST_ELEVATION_LEFT_OFFSET_PX,
 } from '../constants.js';
+import { getSpeciesKey } from '../utils/speciesKey.js';
 import { makeRng, seedForPlant } from '../utils/rng.js';
 import { appendTooltip, clearSvg, createSvgElement } from './svgUtils.js';
 import { buildTooltipLines } from './tooltip.js';
@@ -15,6 +16,11 @@ import { pointInPolygon } from './geometry.js';
 import { buildPlantLabel } from './labels.js';
 import { buildFruitCenters } from './fruitPlacement.js';
 import { buildSmoothPath } from './pathUtils.js';
+
+const HIGHLIGHT_COLOR = '#ef7d1a';
+const HIGHLIGHT_OUTLINE_OPACITY = 0.9;
+const TARGET_COLOR = '#1b74d8';
+const TARGET_OUTLINE_OPACITY = 0.95;
 
 /**
  * South (kitchen) elevation uses the x axis of the yard as horizontal.
@@ -73,8 +79,12 @@ function renderElevation(
 ) {
   clearSvg(svg);
   const toPixels = (feet) => feet * INCHES_PER_FOOT * pixelsPerInch;
-  const { showLabels = false } = options;
+  const { showLabels = false, highlightedSpeciesKey = '', targetedPlantId = '' } = options;
+  const normalizedHighlightKey = (highlightedSpeciesKey || '').toLowerCase();
+  const normalizedTargetId = String(targetedPlantId || '');
   const depthKey = axisKey === 'x' ? 'y' : 'x';
+  const highlightTargets = [];
+  const targetMarkers = [];
   const sortedPlantStates = [...plantStates].sort((a, b) => {
     const priorityDiff = stackingPriority(a?.plant, axisKey) - stackingPriority(b?.plant, axisKey);
     if (priorityDiff !== 0) return priorityDiff; // lower priority drawn first
@@ -107,7 +117,14 @@ function renderElevation(
   });
 
   sortedPlantStates.forEach(({ plant, state }) => {
-    const group = createSvgElement('g', { 'data-name': plant.commonName });
+    const speciesKey = getSpeciesKey(plant);
+    const isHighlighted = Boolean(normalizedHighlightKey && speciesKey === normalizedHighlightKey);
+    const isTargeted = normalizedTargetId && String(plant.id) === normalizedTargetId;
+    const group = createSvgElement('g', {
+      'data-name': plant.commonName,
+      'data-plant-id': plant.id,
+      'data-species-key': speciesKey,
+    });
     const canopySeed = seedForPlant(plant.id);
     const rng = makeRng(canopySeed);
     const axisValue = axisKey === 'x' ? plant.x : plant.y;
@@ -241,7 +258,27 @@ function renderElevation(
 
     appendTooltip(group, buildTooltipLines(plant, state));
     svg.appendChild(group);
+
+    if (isHighlighted) {
+      highlightTargets.push({
+        cx,
+        width: adjustedWidth,
+        height: adjustedHeight,
+        groundY,
+      });
+    }
+    if (isTargeted) {
+      targetMarkers.push({
+        cx,
+        width: adjustedWidth,
+        height: adjustedHeight,
+        groundY,
+      });
+    }
   });
+
+  highlightTargets.forEach((target) => appendElevationHighlight(svg, target));
+  targetMarkers.forEach((target) => appendElevationTarget(svg, target));
 }
 
 function stackingPriority(plant, axisKey) {
@@ -623,4 +660,63 @@ function buildClipId(suffix) {
     .replace(/[^a-zA-Z0-9_-]/g, '_')
     .slice(0, 60);
   return `plant-clip-${safe}`;
+}
+
+function appendElevationHighlight(svg, { cx, groundY, width, height }) {
+  const padding = Math.max(Math.min(width * 0.08, 12), 6);
+  const rect = createSvgElement('rect', {
+    x: cx - width / 2 - padding,
+    y: groundY - height - padding,
+    width: width + padding * 2,
+    height: height + padding * 1.6,
+    fill: 'none',
+    stroke: HIGHLIGHT_COLOR,
+    'stroke-width': Math.max(width * 0.045, 2.4),
+    'stroke-dasharray': '7 6',
+    'stroke-opacity': HIGHLIGHT_OUTLINE_OPACITY,
+    'pointer-events': 'none',
+    rx: padding * 0.4,
+    ry: padding * 0.4,
+  });
+  const marker = createSvgElement('circle', {
+    cx,
+    cy: groundY - Math.min(height * 0.55, height - 4),
+    r: Math.max(Math.min(width, height) * 0.07, 3.2),
+    fill: HIGHLIGHT_COLOR,
+    'fill-opacity': 0.85,
+    stroke: '#fff',
+    'stroke-width': 2,
+    'pointer-events': 'none',
+  });
+  svg.appendChild(rect);
+  svg.appendChild(marker);
+}
+
+function appendElevationTarget(svg, { cx, groundY, width, height }) {
+  const padding = Math.max(Math.min(width * 0.06, 10), 5);
+  const rect = createSvgElement('rect', {
+    x: cx - width / 2 - padding,
+    y: groundY - height - padding,
+    width: width + padding * 2,
+    height: height + padding * 1.5,
+    fill: 'none',
+    stroke: TARGET_COLOR,
+    'stroke-width': Math.max(width * 0.06, 3),
+    'stroke-opacity': TARGET_OUTLINE_OPACITY,
+    'pointer-events': 'none',
+    rx: padding * 0.35,
+    ry: padding * 0.35,
+  });
+  const marker = createSvgElement('circle', {
+    cx,
+    cy: groundY - Math.min(height * 0.5, height - 3),
+    r: Math.max(Math.min(width, height) * 0.1, 4.2),
+    fill: TARGET_COLOR,
+    'fill-opacity': 0.92,
+    stroke: '#fff',
+    'stroke-width': 2,
+    'pointer-events': 'none',
+  });
+  svg.appendChild(rect);
+  svg.appendChild(marker);
 }

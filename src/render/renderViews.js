@@ -4,12 +4,18 @@ import { filterPlantStatesByHiddenLayers } from '../state/layers.js';
 
 export function renderViews(svgRefs, plantStates, pixelsPerInch, options = {}) {
   const { topSvg, southSvg, westSvg } = svgRefs;
-  const { showLabels = false, hiddenLayerCount = 0 } = options;
+  const {
+    showLabels = false,
+    hiddenLayerCount = 0,
+    highlightedSpeciesKey = '',
+    targetedPlantId = '',
+  } = options;
   const filtered = filterPlantStatesByHiddenLayers(plantStates, hiddenLayerCount);
   const topOrdered = orderTopViewPlantStates(filtered);
-  renderTopView(topSvg, topOrdered, pixelsPerInch, { showLabels });
-  renderSouthElevation(southSvg, filtered, pixelsPerInch, { showLabels });
-  renderWestElevation(westSvg, filtered, pixelsPerInch, { showLabels });
+  const renderOptions = { showLabels, highlightedSpeciesKey, targetedPlantId };
+  renderTopView(topSvg, topOrdered, pixelsPerInch, renderOptions);
+  renderSouthElevation(southSvg, filtered, pixelsPerInch, renderOptions);
+  renderWestElevation(westSvg, filtered, pixelsPerInch, renderOptions);
 }
 
 function orderTopViewPlantStates(plantStates) {
