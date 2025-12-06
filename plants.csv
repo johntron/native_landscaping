@@ -1,15 +1,16 @@
-id,common_name,botanical_name,growth_shape,growing_season_months,flowering_season_months,flower_color,foliage_color_spring,foliage_color_summer,foliage_color_fall,foliage_color_winter,sun_pref,water_pref,soil_pref,width_ft,height_ft,inflorescence,flower_count_hint,flower_zone
-beautyberry,American beautyberry,Callicarpa americana,arch,3-11,5-6,#b58ad2,#73b567,#5f9c57,#d2a84f,#8b7255,part-sun,medium,clay,5.5,4.5,umbel/head,30,mid
-coralberry,Coralberry,Symphoricarpos orbiculatus,mound,3-11,5-5,#c982b1,#6fa05f,#5c7f52,#b98552,#866b52,part-sun,medium,clay,5,3.5,umbel/head,40,mid
-fragrant-sumac,Fragrant sumac,Rhus aromatica,mound,3-11,3-4,#d6c24f,#78b15c,#5a874d,#c75532,#7a5a40,full-sun,low,clay,5,3.5,umbel/head,20,upper
-pink-turks-cap,Pink Turk's cap,Malvaviscus arboreus var. drummondii,vase,3-12,5-11,#e08fb5,#6fa45f,#5b8c52,#74a25f,#6a7a55,part-sun,medium,clay,3.5,2.5,scatter,25,full
-frostweed,Frostweed,Verbesina virginica,vertical,3-11,8-10,#f2f2ea,#71ac6d,#4f7f5a,#7c9c6a,#7a705f,part-sun,medium,clay,2.5,4.5,panicle/spray,30,upper
-giant-ironweed,Giant ironweed,Vernonia gigantea,vase,4-10,8-9,#7a35b3,#6f9a5f,#4f7050,#8a654f,#755a4f,part-sun,medium,clay,2.5,5.5,panicle/spray,40,upper
-coral-honeysuckle,Coral honeysuckle,Lonicera sempervirens,vertical,2-12,3-9,#d8522b,#5f8c72,#4c705f,#4c705f,#4f5f50,full-sun,medium,loamy,2,8,spike/raceme,60,upper
-native-passionflower,Native passionflower,Passiflora incarnata,arch,4-10,6-9,#b38fe0,#6fa06a,#4f7c55,#b0a45f,#6b5a4a,part-sun,medium,loamy,3.5,6,umbel/head,10,upper
-carex-blanda,Carex blanda,Carex blanda,grass,2-12,3-4,#c2c29c,#70a86b,#568c55,#788c6a,#6f6a55,part-sun,medium,clay,1.5,1.2,panicle/spray,20,upper
-horseherb,Horseherb,Calyptocarpus vialis,creeping,3-11,4-10,#d8c54f,#6fa45f,#5f8c55,#7a8c6a,#6a6a55,part-sun,medium,clay,3,0.4,scatter,15,full
-winecup,Winecup,Callirhoe involucrata,creeping,2-7,3-6,#c02763,#5f8c5a,#6f8c78,#7c6a5f,#6a5f55,part-sun,low,loamy,3,0.5,umbel/head,20,upper
-golden-groundsel,Golden groundsel,Packera obovata,mound,2-11,3-4,#e6c844,#4f7c55,#5f8c62,#708c6a,#5a6b58,part-sun,medium,clay,2,0.8,umbel/head,30,upper
-blackfoot-daisy,Blackfoot daisy,Melampodium leucanthum,mound,3-11,4-10,#f2f2e6,#7d9a86,#708c7a,#8c8a70,#7a7a68,full-sun,low,sandy,2,1,umbel/head,25,upper
-four-nerve-daisy,Four-nerve daisy,Tetraneuris scaposa,mound,2-12,3-10,#e8c941,#6f8c64,#6f8c64,#7a7a64,#707058,full-sun,low,loamy,1,1,umbel/head,15,upper
+id,common_name,botanical_name,growth_shape,growing_season_months,flowering_season_months,flower_color,foliage_color_spring,foliage_color_summer,foliage_color_fall,foliage_color_winter,sun_pref,water_pref,soil_pref,width_ft,height_ft,inflorescence,flower_count_hint,flower_zone,fruit_color,fruit_season_months,fruit_load
+beautyberry,American beautyberry,Callicarpa americana,arch,3-11,5-6,#b58ad2,#73b567,#5f9c57,#d2a84f,#8b7255,part-sun,medium,clay,5.5,4.5,umbel/head,30,mid,#b245cc,8-12,heavy
+coralberry,Coralberry,Symphoricarpos orbiculatus,mound,3-11,5-5,#c982b1,#6fa05f,#5c7f52,#b98552,#866b52,part-sun,medium,clay,5,3.5,umbel/head,40,mid,#c45f9b,9-2,heavy
+fragrant-sumac,Fragrant sumac,Rhus aromatica,mound,3-11,3-4,#d6c24f,#78b15c,#5a874d,#c75532,#7a5a40,full-sun,low,clay,5,3.5,umbel/head,20,upper,#b83c2b,7-9,moderate
+pink-turks-cap,Pink Turk's cap,Malvaviscus arboreus var. drummondii,vase,3-12,5-11,#e08fb5,#6fa45f,#5b8c52,#74a25f,#6a7a55,part-sun,medium,clay,3.5,2.5,scatter,25,full,#cf4f4f,7-12,moderate
+frostweed,Frostweed,Verbesina virginica,vertical,3-11,8-10,#f2f2ea,#71ac6d,#4f7f5a,#7c9c6a,#7a705f,part-sun,medium,clay,2.5,4.5,panicle/spray,30,upper,none,0,none
+giant-ironweed,Giant ironweed,Vernonia gigantea,vase,4-10,8-9,#7a35b3,#6f9a5f,#4f7050,#8a654f,#755a4f,part-sun,medium,clay,2.5,5.5,panicle/spray,40,upper,none,0,none
+coral-honeysuckle,Coral honeysuckle,Lonicera sempervirens,vertical,2-12,3-9,#d8522b,#5f8c72,#4c705f,#4c705f,#4f5f50,full-sun,medium,loamy,2,8,spike/raceme,60,upper,#d94429,6-10,sparse
+native-passionflower,Native passionflower,Passiflora incarnata,arch,4-10,6-9,#b38fe0,#6fa06a,#4f7c55,#b0a45f,#6b5a4a,part-sun,medium,loamy,3.5,6,umbel/head,10,upper,#d8983d,7-10,moderate
+carex-blanda,Carex blanda,Carex blanda,grass,2-12,3-4,#c2c29c,#70a86b,#568c55,#788c6a,#6f6a55,part-sun,medium,clay,1.5,1.2,panicle/spray,20,upper,none,0,none
+horseherb,Horseherb,Calyptocarpus vialis,creeping,3-11,4-10,#d8c54f,#6fa45f,#5f8c55,#7a8c6a,#6a6a55,part-sun,medium,clay,3,0.4,scatter,15,full,none,0,none
+winecup,Winecup,Callirhoe involucrata,creeping,2-7,3-6,#c02763,#5f8c5a,#6f8c78,#7c6a5f,#6a5f55,part-sun,low,loamy,3,0.5,umbel/head,20,upper,none,0,none
+golden-groundsel,Golden groundsel,Packera obovata,mound,2-11,3-4,#e6c844,#4f7c55,#5f8c62,#708c6a,#5a6b58,part-sun,medium,clay,2,0.8,umbel/head,30,upper,none,0,none
+blackfoot-daisy,Blackfoot daisy,Melampodium leucanthum,mound,3-11,4-10,#f2f2e6,#7d9a86,#708c7a,#8c8a70,#7a7a68,full-sun,low,sandy,2,1,umbel/head,25,upper,none,0,none
+four-nerve-daisy,Four-nerve daisy,Tetraneuris scaposa,mound,2-12,3-10,#e8c941,#6f8c64,#6f8c64,#7a7a64,#707058,full-sun,low,loamy,1,1,umbel/head,15,upper,none,0,none
+yaupon-holly,American Yaupon Holly,Ilex vomitoria,tree,3-12,3-4,#f1f1e2,#6c8a56,#5b7a4b,#6a7f58,#5a6c52,part-sun,medium,loamy,10,15,umbel/head,200,upper,#b3261e,10-2,heavy
