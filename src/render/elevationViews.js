@@ -13,6 +13,7 @@ import { buildTooltipLines } from './tooltip.js';
 import { buildFlowerCenters } from './inflorescenceStrategies.js';
 import { pointInPolygon } from './geometry.js';
 import { buildPlantLabel } from './labels.js';
+import { buildSmoothPath } from './pathUtils.js';
 
 /**
  * South (kitchen) elevation uses the x axis of the yard as horizontal.
@@ -190,6 +191,19 @@ function renderProfileSilhouette({
   geometry,
 }) {
   const { adjustedWidth, adjustedHeight, exponent } = geometry || resolveProfileGeometry(width, height, growthShape);
+  if ((growthShape || '').toLowerCase() === 'tree') {
+    renderTreeProfile({
+      cx,
+      groundY,
+      width: adjustedWidth,
+      height: adjustedHeight,
+      color,
+      rng,
+      clipSuffix,
+      group,
+    });
+    return;
+  }
   const d = buildWavyProfilePath({ cx, groundY, width: adjustedWidth, height: adjustedHeight, exponent, rng });
   const clipId = buildClipId(clipSuffix);
 
@@ -247,7 +261,14 @@ function renderProfileSilhouette({
 
 function resolveProfileGeometry(width, height, growthShape) {
   const shape = (growthShape || '').toLowerCase();
-  if (shape === 'vertical' || shape === 'tree' || shape === 'vase') {
+  if (shape === 'tree') {
+    return {
+      adjustedWidth: width * 0.9,
+      adjustedHeight: height,
+      exponent: 0.85,
+    };
+  }
+  if (shape === 'vertical' || shape === 'vase') {
     return {
       adjustedWidth: width * 0.82,
       adjustedHeight: height * 1.05,
@@ -327,6 +348,110 @@ function buildProfilePathFromTopPoints({ topPoints, startX, cx, groundY, width }
 function buildWavyProfilePath({ cx, groundY, width, height, exponent, rng }) {
   const { topPoints, startX } = buildProfileTopPoints({ cx, groundY, width, height, exponent, rng });
   return buildProfilePathFromTopPoints({ topPoints, startX, cx, groundY, width });
+}
+
+function buildWavyEllipsePoints({ cx, cy, rx, ry, rng }) {
+  const pointCount = 14 + Math.floor(rng.next() * 6); // 14-19 points
+  const angleStep = (Math.PI * 2) / pointCount;
+  const wobble = 0.12;
+  const points = [];
+
+  for (let i = 0; i < pointCount; i += 1) {
+    const angle = i * angleStep;
+    const radialJitter = 1 + (rng.next() - 0.5) * wobble;
+    const x = cx + Math.cos(angle) * rx * radialJitter;
+    const y = cy + Math.sin(angle) * ry * radialJitter;
+    points.push({ x, y });
+  }
+  return points;
+}
+
+function renderTreeProfile({ cx, groundY, width, height, color, rng, clipSuffix, group }) {
+  const trunkHeight = height * 0.4;
+  const trunkWidth = Math.max(width * 0.22, 4);
+  const trunkTopWidth = trunkWidth * 0.8;
+  const trunkColor = '#8b6f4d';
+
+  const trunkBaseY = groundY;
+  const trunkTopY = groundY - trunkHeight;
+  const halfBase = trunkWidth / 2;
+  const halfTop = trunkTopWidth / 2;
+
+  const trunkPath = [
+    `M ${cx - halfBase} ${trunkBaseY}`,
+    `L ${cx + halfBase} ${trunkBaseY}`,
+    `L ${cx + halfTop} ${trunkTopY}`,
+    `L ${cx - halfTop} ${trunkTopY}`,
+    'Z',
+  ].join(' ');
+  const trunk = createSvgElement('path', {
+    d: trunkPath,
+    fill: trunkColor,
+    stroke: darkenHex(trunkColor, 0.8),
+    'stroke-width': Math.max(trunkWidth * 0.08, 1.2),
+    'stroke-linejoin': 'round',
+  });
+  group.appendChild(trunk);
+
+  const canopyRy = (height - trunkHeight) * 0.55; // oval crown
+  const canopyRx = canopyRy * 0.95;
+  const canopyCenterY = trunkTopY - canopyRy * 0.25;
+  const canopyWidth = canopyRx * 2;
+
+  const canopyPoints = buildWavyEllipsePoints({ cx, cy: canopyCenterY, rx: canopyRx, ry: canopyRy, rng });
+  const canopyPath = buildSmoothPath(canopyPoints);
+  const canopyClipId = buildClipId(`${clipSuffix}-tree`);
+
+  const canopy = createSvgElement('path', { d: canopyPath, fill: color });
+  group.appendChild(canopy);
+
+  const defs = createSvgElement('defs', {});
+  const clipPath = createSvgElement('clipPath', { id: canopyClipId });
+  clipPath.appendChild(createSvgElement('path', { d: canopyPath }));
+  defs.appendChild(clipPath);
+  group.appendChild(defs);
+
+  const shade = createSvgElement('ellipse', {
+    cx: cx + canopyRx * 0.18,
+    cy: canopyCenterY - canopyRy * 0.2,
+    rx: canopyRx * 0.6,
+    ry: canopyRy * 0.6,
+    fill: darkenHex(color, 0.65),
+    'fill-opacity': 0.35,
+  });
+  shade.setAttribute('clip-path', `url(#${canopyClipId})`);
+  group.appendChild(shade);
+
+  const midHighlight = createSvgElement('ellipse', {
+    cx: cx - canopyRx * 0.08,
+    cy: canopyCenterY - canopyRy * 0.05,
+    rx: canopyRx * 0.5,
+    ry: canopyRy * 0.5,
+    fill: lightenHex(color, 0.25),
+    'fill-opacity': 0.75,
+  });
+  midHighlight.setAttribute('clip-path', `url(#${canopyClipId})`);
+  group.appendChild(midHighlight);
+
+  const brightHighlight = createSvgElement('ellipse', {
+    cx: cx - canopyRx * 0.2,
+    cy: canopyCenterY - canopyRy * 0.2,
+    rx: canopyRx * 0.35,
+    ry: canopyRy * 0.35,
+    fill: lightenHex(color, 0.45),
+    'fill-opacity': 0.7,
+  });
+  brightHighlight.setAttribute('clip-path', `url(#${canopyClipId})`);
+  group.appendChild(brightHighlight);
+
+  const outline = createSvgElement('path', {
+    d: canopyPath,
+    fill: 'none',
+    stroke: darkenHex(color, 0.55),
+    'stroke-width': Math.max(canopyWidth * 0.05, 0.9),
+    'stroke-linejoin': 'round',
+  });
+  group.appendChild(outline);
 }
 
 function midpoint(a, b) {

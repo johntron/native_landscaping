@@ -144,7 +144,6 @@ function normalizeGrowthShape(value) {
   const v = (value || '').toLowerCase();
   if (!v) return 'mound';
   const aliases = {
-    tree: 'vertical',
     bush: 'mound',
     shrub: 'mound',
     flower: 'mound',
