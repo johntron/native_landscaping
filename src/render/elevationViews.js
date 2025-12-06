@@ -75,14 +75,34 @@ function renderElevation(
   const { showLabels = false } = options;
   const depthKey = axisKey === 'x' ? 'y' : 'x';
   const sortedPlantStates = [...plantStates].sort((a, b) => {
+    const priorityDiff = stackingPriority(a?.plant, axisKey) - stackingPriority(b?.plant, axisKey);
+    if (priorityDiff !== 0) return priorityDiff; // lower priority drawn first
+
+    if (axisKey === 'x') {
+      // South elevation layers by y: larger y first, smaller y last (front).
+      const yA = a?.plant?.y ?? 0;
+      const yB = b?.plant?.y ?? 0;
+      if (yA !== yB) return yB - yA;
+    } else {
+      // West elevation layers by x: smaller x first, larger x last (front).
+      const xA = a?.plant?.x ?? 0;
+      const xB = b?.plant?.x ?? 0;
+      if (xA !== xB) return xA - xB;
+    }
+
+    const heightA = a?.plant?.height ?? 0;
+    const heightB = b?.plant?.height ?? 0;
+    if (heightA !== heightB) return heightA - heightB;
+
     const depthA = a?.plant?.[depthKey] ?? 0;
     const depthB = b?.plant?.[depthKey] ?? 0;
-    if (depthA === depthB) {
-      const heightA = a?.plant?.height ?? 0;
-      const heightB = b?.plant?.height ?? 0;
-      return heightB - heightA;
-    }
-    return depthB - depthA;
+    if (depthA !== depthB) return depthB - depthA;
+
+    const widthA = a?.plant?.width ?? 0;
+    const widthB = b?.plant?.width ?? 0;
+    if (widthA !== widthB) return widthA - widthB;
+
+    return String(a?.plant?.id ?? '').localeCompare(String(b?.plant?.id ?? ''));
   });
 
   sortedPlantStates.forEach(({ plant, state }) => {
@@ -176,6 +196,18 @@ function renderElevation(
     appendTooltip(group, buildTooltipLines(plant, state));
     svg.appendChild(group);
   });
+}
+
+function stackingPriority(plant, axisKey) {
+  if (!plant) return 1;
+  // On the west (y-axis) elevation, force Callirhoe involucrata to render last so it stays in front.
+  if (axisKey === 'y') {
+    const botanical = (plant.botanicalName || plant.botanical_name || '').toLowerCase();
+    if (botanical === 'callirhoe involucrata') {
+      return 2;
+    }
+  }
+  return 1;
 }
 
 function renderProfileSilhouette({
