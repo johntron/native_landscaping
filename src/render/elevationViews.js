@@ -80,9 +80,15 @@ function renderElevation(
 ) {
   clearSvg(svg);
   const toPixels = (feet) => feet * INCHES_PER_FOOT * pixelsPerInch;
-  const { showLabels = false, highlightedSpeciesKey = '', targetedPlantId = '' } = options;
+  const {
+    showLabels = false,
+    highlightedSpeciesKey = '',
+    targetedPlantId = '',
+    hoveredPlantId = '',
+  } = options;
   const normalizedHighlightKey = (highlightedSpeciesKey || '').toLowerCase();
   const normalizedTargetId = String(targetedPlantId || '');
+  const normalizedHoveredId = String(hoveredPlantId || '');
   const depthKey = axisKey === 'x' ? 'y' : 'x';
   const highlightTargets = [];
   const targetMarkers = [];
@@ -121,6 +127,7 @@ function renderElevation(
     const speciesKey = getSpeciesKey(plant);
     const isHighlighted = Boolean(normalizedHighlightKey && speciesKey === normalizedHighlightKey);
     const isTargeted = normalizedTargetId && String(plant.id) === normalizedTargetId;
+    const isHovered = normalizedHoveredId && String(plant.id) === normalizedHoveredId;
     const group = createSvgElement('g', {
       'data-name': plant.commonName,
       'data-plant-id': plant.id,
@@ -268,7 +275,7 @@ function renderElevation(
         groundY,
       });
     }
-    if (isTargeted) {
+    if (isTargeted || isHovered) {
       targetMarkers.push({
         cx,
         width: adjustedWidth,

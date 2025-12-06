@@ -32,10 +32,16 @@ export function renderTopView(
   pixelsPerInch = DEFAULT_PIXELS_PER_INCH,
   options = {}
 ) {
-  const { showLabels = false, highlightedSpeciesKey = '', targetedPlantId = '' } = options;
+  const {
+    showLabels = false,
+    highlightedSpeciesKey = '',
+    targetedPlantId = '',
+    hoveredPlantId = '',
+  } = options;
   clearSvg(svg);
   const normalizedHighlightKey = (highlightedSpeciesKey || '').toLowerCase();
   const normalizedTargetId = String(targetedPlantId || '');
+  const normalizedHoveredId = String(hoveredPlantId || '');
   const toPixels = (feet) => feet * INCHES_PER_FOOT * pixelsPerInch;
   const highlightTargets = [];
   const targetMarkers = [];
@@ -44,6 +50,7 @@ export function renderTopView(
     const speciesKey = getSpeciesKey(plant);
     const isHighlighted = Boolean(normalizedHighlightKey && speciesKey === normalizedHighlightKey);
     const isTargeted = normalizedTargetId && String(plant.id) === normalizedTargetId;
+    const isHovered = normalizedHoveredId && String(plant.id) === normalizedHoveredId;
     const group = createSvgElement('g', {
       'data-name': plant.commonName,
       'data-plant-id': plant.id,
@@ -143,7 +150,7 @@ export function renderTopView(
     if (isHighlighted) {
       highlightTargets.push({ cx, cy, radius });
     }
-    if (isTargeted) {
+    if (isTargeted || isHovered) {
       targetMarkers.push({ cx, cy, radius });
     }
   });

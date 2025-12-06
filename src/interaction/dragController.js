@@ -11,13 +11,20 @@ const MIN_HITBOX_RADIUS_PX = 28; // generous target for touch devices
  * @param {() => number} options.getPixelsPerInch
  * @param {() => void} options.onPositionsChange
  */
-export function createPlantDragController({ svg, getPlants, getPixelsPerInch, onPositionsChange }) {
+export function createPlantDragController({
+  svg,
+  getPlants,
+  getPixelsPerInch,
+  onPositionsChange,
+  onHoverPlant,
+}) {
   const state = {
     locked: true,
     activePlant: null,
     pointerId: null,
     offsetFeet: { x: 0, y: 0 },
     renderQueued: false,
+    hoveredPlantId: '',
   };
 
   if (!svg) {
@@ -32,16 +39,23 @@ export function createPlantDragController({ svg, getPlants, getPixelsPerInch, on
   svg.addEventListener('pointerup', handlePointerUp);
   svg.addEventListener('pointercancel', handlePointerUp);
   svg.addEventListener('lostpointercapture', handlePointerUp);
+  svg.addEventListener('pointerleave', handlePointerLeave);
 
   function handlePointerDown(event) {
     if (state.locked || !event.isPrimary) return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
 
     const ctx = buildPointerContext(svg, event, getPixelsPerInch());
-    if (!ctx) return;
+    if (!ctx) {
+      notifyHover('');
+      return;
+    }
 
     const hit = pickPlantHit(getPlants(), ctx);
-    if (!hit) return;
+    if (!hit) {
+      notifyHover('');
+      return;
+    }
 
     state.activePlant = hit.plant;
     state.pointerId = event.pointerId;
@@ -51,12 +65,14 @@ export function createPlantDragController({ svg, getPlants, getPixelsPerInch, on
     };
     svg.setPointerCapture(event.pointerId);
     svg.style.cursor = 'grabbing';
+    notifyHover(state.activePlant.id);
     event.preventDefault();
   }
 
   function handlePointerMove(event) {
-    if (!state.activePlant || event.pointerId !== state.pointerId) return;
     const ctx = buildPointerContext(svg, event, getPixelsPerInch());
+    updateHoverFromContext(event, ctx);
+    if (!state.activePlant || event.pointerId !== state.pointerId) return;
     if (!ctx) return;
     updatePlantPosition(ctx);
     event.preventDefault();
@@ -64,7 +80,41 @@ export function createPlantDragController({ svg, getPlants, getPixelsPerInch, on
 
   function handlePointerUp(event) {
     if (event.pointerId !== state.pointerId) return;
+    const ctx = buildPointerContext(svg, event, getPixelsPerInch());
     cancelActive();
+    updateHoverFromContext(event, ctx);
+  }
+
+  function handlePointerLeave() {
+    if (state.activePlant) return;
+    notifyHover('');
+  }
+
+  function updateHoverFromContext(event, context) {
+    if (!event?.isPrimary) return;
+    if (state.locked) {
+      notifyHover('');
+      return;
+    }
+    if (state.activePlant) {
+      notifyHover(state.activePlant.id);
+      return;
+    }
+    if (!context) {
+      notifyHover('');
+      return;
+    }
+    const hit = pickPlantHit(getPlants(), context);
+    notifyHover(hit ? hit.plant.id : '');
+  }
+
+  function notifyHover(plantId) {
+    const normalized = plantId ? String(plantId) : '';
+    if (state.hoveredPlantId === normalized) return;
+    state.hoveredPlantId = normalized;
+    if (typeof onHoverPlant === 'function') {
+      onHoverPlant(normalized);
+    }
   }
 
   function updatePlantPosition(ctx) {
@@ -100,6 +150,7 @@ export function createPlantDragController({ svg, getPlants, getPixelsPerInch, on
     state.locked = Boolean(locked);
     if (state.locked) {
       cancelActive();
+      notifyHover('');
     }
     svg.style.touchAction = state.locked ? 'auto' : 'none';
     svg.style.cursor = state.locked ? 'default' : 'grab';

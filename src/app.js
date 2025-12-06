@@ -17,6 +17,8 @@ import { formatMonthRange } from './state/seasonalState.js';
 import { clampHiddenLayerCount, classifyPlantLayer } from './state/layers.js';
 import { getSpeciesKey } from './utils/speciesKey.js';
 
+const LOCK_STATE_KEY = 'native-landscaping-positions-locked';
+
 const appState = {
   plants: [],
   month: new Date().getMonth() + 1,
@@ -26,6 +28,7 @@ const appState = {
   hiddenLayerCount: 0,
   highlightedSpeciesKey: '',
   targetedPlantId: '',
+  hoveredPlantId: '',
 };
 
 async function init() {
@@ -93,6 +96,12 @@ async function init() {
     appState.targetedPlantId = normalized;
     render();
   };
+  const setHoveredPlant = (plantId) => {
+    const normalized = plantId ? String(plantId) : '';
+    if (normalized === appState.hoveredPlantId) return;
+    appState.hoveredPlantId = normalized;
+    render();
+  };
   const applyScale = (value) => {
     appState.pixelsPerInch = value;
     updateScaleIndicator(scaleIndicator, value);
@@ -105,6 +114,7 @@ async function init() {
     getPlants: () => appState.plants,
     getPixelsPerInch: () => appState.pixelsPerInch,
     onPositionsChange: () => render(),
+    onHoverPlant: setHoveredPlant,
   });
 
   const cloneMenu = createCloneMenu({
@@ -123,13 +133,16 @@ async function init() {
     appState.positionsLocked = locked;
     dragController.setLocked(locked);
     updateLockStatus(lockStatusText, locked);
+    persistLockState(locked);
   };
 
+  const persistedLockState = readPersistedLockState();
+  const initialLockState = persistedLockState !== null ? persistedLockState : true;
   if (lockToggle) {
-    lockToggle.checked = true;
+    lockToggle.checked = initialLockState;
     lockToggle.addEventListener('change', (e) => applyLockState(e.target.checked));
   }
-  applyLockState(true);
+  applyLockState(initialLockState);
   if (exportButton) {
     exportButton.disabled = true;
   }
@@ -184,6 +197,7 @@ async function init() {
       hiddenLayerCount: appState.hiddenLayerCount,
       highlightedSpeciesKey: appState.highlightedSpeciesKey,
       targetedPlantId: appState.targetedPlantId,
+      hoveredPlantId: appState.hoveredPlantId,
     });
   };
 
@@ -407,6 +421,27 @@ function formatFeet(value) {
 function updateLockStatus(labelEl, locked) {
   if (!labelEl) return;
   labelEl.textContent = locked ? 'Positions locked' : 'Drag to move plants';
+}
+
+function readPersistedLockState() {
+  if (typeof localStorage === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(LOCK_STATE_KEY);
+    if (raw === 'true') return true;
+    if (raw === 'false') return false;
+  } catch (err) {
+    console.warn('Unable to read persisted lock state', err);
+  }
+  return null;
+}
+
+function persistLockState(locked) {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(LOCK_STATE_KEY, locked ? 'true' : 'false');
+  } catch (err) {
+    console.warn('Unable to persist lock state', err);
+  }
 }
 
 function resolveInches(item) {

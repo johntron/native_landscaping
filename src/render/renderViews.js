@@ -9,10 +9,16 @@ export function renderViews(svgRefs, plantStates, pixelsPerInch, options = {}) {
     hiddenLayerCount = 0,
     highlightedSpeciesKey = '',
     targetedPlantId = '',
+    hoveredPlantId = '',
   } = options;
   const filtered = filterPlantStatesByHiddenLayers(plantStates, hiddenLayerCount);
   const topOrdered = orderTopViewPlantStates(filtered);
-  const renderOptions = { showLabels, highlightedSpeciesKey, targetedPlantId };
+  const renderOptions = {
+    showLabels,
+    highlightedSpeciesKey,
+    targetedPlantId,
+    hoveredPlantId,
+  };
   renderTopView(topSvg, topOrdered, pixelsPerInch, renderOptions);
   renderSouthElevation(southSvg, filtered, pixelsPerInch, renderOptions);
   renderWestElevation(westSvg, filtered, pixelsPerInch, renderOptions);
