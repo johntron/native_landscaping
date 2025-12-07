@@ -36,6 +36,13 @@ const server = http.createServer(async (req, res) => {
       const payload = await collectPayload(req);
       const history = await readHistoryFile();
       const trimmed = history.entries.slice(0, Math.max(history.cursor + 1, 0));
+      if (
+        trimmed.length === 0 &&
+        Array.isArray(payload.previousPlants) &&
+        payload.previousPlants.length
+      ) {
+        trimmed.push(makeEntry(payload.previousPlants, 'Initial layout'));
+      }
       const entry = makeEntry(payload.plants, payload.description, payload.id);
       trimmed.push(entry);
       const cursor = trimmed.length - 1;
