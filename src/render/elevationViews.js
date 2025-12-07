@@ -152,6 +152,7 @@ function renderElevation(
       height: adjustedHeight,
       exponent: profileGeometry.exponent,
       rng: makeRng(canopySeed),
+      growthShape: plant.growthShape,
     });
 
     const silhouetteMeta = renderProfileSilhouette({
@@ -327,7 +328,15 @@ function renderProfileSilhouette({
     });
     return;
   }
-  const d = buildWavyProfilePath({ cx, groundY, width: adjustedWidth, height: adjustedHeight, exponent, rng });
+  const d = buildWavyProfilePath({
+    cx,
+    groundY,
+    width: adjustedWidth,
+    height: adjustedHeight,
+    exponent,
+    rng,
+    growthShape,
+  });
   const clipId = buildClipId(clipSuffix);
 
   const base = createSvgElement('path', { d, fill: color, 'fill-opacity': PLANT_BLEND_OPACITY });
@@ -414,6 +423,13 @@ function resolveProfileGeometry(width, height, growthShape) {
       exponent: 0.95,
     };
   }
+  if (shape === 'arch' || shape === 'arching') {
+    return {
+      adjustedWidth: width * 1.22,
+      adjustedHeight: height * 0.92,
+      exponent: 1.12,
+    };
+  }
   return {
     adjustedWidth: width,
     adjustedHeight: height,
@@ -421,26 +437,52 @@ function resolveProfileGeometry(width, height, growthShape) {
   };
 }
 
-function buildProfileOutlinePoints({ cx, groundY, width, height, exponent, rng }) {
-  const { topPoints, startX } = buildProfileTopPoints({ cx, groundY, width, height, exponent, rng });
+function buildProfileOutlinePoints({
+  cx,
+  groundY,
+  width,
+  height,
+  exponent,
+  rng,
+  growthShape,
+}) {
+  const { topPoints, startX } = buildProfileTopPoints({
+    cx,
+    groundY,
+    width,
+    height,
+    exponent,
+    rng,
+    growthShape,
+  });
   if (!topPoints.length) return [];
   const outline = [{ x: startX, y: groundY }, ...topPoints, { x: cx + width / 2, y: groundY }];
   return outline;
 }
 
-function buildProfileTopPoints({ cx, groundY, width, height, exponent, rng }) {
+function buildProfileTopPoints({ cx, groundY, width, height, exponent, rng, growthShape }) {
   const pointCount = 12 + Math.floor(rng.next() * 5); // 12-16 points along the top
   const startX = cx - width / 2;
   const segments = pointCount;
   const topPoints = [];
+  const shape = (growthShape || '').toLowerCase();
+  const isArching = shape === 'arch' || shape === 'arching';
 
   for (let i = 0; i <= segments; i += 1) {
     const t = i / segments;
     const arch = Math.pow(Math.sin(Math.PI * t), exponent);
+    let heightScale = arch;
+    if (isArching) {
+      // Lift the shoulders and soften the crown to suggest outward-curving stems.
+      const shoulderBias = 1 + 0.32 * Math.cos(2 * Math.PI * t); // lower center, lift quarters
+      const centerSag = 1 - 0.16 * (1 - Math.abs(0.5 - t) * 2); // lower midpoints more than edges
+      heightScale *= shoulderBias * centerSag;
+    }
     const jitterY = (rng.next() - 0.5) * height * 0.08;
     const jitterX = (rng.next() - 0.5) * width * 0.025;
-    const x = startX + width * t + jitterX;
-    const y = groundY - arch * height + jitterY;
+    const flare = isArching ? (t - 0.5) * width * 0.06 : 0;
+    const x = startX + width * t + jitterX + flare;
+    const y = groundY - heightScale * height + jitterY;
     topPoints.push({ x, y });
   }
 
@@ -470,8 +512,16 @@ function buildProfilePathFromTopPoints({ topPoints, startX, cx, groundY, width }
   return pathParts.join(' ');
 }
 
-function buildWavyProfilePath({ cx, groundY, width, height, exponent, rng }) {
-  const { topPoints, startX } = buildProfileTopPoints({ cx, groundY, width, height, exponent, rng });
+function buildWavyProfilePath({ cx, groundY, width, height, exponent, rng, growthShape }) {
+  const { topPoints, startX } = buildProfileTopPoints({
+    cx,
+    groundY,
+    width,
+    height,
+    exponent,
+    rng,
+    growthShape,
+  });
   return buildProfilePathFromTopPoints({ topPoints, startX, cx, groundY, width });
 }
 
