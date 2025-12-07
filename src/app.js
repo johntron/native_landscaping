@@ -1,5 +1,6 @@
 import {
   DEFAULT_PIXELS_PER_INCH,
+  ELEVATION_VIEWBOX,
   INCHES_PER_FOOT,
   MONTH_NAMES,
   PLAN_VIEWBOX,
@@ -18,8 +19,15 @@ import { formatMonthRange } from './state/seasonalState.js';
 import { clampHiddenLayerCount, classifyPlantLayer } from './state/layers.js';
 import { getSpeciesKey } from './utils/speciesKey.js';
 import { createLayoutHistory } from './history/layoutHistory.js';
+import { captureViewToPng } from './export/viewCapture.js';
 
 const LOCK_STATE_KEY = 'native-landscaping-positions-locked';
+const EXPORT_MONTH = 6; // June
+const VIEW_BACKGROUNDS = {
+  top: new URL('img/top view.webp', document.baseURI).toString(),
+  south: new URL('img/front view.webp', document.baseURI).toString(),
+  east: new URL('img/side view.webp', document.baseURI).toString(),
+};
 
 const appState = {
   plants: [],
@@ -33,6 +41,10 @@ const appState = {
   hoveredPlantId: '',
   maximizedViewId: '',
 };
+
+let loadedSpeciesCsv = '';
+let isBundleExporting = false;
+const JSZipLib = typeof window !== 'undefined' ? window.JSZip : null;
 
 async function init() {
   const monthSlider = document.getElementById('monthSlider');
@@ -53,6 +65,7 @@ async function init() {
   const lockToggle = document.getElementById('lockToggle');
   const lockStatusText = document.getElementById('lockStatusText');
   const exportButton = document.getElementById('exportLayoutBtn');
+  const exportBundleButton = document.getElementById('exportBundleBtn');
   const labelToggle = document.getElementById('labelToggle');
   const layerVisibilitySelect = document.getElementById('layerVisibility');
   const undoButton = document.getElementById('undoLayoutBtn');
@@ -193,6 +206,78 @@ async function init() {
     appState.hoveredPlantId = normalized;
     render();
   };
+  const handleBundleExport = async () => {
+    if (isBundleExporting) return;
+    if (!svgRefs.topSvg || !svgRefs.southSvg || !svgRefs.eastSvg) return;
+    if (!loadedSpeciesCsv) {
+      console.warn('No plants.csv loaded; cannot export bundle.');
+      return;
+    }
+    isBundleExporting = true;
+    const restoreToken = snapshotViewState({
+      monthSlider,
+      monthReadout,
+      layerVisibilitySelect,
+      state: appState,
+    });
+    toggleButtonBusy(exportBundleButton, true, 'Preparing bundle…');
+    appState.hiddenLayerCount = 0;
+    if (layerVisibilitySelect) {
+      layerVisibilitySelect.value = '0';
+    }
+    appState.hoveredPlantId = '';
+    appState.targetedPlantId = '';
+    appState.month = EXPORT_MONTH;
+    if (monthSlider) monthSlider.value = String(EXPORT_MONTH);
+    if (monthReadout) monthReadout.textContent = MONTH_NAMES[EXPORT_MONTH - 1] || '';
+    render();
+    await nextFrame();
+
+    try {
+      if (!JSZipLib) {
+        throw new Error('JSZip is not loaded');
+      }
+      const [topPng, southPng, eastPng] = await Promise.all([
+        captureViewToPng({
+          svg: svgRefs.topSvg,
+          viewBox: PLAN_VIEWBOX,
+          backgroundUrl: VIEW_BACKGROUNDS.top,
+        }),
+        captureViewToPng({
+          svg: svgRefs.southSvg,
+          viewBox: ELEVATION_VIEWBOX,
+          backgroundUrl: VIEW_BACKGROUNDS.south,
+        }),
+        captureViewToPng({
+          svg: svgRefs.eastSvg,
+          viewBox: ELEVATION_VIEWBOX,
+          backgroundUrl: VIEW_BACKGROUNDS.east,
+        }),
+      ]);
+
+      const zip = new JSZipLib();
+      zip.file('plants.csv', loadedSpeciesCsv);
+      zip.file('planting_layout.csv', buildLayoutCsv(appState.plants));
+      zip.file('images/top-view.png', topPng);
+      zip.file('images/south-elevation.png', southPng);
+      zip.file('images/east-elevation.png', eastPng);
+      const blob = await zip.generateAsync({ type: 'blob' });
+      triggerDownload(blob, 'native-landscape-plan.zip');
+    } catch (err) {
+      console.error('Failed to export plan bundle', err);
+      alert('Unable to export plan bundle. Check console for details.');
+    } finally {
+      restoreViewState(restoreToken, {
+        monthSlider,
+        monthReadout,
+        layerVisibilitySelect,
+        state: appState,
+        onRestore: render,
+      });
+      toggleButtonBusy(exportBundleButton, false);
+      isBundleExporting = false;
+    }
+  };
   const applyScale = (value) => {
     appState.pixelsPerInch = value;
     updateScaleIndicator(scaleIndicator, value);
@@ -258,6 +343,9 @@ async function init() {
   if (exportButton) {
     exportButton.disabled = true;
   }
+  if (exportBundleButton) {
+    exportBundleButton.disabled = true;
+  }
   if (labelToggle) {
     labelToggle.checked = true;
     appState.showLabels = true;
@@ -282,6 +370,7 @@ async function init() {
       fetchCsv(new URL('plants.csv', document.baseURI)),
       fetchCsv(new URL('planting_layout.csv', document.baseURI)),
     ]);
+    loadedSpeciesCsv = speciesCsv;
     const initialPlants = buildPlantsFromCsv(speciesCsv, layoutCsv);
     const layoutCsvSnapshot = buildLayoutCsv(initialPlants);
     const historyData = await loadLayoutHistory(updateHistoryStatus, {
@@ -328,6 +417,10 @@ async function init() {
     if (exportButton) {
       exportButton.disabled = false;
       exportButton.addEventListener('click', () => downloadLayoutCsv(appState.plants));
+    }
+    if (exportBundleButton) {
+      exportBundleButton.disabled = false;
+      exportBundleButton.addEventListener('click', handleBundleExport);
     }
   } catch (err) {
     showLoadError('Unable to load plants and layout data.');
@@ -612,10 +705,15 @@ function downloadLayoutCsv(plants) {
   if (!plants?.length) return;
   const csv = buildLayoutCsv(plants);
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  triggerDownload(blob, 'planting_layout.csv');
+}
+
+function triggerDownload(blob, filename) {
+  if (!blob) return;
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = 'planting_layout.csv';
+  anchor.download = filename || 'download';
   anchor.style.display = 'none';
   document.body.appendChild(anchor);
   anchor.click();
@@ -623,6 +721,59 @@ function downloadLayoutCsv(plants) {
   URL.revokeObjectURL(url);
 }
 
+function snapshotViewState({ monthSlider, monthReadout, layerVisibilitySelect, state }) {
+  return {
+    month: state.month,
+    hiddenLayerCount: state.hiddenLayerCount,
+    highlightedSpeciesKey: state.highlightedSpeciesKey,
+    targetedPlantId: state.targetedPlantId,
+    hoveredPlantId: state.hoveredPlantId,
+    monthSliderValue: monthSlider ? monthSlider.value : null,
+    monthReadoutText: monthReadout ? monthReadout.textContent : null,
+    layerVisibilityValue: layerVisibilitySelect ? layerVisibilitySelect.value : null,
+  };
+}
+
+function restoreViewState(snapshot, { monthSlider, monthReadout, layerVisibilitySelect, state, onRestore }) {
+  if (!snapshot) return;
+  state.month = snapshot.month;
+  state.hiddenLayerCount = snapshot.hiddenLayerCount;
+  state.highlightedSpeciesKey = snapshot.highlightedSpeciesKey;
+  state.targetedPlantId = snapshot.targetedPlantId;
+  state.hoveredPlantId = snapshot.hoveredPlantId;
+  if (monthSlider && snapshot.monthSliderValue !== null) {
+    monthSlider.value = snapshot.monthSliderValue;
+  }
+  if (monthReadout && snapshot.monthReadoutText !== null) {
+    monthReadout.textContent = snapshot.monthReadoutText;
+  }
+  if (layerVisibilitySelect && snapshot.layerVisibilityValue !== null) {
+    layerVisibilitySelect.value = snapshot.layerVisibilityValue;
+  }
+  onRestore?.();
+}
+
+function toggleButtonBusy(button, busy, busyText) {
+  if (!button) return;
+  if (busy) {
+    if (!button.dataset.originalLabel) {
+      button.dataset.originalLabel = button.textContent || '';
+    }
+    button.disabled = true;
+    if (busyText) {
+      button.textContent = busyText;
+    }
+    return;
+  }
+  button.disabled = false;
+  if (button.dataset.originalLabel) {
+    button.textContent = button.dataset.originalLabel;
+  }
+}
+
+function nextFrame() {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
 
 function createCloneMenu({ onClone, onClose }) {
   const menu = document.createElement('div');
