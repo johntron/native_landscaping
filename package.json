@@ -7,6 +7,9 @@
     "test": "node tests/run-tests.cjs",
     "serve": "node server.js"
   },
+  "dependencies": {
+    "jszip": "^3.10.1"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC"

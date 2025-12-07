@@ -1,10 +1,9 @@
 id,botanical_name,x_ft,y_ft
-beautyberry-east,Callicarpa americana,11.825,16.566
+beautyberry-east,Callicarpa americana,10.914,16.175
 turkscap-shade,Malvaviscus arboreus var. drummondii,6.732,11.391
-turkscap-kitchen,Malvaviscus arboreus var. drummondii,6.401,8.505
-frostweed-drift,Verbesina virginica,15.319,18.099
+frostweed-drift,Verbesina virginica,14.831,14.781
 honeysuckle-obelisk,Lonicera sempervirens,3.344,4.065
-passionflower-trellis,Passiflora incarnata,5.237,9.776
+passionflower-trellis,Passiflora incarnata,3.416,9.581
 carex-glade,Carex blanda,5.111,12.836
 carex-glade2,Carex blanda,3.799,13.952
 carex-glade3,Carex blanda,7.058,16.891
@@ -22,10 +21,10 @@ winecup-edge,Callirhoe involucrata,8.051,13.348
 winecup-edge2,Callirhoe involucrata,12.803,14.503
 winecup-edge3,Callirhoe involucrata,6.603,7.907
 winecup-edge4,Callirhoe involucrata,9.790,14.094
-groundsel-drift,Packera obovata,7.032,11.248
-four-nerve-daisy-front,Tetraneuris scaposa,4.643,6.856
-four-nerve-daisy-front,Tetraneuris scaposa,4.716,10.928
-yaupon,Ilex vomitoria,6.562,13.002
+groundsel-drift,Packera obovata,7.650,16.582
+four-nerve-daisy-front,Tetraneuris scaposa,3.440,3.343
+four-nerve-daisy-front,Tetraneuris scaposa,14.376,14.311
+yaupon,Ilex vomitoria,5.936,13.682
 horseherb-carpet3-copy,Calyptocarpus vialis,4.570,3.906
 horseherb-carpet3-copy-copy,Calyptocarpus vialis,4.761,3.403
 carex-glade6-copy,Carex blanda,3.729,6.361
@@ -54,7 +53,7 @@ horseherb-carpet5-copy,Calyptocarpus vialis,3.054,14.063
 winecup-edge2-copy,Callirhoe involucrata,14.776,15.017
 carex-glade3-copy,Carex blanda,7.104,15.696
 horseherb-carpet4-copy-3,Calyptocarpus vialis,6.251,15.438
-groundsel-drift-copy,Packera obovata,8.750,14.526
+groundsel-drift-copy,Packera obovata,8.384,14.628
 winecup-edge4-copy,Callirhoe involucrata,10.126,16.026
 carex-glade3-copy-2,Carex blanda,10.740,17.587
 winecup-edge2-copy-copy,Callirhoe involucrata,12.713,16.550
@@ -62,6 +61,6 @@ winecup-edge2-copy-copy-copy,Callirhoe involucrata,12.758,15.428
 horseherb-carpet2-copy,Calyptocarpus vialis,15.650,18.435
 carex-glade3-copy-2-copy,Carex blanda,14.457,16.756
 carex-glade3-copy-2-copy-2,Carex blanda,12.749,17.774
-coralberry,Symphoricarpos orbiculatus,3.959,6.691
-mistflower,Conoclinium greggii,5.952,4.131
+coralberry,Symphoricarpos orbiculatus,4.805,6.496
+mistflower,Conoclinium greggii,6.375,3.806
 mistflower-copy,Conoclinium greggii,10.142,14.484
