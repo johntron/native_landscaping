@@ -162,6 +162,156 @@ export function createPlantDragController({
   };
 }
 
+export function createElevationDragController({
+  svg,
+  axis = 'x',
+  getPlants,
+  getPixelsPerInch,
+  onPositionsChange,
+  onHoverPlant,
+}) {
+  const axisKey = axis === 'y' ? 'y' : 'x';
+  const state = {
+    locked: true,
+    activePlant: null,
+    pointerId: null,
+    axisOffsetFeet: 0,
+    renderQueued: false,
+    hoveredPlantId: '',
+  };
+
+  if (!svg) {
+    return {
+      setLocked: () => {},
+      isLocked: () => true,
+    };
+  }
+
+  svg.addEventListener('pointerdown', handlePointerDown);
+  svg.addEventListener('pointermove', handlePointerMove);
+  svg.addEventListener('pointerup', handlePointerUp);
+  svg.addEventListener('pointercancel', handlePointerUp);
+  svg.addEventListener('lostpointercapture', handlePointerUp);
+  svg.addEventListener('pointerleave', handlePointerLeave);
+
+  function handlePointerDown(event) {
+    if (state.locked || !event.isPrimary) return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+
+    const ctx = buildPointerContext(svg, event, getPixelsPerInch());
+    if (!ctx) {
+      notifyHover('');
+      return;
+    }
+
+    const plantId = findPlantIdFromEvent(event);
+    if (!plantId) {
+      notifyHover('');
+      return;
+    }
+    const target = getPlants().find((plant) => String(plant.id) === String(plantId));
+    if (!target) {
+      notifyHover('');
+      return;
+    }
+
+    state.activePlant = target;
+    state.pointerId = event.pointerId;
+    const axisPosition = ctx.positionFeet.x;
+    const axisValue = Number(target[axisKey]) || 0;
+    state.axisOffsetFeet = axisPosition - axisValue;
+    svg.setPointerCapture(event.pointerId);
+    svg.style.cursor = 'grabbing';
+    notifyHover(target.id);
+    event.preventDefault();
+  }
+
+  function handlePointerMove(event) {
+    const ctx = buildPointerContext(svg, event, getPixelsPerInch());
+    updateHoverFromContext(event);
+    if (!state.activePlant || event.pointerId !== state.pointerId) return;
+    if (!ctx) return;
+    updatePlantPosition(ctx);
+    event.preventDefault();
+  }
+
+  function handlePointerUp(event) {
+    if (event.pointerId !== state.pointerId) return;
+    cancelActive();
+    updateHoverFromContext(event);
+  }
+
+  function handlePointerLeave() {
+    if (state.activePlant) return;
+    notifyHover('');
+  }
+
+  function updateHoverFromContext(event) {
+    if (!event?.isPrimary) return;
+    if (state.locked) {
+      notifyHover('');
+      return;
+    }
+    if (state.activePlant) {
+      notifyHover(state.activePlant.id);
+      return;
+    }
+    const plantId = findPlantIdFromEvent(event);
+    notifyHover(plantId);
+  }
+
+  function notifyHover(plantId) {
+    const normalized = plantId ? String(plantId) : '';
+    if (state.hoveredPlantId === normalized) return;
+    state.hoveredPlantId = normalized;
+    if (typeof onHoverPlant === 'function') {
+      onHoverPlant(normalized);
+    }
+  }
+
+  function updatePlantPosition(ctx) {
+    const axisLimit = viewBoxToFeet(ctx.viewBox.width, ctx.pixelsPerInch);
+    const rawAxis = ctx.positionFeet.x - state.axisOffsetFeet;
+    const clamped = clamp(rawAxis, 0, axisLimit);
+    state.activePlant[axisKey] = clamped;
+    queueRender();
+  }
+
+  function queueRender() {
+    if (state.renderQueued) return;
+    state.renderQueued = true;
+    requestAnimationFrame(() => {
+      state.renderQueued = false;
+      onPositionsChange?.();
+    });
+  }
+
+  function cancelActive() {
+    if (state.pointerId !== null && svg.hasPointerCapture(state.pointerId)) {
+      svg.releasePointerCapture(state.pointerId);
+    }
+    state.activePlant = null;
+    state.pointerId = null;
+    state.axisOffsetFeet = 0;
+    svg.style.cursor = state.locked ? 'default' : 'grab';
+  }
+
+  function setLocked(locked) {
+    state.locked = Boolean(locked);
+    if (state.locked) {
+      cancelActive();
+      notifyHover('');
+    }
+    svg.style.touchAction = state.locked ? 'auto' : 'none';
+    svg.style.cursor = state.locked ? 'default' : 'grab';
+  }
+
+  return {
+    setLocked,
+    isLocked: () => state.locked,
+  };
+}
+
 function pickPlantHit(plants, ctx) {
   const { viewBox, pixelsPerInch, viewBoxPoint, scaleFactor } = ctx;
   const toPixels = (feet) => feet * INCHES_PER_FOOT * pixelsPerInch;
@@ -194,6 +344,13 @@ function pickPlantHit(plants, ctx) {
   });
 
   return candidates[0] || null;
+}
+
+function findPlantIdFromEvent(event) {
+  if (!(event?.target instanceof Element)) return '';
+  const group = event.target.closest('[data-plant-id]');
+  if (!group) return '';
+  return group.getAttribute('data-plant-id') || '';
 }
 
 function buildPointerContext(svg, event, pixelsPerInch) {

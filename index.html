@@ -54,21 +54,57 @@
         </div>
         <!-- The views container holds the top‑down, front and side perspectives. -->
         <main class="views">
-          <div class="view-panel">
-            <p class="view-label">Top-down plan</p>
+          <div class="view-panel" data-view-panel="topView">
+            <div class="view-panel__header">
+              <p class="view-label">Top-down plan</p>
+              <button
+                class="view-panel__toggle"
+                type="button"
+                data-maximize-target="topView"
+                aria-pressed="false"
+                title="Maximize this view"
+              >
+                <span class="view-panel__toggle-icon" aria-hidden="true">⤢</span>
+                <span class="view-panel__toggle-text">Maximize</span>
+              </button>
+            </div>
             <div class="view" id="topView">
               <!-- The SVG overlay uses a fixed viewBox measured in yard units; configured at runtime from constants. -->
               <svg id="topSvg" xmlns="http://www.w3.org/2000/svg"></svg>
             </div>
           </div>
-          <div class="view-panel">
-            <p class="view-label">South elevation</p>
+          <div class="view-panel" data-view-panel="frontView">
+            <div class="view-panel__header">
+              <p class="view-label">South elevation</p>
+              <button
+                class="view-panel__toggle"
+                type="button"
+                data-maximize-target="frontView"
+                aria-pressed="false"
+                title="Maximize this view"
+              >
+                <span class="view-panel__toggle-icon" aria-hidden="true">⤢</span>
+                <span class="view-panel__toggle-text">Maximize</span>
+              </button>
+            </div>
             <div class="view" id="frontView">
               <svg id="frontSvg" xmlns="http://www.w3.org/2000/svg"></svg>
             </div>
           </div>
-          <div class="view-panel">
-            <p class="view-label">West elevation</p>
+          <div class="view-panel" data-view-panel="sideView">
+            <div class="view-panel__header">
+              <p class="view-label">West elevation</p>
+              <button
+                class="view-panel__toggle"
+                type="button"
+                data-maximize-target="sideView"
+                aria-pressed="false"
+                title="Maximize this view"
+              >
+                <span class="view-panel__toggle-icon" aria-hidden="true">⤢</span>
+                <span class="view-panel__toggle-text">Maximize</span>
+              </button>
+            </div>
             <div class="view" id="sideView">
               <svg id="sideSvg" xmlns="http://www.w3.org/2000/svg"></svg>
             </div>
