@@ -8,7 +8,7 @@ import {
 import { fetchCsv } from './data/csvLoader.js';
 import { buildPlantsFromCsv } from './data/plantParser.js';
 import { buildLayoutCsv } from './data/layoutExporter.js';
-import { loadLayoutHistory, persistLayout } from './data/persistence.js';
+import { loadLayoutHistory, persistLayout, updateHistoryCursor } from './data/persistence.js';
 import { computePlantState } from './state/seasonalState.js';
 import { renderViews } from './render/renderViews.js';
 import { configureViews } from './render/viewConfig.js';
@@ -283,7 +283,10 @@ async function init() {
       fetchCsv(new URL('planting_layout.csv', document.baseURI)),
     ]);
     const initialPlants = buildPlantsFromCsv(speciesCsv, layoutCsv);
-    const historyData = await loadLayoutHistory(updateHistoryStatus);
+    const layoutCsvSnapshot = buildLayoutCsv(initialPlants);
+    const historyData = await loadLayoutHistory(updateHistoryStatus, {
+      layoutCsv: layoutCsvSnapshot,
+    });
     const historyEntries = historyData.entries || [];
     const historyCursor = typeof historyData.cursor === 'number' ? historyData.cursor : -1;
     layoutHistoryInstance = createLayoutHistory(initialPlants, {
@@ -296,9 +299,18 @@ async function init() {
 
     commitLayoutChange = (description) => {
       if (!layoutHistoryInstance) return;
+      const previousPlants = layoutHistoryInstance.getCurrentPlants();
       layoutHistoryInstance.record(appState.plants, { description });
       updateHistoryControls();
-      persistLayout(appState.plants, description, updateHistoryStatus).then((result) => {
+      persistLayout(appState.plants, description, updateHistoryStatus, {
+        previousPlants,
+      }).then((result) => {
+        if (result) {
+          console.log('Layout persisted', {
+            entryId: result.entry?.id || 'unknown',
+            cursor: result.cursor,
+          });
+        }
         if (result?.entry) {
           layoutHistoryInstance.annotateCurrentEntry(result.entry);
         }
