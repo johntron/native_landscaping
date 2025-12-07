@@ -11,7 +11,7 @@ import { buildLayoutCsv } from './data/layoutExporter.js';
 import { computePlantState } from './state/seasonalState.js';
 import { renderViews } from './render/renderViews.js';
 import { configureViews } from './render/viewConfig.js';
-import { createPlantDragController } from './interaction/dragController.js';
+import { createPlantDragController, createElevationDragController } from './interaction/dragController.js';
 import { buildPlantLabel } from './render/labels.js';
 import { formatMonthRange } from './state/seasonalState.js';
 import { clampHiddenLayerCount, classifyPlantLayer } from './state/layers.js';
@@ -29,6 +29,7 @@ const appState = {
   highlightedSpeciesKey: '',
   targetedPlantId: '',
   hoveredPlantId: '',
+  maximizedViewId: '',
 };
 
 async function init() {
@@ -54,6 +55,42 @@ async function init() {
   const layerVisibilitySelect = document.getElementById('layerVisibility');
 
   configureViews({ svgRefs, containerRefs });
+
+  const viewsContainer = document.querySelector('.views');
+  const maximizeButtons = Array.from(document.querySelectorAll('[data-maximize-target]'));
+
+  const refreshMaximizedView = () => {
+    if (viewsContainer) {
+      if (appState.maximizedViewId) {
+        viewsContainer.dataset.maximized = appState.maximizedViewId;
+      } else {
+        viewsContainer.removeAttribute('data-maximized');
+      }
+    }
+    maximizeButtons.forEach((button) => {
+      const target = button.dataset.maximizeTarget || '';
+      const isActive = Boolean(target && target === appState.maximizedViewId);
+      button.classList.toggle('is-active', isActive);
+      button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+      const label = button.querySelector('.view-panel__toggle-text');
+      if (label) {
+        label.textContent = isActive ? 'Restore' : 'Maximize';
+      }
+      button.title = isActive ? 'Restore this view' : 'Maximize this view';
+    });
+  };
+
+  const toggleViewMaximization = (viewId) => {
+    const normalized = viewId ? String(viewId) : '';
+    appState.maximizedViewId = appState.maximizedViewId === normalized ? '' : normalized;
+    refreshMaximizedView();
+  };
+
+  maximizeButtons.forEach((button) => {
+    button.addEventListener('click', () => toggleViewMaximization(button.dataset.maximizeTarget));
+  });
+
+  refreshMaximizedView();
 
   initMonthSlider(monthSlider, monthReadout, appState.month);
 
@@ -116,6 +153,23 @@ async function init() {
     onPositionsChange: () => render(),
     onHoverPlant: setHoveredPlant,
   });
+  const southDragController = createElevationDragController({
+    svg: svgRefs.southSvg,
+    axis: 'x',
+    getPlants: () => appState.plants,
+    getPixelsPerInch: () => appState.pixelsPerInch,
+    onPositionsChange: () => render(),
+    onHoverPlant: setHoveredPlant,
+  });
+  const westDragController = createElevationDragController({
+    svg: svgRefs.westSvg,
+    axis: 'y',
+    getPlants: () => appState.plants,
+    getPixelsPerInch: () => appState.pixelsPerInch,
+    onPositionsChange: () => render(),
+    onHoverPlant: setHoveredPlant,
+  });
+  const dragControllers = [dragController, southDragController, westDragController];
 
   const cloneMenu = createCloneMenu({
     onClone: (plantId) => {
@@ -131,7 +185,7 @@ async function init() {
 
   const applyLockState = (locked) => {
     appState.positionsLocked = locked;
-    dragController.setLocked(locked);
+    dragControllers.forEach((controller) => controller?.setLocked?.(locked));
     updateLockStatus(lockStatusText, locked);
     persistLockState(locked);
   };
