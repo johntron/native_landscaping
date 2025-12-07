@@ -12,9 +12,9 @@ It should be easy to maintain, easy to extend, and faithful to ecological realit
 
 - Visualize how a native planting design changes **month-by-month**.
 - Show **three synchronized orthographic views** of the same yard:
-  1. Top-down plan view
+  1. Plan (looking down)
   2. South (kitchen) elevation
-  3. West (patio) elevation
+  3. East (patio) elevation
 - Make it easy to update the design by editing a **CSV of plants** instead of
   hard-coding plant data.
 - Help people understand **structure, layering, and phenology** (growth +
@@ -102,7 +102,7 @@ Rendering is **data-driven**. For every selected month:
 2. `computePlantState` determines active growth, flowering, and foliage colors.
 3. `renderViews` hands the plant state list to each view renderer:
    - `renderTopView` draws foliage/bloom circles scaled to `width_ft`.
-   - `renderSouthElevation` and `renderWestElevation` draw simplified profiles based on `growth_shape` and `height_ft`, honoring consistent viewBox scaling and offsets from `constants.js`.
+- `renderSouthElevation` and `renderEastElevation` draw simplified profiles based on `growth_shape` and `height_ft`, honoring consistent viewBox scaling and offsets from `constants.js`.
 
 Top view uses the yard coordinate system (origin at SW corner, y increasing north). Elevations reuse the same data but map either x or y as horizontal distance to convey layering depth. Taller plants naturally overlap because each renderer clears and repopulates its SVG every frame (`render/topView.js`, `render/elevationViews.js`).
 
@@ -180,7 +180,8 @@ When the user delegates work, here are examples of useful tasks:
 
 ## Tooling
 
-- Tests use Node's built-in test runner: `npm test` (alias for `node --test`).
+- Run `npm test` to execute `node tests/run-tests.cjs`, which covers the layout history stack and the persistence module (ensuring the app hits `/api/layout` when committing changes).
+- Run `npm run serve` (or `node server.js`) to launch the bundled static + persistence server that exposes `/api/layout` for saving the layout and `/api/history` for the changelog.
 - No external dependencies are required to execute the suite.
 
 ---

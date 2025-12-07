@@ -8,6 +8,7 @@ import {
 import { fetchCsv } from './data/csvLoader.js';
 import { buildPlantsFromCsv } from './data/plantParser.js';
 import { buildLayoutCsv } from './data/layoutExporter.js';
+import { loadLayoutHistory, persistLayout } from './data/persistence.js';
 import { computePlantState } from './state/seasonalState.js';
 import { renderViews } from './render/renderViews.js';
 import { configureViews } from './render/viewConfig.js';
@@ -16,6 +17,7 @@ import { buildPlantLabel } from './render/labels.js';
 import { formatMonthRange } from './state/seasonalState.js';
 import { clampHiddenLayerCount, classifyPlantLayer } from './state/layers.js';
 import { getSpeciesKey } from './utils/speciesKey.js';
+import { createLayoutHistory } from './history/layoutHistory.js';
 
 const LOCK_STATE_KEY = 'native-landscaping-positions-locked';
 
@@ -41,18 +43,21 @@ async function init() {
   const svgRefs = {
     topSvg: document.getElementById('topSvg'),
     southSvg: document.getElementById('frontSvg'),
-    westSvg: document.getElementById('sideSvg'),
+    eastSvg: document.getElementById('sideSvg'),
   };
   const containerRefs = {
     topView: document.getElementById('topView'),
     southView: document.getElementById('frontView'),
-    westView: document.getElementById('sideView'),
+    eastView: document.getElementById('sideView'),
   };
   const lockToggle = document.getElementById('lockToggle');
   const lockStatusText = document.getElementById('lockStatusText');
   const exportButton = document.getElementById('exportLayoutBtn');
   const labelToggle = document.getElementById('labelToggle');
   const layerVisibilitySelect = document.getElementById('layerVisibility');
+  const undoButton = document.getElementById('undoLayoutBtn');
+  const redoButton = document.getElementById('redoLayoutBtn');
+  const historyStatus = document.getElementById('layoutHistoryStatus');
 
   configureViews({ svgRefs, containerRefs });
 
@@ -96,6 +101,55 @@ async function init() {
 
   let render = () => {};
   let highlightedRowEl = null;
+  let layoutHistoryInstance = null;
+  let commitLayoutChange = () => {};
+
+  const updateHistoryStatus = (message, state = '') => {
+    if (!historyStatus) return;
+    historyStatus.textContent = message || '';
+    if (state) {
+      historyStatus.dataset.state = state;
+    } else {
+      historyStatus.removeAttribute('data-state');
+    }
+  };
+
+  const updateHistoryControls = () => {
+    const canUndo = layoutHistoryInstance?.canUndo() ?? false;
+    const canRedo = layoutHistoryInstance?.canRedo() ?? false;
+    if (undoButton) undoButton.disabled = !canUndo;
+    if (redoButton) redoButton.disabled = !canRedo;
+  };
+
+  const applyHistoryPlants = (plants) => {
+    if (!Array.isArray(plants)) return;
+    appState.plants = plants;
+    render();
+    updateHistoryControls();
+  };
+
+  const handleUndo = () => {
+    if (!layoutHistoryInstance) return;
+    const plants = layoutHistoryInstance.undo();
+    if (!plants) return;
+    applyHistoryPlants(plants);
+    updateHistoryCursor(layoutHistoryInstance.getCursor(), updateHistoryStatus);
+  };
+
+  const handleRedo = () => {
+    if (!layoutHistoryInstance) return;
+    const plants = layoutHistoryInstance.redo();
+    if (!plants) return;
+    applyHistoryPlants(plants);
+    updateHistoryCursor(layoutHistoryInstance.getCursor(), updateHistoryStatus);
+  };
+
+  if (undoButton) {
+    undoButton.addEventListener('click', handleUndo);
+  }
+  if (redoButton) {
+    redoButton.addEventListener('click', handleRedo);
+  }
 
   const setHighlightedSpecies = (speciesKey, rowEl) => {
     const normalized = (speciesKey || '').toLowerCase();
@@ -152,6 +206,7 @@ async function init() {
     getPixelsPerInch: () => appState.pixelsPerInch,
     onPositionsChange: () => render(),
     onHoverPlant: setHoveredPlant,
+    onChangeCommit: () => commitLayoutChange('Moved plant'),
   });
   const southDragController = createElevationDragController({
     svg: svgRefs.southSvg,
@@ -160,16 +215,18 @@ async function init() {
     getPixelsPerInch: () => appState.pixelsPerInch,
     onPositionsChange: () => render(),
     onHoverPlant: setHoveredPlant,
+    onChangeCommit: () => commitLayoutChange('Moved plant'),
   });
-  const westDragController = createElevationDragController({
-    svg: svgRefs.westSvg,
+  const eastDragController = createElevationDragController({
+    svg: svgRefs.eastSvg,
     axis: 'y',
     getPlants: () => appState.plants,
     getPixelsPerInch: () => appState.pixelsPerInch,
     onPositionsChange: () => render(),
     onHoverPlant: setHoveredPlant,
+    onChangeCommit: () => commitLayoutChange('Moved plant'),
   });
-  const dragControllers = [dragController, southDragController, westDragController];
+  const dragControllers = [dragController, southDragController, eastDragController];
 
   const cloneMenu = createCloneMenu({
     onClone: (plantId) => {
@@ -178,6 +235,7 @@ async function init() {
         cloneMenu.hide();
         setTargetedPlant('');
         render();
+        commitLayoutChange('Cloned plant');
       }
     },
     onClose: () => setTargetedPlant(''),
@@ -224,7 +282,33 @@ async function init() {
       fetchCsv(new URL('plants.csv', document.baseURI)),
       fetchCsv(new URL('planting_layout.csv', document.baseURI)),
     ]);
-    appState.plants = buildPlantsFromCsv(speciesCsv, layoutCsv);
+    const initialPlants = buildPlantsFromCsv(speciesCsv, layoutCsv);
+    const historyData = await loadLayoutHistory(updateHistoryStatus);
+    const historyEntries = historyData.entries || [];
+    const historyCursor = typeof historyData.cursor === 'number' ? historyData.cursor : -1;
+    layoutHistoryInstance = createLayoutHistory(initialPlants, {
+      seedEntries: historyEntries,
+      initialCursor: historyCursor,
+    });
+    const currentPlants = layoutHistoryInstance.getCurrentPlants();
+    appState.plants = currentPlants.length ? currentPlants : initialPlants;
+    updateHistoryControls();
+
+    commitLayoutChange = (description) => {
+      if (!layoutHistoryInstance) return;
+      layoutHistoryInstance.record(appState.plants, { description });
+      updateHistoryControls();
+      persistLayout(appState.plants, description, updateHistoryStatus).then((result) => {
+        if (result?.entry) {
+          layoutHistoryInstance.annotateCurrentEntry(result.entry);
+        }
+        if (typeof result?.cursor === 'number') {
+          layoutHistoryInstance.setCursor(result.cursor);
+        }
+        updateHistoryControls();
+      });
+    };
+
     renderSpeciesTable(appState.plants, {
       onHoverStart: (speciesKey, rowEl) => setHighlightedSpecies(speciesKey, rowEl),
       onHoverEnd: (_speciesKey, rowEl) => clearHighlightedSpecies(rowEl),
@@ -526,6 +610,7 @@ function downloadLayoutCsv(plants) {
   anchor.remove();
   URL.revokeObjectURL(url);
 }
+
 
 function createCloneMenu({ onClone, onClose }) {
   const menu = document.createElement('div');

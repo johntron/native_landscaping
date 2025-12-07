@@ -1,9 +1,9 @@
 import { renderTopView } from './topView.js';
-import { renderSouthElevation, renderWestElevation } from './elevationViews.js';
+import { renderSouthElevation, renderEastElevation } from './elevationViews.js';
 import { filterPlantStatesByHiddenLayers } from '../state/layers.js';
 
 export function renderViews(svgRefs, plantStates, pixelsPerInch, options = {}) {
-  const { topSvg, southSvg, westSvg } = svgRefs;
+  const { topSvg, southSvg, eastSvg } = svgRefs;
   const {
     showLabels = false,
     hiddenLayerCount = 0,
@@ -21,7 +21,7 @@ export function renderViews(svgRefs, plantStates, pixelsPerInch, options = {}) {
   };
   renderTopView(topSvg, topOrdered, pixelsPerInch, renderOptions);
   renderSouthElevation(southSvg, filtered, pixelsPerInch, renderOptions);
-  renderWestElevation(westSvg, filtered, pixelsPerInch, renderOptions);
+  renderEastElevation(eastSvg, filtered, pixelsPerInch, renderOptions);
 }
 
 function orderTopViewPlantStates(plantStates) {

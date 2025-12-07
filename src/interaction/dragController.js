@@ -17,6 +17,7 @@ export function createPlantDragController({
   getPixelsPerInch,
   onPositionsChange,
   onHoverPlant,
+  onChangeCommit,
 }) {
   const state = {
     locked: true,
@@ -25,6 +26,7 @@ export function createPlantDragController({
     offsetFeet: { x: 0, y: 0 },
     renderQueued: false,
     hoveredPlantId: '',
+    hasMoved: false,
   };
 
   if (!svg) {
@@ -66,6 +68,7 @@ export function createPlantDragController({
     svg.setPointerCapture(event.pointerId);
     svg.style.cursor = 'grabbing';
     notifyHover(state.activePlant.id);
+    state.hasMoved = false;
     event.preventDefault();
   }
 
@@ -81,7 +84,11 @@ export function createPlantDragController({
   function handlePointerUp(event) {
     if (event.pointerId !== state.pointerId) return;
     const ctx = buildPointerContext(svg, event, getPixelsPerInch());
+    const moved = state.hasMoved;
     cancelActive();
+    if (moved) {
+      onChangeCommit?.();
+    }
     updateHoverFromContext(event, ctx);
   }
 
@@ -121,9 +128,16 @@ export function createPlantDragController({
     const { viewBox, pixelsPerInch, positionFeet } = ctx;
     const clampX = clamp(positionFeet.x - state.offsetFeet.x, 0, viewBoxToFeet(viewBox.width, pixelsPerInch));
     const clampY = clamp(positionFeet.y - state.offsetFeet.y, 0, viewBoxToFeet(viewBox.height, pixelsPerInch));
+    const previousX = state.activePlant.x;
+    const previousY = state.activePlant.y;
 
     state.activePlant.x = clampX;
     state.activePlant.y = clampY;
+
+    const movedEnough = Math.abs(clampX - previousX) > 1e-6 || Math.abs(clampY - previousY) > 1e-6;
+    if (movedEnough) {
+      state.hasMoved = true;
+    }
     queueRender();
   }
 
@@ -143,6 +157,7 @@ export function createPlantDragController({
     state.activePlant = null;
     state.pointerId = null;
     state.offsetFeet = { x: 0, y: 0 };
+    state.hasMoved = false;
     svg.style.cursor = state.locked ? 'default' : 'grab';
   }
 
@@ -169,6 +184,7 @@ export function createElevationDragController({
   getPixelsPerInch,
   onPositionsChange,
   onHoverPlant,
+  onChangeCommit,
 }) {
   const axisKey = axis === 'y' ? 'y' : 'x';
   const state = {
@@ -178,6 +194,7 @@ export function createElevationDragController({
     axisOffsetFeet: 0,
     renderQueued: false,
     hoveredPlantId: '',
+    hasMoved: false,
   };
 
   if (!svg) {
@@ -223,6 +240,7 @@ export function createElevationDragController({
     svg.setPointerCapture(event.pointerId);
     svg.style.cursor = 'grabbing';
     notifyHover(target.id);
+    state.hasMoved = false;
     event.preventDefault();
   }
 
@@ -237,7 +255,11 @@ export function createElevationDragController({
 
   function handlePointerUp(event) {
     if (event.pointerId !== state.pointerId) return;
+    const moved = state.hasMoved;
     cancelActive();
+    if (moved) {
+      onChangeCommit?.();
+    }
     updateHoverFromContext(event);
   }
 
@@ -273,7 +295,11 @@ export function createElevationDragController({
     const axisLimit = viewBoxToFeet(ctx.viewBox.width, ctx.pixelsPerInch);
     const rawAxis = ctx.positionFeet.x - state.axisOffsetFeet;
     const clamped = clamp(rawAxis, 0, axisLimit);
+    const previous = state.activePlant[axisKey];
     state.activePlant[axisKey] = clamped;
+    if (Math.abs(clamped - previous) > 1e-6) {
+      state.hasMoved = true;
+    }
     queueRender();
   }
 
@@ -293,6 +319,7 @@ export function createElevationDragController({
     state.activePlant = null;
     state.pointerId = null;
     state.axisOffsetFeet = 0;
+    state.hasMoved = false;
     svg.style.cursor = state.locked ? 'default' : 'grab';
   }
 

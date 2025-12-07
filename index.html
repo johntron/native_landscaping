@@ -56,7 +56,10 @@
         <main class="views">
           <div class="view-panel" data-view-panel="topView">
             <div class="view-panel__header">
-              <p class="view-label">Top-down plan</p>
+              <p class="view-label">
+                Plan
+                <span class="view-label__subtitle">Looking Down</span>
+              </p>
               <button
                 class="view-panel__toggle"
                 type="button"
@@ -75,7 +78,10 @@
           </div>
           <div class="view-panel" data-view-panel="frontView">
             <div class="view-panel__header">
-              <p class="view-label">South elevation</p>
+              <p class="view-label">
+                South elevation
+                <span class="view-label__subtitle">Looking North</span>
+              </p>
               <button
                 class="view-panel__toggle"
                 type="button"
@@ -93,7 +99,10 @@
           </div>
           <div class="view-panel" data-view-panel="sideView">
             <div class="view-panel__header">
-              <p class="view-label">West elevation</p>
+              <p class="view-label">
+                East elevation
+                <span class="view-label__subtitle">Looking West</span>
+              </p>
               <button
                 class="view-panel__toggle"
                 type="button"
@@ -172,6 +181,15 @@
                     </span>
                   </span>
                 </label>
+              </div>
+            </div>
+            <div class="history-panel">
+              <div class="history-controls">
+                <button id="undoLayoutBtn" class="button pill-button" type="button" disabled>Undo</button>
+                <button id="redoLayoutBtn" class="button pill-button" type="button" disabled>Redo</button>
+              </div>
+              <div class="history-status" id="layoutHistoryStatus">
+                Saving disabled until you run <code>node server.js</code>.
               </div>
             </div>
             <button id="exportLayoutBtn" class="button pill-button" type="button" disabled>Export layout CSV</button>

@@ -26,8 +26,8 @@ export const SCALE_LIMITS = {
 export const PLANT_BLEND_OPACITY = 0.72;
 export const SOUTH_ELEVATION_BOTTOM_OFFSET_PX = 100;
 export const SOUTH_ELEVATION_LEFT_OFFSET_PX = 0;
-export const WEST_ELEVATION_BOTTOM_OFFSET_PX = 100;
-export const WEST_ELEVATION_LEFT_OFFSET_PX = 80;
+export const EAST_ELEVATION_BOTTOM_OFFSET_PX = 100;
+export const EAST_ELEVATION_LEFT_OFFSET_PX = 80;
 
 export const PLAN_VIEWBOX = {
   width: 800,
