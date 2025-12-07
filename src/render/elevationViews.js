@@ -4,8 +4,8 @@ import {
   INCHES_PER_FOOT,
   SOUTH_ELEVATION_BOTTOM_OFFSET_PX,
   SOUTH_ELEVATION_LEFT_OFFSET_PX,
-  WEST_ELEVATION_BOTTOM_OFFSET_PX,
-  WEST_ELEVATION_LEFT_OFFSET_PX,
+  EAST_ELEVATION_BOTTOM_OFFSET_PX,
+  EAST_ELEVATION_LEFT_OFFSET_PX,
   PLANT_BLEND_OPACITY,
 } from '../constants.js';
 import { getSpeciesKey } from '../utils/speciesKey.js';
@@ -47,12 +47,12 @@ export function renderSouthElevation(
 }
 
 /**
- * West (patio) elevation uses the y axis of the yard as horizontal to give depth.
+ * East (patio) elevation uses the y axis of the yard as horizontal to give depth.
  * @param {SVGSVGElement} svg
  * @param {Array<{ plant: any, state: any }>} plantStates
  * @param {number} pixelsPerInch
  */
-export function renderWestElevation(
+export function renderEastElevation(
   svg,
   plantStates,
   pixelsPerInch = DEFAULT_PIXELS_PER_INCH,
@@ -63,8 +63,8 @@ export function renderWestElevation(
     plantStates,
     'y',
     pixelsPerInch,
-    WEST_ELEVATION_BOTTOM_OFFSET_PX,
-    WEST_ELEVATION_LEFT_OFFSET_PX,
+    EAST_ELEVATION_BOTTOM_OFFSET_PX,
+    EAST_ELEVATION_LEFT_OFFSET_PX,
     options
   );
 }
@@ -102,7 +102,7 @@ function renderElevation(
       const yB = b?.plant?.y ?? 0;
       if (yA !== yB) return yB - yA;
     } else {
-      // West elevation layers by x: smaller x first, larger x last (front).
+      // East elevation layers by x: smaller x first, larger x last (front).
       const xA = a?.plant?.x ?? 0;
       const xB = b?.plant?.x ?? 0;
       if (xA !== xB) return xA - xB;
@@ -291,7 +291,7 @@ function renderElevation(
 
 function stackingPriority(plant, axisKey) {
   if (!plant) return 1;
-  // On the west (y-axis) elevation, force Callirhoe involucrata to render last so it stays in front.
+  // On the east (y-axis) elevation, force Callirhoe involucrata to render last so it stays in front.
   if (axisKey === 'y') {
     const botanical = (plant.botanicalName || plant.botanical_name || '').toLowerCase();
     if (botanical === 'callirhoe involucrata') {

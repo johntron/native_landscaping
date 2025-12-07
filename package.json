@@ -4,7 +4,8 @@
   "description": "Backyard seasonal visualization",
   "type": "module",
   "scripts": {
-    "test": "node --test"
+    "test": "node tests/run-tests.cjs",
+    "serve": "node server.js"
   },
   "keywords": [],
   "author": "",

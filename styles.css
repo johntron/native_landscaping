@@ -294,6 +294,31 @@ h1 {
   flex-wrap: wrap;
 }
 
+.history-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+}
+
+.history-controls {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.history-status {
+  font-size: 0.8rem;
+  color: #4b4f54;
+}
+
+.history-status[data-state="success"] {
+  color: #1c5a70;
+}
+
+.history-status[data-state="error"] {
+  color: #9d2833;
+}
+
 select {
   font-size: 1rem;
   padding: 0.25rem 0.5rem;
@@ -623,6 +648,17 @@ select {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: #4b4f43;
+  line-height: 1.25;
+}
+
+.view-label__subtitle {
+  display: block;
+  font-size: 0.78rem;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  font-weight: 700;
+  color: #5f645c;
+  margin-top: 0.05rem;
 }
 
 /* Optional styling for tooltip text displayed via title attributes on SVG elements. */
