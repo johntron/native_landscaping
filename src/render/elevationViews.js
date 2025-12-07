@@ -519,7 +519,7 @@ function renderTreeProfile({ cx, groundY, width, height, color, rng, clipSuffix,
   group.appendChild(trunk);
 
   const canopyRy = (height - trunkHeight) * 0.55; // oval crown
-  const canopyRx = canopyRy * 0.95;
+  const canopyRx = Math.max((width / 2) * 0.95, canopyRy * 0.6);
   const canopyCenterY = trunkTopY - canopyRy * 0.25;
   const canopyWidth = canopyRx * 2;
 
