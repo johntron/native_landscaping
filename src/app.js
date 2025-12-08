@@ -52,6 +52,7 @@ async function init() {
   const scaleInput = document.getElementById('scaleInput');
   const scaleSlider = document.getElementById('scaleSlider');
   const scaleIndicator = document.getElementById('scaleIndicator');
+  const scaleSummaryEls = Array.from(document.querySelectorAll('[data-scale-summary]'));
   const svgRefs = {
     topSvg: document.getElementById('topSvg'),
     southSvg: document.getElementById('frontSvg'),
@@ -64,10 +65,10 @@ async function init() {
   };
   const lockToggle = document.getElementById('lockToggle');
   const lockStatusText = document.getElementById('lockStatusText');
-  const exportButton = document.getElementById('exportLayoutBtn');
   const exportBundleButton = document.getElementById('exportBundleBtn');
+  const managePlantsButton = document.getElementById('managePlantsBtn');
   const labelToggle = document.getElementById('labelToggle');
-  const layerVisibilitySelect = document.getElementById('layerVisibility');
+  const layerVisibilityButtons = Array.from(document.querySelectorAll('[data-layer-visibility]'));
   const undoButton = document.getElementById('undoLayoutBtn');
   const redoButton = document.getElementById('redoLayoutBtn');
   const historyStatus = document.getElementById('layoutHistoryStatus');
@@ -116,6 +117,22 @@ async function init() {
   let highlightedRowEl = null;
   let layoutHistoryInstance = null;
   let commitLayoutChange = () => {};
+  const syncLayerButtons = (hiddenCount) => {
+    layerVisibilityButtons.forEach((button) => {
+      const value = Number(button.dataset.layerVisibility || button.value || 0);
+      const isActive = value === hiddenCount;
+      button.classList.toggle('is-active', isActive);
+      button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+  };
+  const applyHiddenLayers = (count, { shouldRender = true } = {}) => {
+    const clamped = clampHiddenLayerCount(count);
+    appState.hiddenLayerCount = clamped;
+    syncLayerButtons(clamped);
+    if (shouldRender) {
+      render();
+    }
+  };
 
   const updateHistoryStatus = (message, state = '') => {
     if (!historyStatus) return;
@@ -217,14 +234,10 @@ async function init() {
     const restoreToken = snapshotViewState({
       monthSlider,
       monthReadout,
-      layerVisibilitySelect,
       state: appState,
     });
     toggleButtonBusy(exportBundleButton, true, 'Preparing bundle…');
-    appState.hiddenLayerCount = 0;
-    if (layerVisibilitySelect) {
-      layerVisibilitySelect.value = '0';
-    }
+    applyHiddenLayers(0, { shouldRender: false });
     appState.hoveredPlantId = '';
     appState.targetedPlantId = '';
     appState.month = EXPORT_MONTH;
@@ -270,9 +283,11 @@ async function init() {
       restoreViewState(restoreToken, {
         monthSlider,
         monthReadout,
-        layerVisibilitySelect,
         state: appState,
-        onRestore: render,
+        onRestore: () => {
+          syncLayerButtons(appState.hiddenLayerCount);
+          render();
+        },
       });
       toggleButtonBusy(exportBundleButton, false);
       isBundleExporting = false;
@@ -281,6 +296,7 @@ async function init() {
   const applyScale = (value) => {
     appState.pixelsPerInch = value;
     updateScaleIndicator(scaleIndicator, value);
+    updateScaleSummaries(scaleSummaryEls, value);
     render();
   };
   initScaleControls(scaleInput, scaleSlider, applyScale);
@@ -340,11 +356,14 @@ async function init() {
     lockToggle.addEventListener('change', (e) => applyLockState(e.target.checked));
   }
   applyLockState(initialLockState);
-  if (exportButton) {
-    exportButton.disabled = true;
-  }
   if (exportBundleButton) {
     exportBundleButton.disabled = true;
+  }
+  if (managePlantsButton) {
+    managePlantsButton.disabled = false;
+    managePlantsButton.addEventListener('click', () => {
+      alert('Manage plants is coming soon. Edit plants.csv to add or update species for now.');
+    });
   }
   if (labelToggle) {
     labelToggle.checked = true;
@@ -357,11 +376,13 @@ async function init() {
     appState.showLabels = false;
   }
 
-  if (layerVisibilitySelect) {
-    layerVisibilitySelect.value = String(appState.hiddenLayerCount);
-    layerVisibilitySelect.addEventListener('change', (e) => {
-      appState.hiddenLayerCount = clampHiddenLayerCount(Number(e.target.value));
-      render();
+  if (layerVisibilityButtons.length) {
+    syncLayerButtons(appState.hiddenLayerCount);
+    layerVisibilityButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        const next = Number(button.dataset.layerVisibility || button.value || 0);
+        applyHiddenLayers(next);
+      });
     });
   }
 
@@ -414,10 +435,6 @@ async function init() {
       onHoverStart: (speciesKey, rowEl) => setHighlightedSpecies(speciesKey, rowEl),
       onHoverEnd: (_speciesKey, rowEl) => clearHighlightedSpecies(rowEl),
     });
-    if (exportButton) {
-      exportButton.disabled = false;
-      exportButton.addEventListener('click', () => downloadLayoutCsv(appState.plants));
-    }
     if (exportBundleButton) {
       exportBundleButton.disabled = false;
       exportBundleButton.addEventListener('click', handleBundleExport);
@@ -486,6 +503,7 @@ async function init() {
   });
 
   updateScaleIndicator(scaleIndicator, appState.pixelsPerInch);
+  updateScaleSummaries(scaleSummaryEls, appState.pixelsPerInch);
   render();
 }
 
@@ -536,6 +554,16 @@ function updateScaleIndicator(container, pixelsPerInch) {
     if (line) {
       line.style.width = `${width}px`;
     }
+  });
+}
+
+function updateScaleSummaries(summaryEls, pixelsPerInch) {
+  if (!summaryEls?.length) return;
+  const perFoot = Math.round((pixelsPerInch || 0) * INCHES_PER_FOOT);
+  summaryEls.forEach((el) => {
+    if (!el) return;
+    const formatted = Number.isFinite(perFoot) && perFoot > 0 ? perFoot.toLocaleString() : '0';
+    el.textContent = `1 ft ≈ ${formatted} px`;
   });
 }
 
@@ -701,13 +729,6 @@ function resolveInches(item) {
   return null;
 }
 
-function downloadLayoutCsv(plants) {
-  if (!plants?.length) return;
-  const csv = buildLayoutCsv(plants);
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  triggerDownload(blob, 'planting_layout.csv');
-}
-
 function triggerDownload(blob, filename) {
   if (!blob) return;
   const url = URL.createObjectURL(blob);
@@ -721,7 +742,7 @@ function triggerDownload(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
-function snapshotViewState({ monthSlider, monthReadout, layerVisibilitySelect, state }) {
+function snapshotViewState({ monthSlider, monthReadout, state }) {
   return {
     month: state.month,
     hiddenLayerCount: state.hiddenLayerCount,
@@ -730,11 +751,10 @@ function snapshotViewState({ monthSlider, monthReadout, layerVisibilitySelect, s
     hoveredPlantId: state.hoveredPlantId,
     monthSliderValue: monthSlider ? monthSlider.value : null,
     monthReadoutText: monthReadout ? monthReadout.textContent : null,
-    layerVisibilityValue: layerVisibilitySelect ? layerVisibilitySelect.value : null,
   };
 }
 
-function restoreViewState(snapshot, { monthSlider, monthReadout, layerVisibilitySelect, state, onRestore }) {
+function restoreViewState(snapshot, { monthSlider, monthReadout, state, onRestore }) {
   if (!snapshot) return;
   state.month = snapshot.month;
   state.hiddenLayerCount = snapshot.hiddenLayerCount;
@@ -746,9 +766,6 @@ function restoreViewState(snapshot, { monthSlider, monthReadout, layerVisibility
   }
   if (monthReadout && snapshot.monthReadoutText !== null) {
     monthReadout.textContent = snapshot.monthReadoutText;
-  }
-  if (layerVisibilitySelect && snapshot.layerVisibilityValue !== null) {
-    layerVisibilitySelect.value = snapshot.layerVisibilityValue;
   }
   onRestore?.();
 }
