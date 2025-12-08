@@ -86,8 +86,9 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   const address = server.address();
+  const host = address.family === 'IPv6' ? `[${address.address}]` : address.address;
   const boundPort = address && address.port ? address.port : PORT;
-  console.log(`Serving native-landscaping at http://localhost:${boundPort}`);
+  console.log(`Serving native-landscaping at http://${host}:${boundPort}`);
 });
 
 async function collectPayload(req, options = {}) {

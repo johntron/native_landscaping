@@ -9,7 +9,7 @@ import {
 
 test('classifyPlantLayer buckets plants by growth shape and height', () => {
   assert.equal(classifyPlantLayer({ height: 0.6, growthShape: 'creeping' }), 'groundcover');
-  assert.equal(classifyPlantLayer({ height: 10, growthShape: 'mound', width: 2 }), 'trees');
+  assert.equal(classifyPlantLayer({ height: 10, growthShape: 'mound', width: 2 }), 'sculptural');
   assert.equal(classifyPlantLayer({ height: 5, growthShape: 'vertical' }), 'sculptural');
   assert.equal(classifyPlantLayer({ height: 2, growthShape: 'mound' }), 'accents');
   assert.equal(classifyPlantLayer({ height: 0.2 }), 'groundcover');

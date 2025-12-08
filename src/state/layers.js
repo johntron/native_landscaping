@@ -11,7 +11,6 @@ export function classifyPlantLayer(plant) {
 
   if (shape === 'creeping') return 'groundcover';
   if (shape === 'tree') return 'trees';
-  if (height >= 9 || (height >= 7 && width >= 3)) return 'trees';
   if (height >= 4 || shape === 'vertical' || shape === 'vase' || shape === 'arch') {
     return 'sculptural';
   }

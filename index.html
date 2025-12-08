@@ -9,46 +9,118 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   </head>
   <body>
-    <header>
-      <h1>Backyard Visualization</h1>
-      <p class="data-note">
-        Plant data is fetched from plants.csv (species) and planting_layout.csv (yard layout). Run these files through a local web server to avoid
-        browser restrictions when testing (for example, <code>npx serve</code>).
-      </p>
+    <header class="page-header">
+      <div class="header-inner">
+        <h1>Backyard Visualization</h1>
+        <p class="data-note">
+          Seasonal native landscape views driven by plants.csv (species) and planting_layout.csv (layout). Serve locally to load CSVs (for example,
+          <code>npx serve</code>).
+        </p>
+      </div>
     </header>
     <div class="page">
       <div class="view-shell">
-        <div class="view-meta view-meta--near">
-          <div class="scale-indicator" id="scaleIndicator">
-            <div class="scale-indicator__title">Scale reference</div>
-            <div class="scale-indicator__bars">
-              <div class="scale-indicator__item" data-inches="3">
-                <div class="scale-indicator__line"></div>
-                <span>3 in</span>
+        <div class="view-toolbar">
+          <div class="view-toolbar__row view-toolbar__row--top">
+            <div class="legend">
+              <div class="legend__item">
+                <span class="legend__swatch legend__swatch--label">CA</span>
+                <span class="legend__text">Species initials</span>
               </div>
-              <div class="scale-indicator__item" data-feet="1">
-                <div class="scale-indicator__line"></div>
-                <span>1 ft</span>
+              <div class="legend__item">
+                <span class="legend__swatch legend__swatch--flower"></span>
+                <span class="legend__text">Current blooms</span>
               </div>
-              <div class="scale-indicator__item" data-feet="10">
-                <div class="scale-indicator__line"></div>
-                <span>10 ft</span>
+              <div class="legend__item">
+                <span class="legend__swatch legend__swatch--foliage"></span>
+                <span class="legend__text">Foliage canopy</span>
               </div>
             </div>
-            <div class="scale-indicator__hint">Reference applies to plan and elevations.</div>
+            <div class="view-toolbar__actions">
+              <div class="layer-chips" id="layerVisibilityChips" role="group" aria-label="Layer visibility">
+                <button type="button" class="chip chip--ghost is-active" data-layer-visibility="0" aria-pressed="true">All layers</button>
+                <button type="button" class="chip chip--ghost" data-layer-visibility="1" aria-pressed="false">Hide trees</button>
+                <button type="button" class="chip chip--ghost" data-layer-visibility="2" aria-pressed="false">Hide trees + sculptural</button>
+                <button type="button" class="chip chip--ghost" data-layer-visibility="3" aria-pressed="false">Hide through accents</button>
+                <button type="button" class="chip chip--ghost" data-layer-visibility="4" aria-pressed="false">Hide everything</button>
+              </div>
+              <div class="toggle-row">
+                <label class="pill-switch" for="labelToggle">
+                  <input id="labelToggle" type="checkbox" checked />
+                  <span class="pill-body">
+                    <span class="pill-thumb"></span>
+                    <span class="pill-content">
+                      <span class="pill-icon pill-icon--text" aria-hidden="true">Aa</span>
+                      <span class="pill-text">
+                        <span class="pill-title">Plant labels</span>
+                        <span class="pill-hint">show initials</span>
+                      </span>
+                    </span>
+                  </span>
+                </label>
+                <label class="pill-switch" for="lockToggle" data-variant="lock">
+                  <input id="lockToggle" type="checkbox" checked />
+                  <span class="pill-body">
+                    <span class="pill-thumb"></span>
+                    <span class="pill-content">
+                      <span class="pill-icon pill-icon--locked" aria-hidden="true">
+                        <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                          <path d="M12 7V5a4 4 0 0 0-8 0v2H3v8h10V7h-1Zm-6 0V5a2 2 0 0 1 4 0v2H6Z" fill="currentColor"/>
+                        </svg>
+                      </span>
+                      <span class="pill-icon pill-icon--unlocked" aria-hidden="true">
+                        <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                          <path d="M12 7h1v8H3V7h7V5a3 3 0 0 0-5.7-1.1l-1-.6A4.5 4.5 0 0 1 12 5v2Z" fill="currentColor"/>
+                        </svg>
+                      </span>
+                      <span class="pill-text">
+                        <span class="pill-title" id="lockStatusText">Positions locked</span>
+                        <span class="pill-hint">unlock to drag</span>
+                      </span>
+                    </span>
+                  </span>
+                </label>
+                <div class="history-controls">
+                  <button id="undoLayoutBtn" class="button pill-button" type="button" disabled>Undo</button>
+                  <button id="redoLayoutBtn" class="button pill-button" type="button" disabled>Redo</button>
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="legend">
-            <div class="legend__item">
-              <span class="legend__swatch legend__swatch--label">CA</span>
-              <span class="legend__text">Species initials</span>
+          <div class="view-toolbar__row view-toolbar__row--controls">
+            <div class="month-control">
+              <div class="control-title">Month</div>
+              <div class="month-slider">
+                <input id="monthSlider" type="range" min="1" max="12" step="1" />
+                <div class="month-readout" id="monthReadout">January</div>
+              </div>
             </div>
-            <div class="legend__item">
-              <span class="legend__swatch legend__swatch--flower"></span>
-              <span class="legend__text">Current blooms</span>
-            </div>
-            <div class="legend__item">
-              <span class="legend__swatch legend__swatch--foliage"></span>
-              <span class="legend__text">Foliage canopy</span>
+            <div class="view-toolbar__control-group">
+              <div class="control-pair control-pair--scale">
+                <label for="scaleSlider">Scale (px/in)</label>
+                <div class="scale-inputs">
+                  <input id="scaleSlider" type="range" step="0.01" min="0.01" aria-label="Scale slider" />
+                  <input id="scaleInput" type="number" inputmode="decimal" step="0.01" min="0.01" />
+                </div>
+              </div>
+              <div class="scale-indicator scale-indicator--compact" id="scaleIndicator">
+                <div class="scale-indicator__title">Scale reference</div>
+                <div class="scale-indicator__bars">
+                  <div class="scale-indicator__item" data-inches="3">
+                    <div class="scale-indicator__line"></div>
+                    <span>3 in</span>
+                  </div>
+                  <div class="scale-indicator__item" data-feet="1">
+                    <div class="scale-indicator__line"></div>
+                    <span>1 ft</span>
+                  </div>
+                  <div class="scale-indicator__item" data-feet="10">
+                    <div class="scale-indicator__line"></div>
+                    <span>10 ft</span>
+                  </div>
+                </div>
+                <div class="scale-indicator__hint">Applies to plan and elevations.</div>
+              </div>
             </div>
           </div>
         </div>
@@ -72,6 +144,12 @@
               </button>
             </div>
             <div class="view" id="topView">
+              <div class="view__overlay">
+                <div class="view-scale" aria-hidden="true">
+                  <span class="view-scale__label">Scale</span>
+                  <span class="view-scale__value" data-scale-summary>1 ft = 0 px</span>
+                </div>
+              </div>
               <!-- The SVG overlay uses a fixed viewBox measured in yard units; configured at runtime from constants. -->
               <svg id="topSvg" xmlns="http://www.w3.org/2000/svg"></svg>
             </div>
@@ -94,6 +172,12 @@
               </button>
             </div>
             <div class="view" id="frontView">
+              <div class="view__overlay">
+                <div class="view-scale" aria-hidden="true">
+                  <span class="view-scale__label">Scale</span>
+                  <span class="view-scale__value" data-scale-summary>1 ft = 0 px</span>
+                </div>
+              </div>
               <svg id="frontSvg" xmlns="http://www.w3.org/2000/svg"></svg>
             </div>
           </div>
@@ -115,86 +199,25 @@
               </button>
             </div>
             <div class="view" id="sideView">
+              <div class="view__overlay">
+                <div class="view-scale" aria-hidden="true">
+                  <span class="view-scale__label">Scale</span>
+                  <span class="view-scale__value" data-scale-summary>1 ft = 0 px</span>
+                </div>
+              </div>
               <svg id="sideSvg" xmlns="http://www.w3.org/2000/svg"></svg>
             </div>
           </div>
         </main>
       </div>
       <div class="species-table" id="speciesTable"></div>
-      <div class="controls-block">
-        <div class="controls-grid">
-          <div class="controls-row controls-row--primary">
-            <div class="month-control">
-              <div class="control-title">Month</div>
-              <div class="month-slider">
-                <input id="monthSlider" type="range" min="1" max="12" step="1" />
-                <div class="month-readout" id="monthReadout">January</div>
-              </div>
-            </div>
-            <div class="control-pair control-pair--scale">
-              <label for="scaleSlider">Scale (px/in)</label>
-              <div class="scale-inputs">
-                <input id="scaleSlider" type="range" step="0.01" min="0.01" aria-label="Scale slider" />
-                <input id="scaleInput" type="number" inputmode="decimal" step="0.01" min="0.01" />
-              </div>
-            </div>
-          </div>
-          <div class="controls-row controls-row--secondary">
-            <div class="secondary-controls">
-              <div class="control-pair control-pair--layers">
-                <label for="layerVisibility">Hide upper layers</label>
-                <select id="layerVisibility">
-                  <option value="0">Show all layers</option>
-                  <option value="1">Hide trees</option>
-                  <option value="2">Hide trees + sculptural</option>
-                  <option value="3">Hide through accents</option>
-                  <option value="4">Hide everything (incl. groundcover)</option>
-                </select>
-                <p class="control-hint">Removes layers from the canopy downward so understory plants stay visible.</p>
-              </div>
-              <div class="toggle-row">
-                <label class="pill-switch" for="lockToggle" data-variant="lock">
-                  <input id="lockToggle" type="checkbox" checked />
-                  <span class="pill-body">
-                    <span class="pill-thumb"></span>
-                    <span class="pill-content">
-                      <svg class="pill-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                        <path d="M12 7V5a4 4 0 0 0-8 0v2H3v8h10V7h-1Zm-6 0V5a2 2 0 0 1 4 0v2H6Z" fill="currentColor"/>
-                      </svg>
-                      <span class="pill-text">
-                        <span class="pill-title" id="lockStatusText">Positions locked</span>
-                        <span class="pill-hint">unlock to drag</span>
-                      </span>
-                    </span>
-                  </span>
-                </label>
-                <label class="pill-switch" for="labelToggle">
-                  <input id="labelToggle" type="checkbox" checked />
-                  <span class="pill-body">
-                    <span class="pill-thumb"></span>
-                    <span class="pill-content">
-                      <span class="pill-icon pill-icon--text" aria-hidden="true">Aa</span>
-                      <span class="pill-text">
-                        <span class="pill-title">Plant labels</span>
-                        <span class="pill-hint">show initials</span>
-                      </span>
-                    </span>
-                  </span>
-                </label>
-              </div>
-            </div>
-            <div class="history-panel">
-              <div class="history-controls">
-                <button id="undoLayoutBtn" class="button pill-button" type="button" disabled>Undo</button>
-                <button id="redoLayoutBtn" class="button pill-button" type="button" disabled>Redo</button>
-              </div>
-              <div class="history-status" id="layoutHistoryStatus">
-                Saving disabled until you run <code>node server.js</code>.
-              </div>
-            </div>
-            <button id="exportLayoutBtn" class="button pill-button" type="button" disabled>Export layout CSV</button>
-            <button id="exportBundleBtn" class="button pill-button" type="button" disabled>Download plan bundle (zip)</button>
-          </div>
+      <div class="data-actions">
+        <div class="history-status" id="layoutHistoryStatus">
+          Saving disabled until you run <code>node server.js</code>.
+        </div>
+        <div class="admin-buttons">
+          <button id="managePlantsBtn" class="button pill-button" type="button" disabled>Manage plants data</button>
+          <button id="exportBundleBtn" class="button pill-button" type="button" disabled>Download plan bundle (zip)</button>
         </div>
       </div>
     </div>
