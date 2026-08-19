@@ -11,11 +11,16 @@
   <body>
     <header class="page-header">
       <div class="header-inner">
-        <h1>Backyard Visualization</h1>
+        <h1 id="projectTitle">Backyard Visualization</h1>
         <p class="data-note">
-          Seasonal native landscape views driven by plants.csv (species) and planting_layout.csv (layout). Serve locally to load CSVs (for example,
-          <code>npx serve</code>).
+          Seasonal native landscape views driven by plants.csv (shared species catalog) and each project's planting_layout.csv. Serve locally to load
+          the data files (for example, <code>npx serve</code>).
         </p>
+        <div class="project-picker">
+          <label for="projectSelect">Project</label>
+          <select id="projectSelect" disabled></select>
+          <span class="project-picker__note" id="projectNotice" hidden></span>
+        </div>
       </div>
     </header>
     <div class="page">
@@ -129,8 +134,8 @@
           <div class="view-panel" data-view-panel="topView">
             <div class="view-panel__header">
               <p class="view-label">
-                Plan
-                <span class="view-label__subtitle">Looking Down</span>
+                <span class="view-label__name" data-view-label>Plan</span>
+                <span class="view-label__subtitle" data-view-sublabel>Looking Down</span>
               </p>
               <button
                 class="view-panel__toggle"
@@ -157,8 +162,8 @@
           <div class="view-panel" data-view-panel="frontView">
             <div class="view-panel__header">
               <p class="view-label">
-                South elevation
-                <span class="view-label__subtitle">Looking North</span>
+                <span class="view-label__name" data-view-label>South elevation</span>
+                <span class="view-label__subtitle" data-view-sublabel>Looking North</span>
               </p>
               <button
                 class="view-panel__toggle"
@@ -184,8 +189,8 @@
           <div class="view-panel" data-view-panel="sideView">
             <div class="view-panel__header">
               <p class="view-label">
-                East elevation
-                <span class="view-label__subtitle">Looking West</span>
+                <span class="view-label__name" data-view-label>East elevation</span>
+                <span class="view-label__subtitle" data-view-sublabel>Looking West</span>
               </p>
               <button
                 class="view-panel__toggle"

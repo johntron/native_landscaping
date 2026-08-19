@@ -739,6 +739,36 @@ select {
   opacity: 0.9;
 }
 
+.project-picker {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.project-picker label {
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #4b4f43;
+}
+
+.project-picker select {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid #d6d3cb;
+  border-radius: 6px;
+  background-color: #fff;
+  font-size: 0.88rem;
+  color: #1f2a35;
+}
+
+.project-picker__note {
+  font-size: 0.8rem;
+  color: #9a4a2f;
+}
+
 /* Individual view containers share common styles. */
 .view {
   position: relative;
@@ -791,18 +821,10 @@ select {
   color: #215a64;
 }
 
-/* Assign each background image to its corresponding view. */
-#topView {
-  background-image: url('img/top view.webp');
-}
-
-#frontView {
-  background-image: url('img/front view.webp');
-}
-
-#sideView {
-  background-image: url('img/side view.webp');
-}
+/*
+ * Background images are applied by JS from the active project's config
+ * (see src/render/viewConfig.js) — a stylesheet cannot vary them per project.
+ */
 
 /* The SVG overlays fill their parent divs and are layered on top. */
 .view svg {

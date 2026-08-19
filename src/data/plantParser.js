@@ -3,6 +3,18 @@ import { classifyPlantLayer } from '../state/layers.js';
 
 const DEFAULT_LEAF_COLOR = '#6b8e23';
 
+/**
+ * Raised when the CSV loads fine but its contents are invalid — a hand-edit
+ * mistake the user can fix, as opposed to a fetch/serving failure. Callers use
+ * this to show the real reason instead of generic "couldn't load" advice.
+ */
+export class LayoutDataError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'LayoutDataError';
+  }
+}
+
 const numberFieldAliases = {
   x: ['x_ft', 'x'],
   y: ['y_ft', 'y'],
@@ -62,13 +74,35 @@ export function parseSpeciesCsv(csvText) {
  */
 export function parsePlantLayoutCsv(csvText) {
   const rows = parseCsv(csvText);
-  return rows.map((row, idx) => ({
+  const placements = rows.map((row, idx) => ({
     id: row.id || row.name || `plant-${idx + 1}`,
     botanicalKey: normalizeBotanicalName(row.botanical_name || row.botanicalName || ''),
     speciesEpithet: (row.species_epithet || row.species || '').toLowerCase(),
     x: pickNumber(row, numberFieldAliases.x) ?? 0,
     y: pickNumber(row, numberFieldAliases.y) ?? 0,
   }));
+
+  assertUniqueIds(placements);
+  return placements;
+}
+
+/**
+ * Ids address plants for dragging, cloning, and highlighting, so a repeat makes
+ * every row after the first unreachable. Fail loudly instead of silently losing one.
+ * @param {Array<{id: string}>} placements
+ */
+function assertUniqueIds(placements) {
+  const firstRowById = new Map();
+  placements.forEach((placement, idx) => {
+    const id = String(placement.id);
+    const firstRow = firstRowById.get(id);
+    if (firstRow !== undefined) {
+      throw new LayoutDataError(
+        `Duplicate plant id "${id}" in layout (data rows ${firstRow + 1} and ${idx + 1}, excluding the header); ids must be unique`
+      );
+    }
+    firstRowById.set(id, idx);
+  });
 }
 
 /**
@@ -90,7 +124,7 @@ export function buildPlantsFromCsv(speciesCsvText, layoutCsvText) {
   return layout.map((placement, idx) => {
     const botanicalKey = placement.botanicalKey || (placement.speciesEpithet ? null : '');
     if (!botanicalKey && !placement.speciesEpithet) {
-      throw new Error(`Layout row ${placement.id} is missing botanical_name`);
+      throw new LayoutDataError(`Layout row ${placement.id} is missing botanical_name`);
     }
 
     const speciesEntry =
@@ -99,7 +133,7 @@ export function buildPlantsFromCsv(speciesCsvText, layoutCsvText) {
 
     if (!speciesEntry) {
       const missing = botanicalKey || placement.speciesEpithet || 'unknown';
-      throw new Error(`Unknown plant "${missing}" in layout row ${placement.id}`);
+      throw new LayoutDataError(`Unknown plant "${missing}" in layout row ${placement.id}`);
     }
 
     const plant = {
