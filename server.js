@@ -2,14 +2,13 @@ import http from 'node:http';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { buildLayoutCsv } from './src/data/layoutExporter.js';
+import { projectIdFromUrl, resolveProjectPaths } from './src/data/projectPaths.js';
 
 const envPort = Number(process.env.PORT);
 const PORT = Number.isFinite(envPort) ? envPort : 8000;
 const PUBLIC_DIR = process.env.PUBLIC_DIR
   ? path.resolve(process.env.PUBLIC_DIR)
   : path.resolve(process.cwd());
-const HISTORY_FILE = path.join(PUBLIC_DIR, 'layout-history.json');
-const LAYOUT_FILE = path.join(PUBLIC_DIR, 'planting_layout.csv');
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -17,6 +16,9 @@ const MIME_TYPES = {
   '.js': 'application/javascript; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.webp': 'image/webp',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
   '.json': 'application/json; charset=utf-8',
 };
 
@@ -25,16 +27,23 @@ const server = http.createServer(async (req, res) => {
   const pathname = url.pathname;
 
   if (pathname === '/api/history' && req.method === 'GET') {
-    const history = await readHistoryFile();
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ entries: history.entries, cursor: history.cursor }));
+    try {
+      const { historyFile } = resolveProjectPaths(projectIdFromUrl(url), PUBLIC_DIR);
+      const history = await readHistoryFile(historyFile);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ entries: history.entries, cursor: history.cursor }));
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
     return;
   }
 
   if (pathname === '/api/layout' && req.method === 'POST') {
     try {
+      const { historyFile, layoutFile, projectId } = resolveProjectPaths(projectIdFromUrl(url), PUBLIC_DIR);
       const payload = await collectPayload(req);
-      const history = await readHistoryFile();
+      const history = await readHistoryFile(historyFile);
       const trimmed = history.entries.slice(0, Math.max(history.cursor + 1, 0));
       if (
         trimmed.length === 0 &&
@@ -46,9 +55,9 @@ const server = http.createServer(async (req, res) => {
       const entry = makeEntry(payload.plants, payload.description, payload.id);
       trimmed.push(entry);
       const cursor = trimmed.length - 1;
-      await writeLayoutFile(entry.plants);
-      await writeHistoryFile({ entries: trimmed, cursor });
-      console.log(`Layout saved (history entries: ${trimmed.length})`);
+      await writeLayoutFile(layoutFile, entry.plants);
+      await writeHistoryFile(historyFile, { entries: trimmed, cursor });
+      console.log(`Layout saved for '${projectId}' (history entries: ${trimmed.length})`);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ entry, cursor }));
     } catch (err) {
@@ -61,16 +70,17 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/api/history/cursor' && req.method === 'POST') {
     try {
+      const { historyFile, layoutFile, projectId } = resolveProjectPaths(projectIdFromUrl(url), PUBLIC_DIR);
       const payload = await collectPayload(req, { requirePlants: false });
-      const history = await readHistoryFile();
+      const history = await readHistoryFile(historyFile);
       const cursor = Number(payload.cursor);
       if (!Number.isFinite(cursor) || cursor < 0 || cursor >= history.entries.length) {
         throw new Error('Invalid cursor');
       }
       const entry = history.entries[cursor];
-      await writeLayoutFile(entry.plants);
-      await writeHistoryFile({ entries: history.entries, cursor });
-      console.log(`Layout rewound to '${entry.id}' (cursor ${cursor})`);
+      await writeLayoutFile(layoutFile, entry.plants);
+      await writeHistoryFile(historyFile, { entries: history.entries, cursor });
+      console.log(`Layout for '${projectId}' rewound to '${entry.id}' (cursor ${cursor})`);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ entry, cursor }));
     } catch (err) {
@@ -113,13 +123,13 @@ function makeEntry(plants, description, id) {
   };
 }
 
-async function writeLayoutFile(plants) {
-  await fs.writeFile(LAYOUT_FILE, buildLayoutCsv(plants || []));
+async function writeLayoutFile(layoutFile, plants) {
+  await fs.writeFile(layoutFile, buildLayoutCsv(plants || []));
 }
 
-async function readHistoryFile() {
+async function readHistoryFile(historyFile) {
   try {
-    const raw = await fs.readFile(HISTORY_FILE, 'utf-8');
+    const raw = await fs.readFile(historyFile, 'utf-8');
     const parsed = JSON.parse(raw);
     const entries = Array.isArray(parsed.entries) ? parsed.entries : [];
     const cursor =
@@ -132,13 +142,13 @@ async function readHistoryFile() {
   }
 }
 
-async function writeHistoryFile(history) {
+async function writeHistoryFile(historyFile, history) {
   const entries = Array.isArray(history.entries) ? history.entries : [];
   const cursor =
     typeof history.cursor === 'number' && Number.isFinite(history.cursor)
       ? history.cursor
       : entries.length - 1;
-  await fs.writeFile(HISTORY_FILE, JSON.stringify({ entries, cursor }, null, 2));
+  await fs.writeFile(historyFile, JSON.stringify({ entries, cursor }, null, 2));
 }
 
 async function serveStaticFile(res, pathname) {

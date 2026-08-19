@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPlantsFromCsv, parseSpeciesCsv } from '../src/data/plantParser.js';
+import { buildPlantsFromCsv, LayoutDataError, parsePlantLayoutCsv, parseSpeciesCsv } from '../src/data/plantParser.js';
 
 const speciesHeader = 'id,common_name,botanical_name,growing_season_months,flowering_season_months,foliage_color_spring,foliage_color_summer,foliage_color_fall,foliage_color_winter,flower_color,width_ft,height_ft,growth_shape';
 
@@ -109,4 +109,40 @@ test('parses fruit metadata and carries it through plant instances', () => {
   assert.equal(plants[1].fruitColor, '#b3261e');
   assert.deepStrictEqual(plants[1].fruitMonths, [10, 11, 12, 1, 2]);
   assert.equal(plants[1].fruitLoad, 'moderate');
+});
+
+test('rejects layouts that reuse a plant id', () => {
+  const layoutCsv = 'id,botanical_name,x_ft,y_ft\n'
+    + 'daisy,Tetraneuris scaposa,1,1\n'
+    + 'sage,Salvia greggii,2,2\n'
+    + 'daisy,Tetraneuris scaposa,3,3';
+
+  assert.throws(
+    () => parsePlantLayoutCsv(layoutCsv),
+    /Duplicate plant id "daisy" in layout \(data rows 1 and 3, excluding the header\)/
+  );
+});
+
+test('accepts layouts whose ids are all distinct', () => {
+  const layoutCsv = 'id,botanical_name,x_ft,y_ft\n'
+    + 'daisy,Tetraneuris scaposa,1,1\n'
+    + 'sage,Salvia greggii,2,2';
+
+  const placements = parsePlantLayoutCsv(layoutCsv);
+
+  assert.deepStrictEqual(placements.map((p) => p.id), ['daisy', 'sage']);
+});
+
+test('content mistakes are LayoutDataError so the UI can name the real reason', () => {
+  const dupCsv = 'id,botanical_name,x_ft,y_ft\n'
+    + 'daisy,Tetraneuris scaposa,1,1\n'
+    + 'daisy,Tetraneuris scaposa,2,2';
+
+  assert.throws(() => parsePlantLayoutCsv(dupCsv), LayoutDataError);
+
+  const speciesCsv = `${speciesHeader}\n`
+    + 'c,Autumn sage,Salvia greggii,3-11,3-11,,,,,red,3,3,mound';
+  const unknownCsv = 'id,botanical_name,x_ft,y_ft\nmystery,Nothing realis,1,1';
+
+  assert.throws(() => buildPlantsFromCsv(speciesCsv, unknownCsv), LayoutDataError);
 });
