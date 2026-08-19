@@ -78,8 +78,97 @@ h1 {
 }
 
 .view-toolbar__row--top {
-  align-items: flex-start;
+  align-items: center;
   gap: 1rem;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.mode-switch {
+  display: inline-flex;
+  background-color: #e7e3d5;
+  border: 1px solid #d6d3cb;
+  border-radius: 999px;
+  padding: 0.2rem;
+  gap: 0.15rem;
+}
+
+.mode-switch__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: none;
+  background: transparent;
+  color: #6b7370;
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+  font-weight: 700;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.mode-switch__btn[data-mode="view"][aria-pressed="true"] {
+  background: linear-gradient(90deg, #215a64 0%, #2f7a8c 100%);
+  color: #fff;
+}
+
+.mode-switch__btn[data-mode="edit"][aria-pressed="true"] {
+  background: linear-gradient(90deg, #a24a3f 0%, #c06a4f 100%);
+  color: #fff;
+}
+
+.settings-toggle {
+  border: 1px solid #c7ced8;
+  background-color: #fff;
+  color: #1f2a35;
+  border-radius: 999px;
+  width: 2.1rem;
+  height: 2.1rem;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.settings-toggle[aria-expanded="true"] {
+  background-color: #eef2f3;
+  border-color: #2f7a8c;
+  color: #215a64;
+}
+
+.settings-drawer {
+  padding: 0.1rem 0 0.1rem;
+}
+
+.edit-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.65rem 0.75rem;
+  background-color: #fbf3ee;
+  border: 1px solid #e3c3ac;
+  border-radius: 8px;
+}
+
+.edit-row[hidden] {
+  display: none;
+}
+
+.edit-row .toggle-row {
+  justify-content: space-between;
+}
+
+.edit-row .view-toolbar__control-group {
+  justify-content: flex-start;
 }
 
 .view-toolbar__actions {

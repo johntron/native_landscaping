@@ -27,6 +27,20 @@
       <div class="view-shell">
         <div class="view-toolbar">
           <div class="view-toolbar__row view-toolbar__row--top">
+            <div class="mode-switch" id="modeSwitch" role="group" aria-label="View or edit mode">
+              <button type="button" class="mode-switch__btn" data-mode="view" aria-pressed="true">
+                <span class="mode-switch__icon" aria-hidden="true">&#128065;</span> View
+              </button>
+              <button type="button" class="mode-switch__btn" data-mode="edit" aria-pressed="false">
+                <span class="mode-switch__icon" aria-hidden="true">&#9998;</span> Edit
+              </button>
+            </div>
+            <button type="button" id="settingsToggleBtn" class="settings-toggle" aria-expanded="false" aria-controls="settingsDrawer">
+              <span aria-hidden="true">&#8943;</span>
+              <span class="sr-only">Legend</span>
+            </button>
+          </div>
+          <div class="settings-drawer" id="settingsDrawer" hidden>
             <div class="legend">
               <div class="legend__item">
                 <span class="legend__swatch legend__swatch--label">CA</span>
@@ -41,63 +55,44 @@
                 <span class="legend__text">Foliage canopy</span>
               </div>
             </div>
-            <div class="view-toolbar__actions">
-              <div class="layer-chips" id="layerVisibilityChips" role="group" aria-label="Layer visibility">
-                <button type="button" class="chip chip--ghost is-active" data-layer-visibility="0" aria-pressed="true">All layers</button>
-                <button type="button" class="chip chip--ghost" data-layer-visibility="1" aria-pressed="false">Hide trees</button>
-                <button type="button" class="chip chip--ghost" data-layer-visibility="2" aria-pressed="false">Hide trees + sculptural</button>
-                <button type="button" class="chip chip--ghost" data-layer-visibility="3" aria-pressed="false">Hide through accents</button>
-                <button type="button" class="chip chip--ghost" data-layer-visibility="4" aria-pressed="false">Hide everything</button>
-              </div>
-              <div class="toggle-row">
-                <label class="pill-switch" for="labelToggle">
-                  <input id="labelToggle" type="checkbox" checked />
-                  <span class="pill-body">
-                    <span class="pill-thumb"></span>
-                    <span class="pill-content">
-                      <span class="pill-icon pill-icon--text" aria-hidden="true">Aa</span>
-                      <span class="pill-text">
-                        <span class="pill-title">Plant labels</span>
-                        <span class="pill-hint">show initials</span>
-                      </span>
-                    </span>
-                  </span>
-                </label>
-                <label class="pill-switch" for="lockToggle" data-variant="lock">
-                  <input id="lockToggle" type="checkbox" checked />
-                  <span class="pill-body">
-                    <span class="pill-thumb"></span>
-                    <span class="pill-content">
-                      <span class="pill-icon pill-icon--locked" aria-hidden="true">
-                        <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                          <path d="M12 7V5a4 4 0 0 0-8 0v2H3v8h10V7h-1Zm-6 0V5a2 2 0 0 1 4 0v2H6Z" fill="currentColor"/>
-                        </svg>
-                      </span>
-                      <span class="pill-icon pill-icon--unlocked" aria-hidden="true">
-                        <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                          <path d="M12 7h1v8H3V7h7V5a3 3 0 0 0-5.7-1.1l-1-.6A4.5 4.5 0 0 1 12 5v2Z" fill="currentColor"/>
-                        </svg>
-                      </span>
-                      <span class="pill-text">
-                        <span class="pill-title" id="lockStatusText">Positions locked</span>
-                        <span class="pill-hint">unlock to drag</span>
-                      </span>
-                    </span>
-                  </span>
-                </label>
-                <div class="history-controls">
-                  <button id="undoLayoutBtn" class="button pill-button" type="button" disabled>Undo</button>
-                  <button id="redoLayoutBtn" class="button pill-button" type="button" disabled>Redo</button>
-                </div>
-              </div>
-            </div>
           </div>
           <div class="view-toolbar__row view-toolbar__row--controls">
             <div class="month-control">
-              <div class="control-title">Month</div>
+              <div class="control-title">Season</div>
               <div class="month-slider">
                 <input id="monthSlider" type="range" min="1" max="12" step="1" />
                 <div class="month-readout" id="monthReadout">January</div>
+              </div>
+            </div>
+            <div class="control-pair control-pair--layers">
+              <label for="layerVisibilitySelect">Layers</label>
+              <select id="layerVisibilitySelect">
+                <option value="0">All layers</option>
+                <option value="1">Hide trees</option>
+                <option value="2">Hide trees + sculptural</option>
+                <option value="3">Hide through accents</option>
+                <option value="4">Hide everything</option>
+              </select>
+            </div>
+          </div>
+          <div class="edit-row" id="editRow" hidden>
+            <div class="toggle-row">
+              <label class="pill-switch" for="labelToggle">
+                <input id="labelToggle" type="checkbox" checked />
+                <span class="pill-body">
+                  <span class="pill-thumb"></span>
+                  <span class="pill-content">
+                    <span class="pill-icon pill-icon--text" aria-hidden="true">Aa</span>
+                    <span class="pill-text">
+                      <span class="pill-title">Plant labels</span>
+                      <span class="pill-hint">show initials</span>
+                    </span>
+                  </span>
+                </span>
+              </label>
+              <div class="history-controls">
+                <button id="undoLayoutBtn" class="button pill-button" type="button" disabled>Undo</button>
+                <button id="redoLayoutBtn" class="button pill-button" type="button" disabled>Redo</button>
               </div>
             </div>
             <div class="view-toolbar__control-group">

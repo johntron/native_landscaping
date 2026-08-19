@@ -64,28 +64,35 @@ test.describe('backyard project', () => {
     expect(january).not.toEqual(june);
   });
 
-  test('layer visibility chips hide plants', async ({ page }) => {
+  test('layer visibility select hides plants', async ({ page }) => {
     await openProject(page, 'backyard');
 
     const plants = page.locator('#topSvg g[data-plant-id]');
     const total = await plants.count();
 
-    await page.locator('[data-layer-visibility="4"]').click();
-    await expect(page.locator('[data-layer-visibility="4"]')).toHaveAttribute(
-      'aria-pressed',
-      'true'
-    );
+    await page.locator('#layerVisibilitySelect').selectOption('4');
     expect(await plants.count()).toBeLessThan(total);
 
-    await page.locator('[data-layer-visibility="0"]').click();
+    await page.locator('#layerVisibilitySelect').selectOption('0');
     await expect(plants).toHaveCount(total);
   });
 
-  test('positions are locked on a fresh visit', async ({ page }) => {
+  test('positions are locked on a fresh visit, in view mode', async ({ page }) => {
     await openProject(page, 'backyard');
 
-    await expect(page.locator('#lockToggle')).toBeChecked();
-    await expect(page.locator('#lockStatusText')).toHaveText(/locked/i);
+    await expect(page.locator('[data-mode="view"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('[data-mode="edit"]')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.locator('#editRow')).toBeHidden();
+  });
+
+  test('switching to edit mode unlocks positions and reveals edit controls', async ({ page }) => {
+    await openProject(page, 'backyard');
+
+    await page.locator('[data-mode="edit"]').click();
+    await expect(page.locator('[data-mode="edit"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#editRow')).toBeVisible();
+    await expect(page.locator('#labelToggle')).toBeVisible();
+    await expect(page.locator('#scaleSlider')).toBeVisible();
   });
 });
 
