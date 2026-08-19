@@ -177,9 +177,18 @@ export function createPlantDragController({
   };
 }
 
+/**
+ * Drag along one yard axis from an elevation view.
+ *
+ * `mirrored` and `leftOffsetPx` must match the elevation's rendering (see
+ * elevationOrientation.js) so the pointer maps back to the same yard position the
+ * plant was drawn at — otherwise dragging in a mirrored view moves plants backwards.
+ */
 export function createElevationDragController({
   svg,
   axis = 'x',
+  mirrored = false,
+  leftOffsetPx = 0,
   getPlants,
   getPixelsPerInch,
   onPositionsChange,
@@ -234,7 +243,7 @@ export function createElevationDragController({
 
     state.activePlant = target;
     state.pointerId = event.pointerId;
-    const axisPosition = ctx.positionFeet.x;
+    const axisPosition = pointerAxisFeet(ctx);
     const axisValue = Number(target[axisKey]) || 0;
     state.axisOffsetFeet = axisPosition - axisValue;
     svg.setPointerCapture(event.pointerId);
@@ -291,9 +300,17 @@ export function createElevationDragController({
     }
   }
 
+  function pointerAxisFeet(ctx) {
+    const offsetFeet = leftOffsetPx / (INCHES_PER_FOOT * ctx.pixelsPerInch);
+    const unmirrored = mirrored
+      ? viewBoxToFeet(ctx.viewBox.width, ctx.pixelsPerInch) - ctx.positionFeet.x
+      : ctx.positionFeet.x;
+    return unmirrored - offsetFeet;
+  }
+
   function updatePlantPosition(ctx) {
     const axisLimit = viewBoxToFeet(ctx.viewBox.width, ctx.pixelsPerInch);
-    const rawAxis = ctx.positionFeet.x - state.axisOffsetFeet;
+    const rawAxis = pointerAxisFeet(ctx) - state.axisOffsetFeet;
     const clamped = clamp(rawAxis, 0, axisLimit);
     const previous = state.activePlant[axisKey];
     state.activePlant[axisKey] = clamped;

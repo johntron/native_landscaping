@@ -1,15 +1,22 @@
 import { renderTopView } from './topView.js';
-import { renderSouthElevation, renderEastElevation } from './elevationViews.js';
+import { renderElevationView } from './elevationViews.js';
 import { filterPlantStatesByHiddenLayers } from '../state/layers.js';
 
+/**
+ * @param {{ topSvg: SVGSVGElement, elevationSvgs: SVGSVGElement[] }} svgRefs
+ * @param {Array<{ plant: any, state: any }>} plantStates
+ * @param {number} pixelsPerInch
+ * @param {object} options `project` carries the active project config (plan + elevations).
+ */
 export function renderViews(svgRefs, plantStates, pixelsPerInch, options = {}) {
-  const { topSvg, southSvg, eastSvg } = svgRefs;
+  const { topSvg, elevationSvgs = [] } = svgRefs;
   const {
     showLabels = false,
     hiddenLayerCount = 0,
     highlightedSpeciesKey = '',
     targetedPlantId = '',
     hoveredPlantId = '',
+    project,
   } = options;
   const filtered = filterPlantStatesByHiddenLayers(plantStates, hiddenLayerCount);
   const topOrdered = orderTopViewPlantStates(filtered);
@@ -19,9 +26,17 @@ export function renderViews(svgRefs, plantStates, pixelsPerInch, options = {}) {
     targetedPlantId,
     hoveredPlantId,
   };
-  renderTopView(topSvg, topOrdered, pixelsPerInch, renderOptions);
-  renderSouthElevation(southSvg, filtered, pixelsPerInch, renderOptions);
-  renderEastElevation(eastSvg, filtered, pixelsPerInch, renderOptions);
+  renderTopView(topSvg, topOrdered, pixelsPerInch, {
+    ...renderOptions,
+    viewBox: project?.plan?.viewBox,
+  });
+
+  const elevations = project?.elevations || [];
+  elevationSvgs.forEach((svg, index) => {
+    const elevation = elevations[index];
+    if (!svg || !elevation) return;
+    renderElevationView(svg, filtered, pixelsPerInch, elevation, renderOptions);
+  });
 }
 
 function orderTopViewPlantStates(plantStates) {

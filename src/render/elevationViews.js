@@ -4,10 +4,13 @@ import {
   INCHES_PER_FOOT,
   SOUTH_ELEVATION_BOTTOM_OFFSET_PX,
   SOUTH_ELEVATION_LEFT_OFFSET_PX,
-  EAST_ELEVATION_BOTTOM_OFFSET_PX,
-  EAST_ELEVATION_LEFT_OFFSET_PX,
   PLANT_BLEND_OPACITY,
 } from '../constants.js';
+import {
+  compareElevationDepth,
+  elevationAxisToViewBoxX,
+  resolveElevationOrientation,
+} from './elevationOrientation.js';
 import { getSpeciesKey } from '../utils/speciesKey.js';
 import { makeRng, seedForPlant } from '../utils/rng.js';
 import { appendTooltip, clearSvg, createSvgElement } from './svgUtils.js';
@@ -24,61 +27,32 @@ const TARGET_COLOR = '#1b74d8';
 const TARGET_OUTLINE_OPACITY = 0.95;
 
 /**
- * South (kitchen) elevation uses the x axis of the yard as horizontal.
+ * Render one elevation for the direction its project config points it at.
+ *
  * @param {SVGSVGElement} svg
  * @param {Array<{ plant: any, state: any }>} plantStates
  * @param {number} pixelsPerInch
+ * @param {{ id?: string, viewFrom: string, viewBox?: { width: number, height: number },
+ *           bottomOffsetPx?: number, leftOffsetPx?: number }} elevation
+ * @param {object} [options]
  */
-export function renderSouthElevation(
+export function renderElevationView(
   svg,
   plantStates,
   pixelsPerInch = DEFAULT_PIXELS_PER_INCH,
-  options = {}
-) {
-  renderElevation(
-    svg,
-    plantStates,
-    'x',
-    pixelsPerInch,
-    SOUTH_ELEVATION_BOTTOM_OFFSET_PX,
-    SOUTH_ELEVATION_LEFT_OFFSET_PX,
-    options
-  );
-}
-
-/**
- * East (patio) elevation uses the y axis of the yard as horizontal to give depth.
- * @param {SVGSVGElement} svg
- * @param {Array<{ plant: any, state: any }>} plantStates
- * @param {number} pixelsPerInch
- */
-export function renderEastElevation(
-  svg,
-  plantStates,
-  pixelsPerInch = DEFAULT_PIXELS_PER_INCH,
-  options = {}
-) {
-  renderElevation(
-    svg,
-    plantStates,
-    'y',
-    pixelsPerInch,
-    EAST_ELEVATION_BOTTOM_OFFSET_PX,
-    EAST_ELEVATION_LEFT_OFFSET_PX,
-    options
-  );
-}
-
-function renderElevation(
-  svg,
-  plantStates,
-  axisKey,
-  pixelsPerInch,
-  bottomOffsetPx = 0,
-  leftOffsetPx = 0,
+  elevation = { viewFrom: 'south' },
   options = {}
 ) {
   clearSvg(svg);
+  const {
+    viewFrom,
+    viewBox = ELEVATION_VIEWBOX,
+    bottomOffsetPx = SOUTH_ELEVATION_BOTTOM_OFFSET_PX,
+    leftOffsetPx = SOUTH_ELEVATION_LEFT_OFFSET_PX,
+  } = elevation || {};
+  const orientation = resolveElevationOrientation(viewFrom);
+  const { axisKey, depthKey, mirrored, farIsHigh } = orientation;
+  const elevationId = elevation?.id || orientation.viewFrom;
   const toPixels = (feet) => feet * INCHES_PER_FOOT * pixelsPerInch;
   const {
     showLabels = false,
@@ -89,32 +63,30 @@ function renderElevation(
   const normalizedHighlightKey = (highlightedSpeciesKey || '').toLowerCase();
   const normalizedTargetId = String(targetedPlantId || '');
   const normalizedHoveredId = String(hoveredPlantId || '');
-  const depthKey = axisKey === 'x' ? 'y' : 'x';
   const highlightTargets = [];
   const targetMarkers = [];
   const sortedPlantStates = [...plantStates].sort((a, b) => {
     const priorityDiff = stackingPriority(a?.plant, axisKey) - stackingPriority(b?.plant, axisKey);
     if (priorityDiff !== 0) return priorityDiff; // lower priority drawn first
 
-    if (axisKey === 'x') {
-      // South elevation layers by y: larger y first, smaller y last (front).
-      const yA = a?.plant?.y ?? 0;
-      const yB = b?.plant?.y ?? 0;
-      if (yA !== yB) return yB - yA;
-    } else {
-      // East elevation layers by x: smaller x first, larger x last (front).
-      const xA = a?.plant?.x ?? 0;
-      const xB = b?.plant?.x ?? 0;
-      if (xA !== xB) return xA - xB;
-    }
+    // Draw back to front along the depth axis so nearer plants overlap farther ones.
+    const nearDiff = compareElevationDepth(
+      a?.plant?.[depthKey] ?? 0,
+      b?.plant?.[depthKey] ?? 0,
+      farIsHigh
+    );
+    if (nearDiff !== 0) return nearDiff;
 
     const heightA = a?.plant?.height ?? 0;
     const heightB = b?.plant?.height ?? 0;
     if (heightA !== heightB) return heightA - heightB;
 
-    const depthA = a?.plant?.[depthKey] ?? 0;
-    const depthB = b?.plant?.[depthKey] ?? 0;
-    if (depthA !== depthB) return depthB - depthA;
+    const depthTie = compareElevationDepth(
+      a?.plant?.[depthKey] ?? 0,
+      b?.plant?.[depthKey] ?? 0,
+      farIsHigh
+    );
+    if (depthTie !== 0) return depthTie;
 
     const widthA = a?.plant?.width ?? 0;
     const widthB = b?.plant?.width ?? 0;
@@ -135,11 +107,15 @@ function renderElevation(
     });
     const canopySeed = seedForPlant(plant.id);
     const rng = makeRng(canopySeed);
-    const axisValue = axisKey === 'x' ? plant.x : plant.y;
-    const cx = toPixels(axisValue) + leftOffsetPx;
+    const axisValue = plant[axisKey];
+    const cx = elevationAxisToViewBoxX(axisValue, toPixels, {
+      mirrored,
+      leftOffsetPx,
+      viewBoxWidth: viewBox.width,
+    });
     const width = toPixels(plant.width);
     const height = toPixels(plant.height);
-    const groundY = ELEVATION_VIEWBOX.height - bottomOffsetPx;
+    const groundY = viewBox.height - bottomOffsetPx;
     const profileGeometry = resolveProfileGeometry(width, height, plant.growthShape);
     const { adjustedWidth, adjustedHeight } = profileGeometry;
     const canopyBounds = resolveCanopyBounds(plant.growthShape, groundY, adjustedHeight);
@@ -164,7 +140,7 @@ function renderElevation(
       groundY,
       rng,
       group,
-      clipSuffix: `${axisKey}-${plant.id}`,
+      clipSuffix: `${elevationId}-${plant.id}`,
       geometry: profileGeometry,
     });
     const profileClipPath = silhouetteMeta?.clipId ? `url(#${silhouetteMeta.clipId})` : null;
@@ -292,7 +268,7 @@ function renderElevation(
 
 function stackingPriority(plant, axisKey) {
   if (!plant) return 1;
-  // On the east (y-axis) elevation, force Callirhoe involucrata to render last so it stays in front.
+  // On east/west elevations (y axis horizontal), force Callirhoe involucrata to render last so it stays in front.
   if (axisKey === 'y') {
     const botanical = (plant.botanicalName || plant.botanical_name || '').toLowerCase();
     if (botanical === 'callirhoe involucrata') {

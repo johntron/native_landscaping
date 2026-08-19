@@ -59,10 +59,57 @@ document the commands in this file under a new “Tooling” section.
 
 ## Project Structure & Responsibilities
 
+### 0. Projects
+
+The app hosts **multiple projects** — separate yards, each with its own background
+images, canvas dimensions, and compass orientation. They share one species catalog
+(`plants.csv` at the repo root); each project's *selection* of species is implicit
+in its own `planting_layout.csv`.
+
+```
+plants.csv                       shared species catalog (all projects)
+projects/index.json              { defaultProject, projects: [{ id, name }] }
+projects/<slug>/project.json     view geometry, backgrounds, labels, default scale
+projects/<slug>/planting_layout.csv
+projects/<slug>/img/…            that project's background images
+projects/<slug>/layout-history.json   (generated, gitignored)
+```
+
+**Adding a project**: create `projects/<slug>/` with the four items above, then add
+`{ "id": "<slug>", "name": "…" }` to `projects/index.json`. Slugs must match
+`^[a-z0-9][a-z0-9_-]*$` — they become both URL and file path segments, and the
+server rejects anything else (`src/data/projectPaths.js`).
+
+The active project comes from `?project=<slug>`, falling back to `defaultProject`.
+Switching projects **reloads the page** rather than re-initializing in place: the
+render loop, history stack, and drag controllers are each built once against a
+single project, and a reload keeps that simple and the URL linkable.
+
+`projects/example-frontyard/` is a throwaway template showing portrait dimensions
+and north/west elevations; delete it once you have real projects.
+
+#### Elevation orientation
+
+Yard coordinates: origin at the SW corner, **x increases east, y increases north**.
+Each elevation declares `viewFrom` — the compass side the viewer stands on — and
+`src/render/elevationOrientation.js` derives the rest:
+
+| `viewFrom` | horizontal axis | mirrored | farthest plants |
+| ---------- | --------------- | -------- | --------------- |
+| `south`    | x               | no       | high y          |
+| `north`    | x               | yes      | low y           |
+| `east`     | y               | no       | low x           |
+| `west`     | y               | yes      | high x          |
+
+Mirrored views reflect about the viewBox centre, so `leftOffsetPx` always means
+"inset from the near edge". The elevation drag controllers are given the same
+`mirrored`/`leftOffsetPx` values so pointer positions invert the same transform.
+
 ### 1. Background Layers
 
-- Each view has a **static background image** referenced in `styles.css`:
-  - `img/top view.webp`, `img/front view.webp`, `img/side view.webp`.
+- Each view's **static background image** is declared in its `project.json` as a
+  path relative to the project directory, and applied by `src/render/viewConfig.js`.
+  A stylesheet cannot vary backgrounds per project, so `styles.css` no longer sets them.
 - Requirements:
   - Must be **orthographic** (no perspective, no vanishing lines).
   - Vector-like: use flat color fields and simple shapes, not noise textures.
@@ -71,7 +118,7 @@ document the commands in this file under a new “Tooling” section.
 
 ### 2. Plant Data (CSV)
 
-`plants.csv` is the **single source of truth** for species attributes and seasonal palettes; `planting_layout.csv` holds per-plant coordinates (in feet) and must reference species via `botanical_name` (with optional `species_epithet`).
+`plants.csv` is the **single source of truth** for species attributes and seasonal palettes, shared by every project; each project's `projects/<slug>/planting_layout.csv` holds per-plant coordinates (in feet) and must reference species via `botanical_name` (with optional `species_epithet`).
 
 Each layout row describes one plant clump or individual:
 
@@ -124,6 +171,9 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
 - `src/app.js` – application entry point; wires up DOM, loads CSVs, drives rendering loop and drag/export controls.
 - `src/constants.js` – canonical sizes, offsets, and scale defaults shared across modules.
 - `src/data/csvLoader.js` – fetch + minimalist CSV parser (also used by tests).
+- `src/data/projectConfig.js` – project index/config loading, normalization, and slug validation.
+- `src/data/projectPaths.js` – server-side resolution of a project's data files (path-traversal guard).
+- `src/render/elevationOrientation.js` – compass → axis/mirror/depth mapping for elevations.
 - `src/data/plantParser.js` – merges species/layout CSVs, normalizes month specs, aliases, and seasonal palettes.
 - `src/data/layoutExporter.js` – converts in-memory plants back to CSV with consistent precision/escaping.
 - `src/render/*` – view configuration, SVG helpers, tooltip builder, plan view and elevation renderers.
@@ -154,6 +204,11 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
 - Support **multiple growth forms and strata** (groundcover, perennials, shrubs, small trees) but keep the visual vocabulary generic and reusable.
 - Plants should not appear in months outside their growing season; dormant months should desaturate foliage.
 - Winter scenes should look **sparser and browner**, unless the species is evergreen/semi-evergreen per data.
+- Every `id` in a project's `planting_layout.csv` must be **unique**. Ids address plants
+  for dragging, cloning, and hover/target highlighting, so a repeat makes every row after
+  the first unreachable. `parsePlantLayoutCsv` rejects duplicates with a `LayoutDataError`,
+  and the app shows the id and row numbers in an error banner. Anything that adds a plant
+  must mint its id through `buildCloneId` (`src/state/plantIds.js`) so it cannot collide.
 
 ---
 
@@ -181,8 +236,31 @@ When the user delegates work, here are examples of useful tasks:
 ## Tooling
 
 - Run `npm test` to execute `node tests/run-tests.cjs`, which covers the layout history stack and the persistence module (ensuring the app hits `/api/layout` when committing changes).
-- Run `npm run serve` (or `node server.js`) to launch the bundled static + persistence server that exposes `/api/layout` for saving the layout and `/api/history` for the changelog.
-- No external dependencies are required to execute the suite. Run `npm install` once before serving the app: `index.html` loads JSZip from `node_modules/jszip/dist/jszip.min.js`.
+- Run `npm run serve` (or `node server.js`) to launch the bundled static + persistence server. `/api/layout`, `/api/history`, and `/api/history/cursor` are all scoped by a required `?project=<slug>` query parameter and write inside that project's directory only.
+- No external dependencies are required to execute `npm test`; `npm run test:e2e` needs the `@playwright/test` devDependency (see below). Run `npm install` once before serving the app: `index.html` loads JSZip from `node_modules/jszip/dist/jszip.min.js`.
+
+### End-to-end browser tests (Playwright)
+
+`npm run test:e2e` runs the Playwright suite in `tests-e2e/`. It boots `node server.js`
+on port `8123` (override with `E2E_PORT`) and drives the real `index.html` in Chrome.
+
+- Specs live in `tests-e2e/`, **not** `tests/` — `tests/run-tests.cjs` auto-discovers every
+  `*.test.js`/`*.test.cjs` under `tests/` and runs it with `node --test`, which cannot
+  execute Playwright specs. Keeping them apart lets `npm test` stay dependency-free.
+- `playwright.config.js` uses `channel: 'chrome'`, i.e. the Chrome already installed on
+  the machine. `npm install` alone never fetches a browser (Playwright ≥1.5x has no
+  postinstall download); browsers only arrive via an explicit `npx playwright install`,
+  which this suite does not need. If Chrome is missing, either install Chrome or run
+  `npx playwright install chromium` and drop the `channel` option.
+- Assert on **DOM and text, not screenshots**. `renderTopView` stamps every plant group
+  with `data-plant-id`, `data-name`, and `data-species-key`; those are the query handles
+  (`tests-e2e/helpers.js` wraps the common ones). Screenshot diffs are noisy here because
+  the renderers deliberately jitter canopy outlines.
+- The suite is read-only: a fresh browser context has no `native-landscaping-positions-locked` value in
+  `localStorage`, so positions start locked and nothing writes back to
+  `projects/<slug>/planting_layout.csv`. Keep it that way, or point `PUBLIC_DIR` at a
+  scratch copy before adding a spec that drags or saves.
+- `test-results/` and `playwright-report/` are gitignored.
 
 ### Code intelligence (CodeGraph)
 

@@ -6,9 +6,16 @@ This file provides instructions and context for AI coding agents working on this
 stack, module layout, domain rules, tooling). This file only carries the issue-tracker
 integration below.
 
-Tooling shortcuts: `npm test` (Node test suite), `npm run serve` (static + persistence
+Tooling shortcuts: `npm test` (Node test suite), `npm run test:e2e` (Playwright browser
+tests in `tests-e2e/`), `npm run serve` (static + persistence
 server), `codegraph explore/node/callers/impact` for code intelligence (also available as
 `codegraph_*` MCP tools).
+
+Multi-project layout: `plants.csv` at the root is the shared species catalog; each yard
+lives in `projects/<slug>/` (`project.json`, `planting_layout.csv`, `img/`) and is listed
+in `projects/index.json`. The active project comes from `?project=<slug>`; switching
+reloads the page. Elevations are driven by a `viewFrom` compass direction — see the
+"Projects" section of AGENTS.md for the axis/mirror/depth table and how to add a project.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:6cd5cc61 -->
 ## Beads Issue Tracker

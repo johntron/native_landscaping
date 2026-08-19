@@ -1,13 +1,19 @@
 import {
   DEFAULT_PIXELS_PER_INCH,
-  ELEVATION_VIEWBOX,
   INCHES_PER_FOOT,
   MONTH_NAMES,
-  PLAN_VIEWBOX,
   SCALE_LIMITS,
 } from './constants.js';
 import { fetchCsv } from './data/csvLoader.js';
-import { buildPlantsFromCsv } from './data/plantParser.js';
+import {
+  loadProjectConfig,
+  loadProjectIndex,
+  projectAssetPath,
+  projectLayoutPath,
+  resolveActiveProjectId,
+} from './data/projectConfig.js';
+import { resolveElevationOrientation } from './render/elevationOrientation.js';
+import { buildPlantsFromCsv, LayoutDataError } from './data/plantParser.js';
 import { buildLayoutCsv } from './data/layoutExporter.js';
 import { loadLayoutHistory, persistLayout, updateHistoryCursor } from './data/persistence.js';
 import { computePlantState } from './state/seasonalState.js';
@@ -17,19 +23,17 @@ import { createPlantDragController, createElevationDragController } from './inte
 import { buildPlantLabel } from './render/labels.js';
 import { formatMonthRange } from './state/seasonalState.js';
 import { clampHiddenLayerCount, classifyPlantLayer } from './state/layers.js';
+import { buildCloneId } from './state/plantIds.js';
 import { getSpeciesKey } from './utils/speciesKey.js';
 import { createLayoutHistory } from './history/layoutHistory.js';
 import { captureViewToPng } from './export/viewCapture.js';
 
 const LOCK_STATE_KEY = 'native-landscaping-positions-locked';
 const EXPORT_MONTH = 6; // June
-const VIEW_BACKGROUNDS = {
-  top: new URL('img/top view.webp', document.baseURI).toString(),
-  south: new URL('img/front view.webp', document.baseURI).toString(),
-  east: new URL('img/side view.webp', document.baseURI).toString(),
-};
+const PROJECT_QUERY_PARAM = 'project';
 
 const appState = {
+  project: null,
   plants: [],
   month: new Date().getMonth() + 1,
   pixelsPerInch: DEFAULT_PIXELS_PER_INCH,
@@ -53,16 +57,25 @@ async function init() {
   const scaleSlider = document.getElementById('scaleSlider');
   const scaleIndicator = document.getElementById('scaleIndicator');
   const scaleSummaryEls = Array.from(document.querySelectorAll('[data-scale-summary]'));
+  // Elevation panels are positional slots: slot 0 and 1 take whichever compass
+  // directions the active project's config assigns to them.
   const svgRefs = {
     topSvg: document.getElementById('topSvg'),
-    southSvg: document.getElementById('frontSvg'),
-    eastSvg: document.getElementById('sideSvg'),
+    elevationSvgs: [document.getElementById('frontSvg'), document.getElementById('sideSvg')],
   };
   const containerRefs = {
     topView: document.getElementById('topView'),
-    southView: document.getElementById('frontView'),
-    eastView: document.getElementById('sideView'),
+    elevationViews: [document.getElementById('frontView'), document.getElementById('sideView')],
   };
+  const labelRefs = ['topView', 'frontView', 'sideView'].map((panelId) => {
+    const panel = document.querySelector(`[data-view-panel="${panelId}"]`);
+    return {
+      label: panel?.querySelector('[data-view-label]'),
+      sublabel: panel?.querySelector('[data-view-sublabel]'),
+    };
+  });
+  const projectSelect = document.getElementById('projectSelect');
+  const projectNotice = document.getElementById('projectNotice');
   const lockToggle = document.getElementById('lockToggle');
   const lockStatusText = document.getElementById('lockStatusText');
   const exportBundleButton = document.getElementById('exportBundleBtn');
@@ -73,7 +86,34 @@ async function init() {
   const redoButton = document.getElementById('redoLayoutBtn');
   const historyStatus = document.getElementById('layoutHistoryStatus');
 
-  configureViews({ svgRefs, containerRefs });
+  let projectIndex;
+  let project;
+  try {
+    projectIndex = await loadProjectIndex(fetch, document.baseURI);
+    const resolved = resolveActiveProjectId(
+      new URLSearchParams(window.location.search).get(PROJECT_QUERY_PARAM),
+      projectIndex
+    );
+    project = await loadProjectConfig(resolved.id, fetch, document.baseURI);
+    if (resolved.fellBack && projectNotice) {
+      projectNotice.hidden = false;
+      projectNotice.textContent = `Unknown project "${resolved.requestedId}" — showing ${project.name}.`;
+    }
+  } catch (err) {
+    showLoadError('Unable to load project configuration.');
+    console.error(err);
+    return;
+  }
+  appState.project = project;
+  appState.pixelsPerInch = project.pixelsPerInch;
+  document.title = `${project.name} Visualization`;
+  const projectTitle = document.getElementById('projectTitle');
+  if (projectTitle) {
+    projectTitle.textContent = `${project.name} Visualization`;
+  }
+
+  initProjectPicker(projectSelect, projectIndex, project.id);
+  configureViews({ svgRefs, containerRefs, labelRefs, project });
 
   const viewsContainer = document.querySelector('.views');
   const maximizeButtons = Array.from(document.querySelectorAll('[data-maximize-target]'));
@@ -163,7 +203,9 @@ async function init() {
     const plants = layoutHistoryInstance.undo();
     if (!plants) return;
     applyHistoryPlants(plants);
-    updateHistoryCursor(layoutHistoryInstance.getCursor(), updateHistoryStatus);
+    updateHistoryCursor(layoutHistoryInstance.getCursor(), updateHistoryStatus, {
+      projectId: appState.project?.id,
+    });
   };
 
   const handleRedo = () => {
@@ -171,7 +213,9 @@ async function init() {
     const plants = layoutHistoryInstance.redo();
     if (!plants) return;
     applyHistoryPlants(plants);
-    updateHistoryCursor(layoutHistoryInstance.getCursor(), updateHistoryStatus);
+    updateHistoryCursor(layoutHistoryInstance.getCursor(), updateHistoryStatus, {
+      projectId: appState.project?.id,
+    });
   };
 
   if (undoButton) {
@@ -225,7 +269,7 @@ async function init() {
   };
   const handleBundleExport = async () => {
     if (isBundleExporting) return;
-    if (!svgRefs.topSvg || !svgRefs.southSvg || !svgRefs.eastSvg) return;
+    if (!svgRefs.topSvg || svgRefs.elevationSvgs.some((svg) => !svg)) return;
     if (!loadedSpeciesCsv) {
       console.warn('No plants.csv loaded; cannot export bundle.');
       return;
@@ -250,32 +294,32 @@ async function init() {
       if (!JSZipLib) {
         throw new Error('JSZip is not loaded');
       }
-      const [topPng, southPng, eastPng] = await Promise.all([
-        captureViewToPng({
-          svg: svgRefs.topSvg,
-          viewBox: PLAN_VIEWBOX,
-          backgroundUrl: VIEW_BACKGROUNDS.top,
-        }),
-        captureViewToPng({
-          svg: svgRefs.southSvg,
-          viewBox: ELEVATION_VIEWBOX,
-          backgroundUrl: VIEW_BACKGROUNDS.south,
-        }),
-        captureViewToPng({
-          svg: svgRefs.eastSvg,
-          viewBox: ELEVATION_VIEWBOX,
-          backgroundUrl: VIEW_BACKGROUNDS.east,
-        }),
-      ]);
+      const panels = [
+        { view: project.plan, svg: svgRefs.topSvg, fileName: 'plan-view.png' },
+        ...project.elevations.map((elevation, index) => ({
+          view: elevation,
+          svg: svgRefs.elevationSvgs[index],
+          fileName: `${elevation.id}-elevation.png`,
+        })),
+      ];
+      const pngs = await Promise.all(
+        panels.map(({ view, svg }) =>
+          captureViewToPng({
+            svg,
+            viewBox: view.viewBox,
+            backgroundUrl: backgroundUrlFor(project, view),
+          })
+        )
+      );
 
       const zip = new JSZipLib();
       zip.file('plants.csv', loadedSpeciesCsv);
       zip.file('planting_layout.csv', buildLayoutCsv(appState.plants));
-      zip.file('images/top-view.png', topPng);
-      zip.file('images/south-elevation.png', southPng);
-      zip.file('images/east-elevation.png', eastPng);
+      pngs.forEach((png, index) => {
+        zip.file(`images/${panels[index].fileName}`, png);
+      });
       const blob = await zip.generateAsync({ type: 'blob' });
-      triggerDownload(blob, 'native-landscape-plan.zip');
+      triggerDownload(blob, `${project.id}-plan.zip`);
     } catch (err) {
       console.error('Failed to export plan bundle', err);
       alert('Unable to export plan bundle. Check console for details.');
@@ -299,7 +343,7 @@ async function init() {
     updateScaleSummaries(scaleSummaryEls, value);
     render();
   };
-  initScaleControls(scaleInput, scaleSlider, applyScale);
+  initScaleControls(scaleInput, scaleSlider, applyScale, project.pixelsPerInch);
 
   const dragController = createPlantDragController({
     svg: svgRefs.topSvg,
@@ -309,25 +353,21 @@ async function init() {
     onHoverPlant: setHoveredPlant,
     onChangeCommit: () => commitLayoutChange('Moved plant'),
   });
-  const southDragController = createElevationDragController({
-    svg: svgRefs.southSvg,
-    axis: 'x',
-    getPlants: () => appState.plants,
-    getPixelsPerInch: () => appState.pixelsPerInch,
-    onPositionsChange: () => render(),
-    onHoverPlant: setHoveredPlant,
-    onChangeCommit: () => commitLayoutChange('Moved plant'),
-  });
-  const eastDragController = createElevationDragController({
-    svg: svgRefs.eastSvg,
-    axis: 'y',
-    getPlants: () => appState.plants,
-    getPixelsPerInch: () => appState.pixelsPerInch,
-    onPositionsChange: () => render(),
-    onHoverPlant: setHoveredPlant,
-    onChangeCommit: () => commitLayoutChange('Moved plant'),
-  });
-  const dragControllers = [dragController, southDragController, eastDragController];
+  const elevationDragControllers = project.elevations.map((elevation, index) =>
+    createElevationDragController({
+      svg: svgRefs.elevationSvgs[index],
+      // Dragging in an elevation edits the yard axis that runs horizontally in it.
+      axis: resolveElevationOrientation(elevation.viewFrom).axisKey,
+      mirrored: resolveElevationOrientation(elevation.viewFrom).mirrored,
+      leftOffsetPx: elevation.leftOffsetPx,
+      getPlants: () => appState.plants,
+      getPixelsPerInch: () => appState.pixelsPerInch,
+      onPositionsChange: () => render(),
+      onHoverPlant: setHoveredPlant,
+      onChangeCommit: () => commitLayoutChange('Moved plant'),
+    })
+  );
+  const dragControllers = [dragController, ...elevationDragControllers];
 
   const cloneMenu = createCloneMenu({
     onClone: (plantId) => {
@@ -389,13 +429,14 @@ async function init() {
   try {
     const [speciesCsv, layoutCsv] = await Promise.all([
       fetchCsv(new URL('plants.csv', document.baseURI)),
-      fetchCsv(new URL('planting_layout.csv', document.baseURI)),
+      fetchCsv(new URL(projectLayoutPath(project.id), document.baseURI)),
     ]);
     loadedSpeciesCsv = speciesCsv;
     const initialPlants = buildPlantsFromCsv(speciesCsv, layoutCsv);
     const layoutCsvSnapshot = buildLayoutCsv(initialPlants);
     const historyData = await loadLayoutHistory(updateHistoryStatus, {
       layoutCsv: layoutCsvSnapshot,
+      projectId: project.id,
     });
     const historyEntries = historyData.entries || [];
     const historyCursor = typeof historyData.cursor === 'number' ? historyData.cursor : -1;
@@ -414,6 +455,7 @@ async function init() {
       updateHistoryControls();
       persistLayout(appState.plants, description, updateHistoryStatus, {
         previousPlants,
+        projectId: project.id,
       }).then((result) => {
         if (result) {
           console.log('Layout persisted', {
@@ -440,7 +482,13 @@ async function init() {
       exportBundleButton.addEventListener('click', handleBundleExport);
     }
   } catch (err) {
-    showLoadError('Unable to load plants and layout data.');
+    if (err instanceof LayoutDataError) {
+      // The files loaded; their contents are wrong. Say which row so a hand-edit
+      // mistake is fixable without opening the console.
+      showLoadError(err.message, { hint: 'Fix the layout CSV for this project, then reload.' });
+    } else {
+      showLoadError('Unable to load plants and layout data.');
+    }
     console.error(err);
     return;
   }
@@ -458,6 +506,7 @@ async function init() {
       highlightedSpeciesKey: appState.highlightedSpeciesKey,
       targetedPlantId: appState.targetedPlantId,
       hoveredPlantId: appState.hoveredPlantId,
+      project,
     });
   };
 
@@ -507,6 +556,36 @@ async function init() {
   render();
 }
 
+/**
+ * Populate the project picker. Switching navigates to `?project=<id>` and lets the
+ * page reload — the render loop, history stack, and drag controllers are all built
+ * once against a single project, so a reload is both simpler and linkable.
+ */
+function initProjectPicker(selectEl, projectIndex, activeId) {
+  if (!selectEl) return;
+  selectEl.innerHTML = '';
+  projectIndex.projects.forEach((entry) => {
+    const option = document.createElement('option');
+    option.value = entry.id;
+    option.textContent = entry.name;
+    option.selected = entry.id === activeId;
+    selectEl.appendChild(option);
+  });
+  selectEl.disabled = projectIndex.projects.length < 2;
+  selectEl.addEventListener('change', (event) => {
+    const nextId = event.target.value;
+    if (!nextId || nextId === activeId) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set(PROJECT_QUERY_PARAM, nextId);
+    window.location.assign(url.toString());
+  });
+}
+
+/** Absolute URL for a background declared relative to the project directory. */
+function backgroundUrlFor(project, view) {
+  return new URL(projectAssetPath(project.id, view.background), document.baseURI).toString();
+}
+
 function initMonthSlider(sliderEl, readoutEl, initialMonth) {
   if (!sliderEl) return;
   sliderEl.min = '1';
@@ -519,7 +598,7 @@ function initMonthSlider(sliderEl, readoutEl, initialMonth) {
   }
 }
 
-function initScaleControls(inputEl, sliderEl, onChange) {
+function initScaleControls(inputEl, sliderEl, onChange, initialValue = DEFAULT_PIXELS_PER_INCH) {
   if (!inputEl || !sliderEl) return;
 
   const { min, max, step } = SCALE_LIMITS;
@@ -540,7 +619,7 @@ function initScaleControls(inputEl, sliderEl, onChange) {
   inputEl.addEventListener('change', (e) => apply(e.target.value));
   sliderEl.addEventListener('input', (e) => apply(e.target.value));
 
-  apply(DEFAULT_PIXELS_PER_INCH);
+  apply(initialValue);
 }
 
 function updateScaleIndicator(container, pixelsPerInch) {
@@ -567,15 +646,19 @@ function updateScaleSummaries(summaryEls, pixelsPerInch) {
   });
 }
 
-function showLoadError(message) {
+const DEFAULT_LOAD_ERROR_HINT =
+  'Please serve plants.csv and the projects/ directory over HTTP (for example, via `npx serve`).';
+
+function showLoadError(message, { hint = DEFAULT_LOAD_ERROR_HINT } = {}) {
+  const text = `${message} ${hint}`;
   const existing = document.querySelector('.error-banner');
   if (existing) {
-    existing.textContent = message;
+    existing.textContent = text;
     return;
   }
   const banner = document.createElement('div');
   banner.className = 'error-banner';
-  banner.textContent = `${message} Please serve plants.csv and planting_layout.csv over HTTP (for example, via \`npx serve\`).`;
+  banner.textContent = text;
   const main = document.querySelector('main');
   if (main) {
     main.insertAdjacentElement('beforebegin', banner);
@@ -843,8 +926,9 @@ function clonePlantById(state, plantId) {
   if (!plantId) return null;
   const source = state.plants.find((p) => String(p.id) === String(plantId));
   if (!source) return null;
-  const maxXFeet = PLAN_VIEWBOX.width / (INCHES_PER_FOOT * state.pixelsPerInch);
-  const maxYFeet = PLAN_VIEWBOX.height / (INCHES_PER_FOOT * state.pixelsPerInch);
+  const planViewBox = state.project.plan.viewBox;
+  const maxXFeet = planViewBox.width / (INCHES_PER_FOOT * state.pixelsPerInch);
+  const maxYFeet = planViewBox.height / (INCHES_PER_FOOT * state.pixelsPerInch);
   const offset = 1.1;
   const clone = {
     ...source,
@@ -855,18 +939,6 @@ function clonePlantById(state, plantId) {
   clone.layer = classifyPlantLayer(clone);
   state.plants = [...state.plants, clone];
   return clone;
-}
-
-function buildCloneId(existingPlants, baseId) {
-  const existing = new Set((existingPlants || []).map((p) => String(p.id)));
-  const base = String(baseId || 'plant');
-  let candidate = `${base}-copy`;
-  let counter = 2;
-  while (existing.has(candidate)) {
-    candidate = `${base}-copy-${counter}`;
-    counter += 1;
-  }
-  return candidate;
 }
 
 function clampFeet(value, min, max) {
