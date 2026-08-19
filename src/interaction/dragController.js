@@ -99,10 +99,6 @@ export function createPlantDragController({
 
   function updateHoverFromContext(event, context) {
     if (!event?.isPrimary) return;
-    if (state.locked) {
-      notifyHover('');
-      return;
-    }
     if (state.activePlant) {
       notifyHover(state.activePlant.id);
       return;
@@ -279,10 +275,6 @@ export function createElevationDragController({
 
   function updateHoverFromContext(event) {
     if (!event?.isPrimary) return;
-    if (state.locked) {
-      notifyHover('');
-      return;
-    }
     if (state.activePlant) {
       notifyHover(state.activePlant.id);
       return;
