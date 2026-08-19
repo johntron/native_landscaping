@@ -594,7 +594,17 @@ async function init() {
     monthReadout.textContent = MONTH_NAMES[month - 1] || '';
     render();
   });
-  window.addEventListener('resize', render);
+  let lastViewportWidth = window.innerWidth;
+  let resizeTimer = null;
+  window.addEventListener('resize', () => {
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      resizeTimer = null;
+      if (window.innerWidth === lastViewportWidth) return;
+      lastViewportWidth = window.innerWidth;
+      render();
+    }, 150);
+  });
 
   document.addEventListener('contextmenu', (event) => {
     const target = event.target;
@@ -847,8 +857,24 @@ function renderSpeciesTable(plants, handlers = {}) {
       }
       td.dataset.label = headers[idx];
       if (cell.className) td.className = cell.className;
+      if (idx > 2) td.classList.add('species-table__extra');
       tr.appendChild(td);
     });
+
+    const toggleTd = document.createElement('td');
+    toggleTd.className = 'species-table__toggle-cell';
+    const toggleBtn = document.createElement('button');
+    toggleBtn.type = 'button';
+    toggleBtn.className = 'species-table__toggle-btn';
+    toggleBtn.setAttribute('aria-expanded', 'false');
+    toggleBtn.textContent = 'Details';
+    toggleBtn.addEventListener('click', () => {
+      const expanded = tr.classList.toggle('is-expanded');
+      toggleBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      toggleBtn.textContent = expanded ? 'Hide details' : 'Details';
+    });
+    toggleTd.appendChild(toggleBtn);
+    tr.appendChild(toggleTd);
 
     tbody.appendChild(tr);
   });
