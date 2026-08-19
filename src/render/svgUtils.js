@@ -13,9 +13,3 @@ export function createSvgElement(tag, attrs = {}) {
   });
   return el;
 }
-
-export function appendTooltip(group, lines) {
-  const title = createSvgElement('title');
-  title.textContent = lines.filter(Boolean).join('\n');
-  group.appendChild(title);
-}
