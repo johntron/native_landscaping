@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowJs": true,
+    "checkJs": false,
+    "lib": ["ES2022", "DOM"],
+    "baseUrl": "."
+  },
+  "include": ["src/**/*.js", "tests/**/*.js", "server.js"],
+  "exclude": ["node_modules", ".codegraph", ".beads"]
+}

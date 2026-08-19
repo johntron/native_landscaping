@@ -7,3 +7,6 @@ layout-history.json
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# CodeGraph index (derived, machine-local; rebuild with `codegraph init .`)
+.codegraph/

@@ -11,5 +11,47 @@
         "matcher": ""
       }
     ]
+  },
+  "enabledMcpjsonServers": ["codegraph"],
+  "permissions": {
+    "allow": [
+      "Bash(bd ready:*)",
+      "Bash(bd list:*)",
+      "Bash(bd show:*)",
+      "Bash(bd status:*)",
+      "Bash(bd query:*)",
+      "Bash(bd search:*)",
+      "Bash(bd prime:*)",
+      "Bash(bd blocked:*)",
+      "Bash(bd create:*)",
+      "Bash(bd update:*)",
+      "Bash(bd close:*)",
+      "Bash(bd comment:*)",
+      "Bash(bd note:*)",
+      "Bash(bd dep:*)",
+      "Bash(bd label:*)",
+      "Bash(bd tag:*)",
+      "Bash(codegraph query:*)",
+      "Bash(codegraph explore:*)",
+      "Bash(codegraph node:*)",
+      "Bash(codegraph callers:*)",
+      "Bash(codegraph callees:*)",
+      "Bash(codegraph impact:*)",
+      "Bash(codegraph affected:*)",
+      "Bash(codegraph files:*)",
+      "Bash(codegraph status:*)",
+      "Bash(codegraph sync:*)",
+      "Bash(codegraph index:*)",
+      "Bash(npm test:*)",
+      "Bash(node tests/run-tests.cjs:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)"
+    ],
+    "deny": [
+      "Bash(bd dolt push:*)",
+      "Bash(bd federation:*)"
+    ]
   }
 }

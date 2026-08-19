@@ -2,6 +2,14 @@
 
 This file provides instructions and context for AI coding agents working on this project.
 
+**Read [AGENTS.md](AGENTS.md) first** — it is the canonical project guide (purpose, tech
+stack, module layout, domain rules, tooling). This file only carries the issue-tracker
+integration below.
+
+Tooling shortcuts: `npm test` (Node test suite), `npm run serve` (static + persistence
+server), `codegraph explore/node/callers/impact` for code intelligence (also available as
+`codegraph_*` MCP tools).
+
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:6cd5cc61 -->
 ## Beads Issue Tracker
 
