@@ -77,12 +77,14 @@ async function init() {
   });
   const projectSelect = document.getElementById('projectSelect');
   const projectNotice = document.getElementById('projectNotice');
-  const lockToggle = document.getElementById('lockToggle');
-  const lockStatusText = document.getElementById('lockStatusText');
+  const modeButtons = Array.from(document.querySelectorAll('[data-mode]'));
+  const editRow = document.getElementById('editRow');
+  const settingsToggleBtn = document.getElementById('settingsToggleBtn');
+  const settingsDrawer = document.getElementById('settingsDrawer');
   const exportBundleButton = document.getElementById('exportBundleBtn');
   const managePlantsButton = document.getElementById('managePlantsBtn');
   const labelToggle = document.getElementById('labelToggle');
-  const layerVisibilityButtons = Array.from(document.querySelectorAll('[data-layer-visibility]'));
+  const layerVisibilitySelect = document.getElementById('layerVisibilitySelect');
   const undoButton = document.getElementById('undoLayoutBtn');
   const redoButton = document.getElementById('redoLayoutBtn');
   const historyStatus = document.getElementById('layoutHistoryStatus');
@@ -163,12 +165,7 @@ async function init() {
   let layoutHistoryInstance = null;
   let commitLayoutChange = () => {};
   const syncLayerButtons = (hiddenCount) => {
-    layerVisibilityButtons.forEach((button) => {
-      const value = Number(button.dataset.layerVisibility || button.value || 0);
-      const isActive = value === hiddenCount;
-      button.classList.toggle('is-active', isActive);
-      button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-    });
+    if (layerVisibilitySelect) layerVisibilitySelect.value = String(hiddenCount);
   };
   const applyHiddenLayers = (count, { shouldRender = true } = {}) => {
     const clamped = clampHiddenLayerCount(count);
@@ -462,17 +459,35 @@ async function init() {
   const applyLockState = (locked) => {
     appState.positionsLocked = locked;
     dragControllers.forEach((controller) => controller?.setLocked?.(locked));
-    updateLockStatus(lockStatusText, locked);
     persistLockState(locked);
   };
 
+  const applyMode = (mode) => {
+    const locked = mode !== 'edit';
+    modeButtons.forEach((button) => {
+      const isActive = button.dataset.mode === mode;
+      button.classList.toggle('is-active', isActive);
+      button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+    if (editRow) editRow.hidden = mode !== 'edit';
+    applyLockState(locked);
+  };
+
+  modeButtons.forEach((button) => {
+    button.addEventListener('click', () => applyMode(button.dataset.mode));
+  });
+
+  if (settingsToggleBtn && settingsDrawer) {
+    settingsToggleBtn.addEventListener('click', () => {
+      const willOpen = settingsDrawer.hidden;
+      settingsDrawer.hidden = !willOpen;
+      settingsToggleBtn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    });
+  }
+
   const persistedLockState = readPersistedLockState();
   const initialLockState = persistedLockState !== null ? persistedLockState : true;
-  if (lockToggle) {
-    lockToggle.checked = initialLockState;
-    lockToggle.addEventListener('change', (e) => applyLockState(e.target.checked));
-  }
-  applyLockState(initialLockState);
+  applyMode(initialLockState ? 'view' : 'edit');
   if (exportBundleButton) {
     exportBundleButton.disabled = true;
   }
@@ -493,13 +508,10 @@ async function init() {
     appState.showLabels = false;
   }
 
-  if (layerVisibilityButtons.length) {
+  if (layerVisibilitySelect) {
     syncLayerButtons(appState.hiddenLayerCount);
-    layerVisibilityButtons.forEach((button) => {
-      button.addEventListener('click', () => {
-        const next = Number(button.dataset.layerVisibility || button.value || 0);
-        applyHiddenLayers(next);
-      });
+    layerVisibilitySelect.addEventListener('change', (e) => {
+      applyHiddenLayers(Number(e.target.value));
     });
   }
 
@@ -886,11 +898,6 @@ function formatFeet(value) {
   const num = Number(value);
   if (!Number.isFinite(num)) return '';
   return num.toFixed(1);
-}
-
-function updateLockStatus(labelEl, locked) {
-  if (!labelEl) return;
-  labelEl.textContent = locked ? 'Positions locked' : 'Drag to move plants';
 }
 
 function readPersistedLockState() {
