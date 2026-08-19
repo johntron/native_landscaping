@@ -1,0 +1,7 @@
+{
+  "defaultProject": "backyard",
+  "projects": [
+    { "id": "backyard", "name": "Backyard" },
+    { "id": "example-frontyard", "name": "Example front yard" }
+  ]
+}
