@@ -266,10 +266,27 @@ async function init() {
     appState.targetedPlantId = normalized;
     render();
   };
+  const findSpeciesRowEl = (speciesKey) => {
+    if (!speciesKey) return null;
+    const container = document.getElementById('speciesTable');
+    if (!container) return null;
+    return (
+      Array.from(container.querySelectorAll('tr[data-species-key]')).find(
+        (row) => row.dataset.speciesKey === speciesKey
+      ) || null
+    );
+  };
   const setHoveredPlant = (plantId) => {
     const normalized = plantId ? String(plantId) : '';
     if (normalized === appState.hoveredPlantId) return;
     appState.hoveredPlantId = normalized;
+    const plant = normalized ? appState.plants.find((p) => String(p.id) === normalized) : null;
+    if (plant) {
+      const speciesKey = getSpeciesKey(plant);
+      setHighlightedSpecies(speciesKey, findSpeciesRowEl(speciesKey));
+    } else {
+      clearHighlightedSpecies();
+    }
     render();
   };
   const handleBundleExport = async () => {
@@ -413,15 +430,10 @@ async function init() {
       detailSheetLines.innerHTML = '';
       buildTooltipLines(plant, state)
         .filter(Boolean)
+        .filter((line) => line !== plant.botanicalName)
         .forEach((line) => {
           const li = document.createElement('li');
-          if (line === plant.botanicalName) {
-            const em = document.createElement('em');
-            em.textContent = line;
-            li.appendChild(em);
-          } else {
-            li.textContent = line;
-          }
+          li.textContent = line;
           detailSheetLines.appendChild(li);
         });
     }
