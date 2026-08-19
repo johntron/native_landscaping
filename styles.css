@@ -968,9 +968,14 @@ select {
 }
 
 @media (min-width: 640px) {
+  .detail-sheet {
+    align-items: center;
+  }
+
   .detail-sheet__panel {
-    margin: 0 0 2rem;
+    margin: 0;
     border-radius: 12px;
+    box-shadow: 0 20px 45px rgba(0, 0, 0, 0.3);
   }
 }
 
