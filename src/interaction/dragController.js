@@ -167,7 +167,7 @@ export function createPlantDragController({
       cancelActive();
       notifyHover('');
     }
-    svg.style.touchAction = state.locked ? 'auto' : 'none';
+    svg.style.touchAction = state.locked ? 'auto' : 'pan-y';
     svg.style.cursor = state.locked ? 'default' : 'grab';
   }
 
@@ -346,7 +346,7 @@ export function createElevationDragController({
       cancelActive();
       notifyHover('');
     }
-    svg.style.touchAction = state.locked ? 'auto' : 'none';
+    svg.style.touchAction = state.locked ? 'auto' : 'pan-y';
     svg.style.cursor = state.locked ? 'default' : 'grab';
   }
 
