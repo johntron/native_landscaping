@@ -45,6 +45,10 @@ h1 {
   letter-spacing: 0.01em;
 }
 
+.species-table__toggle-cell {
+  display: none;
+}
+
 .control-title {
   font-size: 0.95rem;
   font-weight: 700;
@@ -1059,6 +1063,26 @@ select {
     border-bottom: none;
   }
 
+  .species-table__toggle-cell {
+    display: block;
+    justify-content: flex-end;
+  }
+
+  .species-table__toggle-btn {
+    border: 1px solid #c7ced8;
+    background-color: #fff;
+    color: #1f2a35;
+    border-radius: 999px;
+    padding: 0.3rem 0.7rem;
+    font-weight: 700;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+
+  .species-table__table tr:not(.is-expanded) .species-table__extra {
+    display: none;
+  }
+
   .controls-row {
     flex-direction: column;
     align-items: stretch;
@@ -1078,6 +1102,53 @@ select {
 
   .month-readout {
     text-align: left;
+  }
+}
+
+@media (max-width: 600px) {
+  .view-toolbar__actions,
+  .view-toolbar__control-group {
+    min-width: 0;
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .layer-chips {
+    justify-content: stretch;
+  }
+
+  .layer-chips .chip {
+    flex: 1 1 calc(50% - 0.35rem);
+    text-align: center;
+    padding: 0.4rem 0.5rem;
+    font-size: 0.82rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+  }
+
+  .data-note {
+    display: none;
+  }
+
+  #scaleInput {
+    display: none;
+  }
+
+  .chip {
+    min-height: 44px;
+    padding: 0.6rem 0.75rem;
+  }
+
+  .view-panel__toggle {
+    min-height: 44px;
+    padding: 0.5rem 0.75rem;
+  }
+
+  .project-picker select {
+    min-height: 44px;
+    padding: 0.5rem;
   }
 }
 
