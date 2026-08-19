@@ -1,7 +1,7 @@
 export function buildTooltipLines(plant, state) {
   return [
-    plant.commonName,
     plant.botanicalName,
+    plant.commonName,
     `Height: ${formatFeet(plant.height)}ft, Width: ${formatFeet(plant.width)}ft`,
     formatPositionLine(plant),
     `Sun: ${plant.sunPref}`,
