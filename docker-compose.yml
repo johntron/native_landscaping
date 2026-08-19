@@ -1,0 +1,86 @@
+# Native landscaping app + its own Cloudflare Tunnel connector.
+#
+# TUNNEL ISOLATION (the thing this file is careful about): every compose
+# project that wants a public hostname runs its OWN `cloudflared` sidecar,
+# holding its OWN tunnel token. Nothing here is shared with the geneology
+# project's tunnel, and nothing needs to be:
+#
+#   * Each sidecar is a normal compose service — no `network_mode: host`, no
+#     published ports, no `container_name`. It gets its own network namespace,
+#     so cloudflared's metrics listener binds INSIDE the container and two
+#     connectors on this host have no port to fight over.
+#   * Token mode is outbound-only. The connector dials Cloudflare's edge; it
+#     never listens on the host, so there is no host port to collide on.
+#   * The token embeds the tunnel ID, so one token == one tunnel. THIS is
+#     where "the second tunnel binds to the one I already spawned" actually
+#     comes from: two connectors running the SAME token. Cloudflare treats the
+#     second as another replica of the FIRST tunnel — it registers happily,
+#     serves the first tunnel's ingress, and the new hostname gets Error 1033
+#     because its own tunnel has no connector. Meanwhile the old project's
+#     traffic starts load-balancing onto a connector that can't reach its
+#     origin.
+#
+#     Observed here 2026-08-18, and the cause is a trap worth knowing: `$VAR`
+#     in a compose file is interpolated by COMPOSE, and a variable exported in
+#     the SHELL BEATS the project's .env file. A stray CLOUDFLARE_TUNNEL_TOKEN
+#     in the environment (geneology's) silently won over this project's .env,
+#     so this sidecar booted geneology's tunnel — same host, same image, wrong
+#     tunnel. The fix is below: pass the token via `env_file` as TUNNEL_TOKEN,
+#     which cloudflared reads natively. env_file values come from the file
+#     only — the host shell cannot override them.
+#
+#   * Metrics: both connectors log "Starting metrics server on [::]:20241" and
+#     run concurrently without conflict — separate netns, verified 2026-08-18.
+#
+# `web` is the service name the Cloudflare dashboard's Public Hostname entry
+# points at (`http://web:8080`). That name is resolved by Docker's DNS on this
+# project's compose network, so RENAMING THIS SERVICE BREAKS THE TUNNEL unless
+# the dashboard route is changed to match.
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM node:22-slim
+        # Deps install at / rather than /app on purpose: the bind mount below
+        # covers /app, which would shadow an /app/node_modules baked into the
+        # image. Node's resolver walks parent directories, so /node_modules is
+        # found from /app and survives the mount.
+        WORKDIR /
+        COPY package.json package-lock.json ./
+        RUN npm ci --omit=dev
+        WORKDIR /app
+        CMD ["node", "server.js"]
+    environment:
+      # server.js defaults to 8000; the tunnel route expects 8080. It calls
+      # server.listen(PORT) with no host arg, so it binds all interfaces and
+      # the sidecar can reach it over the compose network.
+      PORT: "8080"
+    volumes:
+      # PUBLIC_DIR defaults to cwd (/app). Mounting the project keeps edits
+      # live and keeps the app's writes — layout-history.json, and
+      # planting_layout.csv on export — on the host where they belong.
+      - .:/app
+    # Loopback ONLY. Off-box reach comes solely through the Cloudflare Tunnel
+    # + Access gate, same as geneology's `review` service. A bare "8080:8080"
+    # binds 0.0.0.0 and would serve the app to the whole LAN with no Google
+    # SSO in front of it — defeating the point of the Access policy.
+    ports:
+      - "127.0.0.1:8080:8080"
+    restart: unless-stopped
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    # TUNNEL_TOKEN comes from .env (gitignored — it is a credential) and is
+    # read by cloudflared itself. Deliberately NOT "--token ${VAR}": that form
+    # is interpolated by compose, where a shell variable of the same name
+    # BEATS this project's .env and boots the wrong tunnel. See the header.
+    env_file:
+      - .env
+    command: ["tunnel", "--no-autoupdate", "run"]
+    restart: unless-stopped
+    # Ordering only, not readiness — cloudflared may log a few origin
+    # connection errors before `web` finishes booting. Those self-heal.
+    depends_on:
+      - web
