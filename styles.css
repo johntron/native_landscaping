@@ -903,8 +903,28 @@ select {
 }
 
 @media (max-width: 960px) {
+  .view-toolbar {
+    position: static;
+  }
+
   .views {
     grid-template-columns: 1fr;
+  }
+
+  .views[data-maximized="topView"] .view-panel[data-view-panel="topView"],
+  .views[data-maximized="frontView"] .view-panel[data-view-panel="frontView"],
+  .views[data-maximized="sideView"] .view-panel[data-view-panel="sideView"] {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    padding: 0.5rem;
+    background-color: #f2f0eb;
+    overflow: auto;
+  }
+
+  .views[data-maximized] .view {
+    aspect-ratio: auto;
+    height: calc(100vh - 3.5rem);
   }
 
   .view-meta {
