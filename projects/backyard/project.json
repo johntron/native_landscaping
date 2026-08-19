@@ -1,0 +1,33 @@
+{
+  "id": "backyard",
+  "name": "Backyard",
+  "defaultPixelsPerInch": 2.25,
+  "plan": {
+    "label": "Plan",
+    "sublabel": "Looking Down",
+    "viewBox": { "width": 800, "height": 600 },
+    "background": "img/top.webp"
+  },
+  "elevations": [
+    {
+      "id": "south",
+      "viewFrom": "south",
+      "label": "South elevation",
+      "sublabel": "Looking North",
+      "viewBox": { "width": 800, "height": 600 },
+      "background": "img/south.webp",
+      "bottomOffsetPx": 100,
+      "leftOffsetPx": 0
+    },
+    {
+      "id": "east",
+      "viewFrom": "east",
+      "label": "East elevation",
+      "sublabel": "Looking West",
+      "viewBox": { "width": 800, "height": 600 },
+      "background": "img/east.webp",
+      "bottomOffsetPx": 100,
+      "leftOffsetPx": 80
+    }
+  ]
+}
