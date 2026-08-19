@@ -602,6 +602,11 @@ select {
   overflow-x: auto;
 }
 
+.species-table__table,
+.species-table__table * {
+  box-sizing: border-box;
+}
+
 .species-table__table {
   width: 100%;
   border-collapse: collapse;
