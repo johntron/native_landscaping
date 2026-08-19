@@ -13,8 +13,7 @@ import {
 } from './elevationOrientation.js';
 import { getSpeciesKey } from '../utils/speciesKey.js';
 import { makeRng, seedForPlant } from '../utils/rng.js';
-import { appendTooltip, clearSvg, createSvgElement } from './svgUtils.js';
-import { buildTooltipLines } from './tooltip.js';
+import { clearSvg, createSvgElement } from './svgUtils.js';
 import { buildFlowerCenters } from './inflorescenceStrategies.js';
 import { pointInPolygon } from './geometry.js';
 import { buildPlantLabel } from './labels.js';
@@ -241,7 +240,6 @@ export function renderElevationView(
       }
     }
 
-    appendTooltip(group, buildTooltipLines(plant, state));
     svg.appendChild(group);
 
     if (isHighlighted) {

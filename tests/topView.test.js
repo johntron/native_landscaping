@@ -60,9 +60,10 @@ test('renderTopView clears nodes and renders groups along with highlight/target 
 
   const plantGroups = svg.querySelectorAll('g[data-plant-id]');
   assert.equal(plantGroups.length, plantStates.length);
-  assert.ok(
-    plantGroups[0].querySelectorAll('title').some((node) => node.textContent.includes('Alpha Shrub')),
-    'tooltip includes the common name for each plant group'
+  assert.equal(
+    plantGroups[0].querySelectorAll('title').length,
+    0,
+    'no native SVG title tooltip is rendered; details come from the click-to-open sheet instead'
   );
 
   const highlightRing = svg
