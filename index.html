@@ -226,6 +226,17 @@
         </div>
       </div>
     </div>
+    <div class="detail-sheet" id="detailSheet" hidden>
+      <div class="detail-sheet__backdrop" data-detail-close></div>
+      <div class="detail-sheet__panel" role="dialog" aria-modal="true" aria-labelledby="detailSheetTitle">
+        <button type="button" class="detail-sheet__close" data-detail-close aria-label="Close details">×</button>
+        <h2 class="detail-sheet__title" id="detailSheetTitle"></h2>
+        <ul class="detail-sheet__lines" id="detailSheetLines"></ul>
+        <div class="detail-sheet__actions">
+          <button type="button" class="button pill-button" id="detailSheetCloneBtn">Clone plant</button>
+        </div>
+      </div>
+    </div>
     <script src="node_modules/jszip/dist/jszip.min.js"></script>
     <!-- The application logic lives in the ES module entry point. -->
     <script type="module" src="src/app.js"></script>

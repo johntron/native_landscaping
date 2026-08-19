@@ -25,6 +25,7 @@ import { formatMonthRange } from './state/seasonalState.js';
 import { clampHiddenLayerCount, classifyPlantLayer } from './state/layers.js';
 import { buildCloneId } from './state/plantIds.js';
 import { getSpeciesKey } from './utils/speciesKey.js';
+import { buildTooltipLines } from './render/tooltip.js';
 import { createLayoutHistory } from './history/layoutHistory.js';
 import { captureViewToPng } from './export/viewCapture.js';
 
@@ -85,6 +86,10 @@ async function init() {
   const undoButton = document.getElementById('undoLayoutBtn');
   const redoButton = document.getElementById('redoLayoutBtn');
   const historyStatus = document.getElementById('layoutHistoryStatus');
+  const detailSheet = document.getElementById('detailSheet');
+  const detailSheetTitle = document.getElementById('detailSheetTitle');
+  const detailSheetLines = document.getElementById('detailSheetLines');
+  const detailSheetCloneBtn = document.getElementById('detailSheetCloneBtn');
 
   let projectIndex;
   let project;
@@ -382,6 +387,53 @@ async function init() {
     onClose: () => setTargetedPlant(''),
   });
 
+  const closeDetailSheet = () => {
+    if (!detailSheet || detailSheet.hidden) return;
+    detailSheet.hidden = true;
+    delete detailSheet.dataset.plantId;
+    setTargetedPlant('');
+  };
+
+  const openDetailSheet = (plantId) => {
+    if (!detailSheet) return;
+    const plant = appState.plants.find((p) => String(p.id) === String(plantId));
+    if (!plant) return;
+    const state = computePlantState(plant, appState.month);
+    if (detailSheetTitle) {
+      detailSheetTitle.textContent = plant.commonName || plant.botanicalName || 'Plant details';
+    }
+    if (detailSheetLines) {
+      detailSheetLines.innerHTML = '';
+      buildTooltipLines(plant, state)
+        .filter(Boolean)
+        .forEach((line) => {
+          const li = document.createElement('li');
+          li.textContent = line;
+          detailSheetLines.appendChild(li);
+        });
+    }
+    detailSheet.dataset.plantId = plantId;
+    detailSheet.hidden = false;
+    setTargetedPlant(plantId);
+  };
+
+  if (detailSheetCloneBtn) {
+    detailSheetCloneBtn.addEventListener('click', () => {
+      const plantId = detailSheet?.dataset.plantId;
+      const clone = clonePlantById(appState, plantId);
+      if (clone) {
+        closeDetailSheet();
+        render();
+        commitLayoutChange('Cloned plant');
+      }
+    });
+  }
+  if (detailSheet) {
+    detailSheet.querySelectorAll('[data-detail-close]').forEach((el) => {
+      el.addEventListener('click', closeDetailSheet);
+    });
+  }
+
   const applyLockState = (locked) => {
     appState.positionsLocked = locked;
     dragControllers.forEach((controller) => controller?.setLocked?.(locked));
@@ -540,14 +592,21 @@ async function init() {
 
   document.addEventListener('click', (event) => {
     if (cloneMenu.contains(event.target)) return;
+    if (detailSheet && !detailSheet.hidden && detailSheet.contains(event.target)) return;
+    const target = event.target;
+    const group = target instanceof Element ? target.closest('[data-plant-id]') : null;
+    if (group) {
+      openDetailSheet(group.getAttribute('data-plant-id'));
+      return;
+    }
     cloneMenu.hide();
-    setTargetedPlant('');
+    closeDetailSheet();
   });
 
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
       cloneMenu.hide();
-      setTargetedPlant('');
+      closeDetailSheet();
     }
   });
 
