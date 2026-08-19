@@ -400,7 +400,14 @@ async function init() {
     if (!plant) return;
     const state = computePlantState(plant, appState.month);
     if (detailSheetTitle) {
-      detailSheetTitle.textContent = plant.commonName || plant.botanicalName || 'Plant details';
+      detailSheetTitle.innerHTML = '';
+      if (plant.botanicalName) {
+        const em = document.createElement('em');
+        em.textContent = plant.botanicalName;
+        detailSheetTitle.appendChild(em);
+      } else {
+        detailSheetTitle.textContent = plant.commonName || 'Plant details';
+      }
     }
     if (detailSheetLines) {
       detailSheetLines.innerHTML = '';
@@ -408,7 +415,13 @@ async function init() {
         .filter(Boolean)
         .forEach((line) => {
           const li = document.createElement('li');
-          li.textContent = line;
+          if (line === plant.botanicalName) {
+            const em = document.createElement('em');
+            em.textContent = line;
+            li.appendChild(em);
+          } else {
+            li.textContent = line;
+          }
           detailSheetLines.appendChild(li);
         });
     }
@@ -775,7 +788,7 @@ function renderSpeciesTable(plants, handlers = {}) {
   const table = document.createElement('table');
   table.className = 'species-table__table';
   const thead = document.createElement('thead');
-  const headers = ['Label', 'Common name', 'Botanical name', 'Height (ft)', 'Width (ft)', 'Growth form', 'Sun', 'Water', 'Soil', 'Bloom months'];
+  const headers = ['Label', 'Botanical name', 'Common name', 'Height (ft)', 'Width (ft)', 'Growth form', 'Sun', 'Water', 'Soil', 'Bloom months'];
   const headerRow = document.createElement('tr');
   headers.forEach((title) => {
     const th = document.createElement('th');
@@ -794,8 +807,8 @@ function renderSpeciesTable(plants, handlers = {}) {
     tr.addEventListener('mouseleave', () => onHoverEnd?.(speciesKey, tr));
     const cells = [
       { value: buildPlantLabel(plant), className: 'species-table__label' },
+      { value: plant.botanicalName || plant.botanical_name || '', italic: true },
       { value: plant.commonName || plant.common_name || '' },
-      { value: plant.botanicalName || plant.botanical_name || '' },
       { value: formatFeet(plant.height) },
       { value: formatFeet(plant.width) },
       { value: plant.growthShape || plant.growth_shape || '' },
@@ -813,7 +826,13 @@ function renderSpeciesTable(plants, handlers = {}) {
 
     cells.forEach((cell, idx) => {
       const td = document.createElement('td');
-      td.textContent = cell.value ?? '';
+      if (cell.italic && cell.value) {
+        const em = document.createElement('em');
+        em.textContent = cell.value;
+        td.appendChild(em);
+      } else {
+        td.textContent = cell.value ?? '';
+      }
       td.dataset.label = headers[idx];
       if (cell.className) td.className = cell.className;
       tr.appendChild(td);
