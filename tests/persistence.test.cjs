@@ -15,6 +15,7 @@ async function runPersistenceTest() {
   const historyData = await loadLayoutHistory(
     (msg, state) => historyStatusMessages.push({ msg, state }),
     {
+      projectId: 'backyard',
       fetchFn: async (url, opts) => {
         loadCalls.push({ url, opts });
         return {
@@ -25,6 +26,7 @@ async function runPersistenceTest() {
     }
   );
   assert.strictEqual(loadCalls.length, 1);
+  assert.strictEqual(loadCalls[0].url, '/api/history?project=backyard');
   assert.strictEqual(Array.isArray(historyData.entries) ? historyData.entries.length : 0, 1);
   assert.strictEqual(historyStatusMessages[0].state, 'success');
 
@@ -86,9 +88,11 @@ async function runPersistenceTest() {
     },
     {
       fetchFn: persistFetch,
+      projectId: 'backyard',
     }
   );
   assert.strictEqual(persistCalls.length, 1);
+  assert.strictEqual(persistCalls[0].url, '/api/layout?project=backyard');
   let body = JSON.parse(persistCalls[0].opts.body);
   assert.strictEqual(body.description, 'manual update');
   assert.strictEqual(body.plants.length, 1);
@@ -116,6 +120,7 @@ async function runPersistenceTest() {
       historyStatusMessages.push({ msg, state });
     },
     {
+      projectId: 'backyard',
       fetchFn: async (url, opts) => {
         cursorCalls.push({ url, opts });
         return {
@@ -126,6 +131,7 @@ async function runPersistenceTest() {
     }
   );
   assert.strictEqual(cursorCalls.length, 1);
+  assert.strictEqual(cursorCalls[0].url, '/api/history/cursor?project=backyard');
 }
 
 module.exports = {

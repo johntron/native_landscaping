@@ -24,7 +24,7 @@ const TARGET_OUTLINE_OPACITY = 0.95;
  * @param {SVGSVGElement} svg
  * @param {Array<{ plant: any, state: any }>} plantStates
  * @param {number} pixelsPerInch
- * @param {{ showLabels?: boolean }} [options]
+ * @param {{ showLabels?: boolean, viewBox?: { width: number, height: number } }} [options]
  */
 export function renderTopView(
   svg,
@@ -37,6 +37,7 @@ export function renderTopView(
     highlightedSpeciesKey = '',
     targetedPlantId = '',
     hoveredPlantId = '',
+    viewBox = PLAN_VIEWBOX,
   } = options;
   clearSvg(svg);
   const normalizedHighlightKey = (highlightedSpeciesKey || '').toLowerCase();
@@ -57,7 +58,7 @@ export function renderTopView(
       'data-species-key': speciesKey,
     });
     const cx = toPixels(plant.x);
-    const cy = PLAN_VIEWBOX.height - toPixels(plant.y); // origin bottom-left for yard coordinates
+    const cy = viewBox.height - toPixels(plant.y); // origin bottom-left for yard coordinates
     const radius = toPixels(plant.width) / 2;
     const canopySeed = seedForPlant(plant.id);
     const canopyPoints = buildWavyCirclePoints(cx, cy, radius, makeRng(canopySeed));

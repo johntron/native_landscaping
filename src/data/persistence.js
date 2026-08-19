@@ -2,6 +2,11 @@ import { buildLayoutCsv } from './layoutExporter.js';
 
 const DEFAULT_DESCRIPTION = 'Manual layout update';
 
+/** Scope an API call to a project so the server writes the right layout file. */
+function apiUrl(path, projectId) {
+  return projectId ? `${path}?project=${encodeURIComponent(projectId)}` : path;
+}
+
 function defaultFetch() {
   if (typeof fetch === 'function') {
     return fetch;
@@ -24,7 +29,7 @@ export async function loadLayoutHistory(updateStatus, options = {}) {
     typeof options.layoutCsv === 'string' ? options.layoutCsv.trim() : '';
 
   try {
-    const response = await fetchFn('/api/history', { cache: 'no-store' });
+    const response = await fetchFn(apiUrl('/api/history', options.projectId), { cache: 'no-store' });
     if (!response.ok) {
       throw new Error(`History request failed (${response.status})`);
     }
@@ -81,7 +86,7 @@ export async function persistLayout(plants, description, updateStatus, options =
     payload.previousPlants = options.previousPlants;
   }
   try {
-    const response = await fetchFn('/api/layout', {
+    const response = await fetchFn(apiUrl('/api/layout', options.projectId), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -112,7 +117,7 @@ export async function updateHistoryCursor(cursor, updateStatus, options = {}) {
     return null;
   }
   try {
-    const response = await fetchFn('/api/history/cursor', {
+    const response = await fetchFn(apiUrl('/api/history/cursor', options.projectId), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cursor }),
