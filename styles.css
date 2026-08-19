@@ -902,6 +902,78 @@ select {
   outline: none;
 }
 
+.detail-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.detail-sheet[hidden] {
+  display: none;
+}
+
+.detail-sheet__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(20, 20, 18, 0.45);
+}
+
+.detail-sheet__panel {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  max-height: 80vh;
+  overflow-y: auto;
+  background: #fffdf8;
+  border-radius: 12px 12px 0 0;
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.25);
+  padding: 1.25rem 1.25rem 1.5rem;
+}
+
+.detail-sheet__close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.6rem;
+  border: none;
+  background: none;
+  font-size: 1.4rem;
+  line-height: 1;
+  color: #6a6a6a;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+}
+
+.detail-sheet__title {
+  margin: 0 1.5rem 0.75rem 0;
+  font-size: 1.15rem;
+}
+
+.detail-sheet__lines {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.92rem;
+  color: #2f2f2f;
+}
+
+.detail-sheet__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (min-width: 640px) {
+  .detail-sheet__panel {
+    margin: 0 0 2rem;
+    border-radius: 12px;
+  }
+}
+
 @media (max-width: 960px) {
   .view-toolbar {
     position: static;
