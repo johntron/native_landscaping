@@ -26,6 +26,14 @@ export default defineConfig({
       // Use the Chrome already installed on the machine so `npm install` does
       // not have to download a ~150MB bundled browser.
       use: { ...devices['Desktop Chrome'], channel: 'chrome' },
+      testIgnore: /touch\.spec\.js/,
+    },
+    {
+      // Phone-sized, touch-capable. Scoped to the touch spec alone: running the
+      // whole suite twice would say nothing the desktop run has not already.
+      name: 'mobile-chrome',
+      use: { ...devices['Pixel 5'], channel: 'chrome' },
+      testMatch: /touch\.spec\.js/,
     },
   ],
   webServer: [

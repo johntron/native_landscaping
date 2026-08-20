@@ -478,6 +478,52 @@ h1 {
   color: #6b737a;
 }
 
+/* Destructive actions read as an outline, not a second filled primary. */
+.pill-button--danger {
+  background-color: transparent;
+  border-color: #a4453c;
+  color: #a4453c;
+}
+
+.pill-button--danger:hover,
+.pill-button--danger:focus-visible {
+  background-color: #a4453c;
+  color: #f7f8fa;
+}
+
+.pill-button--danger:disabled {
+  background-color: #dfe3e9;
+  border-color: #c7ced8;
+  color: #6b737a;
+}
+
+/* Species picker + Add, alongside the other Edit-mode controls. */
+.add-plant {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.add-plant label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #4b4f54;
+}
+
+.add-plant select {
+  max-width: min(22rem, 60vw);
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #c7ced8;
+  border-radius: 0.5rem;
+  background-color: #fff;
+  font: inherit;
+  font-size: 0.9rem;
+}
+
 .pill-switch input:checked + .pill-body {
   background-color: #2f7a8c;
   color: #f7f8fa;
@@ -1004,6 +1050,15 @@ select {
   outline: none;
 }
 
+.context-menu__item--danger {
+  color: #a4453c;
+}
+
+.context-menu__item--danger:hover,
+.context-menu__item--danger:focus-visible {
+  background-color: #fbe7e4;
+}
+
 .detail-sheet {
   position: fixed;
   inset: 0;
@@ -1422,4 +1477,26 @@ select {
 
 .setup-panel__status[data-state="success"] {
   color: #2f7a5c;
+}
+
+/*
+ * Touch: who owns the finger.
+ *
+ * A drawing that accepts drags claims the gesture outright. `pan-y` — the
+ * obvious middle ground — does not work: the page scroller takes any movement
+ * with a vertical component and fires pointercancel a few pixels in, and in the
+ * plan view vertical *is* the yard's north/south axis, so half of every drag
+ * died. Per-plant touch-action is not an option either; Chrome ignores the
+ * property on SVG child elements, which have no CSS box.
+ *
+ * The cost is that a finger on a drawing no longer scrolls the page while
+ * that drawing is editable. The toolbar, panel headers, and the page around
+ * the drawings still pan.
+ *
+ * Two controllers share each SVG, so this is driven by a class per controller
+ * rather than by svg.style.touchAction, which they used to overwrite in turn.
+ */
+.view svg.is-drag-enabled,
+.view svg.is-setup-enabled {
+  touch-action: none;
 }

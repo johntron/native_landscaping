@@ -157,7 +157,20 @@ export function createSetupPanel({ root, onCommit, onSave, onSelect }) {
       selectField(
         'Borrow background from',
         view.backgroundFrom || '',
-        ['', ...state.views.filter((v) => v.id !== view.id && v.background).map((v) => v.id)],
+        // Only a view that looks at the yard the same way can be cropped into
+        // this one; anything else would be a meaningless patch of photo.
+        [
+          '',
+          ...state.views
+            .filter(
+              (v) =>
+                v.id !== view.id &&
+                v.background &&
+                v.type === view.type &&
+                v.viewFrom === view.viewFrom
+            )
+            .map((v) => v.id),
+        ],
         (value) => patch({ backgroundFrom: value || undefined })
       )
     );

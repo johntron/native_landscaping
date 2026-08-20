@@ -20,7 +20,17 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
  */
 const CHECKOUT_KEY = createHash('sha256').update(REPO_ROOT).digest('hex').slice(0, 12);
 export const SCRATCH_DIR = path.join(os.tmpdir(), `native-landscaping-e2e-${CHECKOUT_KEY}`);
-export const SCRATCH_PROJECTS = ['drag-plan', 'drag-elevation', 'drag-locked'];
+export const SCRATCH_PROJECTS = [
+  'drag-plan',
+  'drag-elevation',
+  'drag-locked',
+  'plant-add',
+  'plant-remove',
+  'plant-undo',
+  'touch-plan',
+  'touch-hold',
+  'touch-elevation',
+];
 
 /** Files the app is served from; symlinked so the specs test the real source. */
 const LINKED = ['index.html', 'styles.css', 'favicon.svg', 'src', 'plants.csv', 'node_modules'];

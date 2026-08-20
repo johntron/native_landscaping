@@ -106,10 +106,20 @@ export function normalizeProjectConfig(raw, id) {
     return normalized;
   });
 
+  const byId = new Map(views.map((view) => [view.id, view]));
   views.forEach((view) => {
-    if (view.backgroundFrom && !seenIds.has(view.backgroundFrom)) {
+    if (!view.backgroundFrom) return;
+    const source = byId.get(view.backgroundFrom);
+    if (!source) {
       throw new Error(
         `Project "${id}" view "${view.id}" borrows a background from unknown view "${view.backgroundFrom}"`
+      );
+    }
+    // A borrowed photo is cropped to the borrower's rectangle, which only means
+    // anything if the two views look at the yard the same way.
+    if (source.type !== view.type || source.viewFrom !== view.viewFrom) {
+      throw new Error(
+        `Project "${id}" view "${view.id}" borrows a background from "${source.id}", which looks at the yard differently`
       );
     }
   });

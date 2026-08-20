@@ -18,3 +18,28 @@ export function buildCloneId(existingPlants, baseId) {
   }
   return candidate;
 }
+
+/**
+ * Build an id for a plant newly placed from the species catalog. Same
+ * collision guarantee as buildCloneId, but named after the species rather than
+ * an original — a plant added from the catalog has no plant it is a copy of, so
+ * `salvia-greggii-1` reads better than `salvia-greggii-copy` in the CSV.
+ * @param {Array<{id: string}>} existingPlants
+ * @param {string} botanicalName
+ * @returns {string}
+ */
+export function buildNewPlantId(existingPlants, botanicalName) {
+  const existing = new Set((existingPlants || []).map((p) => String(p.id)));
+  const base =
+    String(botanicalName || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'plant';
+  let counter = 1;
+  let candidate = `${base}-${counter}`;
+  while (existing.has(candidate)) {
+    counter += 1;
+    candidate = `${base}-${counter}`;
+  }
+  return candidate;
+}

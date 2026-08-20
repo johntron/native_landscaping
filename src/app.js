@@ -9,7 +9,12 @@ import {
   projectLayoutPath,
   resolveActiveProjectId,
 } from './data/projectConfig.js';
-import { buildPlantsFromCsv, LayoutDataError } from './data/plantParser.js';
+import {
+  buildPlantsFromCsv,
+  createPlantFromSpecies,
+  parseSpeciesCsv,
+  LayoutDataError,
+} from './data/plantParser.js';
 import { buildLayoutCsv } from './data/layoutExporter.js';
 import {
   loadLayoutHistory,
@@ -28,11 +33,13 @@ import { createPlantDragController, createElevationDragController } from './inte
 import { buildPlantLabel } from './render/labels.js';
 import { formatMonthRange } from './state/seasonalState.js';
 import { clampHiddenLayerCount, classifyPlantLayer } from './state/layers.js';
-import { buildCloneId } from './state/plantIds.js';
+import { buildCloneId, buildNewPlantId } from './state/plantIds.js';
 import { getSpeciesKey } from './utils/speciesKey.js';
 import { buildTooltipLines } from './render/tooltip.js';
 import { createLayoutHistory } from './history/layoutHistory.js';
 import { captureViewToPng } from './export/viewCapture.js';
+import { resolveViewBackground } from './render/backgroundCrop.js';
+import { resolveYardBounds } from './render/yardBounds.js';
 
 const MODE_KEY = 'native-landscaping-mode';
 const LEGACY_LOCK_STATE_KEY = 'native-landscaping-positions-locked';
@@ -43,6 +50,7 @@ const PROJECT_QUERY_PARAM = 'project';
 const appState = {
   project: null,
   plants: [],
+  species: [], // the shared plants.csv catalog, for placing plants not yet in the layout
   month: new Date().getMonth() + 1,
   zoom: DEFAULT_ZOOM,
   mode: 'view',
@@ -85,6 +93,9 @@ async function init() {
   const detailSheetTitle = document.getElementById('detailSheetTitle');
   const detailSheetLines = document.getElementById('detailSheetLines');
   const detailSheetCloneBtn = document.getElementById('detailSheetCloneBtn');
+  const detailSheetRemoveBtn = document.getElementById('detailSheetRemoveBtn');
+  const addPlantSelect = document.getElementById('addPlantSelect');
+  const addPlantButton = document.getElementById('addPlantBtn');
 
   let projectIndex;
   let project;
@@ -204,6 +215,8 @@ async function init() {
     if (!Array.isArray(plants)) return;
     appState.plants = plants;
     render();
+    // Undoing an add or a remove changes which species are placed.
+    refreshSpeciesTable();
     updateHistoryControls();
   };
 
@@ -262,6 +275,27 @@ async function init() {
       appState.highlightedSpeciesKey = '';
       render();
     }
+  };
+
+  /**
+   * Rebuild the species legend from the current plants. Adding, removing, or
+   * undoing changes which species are placed, and the table is built from the
+   * layout rather than from the catalog. Deliberately not called from render():
+   * the month slider renders on every input event, and rebuilding the table
+   * mid-drag would orphan the row this closure is holding.
+   */
+  const refreshSpeciesTable = () => {
+    highlightedRowEl = null;
+    const stillPlaced = appState.plants.some(
+      (plant) => getSpeciesKey(plant) === appState.highlightedSpeciesKey
+    );
+    if (appState.highlightedSpeciesKey && !stillPlaced) {
+      appState.highlightedSpeciesKey = '';
+    }
+    renderSpeciesTable(appState.plants, {
+      onHoverStart: (speciesKey, rowEl) => setHighlightedSpecies(speciesKey, rowEl),
+      onHoverEnd: (_speciesKey, rowEl) => clearHighlightedSpecies(rowEl),
+    });
   };
 
   const setTargetedPlant = (plantId) => {
@@ -330,7 +364,7 @@ async function init() {
           captureViewToPng({
             svg,
             viewBox: view.viewBox,
-            backgroundUrl: backgroundUrlFor(project, view),
+            ...backgroundForCapture(project, view),
           })
         )
       );
@@ -380,6 +414,10 @@ async function init() {
         // object, and a controller holding the old one would drag against
         // geometry the drawing no longer uses.
         getTransform: () => createViewTransform(liveView(view.id) || view),
+        // Every view clamps to the same yard, not to its own extent: a view can
+        // reach past the yard (an elevation's near-edge inset is margin), and a
+        // plant dragged out there disappears from the other views.
+        getBounds: () => resolveYardBounds(project.views),
         onPositionsChange: () => render(),
         onHoverPlant: setHoveredPlant,
         onChangeCommit: () => commitLayoutChange('Moved plant'),
@@ -430,18 +468,70 @@ async function init() {
     render();
   };
 
-  const cloneMenu = createCloneMenu({
+  /**
+   * Drop the plant from the layout. Clearing the pointer state first matters:
+   * renderViews is handed targeted/hovered ids, and an id with no plant behind
+   * it would survive as a highlight nothing can clear.
+   */
+  const removePlant = (plantId) => {
+    if (!removePlantById(appState, plantId)) return;
+    plantMenu.hide();
+    closeDetailSheet();
+    appState.hoveredPlantId = '';
+    appState.targetedPlantId = '';
+    render();
+    refreshSpeciesTable();
+    commitLayoutChange('Removed plant');
+  };
+
+  const plantMenu = createPlantMenu({
     onClone: (plantId) => {
       const clone = clonePlantById(appState, plantId);
       if (clone) {
-        cloneMenu.hide();
+        plantMenu.hide();
         setTargetedPlant('');
         render();
+        refreshSpeciesTable();
         commitLayoutChange('Cloned plant');
       }
     },
+    onRemove: (plantId) => removePlant(plantId),
     onClose: () => setTargetedPlant(''),
   });
+
+  /**
+   * Fill the species picker from the shared catalog and wire the Add button.
+   * Runs once the catalog has loaded — until then both controls stay disabled,
+   * because there is nothing to choose from.
+   */
+  function initAddPlantControl() {
+    if (!addPlantSelect || !addPlantButton) return;
+    const options = appState.species
+      .filter((entry) => entry.botanicalName)
+      .sort((a, b) =>
+        (a.commonName || a.botanicalName).localeCompare(b.commonName || b.botanicalName)
+      );
+    addPlantSelect.innerHTML = '';
+    options.forEach((entry) => {
+      const option = document.createElement('option');
+      option.value = entry.botanicalKey || entry.botanicalName;
+      option.textContent = entry.commonName
+        ? `${entry.commonName} (${entry.botanicalName})`
+        : entry.botanicalName;
+      addPlantSelect.appendChild(option);
+    });
+    const hasOptions = options.length > 0;
+    addPlantSelect.disabled = !hasOptions;
+    addPlantButton.disabled = !hasOptions;
+    if (!hasOptions) return;
+    addPlantButton.addEventListener('click', () => {
+      const added = addPlantFromCatalog(appState, addPlantSelect.value);
+      if (!added) return;
+      render();
+      refreshSpeciesTable();
+      commitLayoutChange('Added plant');
+    });
+  }
 
   const closeDetailSheet = () => {
     if (!detailSheet || detailSheet.hidden) return;
@@ -488,8 +578,15 @@ async function init() {
       if (clone) {
         closeDetailSheet();
         render();
+        refreshSpeciesTable();
         commitLayoutChange('Cloned plant');
       }
+    });
+  }
+  if (detailSheetRemoveBtn) {
+    // No confirmation: the change is undoable and the sheet closes behind it.
+    detailSheetRemoveBtn.addEventListener('click', () => {
+      removePlant(detailSheet?.dataset.plantId);
     });
   }
   if (detailSheet) {
@@ -615,6 +712,7 @@ async function init() {
       fetchCsv(new URL(projectLayoutPath(project.id), document.baseURI)),
     ]);
     loadedSpeciesCsv = speciesCsv;
+    appState.species = parseSpeciesCsv(speciesCsv);
     const initialPlants = buildPlantsFromCsv(speciesCsv, layoutCsv);
     const layoutCsvSnapshot = buildLayoutCsv(initialPlants);
     const historyData = await loadLayoutHistory(updateHistoryStatus, {
@@ -656,10 +754,8 @@ async function init() {
       });
     };
 
-    renderSpeciesTable(appState.plants, {
-      onHoverStart: (speciesKey, rowEl) => setHighlightedSpecies(speciesKey, rowEl),
-      onHoverEnd: (_speciesKey, rowEl) => clearHighlightedSpecies(rowEl),
-    });
+    refreshSpeciesTable();
+    initAddPlantControl();
     if (exportBundleButton) {
       exportBundleButton.disabled = false;
       exportBundleButton.addEventListener('click', handleBundleExport);
@@ -717,14 +813,14 @@ async function init() {
     if (!(target instanceof Element)) return;
     const group = target.closest('[data-plant-id]');
     if (!group) {
-      cloneMenu.hide();
+      plantMenu.hide();
       setTargetedPlant('');
       return;
     }
     event.preventDefault();
     const plantId = group.getAttribute('data-plant-id');
     setTargetedPlant(plantId);
-    cloneMenu.show({
+    plantMenu.show({
       x: event.clientX,
       y: event.clientY,
       plantId,
@@ -732,7 +828,7 @@ async function init() {
   });
 
   document.addEventListener('click', (event) => {
-    if (cloneMenu.contains(event.target)) return;
+    if (plantMenu.contains(event.target)) return;
     if (detailSheet && !detailSheet.hidden && detailSheet.contains(event.target)) return;
     const target = event.target;
     const group = target instanceof Element ? target.closest('[data-plant-id]') : null;
@@ -740,13 +836,13 @@ async function init() {
       openDetailSheet(group.getAttribute('data-plant-id'));
       return;
     }
-    cloneMenu.hide();
+    plantMenu.hide();
     closeDetailSheet();
   });
 
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
-      cloneMenu.hide();
+      plantMenu.hide();
       closeDetailSheet();
     }
   });
@@ -781,13 +877,18 @@ function initProjectPicker(selectEl, projectIndex, activeId) {
 }
 
 /**
- * Absolute URL for a background declared relative to the project directory, or
- * null when the view has no image yet — captureViewToPng skips the background
- * rather than fetching projects/<slug>/null.
+ * Background to composite under a view's export: an absolute URL plus, for a
+ * detail view borrowing a neighbour's photo, the patch of it to draw. Both are
+ * null when the view has no image yet — captureViewToPng then skips the
+ * background rather than fetching projects/<slug>/null.
  */
-function backgroundUrlFor(project, view) {
-  if (!view?.background) return null;
-  return new URL(projectAssetPath(project.id, view.background), document.baseURI).toString();
+function backgroundForCapture(project, view) {
+  const { path, crop } = resolveViewBackground(project.views, view);
+  if (!path) return { backgroundUrl: null, sourceRect: null };
+  return {
+    backgroundUrl: new URL(projectAssetPath(project.id, path), document.baseURI).toString(),
+    sourceRect: crop,
+  };
 }
 
 function initMonthSlider(sliderEl, readoutEl, initialMonth) {
@@ -1102,24 +1203,28 @@ function nextFrame() {
   return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }
 
-function createCloneMenu({ onClone, onClose }) {
+function createPlantMenu({ onClone, onRemove, onClose }) {
   const menu = document.createElement('div');
   menu.className = 'context-menu';
   const list = document.createElement('ul');
   list.className = 'context-menu__list';
-  const item = document.createElement('li');
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'context-menu__item';
-  button.textContent = 'Clone plant';
-  button.addEventListener('click', () => {
-    const plantId = menu.dataset.plantId;
-    if (plantId) {
-      onClone?.(plantId);
-    }
-  });
-  item.appendChild(button);
-  list.appendChild(item);
+  const addItem = (label, handler, modifier) => {
+    const item = document.createElement('li');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = modifier ? `context-menu__item ${modifier}` : 'context-menu__item';
+    button.textContent = label;
+    button.addEventListener('click', () => {
+      const plantId = menu.dataset.plantId;
+      if (plantId) {
+        handler?.(plantId);
+      }
+    });
+    item.appendChild(button);
+    list.appendChild(item);
+  };
+  addItem('Clone plant', onClone);
+  addItem('Remove plant', onRemove, 'context-menu__item--danger');
   menu.appendChild(list);
   document.body.appendChild(menu);
 
@@ -1129,7 +1234,7 @@ function createCloneMenu({ onClone, onClose }) {
       const offsetX = window.scrollX || 0;
       const offsetY = window.scrollY || 0;
       const menuWidth = 180;
-      const menuHeight = 48;
+      const menuHeight = 88; // two items
       const maxLeft = offsetX + window.innerWidth - menuWidth - 8;
       const maxTop = offsetY + window.innerHeight - menuHeight - 8;
       menu.style.left = `${Math.min(x + offsetX, maxLeft)}px`;
@@ -1165,6 +1270,47 @@ function clonePlantById(state, plantId) {
   clone.layer = classifyPlantLayer(clone);
   state.plants = [...state.plants, clone];
   return clone;
+}
+
+/**
+ * Place one plant of the chosen species at the middle of the plan view — the
+ * one spot guaranteed to be on the drawing, from which it can be dragged.
+ * @param {typeof appState} state
+ * @param {string} botanicalKey the select's value: a normalized botanical name
+ * @returns {Object|null} the new plant, or null if the species or plan view is gone
+ */
+function addPlantFromCatalog(state, botanicalKey) {
+  const key = String(botanicalKey || '');
+  if (!key) return null;
+  const speciesEntry = state.species.find(
+    (entry) => (entry.botanicalKey || entry.botanicalName) === key
+  );
+  // buildLayoutCsv writes botanicalName and buildPlantsFromCsv matches on it, so
+  // a species without one would write a row that cannot be read back.
+  if (!speciesEntry || !speciesEntry.botanicalName) return null;
+  const planView = state.project?.views?.find((view) => view.type === 'plan');
+  if (!planView) return null;
+  const { originFt, extentFt } = createViewTransform(planView);
+  const plant = createPlantFromSpecies(speciesEntry, {
+    id: buildNewPlantId(state.plants, speciesEntry.botanicalName),
+    x: originFt.x + extentFt.width / 2,
+    y: originFt.y + extentFt.height / 2,
+  });
+  state.plants = [...state.plants, plant];
+  return plant;
+}
+
+/**
+ * Drop a plant from the layout.
+ * @returns {boolean} whether a plant was actually removed
+ */
+function removePlantById(state, plantId) {
+  if (!plantId) return false;
+  const id = String(plantId);
+  const remaining = state.plants.filter((plant) => String(plant.id) !== id);
+  if (remaining.length === state.plants.length) return false;
+  state.plants = remaining;
+  return true;
 }
 
 function clampFeet(value, min, max) {

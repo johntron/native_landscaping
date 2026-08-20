@@ -11,10 +11,10 @@ It should be easy to maintain, easy to extend, and faithful to ecological realit
 ## Project Purpose
 
 - Visualize how a native planting design changes **month-by-month**.
-- Show **three synchronized orthographic views** of the same yard:
-  1. Plan (looking down)
-  2. South (kitchen) elevation
-  3. East (patio) elevation
+- Show **synchronized orthographic views** of the same yard — a plan (looking
+  down), an elevation per compass side the yard is viewed from, and any detail
+  callouts. Each project declares its own set in `project.json`; the backyard
+  ships plan + south (kitchen) + east (patio).
 - Make it easy to update the design by editing a **CSV of plants** instead of
   hard-coding plant data.
 - Help people understand **structure, layering, and phenology** (growth +
@@ -69,7 +69,7 @@ in its own `planting_layout.csv`.
 ```
 plants.csv                       shared species catalog (all projects)
 projects/index.json              { defaultProject, projects: [{ id, name }] }
-projects/<slug>/project.json     view geometry, backgrounds, labels, default scale
+projects/<slug>/project.json     views[]: extent + origin in feet, backgrounds, labels
 projects/<slug>/planting_layout.csv
 projects/<slug>/img/…            that project's background images
 projects/<slug>/layout-history.json   (generated, gitignored)
@@ -80,13 +80,60 @@ projects/<slug>/layout-history.json   (generated, gitignored)
 `^[a-z0-9][a-z0-9_-]*$` — they become both URL and file path segments, and the
 server rejects anything else (`src/data/projectPaths.js`).
 
+**Prefer the Setup mode toolbar over hand-editing `project.json`.** It adds,
+reorders, and removes views, edits each one's extent and origin in feet, and lets
+you drag the crop rectangle, ground line, and near edge directly on the drawing;
+*Save views* writes the file back through `POST /api/project`. Hand-editing works
+too, but Setup mode cannot produce a geometry the renderers disagree with.
+
+#### The views[] schema
+
+A project declares `views[]`, and every view is authored **in feet**:
+
+| key | meaning |
+| --- | --- |
+| `id` | slug; addresses the panel (`data-view-panel`), its SVG (`<id>Svg`), and its export PNG |
+| `type` | `plan` (looking down) or `elevation` (looking horizontally) |
+| `viewFrom` | elevations only — the compass side the viewer stands on |
+| `extentFt` | how much yard the view covers, `{ width, height }` |
+| `originFt` | the yard coordinate at the viewBox's bottom-left corner |
+| `viewBox` | drawing resolution in px; **derived, not a scale** — see below |
+| `label`, `sublabel` | panel headings; omitted when they match the defaults |
+| `background` | image path relative to the project directory |
+| `backgroundFrom` | id of a view to borrow (and crop) a background from |
+
+**Pixels per foot is derived, never authored**: `viewBox.width / extentFt.width`,
+and the height must agree with it or `createViewTransform` rejects the view as
+non-uniformly scaled. `src/render/viewTransform.js` is the single feet↔pixel
+authority; renderers, drag controllers, and the setup overlay all go through it.
+The toolbar's Scale control is **zoom only** — it resizes panels on screen and
+never touches plant coordinates or the geometry in `project.json`.
+
+For an elevation, `originFt.x` is the value of the horizontal axis at the view's
+**near** edge and `originFt.y` is the ground height at the bottom edge, so a
+negative `originFt.y` lifts the ground line into the drawing.
+
+A **detail callout** is just another view with a smaller `extentFt`, a non-zero
+`originFt`, and `backgroundFrom` pointing at the full view: it re-uses that
+view's photo cropped to its own rectangle (`src/render/backgroundCrop.js`), on
+screen and in the exported PNG alike. The source must look at the yard the same
+way — same `type`, and same `viewFrom` for elevations. Any number of views is
+fine; `projects/example-frontyard/` ships four.
+
+The legacy pixel-authored shape — `{ plan, elevations[] }` with `viewBox`,
+`bottomOffsetPx`, `leftOffsetPx`, and a project-wide `defaultPixelsPerInch` — is
+still read and migrated on load by `normalizeProjectConfig`, so an old
+`project.json` keeps working. Nothing writes it back: saves always emit
+`views[]`.
+
 The active project comes from `?project=<slug>`, falling back to `defaultProject`.
 Switching projects **reloads the page** rather than re-initializing in place: the
 render loop, history stack, and drag controllers are each built once against a
 single project, and a reload keeps that simple and the URL linkable.
 
-`projects/example-frontyard/` is a throwaway template showing portrait dimensions
-and north/west elevations; delete it once you have real projects.
+`projects/example-frontyard/` is a throwaway template showing portrait dimensions,
+north/west elevations, and a detail callout cropped out of the plan photo; delete
+it once you have real projects.
 
 #### Elevation orientation
 
@@ -101,9 +148,24 @@ Each elevation declares `viewFrom` — the compass side the viewer stands on —
 | `east`     | y               | no       | low x           |
 | `west`     | y               | yes      | high x          |
 
-Mirrored views reflect about the viewBox centre, so `leftOffsetPx` always means
-"inset from the near edge". The elevation drag controllers are given the same
-`mirrored`/`leftOffsetPx` values so pointer positions invert the same transform.
+Mirrored views reflect about the viewBox centre, so `originFt.x` always means the
+**near** edge — which mirroring puts on the *right* for `north` and `west`. Go
+through `viewTransform`'s `axisToX` / `xToAxis` and that is automatic; do the
+subtraction in feet by hand and it is not.
+
+#### Yard bounds
+
+**A plant is clamped to the yard, never to the view it is being dragged in**
+(`src/render/yardBounds.js`). The two are not the same: an elevation's near-edge
+inset is drawing margin rather than plantable ground, so its rectangle can start
+before the yard's zero and end past its far side. Clamping to the view under the
+pointer therefore let a plant reach a coordinate the plan view cannot draw, and
+it silently vanished from the plan.
+
+The yard is **the first plan view's rectangle, narrowed to what the first
+elevation for each compass direction can draw**. Later views of either kind are
+detail callouts — they show part of the yard by definition, and a plant outside
+one is not lost. If the primary views do not overlap at all, the plan view wins.
 
 ### 1. Background Layers
 
@@ -149,15 +211,32 @@ Rendering is **data-driven**. For every selected month:
 2. `computePlantState` determines active growth, flowering, and foliage colors.
 3. `renderViews` hands the plant state list to each view renderer:
    - `renderTopView` draws foliage/bloom circles scaled to `width_ft`.
-- `renderSouthElevation` and `renderEastElevation` draw simplified profiles based on `growth_shape` and `height_ft`, honoring consistent viewBox scaling and offsets from `constants.js`.
+   - `renderElevationView` draws simplified profiles based on `growth_shape` and
+     `height_ft`, mapping feet to pixels through the view's own `viewTransform`.
 
 Top view uses the yard coordinate system (origin at SW corner, y increasing north). Elevations reuse the same data but map either x or y as horizontal distance to convey layering depth. Taller plants naturally overlap because each renderer clears and repopulates its SVG every frame (`render/topView.js`, `render/elevationViews.js`).
 
 ### 4. Interaction & Controls
 
 - Month selector (`#monthSelect`) controls seasonal state.
-- Scale input + slider keep plan/elevation overlays in sync with physical dimensions; bounds live in `SCALE_LIMITS`.
+- Scale input + slider are **zoom**: they resize the panels on screen only, with bounds in `SCALE_LIMITS`. Physical scale belongs to each view's `extentFt`.
+- Mode pills switch between View, Edit (drag plants), and Setup (define views).
 - Lock toggle enables/disables drag-to-move behavior powered by `createPlantDragController`, which clamps edits to the viewBox and triggers rerenders.
+- **Each view SVG has two controllers, so neither may own an inline style.** The drag and
+  setup controllers are bound to the same element; while both wrote `svg.style.touchAction`
+  the later writer silently won and Edit mode sat at `touch-action: auto`, so the page
+  scroller took every drag. Each now toggles its own class (`is-drag-enabled`,
+  `is-setup-enabled`) and `styles.css` combines them — see the comment there for why neither
+  `pan-y` nor per-plant `touch-action` works. `svg.style.cursor` still has this bug (nl-jfm).
+- Touch is covered by `tests-e2e/touch.spec.js` under its own phone-sized Playwright project.
+  It drives **real touch through CDP** (`Input.dispatchTouchEvent`, wrapped as `touchGesture`
+  in `tests-e2e/helpers.js`): `page.mouse` is not touch and `page.touchscreen` only taps, so
+  neither exercises `touch-action` and both pass against a broken app. CDP synthesizes no
+  long-press `contextmenu`, so the right-click menu cannot be tested on touch.
+- Edit mode's "Add plant" picker places one plant of the chosen species at the middle of
+  the plan view; the plant's own detail sheet and right-click menu carry Clone and Remove.
+  All three go through the same commit path as a drag, so undo/redo and the auto-save to
+  `planting_layout.csv` come for free — there is no separate confirmation step.
 - Export button uses `buildLayoutCsv` to download the current layout so edits can be saved back to `planting_layout.csv`.
 - SVG `<title>` tooltips (built by `render/tooltip.js`) display common + botanical names plus horticultural prefs on hover.
 - When data fails to load, `src/app.js` surfaces a lightweight error banner with instructions to serve CSVs over HTTP.
@@ -174,6 +253,10 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
 - `src/data/projectConfig.js` – project index/config loading, normalization, and slug validation.
 - `src/data/projectPaths.js` – server-side resolution of a project's data files (path-traversal guard).
 - `src/render/elevationOrientation.js` – compass → axis/mirror/depth mapping for elevations.
+- `src/render/viewTransform.js` – the one feet↔pixel authority, wrapping that mapping.
+- `src/render/yardBounds.js` – the shared yard a plant may be dragged within.
+- `src/render/backgroundCrop.js` – which photo a view draws, and which patch of it.
+- `src/interaction/setupPanel.js`, `src/interaction/setupController.js`, `src/render/setupOverlay.js` – Setup mode's form, on-canvas handles, and guides.
 - `src/data/plantParser.js` – merges species/layout CSVs, normalizes month specs, aliases, and seasonal palettes.
 - `src/data/layoutExporter.js` – converts in-memory plants back to CSV with consistent precision/escaping.
 - `src/render/*` – view configuration, SVG helpers, tooltip builder, plan view and elevation renderers.
@@ -208,7 +291,11 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
   for dragging, cloning, and hover/target highlighting, so a repeat makes every row after
   the first unreachable. `parsePlantLayoutCsv` rejects duplicates with a `LayoutDataError`,
   and the app shows the id and row numbers in an error banner. Anything that adds a plant
-  must mint its id through `buildCloneId` (`src/state/plantIds.js`) so it cannot collide.
+  must mint its id through `src/state/plantIds.js` so it cannot collide — `buildCloneId`
+  when copying an existing plant, `buildNewPlantId` when placing one from the catalog.
+- Every plant object, whether it came from `planting_layout.csv` or was added in the
+  browser, is built by `createPlantFromSpecies` (`src/data/plantParser.js`). Keep it that
+  way: two builders would let the two paths drift into different plant shapes.
 
 ---
 
@@ -256,10 +343,12 @@ on port `8123` (override with `E2E_PORT`) and drives the real `index.html` in Ch
   with `data-plant-id`, `data-name`, and `data-species-key`; those are the query handles
   (`tests-e2e/helpers.js` wraps the common ones). Screenshot diffs are noisy here because
   the renderers deliberately jitter canopy outlines.
-- The suite is read-only: a fresh browser context has no `native-landscaping-positions-locked` value in
-  `localStorage`, so positions start locked and nothing writes back to
-  `projects/<slug>/planting_layout.csv`. Keep it that way, or point `PUBLIC_DIR` at a
-  scratch copy before adding a spec that drags or saves.
+- **A spec that writes must use the scratch server.** Dragging a plant auto-saves via
+  `POST /api/layout` and Setup mode's *Save views* posts `/api/project`, either of
+  which would rewrite the repo's `projects/` if pointed at the default server.
+  `playwright.config.js` starts a second server on `E2E_PORT + 1` over a throwaway
+  root built by `tests-e2e/scratch-fixture.mjs`; reach it through `openScratchProject`
+  (`tests-e2e/helpers.js`). Read-only specs use the default server.
 - `test-results/` and `playwright-report/` are gitignored.
 
 ### Code intelligence (CodeGraph)
@@ -299,7 +388,7 @@ is still no build step). `typescript` is a devDependency for the same reason.
 - `src/app.js` controls initialization, month/scale UI, drag locking, and orchestrates rendering.
 - `src/data/plantParser.js` parses `plants.csv` into normalized plant objects and applies seasonal palettes; updates here ripple through every view.
 - `src/state/seasonalState.js` converts month selection into growth/flowering flags and chosen colors relied upon by the renderers.
-- `src/render/topView.js` and `src/render/elevationViews.js` turn plant state into SVG geometry for the three synchronized views.
+- `src/render/topView.js` and `src/render/elevationViews.js` turn plant state into SVG geometry for each of the project's views.
 - `src/interaction/dragController.js` keeps plan-view dragging responsive and constrained; no other module should mutate plant coordinates directly.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:970c3bf2 -->

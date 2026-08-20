@@ -6,10 +6,22 @@ const DEFAULT_EXPORT_SCALE = 2;
 
 /**
  * Render a view (background + SVG overlay) into a PNG blob.
- * @param {{ svg: SVGSVGElement, viewBox: { width: number, height: number }, backgroundUrl?: string, scale?: number }} params
+ *
+ * `sourceRect` is the patch of the background image to draw, as fractions of it
+ * measured from the top-left. A detail view borrows a neighbour's photo and
+ * shows only its own rectangle of it (see render/backgroundCrop.js); without
+ * this the export would stretch the whole photo across the crop.
+ *
+ * @param {{ svg: SVGSVGElement, viewBox: { width: number, height: number }, backgroundUrl?: string, sourceRect?: { x: number, y: number, width: number, height: number }, scale?: number }} params
  * @returns {Promise<Blob>}
  */
-export async function captureViewToPng({ svg, viewBox, backgroundUrl, scale = DEFAULT_EXPORT_SCALE }) {
+export async function captureViewToPng({
+  svg,
+  viewBox,
+  backgroundUrl,
+  sourceRect,
+  scale = DEFAULT_EXPORT_SCALE,
+}) {
   if (!svg || !viewBox) throw new Error('Missing SVG or viewBox for capture');
   const width = Math.round(viewBox.width * scale);
   const height = Math.round(viewBox.height * scale);
@@ -21,7 +33,23 @@ export async function captureViewToPng({ svg, viewBox, backgroundUrl, scale = DE
 
   if (backgroundUrl) {
     const bg = await loadImage(backgroundUrl);
-    ctx.drawImage(bg, 0, 0, width, height);
+    if (sourceRect) {
+      const naturalWidth = bg.naturalWidth || bg.width;
+      const naturalHeight = bg.naturalHeight || bg.height;
+      ctx.drawImage(
+        bg,
+        sourceRect.x * naturalWidth,
+        sourceRect.y * naturalHeight,
+        sourceRect.width * naturalWidth,
+        sourceRect.height * naturalHeight,
+        0,
+        0,
+        width,
+        height
+      );
+    } else {
+      ctx.drawImage(bg, 0, 0, width, height);
+    }
   }
 
   const svgUrl = await serializeSvgToUrl(svg, viewBox, { scale });

@@ -1,5 +1,6 @@
 import { projectAssetPath } from '../data/projectConfig.js';
 import { createViewTransform } from './viewTransform.js';
+import { cropToCssBackground, resolveViewBackground } from './backgroundCrop.js';
 
 /**
  * Build one panel per entry in the project's views[], and apply each view's
@@ -61,10 +62,22 @@ export function configureViews({ container, template, project }) {
       viewEl.style.setProperty('--view-aspect-ratio', `${view.viewBox.width} / ${view.viewBox.height}`);
       // A view may have no background yet — setting url('projects/x/null')
       // would render a broken tile rather than an empty panel.
-      if (view.background) {
-        viewEl.style.backgroundImage = `url('${cssUrl(projectAssetPath(project.id, view.background))}')`;
+      const background = resolveViewBackground(views, view);
+      if (background.path) {
+        viewEl.style.backgroundImage = `url('${cssUrl(projectAssetPath(project.id, background.path))}')`;
       } else {
         viewEl.style.removeProperty('background-image');
+      }
+      // Panels are reused by id, so a view that stops borrowing a background
+      // must have the crop cleared as well as replaced — otherwise it keeps
+      // showing a zoomed patch of its own new photo.
+      const cropCss = cropToCssBackground(background.crop);
+      if (cropCss) {
+        viewEl.style.backgroundSize = cropCss.backgroundSize;
+        viewEl.style.backgroundPosition = cropCss.backgroundPosition;
+      } else {
+        viewEl.style.removeProperty('background-size');
+        viewEl.style.removeProperty('background-position');
       }
     }
 

@@ -71,7 +71,9 @@ export async function loadLayoutHistory(updateStatus, options = {}) {
 }
 
 export async function persistLayout(plants, description, updateStatus, options = {}) {
-  if (!Array.isArray(plants) || plants.length === 0) return null;
+  // An empty array is a legitimate layout — removing the last plant must still
+  // reach disk, or the deletion silently survives only until the next reload.
+  if (!Array.isArray(plants)) return null;
   const fetchFn = options.fetchFn || defaultFetch();
   if (!fetchFn) {
     if (updateStatus) {

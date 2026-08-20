@@ -1,33 +1,71 @@
 {
   "id": "example-frontyard",
   "name": "Example front yard",
-  "defaultPixelsPerInch": 1.6,
-  "plan": {
-    "label": "Plan",
-    "sublabel": "Looking Down",
-    "viewBox": { "width": 600, "height": 800 },
-    "background": "img/plan.svg"
-  },
-  "elevations": [
+  "views": [
+    {
+      "id": "plan",
+      "type": "plan",
+      "viewBox": {
+        "width": 240,
+        "height": 500
+      },
+      "originFt": {
+        "x": 2,
+        "y": 2
+      },
+      "extentFt": {
+        "width": 12,
+        "height": 25
+      },
+      "background": "img/plan.svg"
+    },
     {
       "id": "north",
+      "type": "elevation",
       "viewFrom": "north",
-      "label": "North elevation",
-      "sublabel": "Looking South",
-      "viewBox": { "width": 600, "height": 500 },
-      "background": "img/north.svg",
-      "bottomOffsetPx": 100,
-      "leftOffsetPx": 0
+      "viewBox": {
+        "width": 240,
+        "height": 360
+      },
+      "extentFt": {
+        "width": 12,
+        "height": 18
+      },
+      "background": "img/north.svg"
     },
     {
       "id": "west",
-      "viewFrom": "west",
-      "label": "West elevation",
-      "sublabel": "Looking East",
-      "viewBox": { "width": 600, "height": 500 },
-      "background": "img/west.svg",
-      "bottomOffsetPx": 100,
-      "leftOffsetPx": 40
+      "type": "elevation",
+      "viewFrom": "east",
+      "sublabel": "Looking west",
+      "viewBox": {
+        "width": 500,
+        "height": 360
+      },
+      "extentFt": {
+        "width": 25,
+        "height": 18
+      },
+      "background": "img/west.svg"
+    },
+    {
+      "id": "street-bed",
+      "type": "plan",
+      "label": "Street bed",
+      "sublabel": "Detail",
+      "viewBox": {
+        "width": 180,
+        "height": 120
+      },
+      "originFt": {
+        "x": 3,
+        "y": 3
+      },
+      "extentFt": {
+        "width": 9,
+        "height": 6
+      },
+      "backgroundFrom": "plan"
     }
   ]
 }

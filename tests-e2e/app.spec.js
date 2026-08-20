@@ -355,6 +355,54 @@ test.describe('project switching', () => {
     await expect(page.locator('#projectSelect')).toHaveValue('example-frontyard');
   });
 
+  test('a detail view borrows the plan photo and shows only its rectangle', async ({ page }) => {
+    await openProject(page, 'example-frontyard');
+
+    // Four panels: the multi-view path is only exercised in the browser here.
+    await expect(page.locator('.view-panel')).toHaveCount(4);
+    await expect(page.locator('[data-view-panel="street-bed"] [data-view-label]')).toHaveText(
+      'Street bed'
+    );
+
+    const style = await page
+      .locator('[data-view-panel="street-bed"] .view')
+      .evaluate((el) => ({
+        image: el.style.backgroundImage,
+        size: el.style.backgroundSize,
+        position: el.style.backgroundPosition,
+      }));
+    // The detail declares no background of its own; it crops the plan's photo to
+    // its 9x6 ft rectangle at (3, 3). See src/render/backgroundCrop.js.
+    expect(style.image).toContain('img/plan.svg');
+    // Chrome re-serializes inline percentages, so compare the numbers.
+    const percents = (value) => value.split(' ').map((part) => Number.parseFloat(part));
+    const [sizeX, sizeY] = percents(style.size);
+    expect(sizeX).toBeCloseTo((12 / 9) * 100, 2); // full width over crop width
+    expect(sizeY).toBeCloseTo((25 / 6) * 100, 2);
+    const [posX, posY] = percents(style.position);
+    // The denominator is the leftover travel, not the full extent.
+    expect(posX).toBeCloseTo(((3 - 2) / (12 - 9)) * 100, 2);
+    // …and plan y grows north while CSS y grows down.
+    expect(posY).toBeCloseTo(100 - ((3 - 2) / (25 - 6)) * 100, 2);
+
+    // The stylesheet's 100% 100% stretch must still apply to the uncropped plan.
+    const planSize = await page
+      .locator('[data-view-panel="plan"] .view')
+      .evaluate((el) => el.style.backgroundSize);
+    expect(planSize).toBe('');
+
+    // Plants inside the rectangle are drawn over the cropped photo. The set is
+    // derived from the CSV rather than named, so curating the layout in the app
+    // cannot turn this into a false failure.
+    const inside = (await readLayoutRows('example-frontyard')).filter(
+      (row) => row.xFt >= 3 && row.xFt <= 12 && row.yFt >= 3 && row.yFt <= 9
+    );
+    expect(inside.length).toBeGreaterThan(0);
+    for (const row of inside) {
+      await expect(page.locator(`#street-bedSvg g[data-plant-id="${row.id}"]`)).toHaveCount(1);
+    }
+  });
+
   test('an unknown project falls back to the default and says so', async ({ page }) => {
     await page.goto('/index.html?project=does-not-exist');
     await expect(page.locator('#projectNotice')).toBeVisible();

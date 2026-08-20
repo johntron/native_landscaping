@@ -100,6 +100,16 @@
                 <button id="redoLayoutBtn" class="button pill-button" type="button" disabled>Redo</button>
               </div>
             </div>
+            <!--
+              Places one plant of the chosen species at the middle of the plan
+              view; options come from the shared plants.csv catalog at load.
+              Removing a plant lives on the plant itself (detail sheet / right-click).
+            -->
+            <div class="add-plant" id="addPlantRow">
+              <label for="addPlantSelect">Add plant</label>
+              <select id="addPlantSelect" disabled></select>
+              <button id="addPlantBtn" class="button pill-button" type="button" disabled>Add</button>
+            </div>
             <div class="view-toolbar__control-group">
               <div class="control-pair control-pair--scale">
                 <label for="scaleSlider">Zoom</label>
@@ -184,6 +194,7 @@
         <ul class="detail-sheet__lines" id="detailSheetLines"></ul>
         <div class="detail-sheet__actions">
           <button type="button" class="button pill-button" id="detailSheetCloneBtn">Clone plant</button>
+          <button type="button" class="button pill-button pill-button--danger" id="detailSheetRemoveBtn">Remove plant</button>
         </div>
       </div>
     </div>

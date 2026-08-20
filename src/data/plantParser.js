@@ -136,36 +136,55 @@ export function buildPlantsFromCsv(speciesCsvText, layoutCsvText) {
       throw new LayoutDataError(`Unknown plant "${missing}" in layout row ${placement.id}`);
     }
 
-    const plant = {
+    return createPlantFromSpecies(speciesEntry, {
       id: placement.id || `plant-${idx + 1}`,
-      commonName: speciesEntry.commonName,
-      botanicalName: speciesEntry.botanicalName,
-      botanicalKey: speciesEntry.botanicalKey || placement.botanicalKey,
-      speciesEpithet: speciesEntry.speciesEpithet || placement.speciesEpithet,
       x: placement.x,
       y: placement.y,
-      width: speciesEntry.width ?? 1,
-      height: speciesEntry.height ?? 1,
-      growthShape: speciesEntry.growthShape,
-      growingMonths: speciesEntry.growingMonths,
-      floweringMonths: speciesEntry.floweringMonths,
-      flowerColor: speciesEntry.flowerColor,
-      leafColor: speciesEntry.leafColor,
-      foliageColors: speciesEntry.foliageColors,
-      dormantColor: speciesEntry.dormantColor,
-      sunPref: speciesEntry.sunPref,
-      waterPref: speciesEntry.waterPref,
-      soilPref: speciesEntry.soilPref,
-      inflorescence: speciesEntry.inflorescence,
-      flowerCountHint: speciesEntry.flowerCountHint,
-      flowerZone: speciesEntry.flowerZone,
-      fruitColor: speciesEntry.fruitColor,
-      fruitMonths: speciesEntry.fruitMonths,
-      fruitLoad: speciesEntry.fruitLoad,
-    };
-
-    return { ...plant, layer: classifyPlantLayer(plant) };
+      botanicalKey: placement.botanicalKey,
+      speciesEpithet: placement.speciesEpithet,
+    });
   });
+}
+
+/**
+ * Build one renderable plant from a species row plus a placement. Every plant
+ * the app holds — whether it came from planting_layout.csv or was added in the
+ * browser — is minted here, so the two can never drift into different shapes.
+ *
+ * @param {Object} speciesEntry a row from parseSpeciesCsv
+ * @param {{id: string, x: number, y: number, botanicalKey?: string, speciesEpithet?: string}} placement
+ * @returns {Object} plant, including its computed layer
+ */
+export function createPlantFromSpecies(speciesEntry, placement = {}) {
+  const plant = {
+    id: placement.id,
+    commonName: speciesEntry.commonName,
+    botanicalName: speciesEntry.botanicalName,
+    botanicalKey: speciesEntry.botanicalKey || placement.botanicalKey,
+    speciesEpithet: speciesEntry.speciesEpithet || placement.speciesEpithet,
+    x: placement.x,
+    y: placement.y,
+    width: speciesEntry.width ?? 1,
+    height: speciesEntry.height ?? 1,
+    growthShape: speciesEntry.growthShape,
+    growingMonths: speciesEntry.growingMonths,
+    floweringMonths: speciesEntry.floweringMonths,
+    flowerColor: speciesEntry.flowerColor,
+    leafColor: speciesEntry.leafColor,
+    foliageColors: speciesEntry.foliageColors,
+    dormantColor: speciesEntry.dormantColor,
+    sunPref: speciesEntry.sunPref,
+    waterPref: speciesEntry.waterPref,
+    soilPref: speciesEntry.soilPref,
+    inflorescence: speciesEntry.inflorescence,
+    flowerCountHint: speciesEntry.flowerCountHint,
+    flowerZone: speciesEntry.flowerZone,
+    fruitColor: speciesEntry.fruitColor,
+    fruitMonths: speciesEntry.fruitMonths,
+    fruitLoad: speciesEntry.fruitLoad,
+  };
+
+  return { ...plant, layer: classifyPlantLayer(plant) };
 }
 
 function pickNumber(row, keys) {
