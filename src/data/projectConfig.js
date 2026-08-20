@@ -1,11 +1,13 @@
 import {
   DEFAULT_PIXELS_PER_INCH,
   ELEVATION_VIEWBOX,
+  INCHES_PER_FOOT,
   PLAN_VIEWBOX,
   SOUTH_ELEVATION_BOTTOM_OFFSET_PX,
   SOUTH_ELEVATION_LEFT_OFFSET_PX,
 } from '../constants.js';
 import { isValidViewFrom } from '../render/elevationOrientation.js';
+import { createViewTransform } from '../render/viewTransform.js';
 
 export const PROJECTS_DIR = 'projects';
 export const PROJECT_INDEX_PATH = `${PROJECTS_DIR}/index.json`;
@@ -16,9 +18,6 @@ export const PROJECT_INDEX_PATH = `${PROJECTS_DIR}/index.json`;
  * escape the projects directory.
  */
 const PROJECT_ID_PATTERN = /^[a-z0-9][a-z0-9_-]*$/;
-
-/** The app has exactly two elevation panels; a project supplies a direction for each. */
-export const ELEVATION_SLOTS = 2;
 
 export function isValidProjectId(id) {
   return typeof id === 'string' && id.length <= 64 && PROJECT_ID_PATTERN.test(id);
@@ -71,8 +70,15 @@ export function resolveActiveProjectId(requestedId, index) {
 }
 
 /**
- * Normalize a project.json into a fully-populated config, filling gaps from the
- * global constants so a minimal project file stays valid.
+ * Normalize a project.json into a fully-populated config.
+ *
+ * A project declares `views[]`, each authored in feet: `extentFt` is how much
+ * yard the view covers and `originFt` is the yard coordinate at its viewBox
+ * bottom-left corner. Pixels per foot is derived, never authored.
+ *
+ * The legacy `{plan, elevations[]}` shape — pixel offsets plus a global
+ * `defaultPixelsPerInch` — is still read and migrated on the way in. Writes
+ * always emit `views[]`; see serializeProjectConfig.
  *
  * @param {any} raw
  * @param {string} id project id, taken from the directory name rather than trusted from the file
@@ -85,52 +91,227 @@ export function normalizeProjectConfig(raw, id) {
     throw new Error(`Project "${id}" has no configuration object`);
   }
 
-  const rawElevations = Array.isArray(raw.elevations) ? raw.elevations : [];
-  if (rawElevations.length !== ELEVATION_SLOTS) {
-    throw new Error(
-      `Project "${id}" must declare exactly ${ELEVATION_SLOTS} elevations (found ${rawElevations.length})`
-    );
+  const rawViews = Array.isArray(raw.views) ? raw.views : migrateLegacyViews(raw, id);
+  if (!rawViews.length) {
+    throw new Error(`Project "${id}" declares no views`);
   }
 
-  const plan = raw.plan || {};
-  const elevations = rawElevations.map((elevation, index) =>
-    normalizeElevation(elevation, index, id)
-  );
+  const seenIds = new Set();
+  const views = rawViews.map((view, index) => {
+    const normalized = normalizeView(view, index, id);
+    if (seenIds.has(normalized.id)) {
+      throw new Error(`Project "${id}" has two views with the id "${normalized.id}"`);
+    }
+    seenIds.add(normalized.id);
+    return normalized;
+  });
+
+  views.forEach((view) => {
+    if (view.backgroundFrom && !seenIds.has(view.backgroundFrom)) {
+      throw new Error(
+        `Project "${id}" view "${view.id}" borrows a background from unknown view "${view.backgroundFrom}"`
+      );
+    }
+  });
 
   return {
     id,
     name: String(raw.name || id),
-    pixelsPerInch: normalizePositiveNumber(raw.defaultPixelsPerInch, DEFAULT_PIXELS_PER_INCH),
-    plan: {
-      label: String(plan.label || 'Plan'),
-      sublabel: String(plan.sublabel || 'Looking Down'),
-      viewBox: normalizeViewBox(plan.viewBox, PLAN_VIEWBOX),
-      background: normalizeAssetPath(plan.background, id, 'plan'),
-    },
-    elevations,
+    views,
+    ...legacyProjection(views),
   };
 }
 
-function normalizeElevation(raw, index, projectId) {
+/**
+ * Rewrite the pixel-authored `{plan, elevations[]}` shape as feet-authored views.
+ * `defaultPixelsPerInch` is read here and nowhere else — it is never written back.
+ */
+function migrateLegacyViews(raw, projectId) {
+  const pxPerFt =
+    normalizePositiveNumber(raw.defaultPixelsPerInch, DEFAULT_PIXELS_PER_INCH) * INCHES_PER_FOOT;
+  const plan = raw.plan || {};
+  const planViewBox = normalizeViewBox(plan.viewBox, PLAN_VIEWBOX);
+  const views = [
+    {
+      id: 'plan',
+      type: 'plan',
+      label: plan.label,
+      sublabel: plan.sublabel,
+      viewBox: planViewBox,
+      originFt: { x: 0, y: 0 },
+      extentFt: extentForViewBox(planViewBox, pxPerFt),
+      background: plan.background,
+    },
+  ];
+
+  const rawElevations = Array.isArray(raw.elevations) ? raw.elevations : [];
+  rawElevations.forEach((elevation, index) => {
+    if (!elevation || typeof elevation !== 'object') {
+      throw new Error(`Project "${projectId}" elevation ${index + 1} is not an object`);
+    }
+    const viewBox = normalizeViewBox(elevation.viewBox, ELEVATION_VIEWBOX);
+    // A pixel inset from the near edge becomes a negative origin in feet: the
+    // drawing starts that far before the yard's zero.
+    const leftOffsetPx = normalizeNumber(elevation.leftOffsetPx, SOUTH_ELEVATION_LEFT_OFFSET_PX);
+    const bottomOffsetPx = normalizeNumber(
+      elevation.bottomOffsetPx,
+      SOUTH_ELEVATION_BOTTOM_OFFSET_PX
+    );
+    views.push({
+      id: elevation.id,
+      type: 'elevation',
+      viewFrom: elevation.viewFrom,
+      label: elevation.label,
+      sublabel: elevation.sublabel,
+      viewBox,
+      originFt: { x: -leftOffsetPx / pxPerFt, y: -bottomOffsetPx / pxPerFt },
+      extentFt: extentForViewBox(viewBox, pxPerFt),
+      background: elevation.background,
+    });
+  });
+
+  return views;
+}
+
+function extentForViewBox(viewBox, pxPerFt) {
+  return { width: viewBox.width / pxPerFt, height: viewBox.height / pxPerFt };
+}
+
+function normalizeView(raw, index, projectId) {
+  const where = `view ${index + 1}`;
   if (!raw || typeof raw !== 'object') {
-    throw new Error(`Project "${projectId}" elevation ${index + 1} is not an object`);
+    throw new Error(`Project "${projectId}" ${where} is not an object`);
   }
-  const viewFrom = String(raw.viewFrom || '').toLowerCase();
-  if (!isValidViewFrom(viewFrom)) {
+  const type = String(raw.type || '').toLowerCase();
+  if (type !== 'plan' && type !== 'elevation') {
     throw new Error(
-      `Project "${projectId}" elevation ${index + 1} has an unknown viewFrom "${raw.viewFrom}"`
+      `Project "${projectId}" ${where} has an unknown type "${raw.type}" (expected plan or elevation)`
     );
   }
-  const id = isValidProjectId(raw.id) ? raw.id : viewFrom;
-  return {
+
+  const viewFrom = type === 'elevation' ? String(raw.viewFrom || '').toLowerCase() : '';
+  if (type === 'elevation' && !isValidViewFrom(viewFrom)) {
+    throw new Error(`Project "${projectId}" ${where} has an unknown viewFrom "${raw.viewFrom}"`);
+  }
+
+  const fallbackId = type === 'elevation' ? viewFrom : 'plan';
+  const id = isValidProjectId(raw.id) ? raw.id : fallbackId;
+  const viewBox = normalizeViewBox(raw.viewBox, type === 'plan' ? PLAN_VIEWBOX : ELEVATION_VIEWBOX);
+  const defaults = defaultLabels(type, viewFrom);
+
+  const view = {
     id,
-    viewFrom,
-    label: String(raw.label || `${capitalize(viewFrom)} elevation`),
-    sublabel: String(raw.sublabel || `Looking ${capitalize(oppositeOf(viewFrom))}`),
-    viewBox: normalizeViewBox(raw.viewBox, ELEVATION_VIEWBOX),
-    background: normalizeAssetPath(raw.background, projectId, `elevation ${index + 1}`),
-    bottomOffsetPx: normalizeNumber(raw.bottomOffsetPx, SOUTH_ELEVATION_BOTTOM_OFFSET_PX),
-    leftOffsetPx: normalizeNumber(raw.leftOffsetPx, SOUTH_ELEVATION_LEFT_OFFSET_PX),
+    type,
+    ...(type === 'elevation' ? { viewFrom } : {}),
+    label: String(raw.label || defaults.label),
+    sublabel: String(raw.sublabel || defaults.sublabel),
+    viewBox,
+    originFt: normalizePoint(raw.originFt),
+    extentFt: normalizeExtent(raw.extentFt, projectId, id),
+    background: normalizeAssetPath(raw.background, projectId, id),
+    ...(raw.backgroundFrom ? { backgroundFrom: String(raw.backgroundFrom) } : {}),
+  };
+
+  // One derivation of pxPerFt for the whole app: build the transform the
+  // renderers will use, so a non-uniformly scaled view is rejected here rather
+  // than silently stretching the yard over its photo.
+  try {
+    createViewTransform(view);
+  } catch (err) {
+    throw new Error(`Project "${projectId}" ${where}: ${err.message}`);
+  }
+
+  return view;
+}
+
+function defaultLabels(type, viewFrom) {
+  if (type === 'plan') {
+    return { label: 'Plan', sublabel: 'Looking Down' };
+  }
+  return {
+    label: `${capitalize(viewFrom)} elevation`,
+    sublabel: `Looking ${capitalize(oppositeOf(viewFrom))}`,
+  };
+}
+
+function normalizePoint(raw) {
+  return { x: normalizeNumber(raw?.x, 0), y: normalizeNumber(raw?.y, 0) };
+}
+
+function normalizeExtent(raw, projectId, viewId) {
+  const width = Number(raw?.width);
+  const height = Number(raw?.height);
+  if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+    throw new Error(
+      `Project "${projectId}" view "${viewId}" needs a positive extentFt in feet (width and height)`
+    );
+  }
+  return { width, height };
+}
+
+/**
+ * Fields the app still reads while beads nl-tz7.3 / nl-tz7.4 rewire it onto
+ * `views[]`. Derived, never authored — delete this once nothing consumes it.
+ *
+ * `pixelsPerInch` was global; per-view scales can now differ, so the first view
+ * speaks for the project.
+ */
+function legacyProjection(views) {
+  const plan = views.find((view) => view.type === 'plan') || views[0];
+  const pxPerFt = views[0].viewBox.width / views[0].extentFt.width;
+  return {
+    pixelsPerInch: pxPerFt / INCHES_PER_FOOT,
+    plan: {
+      label: plan.label,
+      sublabel: plan.sublabel,
+      viewBox: plan.viewBox,
+      background: plan.background,
+    },
+    elevations: views
+      .filter((view) => view.type === 'elevation')
+      .map((view) => {
+        const viewPxPerFt = view.viewBox.width / view.extentFt.width;
+        return {
+          id: view.id,
+          viewFrom: view.viewFrom,
+          label: view.label,
+          sublabel: view.sublabel,
+          viewBox: view.viewBox,
+          background: view.background,
+          leftOffsetPx: -view.originFt.x * viewPxPerFt,
+          bottomOffsetPx: -view.originFt.y * viewPxPerFt,
+        };
+      }),
+  };
+}
+
+/**
+ * Render a normalized config back to the shape project.json holds, dropping
+ * anything normalizeProjectConfig would have supplied anyway. Without this,
+ * every save would bake the inflated labels and zero origins into the file.
+ *
+ * @param {ReturnType<typeof normalizeProjectConfig>} config
+ */
+export function serializeProjectConfig(config) {
+  return {
+    id: config.id,
+    name: config.name,
+    views: config.views.map((view) => {
+      const defaults = defaultLabels(view.type, view.viewFrom);
+      const defaultViewBox = view.type === 'plan' ? PLAN_VIEWBOX : ELEVATION_VIEWBOX;
+      const out = { id: view.id, type: view.type };
+      if (view.type === 'elevation') out.viewFrom = view.viewFrom;
+      if (view.label !== defaults.label) out.label = view.label;
+      if (view.sublabel !== defaults.sublabel) out.sublabel = view.sublabel;
+      if (view.viewBox.width !== defaultViewBox.width || view.viewBox.height !== defaultViewBox.height) {
+        out.viewBox = { ...view.viewBox };
+      }
+      if (view.originFt.x !== 0 || view.originFt.y !== 0) out.originFt = { ...view.originFt };
+      out.extentFt = { ...view.extentFt };
+      if (view.background) out.background = view.background;
+      if (view.backgroundFrom) out.backgroundFrom = view.backgroundFrom;
+      return out;
+    }),
   };
 }
 
@@ -142,16 +323,15 @@ function normalizeViewBox(raw, fallback) {
 
 /**
  * Background paths are relative to the project directory. Reject anything that
- * tries to climb out of it or point at another origin.
+ * tries to climb out of it or point at another origin. A view may declare no
+ * background at all — a freshly added view is valid before its image exists.
  */
-function normalizeAssetPath(value, projectId, label) {
-  const path = String(value || '').trim();
-  if (!path) {
-    throw new Error(`Project "${projectId}" is missing a background image for its ${label} view`);
-  }
+function normalizeAssetPath(value, projectId, viewId) {
+  const path = String(value ?? '').trim();
+  if (!path) return null;
   if (path.startsWith('/') || path.includes('..') || /^[a-z][a-z0-9+.-]*:/i.test(path)) {
     throw new Error(
-      `Project "${projectId}" ${label} background must be a path relative to the project directory`
+      `Project "${projectId}" view "${viewId}" background must be a path relative to the project directory`
     );
   }
   return path;

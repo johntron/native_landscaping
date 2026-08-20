@@ -4,10 +4,11 @@ import {
   isValidProjectId,
   normalizeProjectConfig,
   normalizeProjectIndex,
+  serializeProjectConfig,
   projectLayoutPath,
   resolveActiveProjectId,
 } from '../src/data/projectConfig.js';
-import { ELEVATION_VIEWBOX, PLAN_VIEWBOX } from '../src/constants.js';
+import { ELEVATION_VIEWBOX, INCHES_PER_FOOT, PLAN_VIEWBOX } from '../src/constants.js';
 
 function makeConfig(overrides = {}) {
   return {
@@ -84,10 +85,6 @@ test('normalizeProjectConfig rejects malformed configs', () => {
   assert.throws(() => normalizeProjectConfig(makeConfig(), 'Bad Id'), /Invalid project id/);
   assert.throws(() => normalizeProjectConfig(null, 'backyard'), /no configuration object/);
   assert.throws(
-    () => normalizeProjectConfig(makeConfig({ elevations: [] }), 'backyard'),
-    /exactly 2 elevations/
-  );
-  assert.throws(
     () =>
       normalizeProjectConfig(
         makeConfig({
@@ -111,10 +108,8 @@ test('background paths may not escape the project directory', () => {
       background
     );
   });
-  assert.throws(
-    () => normalizeProjectConfig(makeConfig({ plan: {} }), 'backyard'),
-    /missing a background image/
-  );
+  // A view with no background at all is valid — it is how a freshly added view starts.
+  assert.equal(normalizeProjectConfig(makeConfig({ plan: {} }), 'backyard').views[0].background, null);
 });
 
 test('invalid numbers fall back rather than producing a broken viewBox', () => {
@@ -127,4 +122,155 @@ test('invalid numbers fall back rather than producing a broken viewBox', () => {
 
 test('layout path is scoped to the project directory', () => {
   assert.equal(projectLayoutPath('backyard'), 'projects/backyard/planting_layout.csv');
+});
+
+// --- views[] schema, migration, and serialization ---
+
+const BACKYARD_LEGACY = {
+  name: 'Backyard',
+  defaultPixelsPerInch: 2.25,
+  plan: { viewBox: { width: 800, height: 600 }, background: 'img/top.webp' },
+  elevations: [
+    { id: 'east', viewFrom: 'east', background: 'img/east.webp', bottomOffsetPx: 100, leftOffsetPx: 80 },
+  ],
+};
+
+function makeViewsConfig(overrides = {}) {
+  return {
+    name: 'Backyard',
+    views: [
+      {
+        id: 'plan',
+        type: 'plan',
+        viewBox: { width: 800, height: 600 },
+        extentFt: { width: 40, height: 30 },
+        background: 'img/top.webp',
+      },
+      {
+        id: 'east',
+        type: 'elevation',
+        viewFrom: 'east',
+        viewBox: { width: 800, height: 600 },
+        originFt: { x: -3, y: -2.5 },
+        extentFt: { width: 40, height: 30 },
+        background: 'img/east.webp',
+      },
+    ],
+    ...overrides,
+  };
+}
+
+test('the legacy shape migrates to feet-authored views', () => {
+  const config = normalizeProjectConfig(BACKYARD_LEGACY, 'backyard');
+  const pxPerFt = 2.25 * INCHES_PER_FOOT; // 27
+  const [plan, east] = config.views;
+
+  assert.equal(plan.type, 'plan');
+  assert.deepEqual(plan.originFt, { x: 0, y: 0 });
+  assert.deepEqual(plan.extentFt, { width: 800 / pxPerFt, height: 600 / pxPerFt });
+  assert.equal(plan.label, 'Plan');
+
+  // Pixel insets become negative origins: the drawing starts before the yard's zero.
+  assert.equal(east.type, 'elevation');
+  assert.equal(east.viewFrom, 'east');
+  assert.ok(Math.abs(east.originFt.x - -80 / pxPerFt) < 1e-12);
+  assert.ok(Math.abs(east.originFt.y - -100 / pxPerFt) < 1e-12);
+  assert.equal(east.sublabel, 'Looking West');
+});
+
+test('migration round-trips back to the pixel offsets it came from', () => {
+  const config = normalizeProjectConfig(BACKYARD_LEGACY, 'backyard');
+  assert.equal(config.pixelsPerInch, 2.25);
+  assert.ok(Math.abs(config.elevations[0].leftOffsetPx - 80) < 1e-9);
+  assert.ok(Math.abs(config.elevations[0].bottomOffsetPx - 100) < 1e-9);
+  assert.deepEqual(config.plan.viewBox, { width: 800, height: 600 });
+});
+
+test('serializeProjectConfig omits everything normalize would have supplied', () => {
+  const config = normalizeProjectConfig(makeViewsConfig(), 'backyard');
+  const serialized = serializeProjectConfig(config);
+
+  assert.deepEqual(serialized.views[0], {
+    id: 'plan',
+    type: 'plan',
+    extentFt: { width: 40, height: 30 },
+    background: 'img/top.webp',
+  });
+  // The plan's viewBox, labels and zero origin are all defaults, so none are written.
+  assert.deepEqual(serialized.views[1], {
+    id: 'east',
+    type: 'elevation',
+    viewFrom: 'east',
+    originFt: { x: -3, y: -2.5 },
+    extentFt: { width: 40, height: 30 },
+    background: 'img/east.webp',
+  });
+  assert.equal('defaultPixelsPerInch' in serialized, false);
+});
+
+test('serialize then normalize is a fixed point', () => {
+  const config = normalizeProjectConfig(makeViewsConfig(), 'backyard');
+  const reloaded = normalizeProjectConfig(serializeProjectConfig(config), 'backyard');
+  assert.deepEqual(reloaded.views, config.views);
+});
+
+test('a non-default label or viewBox survives the round trip', () => {
+  const config = normalizeProjectConfig(
+    makeViewsConfig({
+      views: [
+        {
+          id: 'shade-bed',
+          type: 'plan',
+          label: 'Shade bed',
+          sublabel: 'Detail',
+          viewBox: { width: 600, height: 450 },
+          originFt: { x: 4, y: 9 },
+          extentFt: { width: 8, height: 6 },
+          backgroundFrom: 'shade-bed',
+        },
+      ],
+    }),
+    'backyard'
+  );
+  const serialized = serializeProjectConfig(config);
+  assert.deepEqual(serialized.views[0], {
+    id: 'shade-bed',
+    type: 'plan',
+    label: 'Shade bed',
+    sublabel: 'Detail',
+    viewBox: { width: 600, height: 450 },
+    originFt: { x: 4, y: 9 },
+    extentFt: { width: 8, height: 6 },
+    backgroundFrom: 'shade-bed',
+  });
+});
+
+test('views[] validation rejects the ways a view can be unusable', () => {
+  const bad = (views, pattern) =>
+    assert.throws(() => normalizeProjectConfig(makeViewsConfig({ views }), 'backyard'), pattern);
+
+  bad([], /declares no views/);
+  bad([{ id: 'x', type: 'oblique', extentFt: { width: 1, height: 1 } }], /unknown type/);
+  bad([{ id: 'x', type: 'elevation', viewFrom: 'up', extentFt: { width: 40, height: 30 } }], /unknown viewFrom/);
+  bad([{ id: 'x', type: 'plan' }], /needs a positive extentFt/);
+  // 800x600 px over 40x20 ft is 20 px/ft across and 30 px/ft down.
+  bad(
+    [{ id: 'x', type: 'plan', viewBox: { width: 800, height: 600 }, extentFt: { width: 40, height: 20 } }],
+    /non-uniformly scaled/
+  );
+  bad(
+    [
+      { id: 'twin', type: 'plan', extentFt: { width: 40, height: 30 } },
+      { id: 'twin', type: 'plan', extentFt: { width: 40, height: 30 } },
+    ],
+    /two views with the id "twin"/
+  );
+  bad(
+    [{ id: 'x', type: 'plan', extentFt: { width: 40, height: 30 }, backgroundFrom: 'ghost' }],
+    /borrows a background from unknown view "ghost"/
+  );
+  bad(
+    [{ id: 'x', type: 'plan', extentFt: { width: 40, height: 30 }, background: '../../secret.webp' }],
+    /relative to the project directory/
+  );
 });
