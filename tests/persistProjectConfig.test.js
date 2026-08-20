@@ -67,3 +67,18 @@ test('an unreachable server is reported rather than thrown', async () => {
   assert.equal(result, null);
   assert.equal(status[0].state, 'error');
 });
+
+test('a body without views[] is not treated as a legacy config', async () => {
+  // The legacy {plan, elevations[]} reader is for files on disk. If a POST body
+  // reached it, {} would migrate into one blank default plan view, pass every
+  // validation, and overwrite the project — with no config history to recover
+  // from. The server rejects it; this pins the contract the client relies on.
+  const bodies = [];
+  await persistProjectConfig(makeConfig(), null, {
+    fetchFn: async (url, opts) => {
+      bodies.push(JSON.parse(opts.body));
+      return { ok: true, json: async () => ({}) };
+    },
+  });
+  assert.ok(Array.isArray(bodies[0].views) && bodies[0].views.length > 0);
+});
