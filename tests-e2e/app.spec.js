@@ -202,6 +202,102 @@ test.describe('setup mode', () => {
   });
 });
 
+// Handle drags edit the view in memory; only the Save button writes, so these
+// stay on the read-only server like the rest of the suite.
+test.describe('setup overlay', () => {
+  /** Centre of an overlay handle, in viewport coordinates. */
+  async function handlePoint(page, svgId, handleId) {
+    // Centre the panel: page.mouse works in viewport coordinates, and a panel
+    // sitting below the fold puts its handles out of reach.
+    await page.evaluate((id) => document.getElementById(id).scrollIntoView({ block: 'center' }), svgId);
+    return page.evaluate(
+      ([id, handle]) => {
+        const svg = document.getElementById(id);
+        const rect = svg.getBoundingClientRect();
+        const box = svg.viewBox.baseVal;
+        const node = svg.querySelector(`circle[data-setup-handle="${handle}"]`);
+        return {
+          x: rect.left + (Number(node.getAttribute('cx')) * rect.width) / box.width,
+          y: rect.top + (Number(node.getAttribute('cy')) * rect.height) / box.height,
+        };
+      },
+      [svgId, handleId]
+    );
+  }
+
+  const fieldValue = (page, label) =>
+    page.locator('.setup-panel__field', { hasText: label }).locator('input').inputValue();
+
+  test('guides appear only in setup mode, and only on the selected view', async ({ page }) => {
+    await openProject(page, 'backyard');
+    await expect(page.locator('[data-setup-overlay]')).toHaveCount(0);
+
+    await page.locator('[data-mode="edit"]').click();
+    await expect(page.locator('[data-setup-overlay]')).toHaveCount(0);
+
+    await page.locator('[data-mode="setup"]').click();
+    await expect(page.locator('#topSvg [data-setup-overlay]')).toHaveCount(1);
+    await expect(page.locator('[data-setup-overlay]')).toHaveCount(1);
+
+    // Selecting another view moves the guides rather than adding a second set.
+    await page.locator('.setup-panel__item', { hasText: 'East elevation' }).locator('.setup-panel__pick').click();
+    await expect(page.locator('#eastSvg [data-setup-overlay]')).toHaveCount(1);
+    await expect(page.locator('[data-setup-overlay]')).toHaveCount(1);
+
+    await page.locator('[data-mode="view"]').click();
+    await expect(page.locator('[data-setup-overlay]')).toHaveCount(0);
+  });
+
+  test('dragging the east elevation ground line moves it and the plants on it', async ({ page }) => {
+    await openProject(page, 'backyard');
+    await page.locator('[data-mode="setup"]').click();
+    await page.locator('.setup-panel__item', { hasText: 'East elevation' }).locator('.setup-panel__pick').click();
+
+    const groundY = () =>
+      page.locator('#eastSvg line[data-setup-guide="ground"]').getAttribute('y1');
+    const plantPath = () =>
+      page.locator('#eastSvg g[data-plant-id]').first().locator('path').first().getAttribute('d');
+
+    const beforeGround = Number(await groundY());
+    const beforePlant = await plantPath();
+    const beforeField = await fieldValue(page, 'Ground height (ft)');
+
+    const start = await handlePoint(page, 'eastSvg', 'ground');
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(start.x, start.y - 40, { steps: 8 });
+    await page.mouse.up();
+
+    // The line moved up, the plants standing on it followed, and the numeric
+    // field agrees — all without a reload.
+    expect(Number(await groundY())).toBeLessThan(beforeGround);
+    expect(await plantPath()).not.toBe(beforePlant);
+    expect(await fieldValue(page, 'Ground height (ft)')).not.toBe(beforeField);
+  });
+
+  test('dragging a plan edge handle resizes the view and the form together', async ({ page }) => {
+    await openProject(page, 'backyard');
+    await page.locator('[data-mode="setup"]').click();
+
+    const beforeWidth = Number(await fieldValue(page, 'Width (ft)'));
+    const beforeLeft = Number(await fieldValue(page, 'Left edge (ft)'));
+
+    // Pull the left edge inward: the view covers less yard, starting further east.
+    const start = await handlePoint(page, 'topSvg', 'min-mid');
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(start.x + 60, start.y, { steps: 8 });
+    await page.mouse.up();
+
+    expect(Number(await fieldValue(page, 'Left edge (ft)'))).toBeGreaterThan(beforeLeft);
+    expect(Number(await fieldValue(page, 'Width (ft)'))).toBeLessThan(beforeWidth);
+    // The right-hand edge of the yard the view covers has not moved.
+    const left = Number(await fieldValue(page, 'Left edge (ft)'));
+    const width = Number(await fieldValue(page, 'Width (ft)'));
+    expect(left + width).toBeCloseTo(beforeLeft + beforeWidth, 1);
+  });
+});
+
 test.describe('project switching', () => {
   test('example-frontyard loads its own layout and elevations', async ({ page }) => {
     await openProject(page, 'example-frontyard');

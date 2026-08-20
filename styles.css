@@ -1265,6 +1265,15 @@ select {
   display: none;
 }
 
+/*
+ * The toolbar is sticky so the season slider stays reachable while scrolling.
+ * The setup form is far taller, and pinning it over the drawing puts the very
+ * handles being dragged underneath it — so Setup mode scrolls with the page.
+ */
+.view-toolbar.is-setup {
+  position: static;
+}
+
 .setup-panel__section {
   display: flex;
   flex-direction: column;

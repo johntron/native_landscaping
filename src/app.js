@@ -21,6 +21,8 @@ import { computePlantState } from './state/seasonalState.js';
 import { renderViews } from './render/renderViews.js';
 import { createViewTransform } from './render/viewTransform.js';
 import { createSetupPanel } from './interaction/setupPanel.js';
+import { createSetupController } from './interaction/setupController.js';
+import { clearSetupOverlay, renderSetupOverlay } from './render/setupOverlay.js';
 import { configureViews } from './render/viewConfig.js';
 import { createPlantDragController, createElevationDragController } from './interaction/dragController.js';
 import { buildPlantLabel } from './render/labels.js';
@@ -69,6 +71,7 @@ async function init() {
   const modeButtons = Array.from(document.querySelectorAll('[data-mode]'));
   const editRow = document.getElementById('editRow');
   const setupRow = document.getElementById('setupRow');
+  const viewToolbar = document.querySelector('.view-toolbar');
   const settingsToggleBtn = document.getElementById('settingsToggleBtn');
   const settingsDrawer = document.getElementById('settingsDrawer');
   const exportBundleButton = document.getElementById('exportBundleBtn');
@@ -367,12 +370,16 @@ async function init() {
 
   // One controller per panel; which one to build follows the view's type, and
   // an elevation reads its axis and mirroring off the view's own transform.
+  const liveView = (viewId) => project.views.find((entry) => entry.id === viewId);
   const buildDragControllers = () =>
     viewPanels.map(({ view, svg }) => {
       const shared = {
         svg,
         getPlants: () => appState.plants,
-        getTransform: () => createViewTransform(view),
+        // Resolved by id, not captured: a Setup-mode edit replaces the view
+        // object, and a controller holding the old one would drag against
+        // geometry the drawing no longer uses.
+        getTransform: () => createViewTransform(liveView(view.id) || view),
         onPositionsChange: () => render(),
         onHoverPlant: setHoveredPlant,
         onChangeCommit: () => commitLayoutChange('Moved plant'),
@@ -383,15 +390,41 @@ async function init() {
     });
   let dragControllers = buildDragControllers();
 
+  // One per panel, but only the selected view's is ever unlocked: two panels
+  // accepting handle drags at once would be two answers to "which view is being
+  // set up".
+  const buildSetupControllers = () =>
+    viewPanels.map(({ view, svg }) =>
+      createSetupController({
+        svg,
+        getView: () => liveView(view.id),
+        onChange: (patch) => applyViewEdit(patchView(project.views, view.id, patch)),
+      })
+    );
+  let setupControllers = buildSetupControllers();
+
   /**
    * Rebuild the panels from the current project. configureViews reuses the SVG
    * of any view whose id is unchanged, so the old controllers must be torn down
    * first or they would double-bind to those elements.
    */
   const rebuildViews = () => {
-    dragControllers.forEach((controller) => controller?.destroy?.());
+    const previousSvgs = viewPanels.map((panel) => panel.svg);
     viewPanels = configureViews({ container: viewsContainer, template: viewPanelTemplate, project });
-    dragControllers = buildDragControllers();
+
+    // Rebuild controllers only when the elements under them changed. Editing a
+    // view's geometry reuses its panel, and tearing down the controller that is
+    // mid-drag would drop the gesture on its first frame.
+    const sameElements =
+      viewPanels.length === previousSvgs.length &&
+      viewPanels.every((panel, index) => panel.svg === previousSvgs[index]);
+    if (!sameElements) {
+      dragControllers.forEach((controller) => controller?.destroy?.());
+      setupControllers.forEach((controller) => controller?.destroy?.());
+      dragControllers = buildDragControllers();
+      setupControllers = buildSetupControllers();
+    }
+
     applyMode(appState.mode);
     refreshMaximizedView();
     render();
@@ -479,8 +512,24 @@ async function init() {
     });
     if (editRow) editRow.hidden = next !== 'edit';
     if (setupRow) setupRow.hidden = next !== 'setup';
+    viewToolbar?.classList.toggle('is-setup', next === 'setup');
     dragControllers.forEach((controller) => controller?.setLocked?.(next !== 'edit'));
+    syncSetupOverlay();
     persistMode(next);
+  }
+
+  /**
+   * The overlay belongs to exactly one view at a time, and only in Setup mode.
+   * Rendering clears each SVG, so this runs after every render rather than once.
+   */
+  function syncSetupOverlay() {
+    const selectedId = appState.mode === 'setup' ? setupPanel.getSelectedId() : '';
+    viewPanels.forEach(({ view, svg }, index) => {
+      const isSelected = view.id === selectedId;
+      setupControllers[index]?.setLocked?.(!isSelected);
+      if (isSelected) renderSetupOverlay(svg, view);
+      else clearSetupOverlay(svg);
+    });
   }
 
   modeButtons.forEach((button) => {
@@ -498,6 +547,7 @@ async function init() {
   const setupPanel = createSetupPanel({
     root: setupRow,
     onCommit: (views) => applyViewEdit(views),
+    onSelect: () => syncSetupOverlay(),
     onSave: async () => {
       setupPanel.setStatus('Saving…', 'info');
       const saved = await persistProjectConfig(project, (message, state) =>
@@ -640,6 +690,7 @@ async function init() {
       targetedPlantId: appState.targetedPlantId,
       hoveredPlantId: appState.hoveredPlantId,
     });
+    syncSetupOverlay();
   };
 
   monthSlider.addEventListener('input', (e) => {
@@ -939,6 +990,11 @@ function formatFeet(value) {
   const num = Number(value);
   if (!Number.isFinite(num)) return '';
   return num.toFixed(1);
+}
+
+/** Replace one view in a list with a shallow-merged copy. */
+function patchView(views, viewId, patch) {
+  return views.map((view) => (view.id === viewId ? { ...view, ...patch } : view));
 }
 
 /**

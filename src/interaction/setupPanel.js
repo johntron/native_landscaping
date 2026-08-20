@@ -13,7 +13,7 @@ import { VIEW_FROM_DIRECTIONS } from '../render/elevationOrientation.js';
  * form re-reads from the project after every commit rather than trusting what
  * the user typed.
  */
-export function createSetupPanel({ root, onCommit, onSave }) {
+export function createSetupPanel({ root, onCommit, onSave, onSelect }) {
   if (!root) {
     return { render: () => {}, getSelectedId: () => '', setStatus: () => {} };
   }
@@ -50,6 +50,7 @@ export function createSetupPanel({ root, onCommit, onSave }) {
       const pick = button(`${view.label}`, 'setup-panel__pick', () => {
         state.selectedId = view.id;
         render(state.views);
+        onSelect?.(view.id);
       });
       pick.setAttribute('aria-pressed', view.id === state.selectedId ? 'true' : 'false');
       const kind = el('span', 'setup-panel__item-kind', view.type === 'plan' ? 'plan' : view.viewFrom);
