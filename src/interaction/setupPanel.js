@@ -143,13 +143,8 @@ export function createSetupPanel({ root, onCommit, onSave }) {
       )
     );
     grid.appendChild(
-      numberField('Drawing width (px)', view.viewBox.width, 1, (value) =>
-        patch({ viewBoxWidth: value })
-      )
-    );
-    grid.appendChild(
-      numberField('Drawing height (px)', view.viewBox.height, 1, (value) =>
-        patch({ viewBoxHeight: value })
+      numberField('Resolution (px per ft)', view.viewBox.width / view.extentFt.width, 1, (value) =>
+        patch({ pxPerFt: value })
       )
     );
     grid.appendChild(
@@ -170,7 +165,8 @@ export function createSetupPanel({ root, onCommit, onSave }) {
       el(
         'p',
         'setup-panel__hint',
-        'Drop background images in the project folder under img/ and type the path, e.g. img/east.webp.'
+        `Drawing is ${Math.round(view.viewBox.width)} × ${Math.round(view.viewBox.height)} px. ` +
+          'Drop background images in the project folder under img/ and type the path, e.g. img/east.webp.'
       )
     );
     return wrap;
@@ -199,10 +195,16 @@ export function createSetupPanel({ root, onCommit, onSave }) {
 }
 
 /**
- * Apply one field change, keeping the feet extent and the pixel drawing at the
- * same aspect ratio. They are two knobs on one scale: letting them drift apart
- * is exactly the non-uniform view that createViewTransform rejects, so the form
- * moves the paired value rather than letting the user author a broken state.
+ * Apply one field change.
+ *
+ * Feet are what a person actually knows about their yard, so `extentFt` is
+ * authored freely in both directions and the pixel `viewBox` is derived from it
+ * at the view's resolution. That makes the aspect ratio whatever the extent
+ * says, and makes the non-uniform view createViewTransform rejects unreachable
+ * from this form rather than merely guarded against.
+ *
+ * The earlier version locked extent to the viewBox's aspect, which meant typing
+ * a height silently rewrote the width — you could never say "30 ft by 10 ft".
  */
 function applyPatch(view, changes) {
   const next = { ...view, viewBox: { ...view.viewBox }, extentFt: { ...view.extentFt }, originFt: { ...view.originFt } };
@@ -223,21 +225,22 @@ function applyPatch(view, changes) {
   if ('originX' in changes) next.originFt.x = changes.originX;
   if ('originY' in changes) next.originFt.y = changes.originY;
 
-  const aspect = next.viewBox.height / next.viewBox.width;
-  if ('extentWidthFt' in changes) {
+  // Resolution carries over from the current view unless the field changed it.
+  const pxPerFt =
+    'pxPerFt' in changes && changes.pxPerFt > 0
+      ? changes.pxPerFt
+      : next.viewBox.width / next.extentFt.width;
+  if ('extentWidthFt' in changes && changes.extentWidthFt > 0) {
     next.extentFt.width = changes.extentWidthFt;
-    next.extentFt.height = changes.extentWidthFt * aspect;
   }
-  if ('extentHeightFt' in changes) {
+  if ('extentHeightFt' in changes && changes.extentHeightFt > 0) {
     next.extentFt.height = changes.extentHeightFt;
-    next.extentFt.width = aspect ? changes.extentHeightFt / aspect : next.extentFt.width;
   }
-  if ('viewBoxWidth' in changes || 'viewBoxHeight' in changes) {
-    if ('viewBoxWidth' in changes) next.viewBox.width = changes.viewBoxWidth;
-    if ('viewBoxHeight' in changes) next.viewBox.height = changes.viewBoxHeight;
-    // Resizing the drawing keeps the yard width it covers and re-derives the rest.
-    next.extentFt.height = next.extentFt.width * (next.viewBox.height / next.viewBox.width);
-  }
+  // Derived, never authored: the two stay uniform by construction.
+  next.viewBox = {
+    width: next.extentFt.width * pxPerFt,
+    height: next.extentFt.height * pxPerFt,
+  };
   return next;
 }
 
