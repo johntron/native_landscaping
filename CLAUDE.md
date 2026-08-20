@@ -17,7 +17,8 @@ in `projects/index.json`. The active project comes from `?project=<slug>`; switc
 reloads the page. `project.json` declares `views[]`, each authored in FEET
 (`extentFt` + `originFt`); pixels per foot is derived from `viewBox / extentFt`, the
 Scale control is zoom only, and the Setup toolbar mode is the preferred way to author
-a view. Elevations are driven by a `viewFrom` compass direction, and a plant drag is
+a view — including *Measure a known length*, which solves a view's `extentFt` from a
+drag across its background photo. Elevations are driven by a `viewFrom` compass direction, and a plant drag is
 clamped to the shared yard rather than to the view it is dragged in — see the
 "Projects" section of AGENTS.md for the axis/mirror table, the views[] schema, and how
 to add a project.

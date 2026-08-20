@@ -359,6 +359,24 @@ test.describe('setup overlay', () => {
     // The segment belongs to the old scale, so it must not survive the rescale.
     await expect(page.locator('#topSvg line[data-setup-ruler]')).toHaveCount(0);
     await expect(page.locator('.setup-panel__status')).toContainText('20 ft across');
+
+    // Any geometry edit invalidates a standing segment the same way, because
+    // the drawing scales with the extent: a segment measured at 600 px would be
+    // drawn outside a view that has since shrunk past it.
+    await page.mouse.move(span.from, span.y);
+    await page.mouse.down();
+    await page.mouse.move(span.to, span.y, { steps: 4 });
+    await page.mouse.up();
+    await expect(page.locator('#topSvg line[data-setup-ruler]')).toHaveCount(1);
+    await page
+      .locator('.setup-panel__field', { hasText: 'Width (ft)' })
+      .locator('input')
+      .fill('12');
+    await page
+      .locator('.setup-panel__field', { hasText: 'Width (ft)' })
+      .locator('input')
+      .press('Enter');
+    await expect(page.locator('#topSvg line[data-setup-ruler]')).toHaveCount(0);
   });
 
   test('dragging a plan edge handle resizes the view and the form together', async ({ page }) => {

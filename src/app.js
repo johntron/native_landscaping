@@ -661,11 +661,6 @@ async function init() {
     syncSetupOverlay();
   }
 
-  function clearRulerSegment() {
-    appState.ruler = null;
-    setupPanel.setMeasurement(null);
-  }
-
   modeButtons.forEach((button) => {
     button.addEventListener('click', () => applyMode(button.dataset.mode));
   });
@@ -705,7 +700,9 @@ async function init() {
       // Cleared before the rebuild: the segment's pixel coordinates belong to
       // the old scale, and redrawing it over the new one looks like a bug.
       const viewId = segment.viewId;
-      clearRulerSegment();
+      // applyViewEdit drops the segment itself; the panel's own copy of the
+      // reading is separate state and has to be cleared here.
+      setupPanel.setMeasurement(null);
       applyViewEdit(patchView(project.views, viewId, patch));
       setupPanel.setStatus(
         `Scaled ${view.label} to ${Math.round(patch.extentFt.width * 100) / 100} ft across.`,
@@ -727,6 +724,11 @@ async function init() {
    * the drawing on the last good state instead of throwing mid-render.
    */
   function applyViewEdit(views) {
+    // A standing segment's pixel coordinates belong to the geometry being
+    // replaced — the viewBox scales with the extent, so they may not even land
+    // inside the new box, and the measurement in feet describes a scale that no
+    // longer exists.
+    appState.ruler = null;
     let validated;
     try {
       validated = normalizeProjectConfig(

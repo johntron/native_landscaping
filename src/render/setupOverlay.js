@@ -201,10 +201,14 @@ export function measureRuler(view, from, to) {
 }
 
 /**
- * A drag shorter than this is a misclick, not a measurement. It matches the
- * controllers' hit radius: inside it, a pointer is "on" a thing rather than
- * having travelled across one, and a 3px span would solve to geometry that is
- * perfectly valid and wildly wrong.
+ * A drag shorter than this is a misclick, not a measurement: a 3px span solves
+ * to geometry that is perfectly valid and wildly wrong, which is exactly what
+ * validation cannot catch.
+ *
+ * A fixed floor in viewBox space, deliberately not the controllers' hit radius
+ * — that one is scaled to screen pixels, and a measurement's usefulness is a
+ * property of the photo it is taken from, not of how big the panel happens to
+ * be drawn.
  */
 export const MIN_RULER_PIXELS = 28;
 
