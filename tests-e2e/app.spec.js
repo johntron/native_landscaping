@@ -93,6 +93,97 @@ test.describe('backyard project', () => {
     await expect(page.locator('#editRow')).toBeVisible();
     await expect(page.locator('#labelToggle')).toBeVisible();
     await expect(page.locator('#scaleSlider')).toBeVisible();
+    await expect(page.locator('#setupRow')).toBeHidden();
+  });
+});
+
+// Setup mode edits the project's views[] in memory; only its Save button writes.
+// Nothing here saves, so these run against the repo like every other spec.
+test.describe('setup mode', () => {
+  test('the third mode shows the view list and hides the edit controls', async ({ page }) => {
+    await openProject(page, 'backyard');
+
+    await page.locator('[data-mode="setup"]').click();
+    await expect(page.locator('[data-mode="setup"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('[data-mode="edit"]')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.locator('#setupRow')).toBeVisible();
+    await expect(page.locator('#editRow')).toBeHidden();
+
+    // One row per view, in the order the project declares them.
+    const items = page.locator('.setup-panel__item');
+    await expect(items).toHaveCount(3);
+    await expect(items.nth(0)).toContainText('Plan');
+    await expect(items.nth(1)).toContainText('South elevation');
+    await expect(items.nth(2)).toContainText('East elevation');
+  });
+
+  test('mode survives a reload, and the old locked/unlocked flag migrates', async ({ page }) => {
+    await openProject(page, 'backyard');
+    await page.locator('[data-mode="setup"]').click();
+    await page.reload();
+    await expect(page.locator('[data-mode="setup"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#setupRow')).toBeVisible();
+
+    // A visitor from before Setup mode existed: unlocked meant Edit.
+    await page.evaluate(() => {
+      localStorage.removeItem('native-landscaping-mode');
+      localStorage.setItem('native-landscaping-positions-locked', 'false');
+    });
+    await page.reload();
+    await expect(page.locator('[data-mode="edit"]')).toHaveAttribute('aria-pressed', 'true');
+    // Reading it migrates it, so the legacy key does not linger.
+    expect(await page.evaluate(() => localStorage.getItem('native-landscaping-mode'))).toBe('edit');
+    expect(
+      await page.evaluate(() => localStorage.getItem('native-landscaping-positions-locked'))
+    ).toBe(null);
+  });
+
+  test('adding and removing a view changes the panels with no reload', async ({ page }) => {
+    await openProject(page, 'backyard');
+    await page.locator('[data-mode="setup"]').click();
+
+    await page.locator('.setup-panel__add').click();
+    await expect(page.locator('.view-panel')).toHaveCount(4);
+    await expect(page.locator('[data-view-panel="view"] [data-view-label]')).toHaveText('New view');
+
+    await page
+      .locator('.setup-panel__item', { hasText: 'New view' })
+      .locator('[aria-label="Remove"]')
+      .click();
+    await expect(page.locator('.view-panel')).toHaveCount(3);
+  });
+
+  test('form edits reach the drawing, and an invalid one is refused', async ({ page }) => {
+    await openProject(page, 'backyard');
+    await page.locator('[data-mode="setup"]').click();
+
+    // Feet and pixels are one scale: 800px over 20ft is 40 px/ft.
+    const width = page.locator('.setup-panel__field', { hasText: 'Width (ft)' }).locator('input');
+    await width.fill('20');
+    await width.press('Enter');
+    await expect(page.locator('[data-view-panel="plan"] [data-scale-summary]')).toHaveText(
+      '1 ft ≈ 40 px'
+    );
+
+    const name = page.locator('.setup-panel__field', { hasText: 'Name' }).locator('input');
+    await name.fill('Overhead');
+    await name.press('Enter');
+    await expect(page.locator('[data-view-panel="plan"] [data-view-label]')).toHaveText('Overhead');
+
+    // A background that climbs out of the project directory is rejected, and the
+    // drawing stays on the last good state rather than half-applying the edit.
+    const panelCount = await page.locator('.view-panel').count();
+    const background = page
+      .locator('.setup-panel__field', { hasText: 'Background image' })
+      .locator('input');
+    await background.fill('../../etc/passwd');
+    await background.press('Enter');
+    await expect(page.locator('.setup-panel__status')).toHaveAttribute('data-state', 'error');
+    await expect(page.locator('.setup-panel__status')).toContainText(
+      'relative to the project directory'
+    );
+    await expect(page.locator('.view-panel')).toHaveCount(panelCount);
+    await expect(page.locator('[data-view-panel="plan"] [data-view-label]')).toHaveText('Overhead');
   });
 });
 

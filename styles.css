@@ -1248,3 +1248,164 @@ select {
   border-radius: 4px;
   font-weight: 600;
 }
+
+/* ---- Setup mode ---------------------------------------------------------
+   A view list plus a form over the selected view. The form and the drawing are
+   two views of the same state, so nothing here holds a draft of its own.       */
+
+.setup-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 0.6rem 0.15rem 0.2rem;
+}
+
+/* A class-level display beats the UA rule for [hidden], same as .edit-row. */
+.setup-row[hidden] {
+  display: none;
+}
+
+.setup-panel__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.setup-panel__heading {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6b6559;
+}
+
+.setup-panel__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.setup-panel__item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid #ddd8d1;
+  border-radius: 6px;
+  background-color: #fff;
+  padding: 0.25rem 0.35rem 0.25rem 0.15rem;
+}
+
+.setup-panel__item.is-selected {
+  border-color: #2f7a8c;
+  box-shadow: inset 3px 0 0 #2f7a8c;
+}
+
+.setup-panel__pick {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  border: 0;
+  background: none;
+  padding: 0.3rem 0.5rem;
+  font: inherit;
+  font-weight: 600;
+  color: #2b2b2b;
+  text-align: left;
+  cursor: pointer;
+}
+
+.setup-panel__item-kind {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: #7a7468;
+}
+
+.setup-panel__item-actions {
+  display: flex;
+  gap: 0.15rem;
+}
+
+.setup-panel__icon-btn {
+  width: 1.9rem;
+  height: 1.9rem;
+  border: 1px solid #ddd8d1;
+  border-radius: 5px;
+  background-color: #fdfcfa;
+  color: #4a453c;
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.setup-panel__icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.setup-panel__icon-btn:not(:disabled):hover {
+  border-color: #2f7a8c;
+  color: #2f7a8c;
+}
+
+.setup-panel__add {
+  align-self: flex-start;
+}
+
+.setup-panel__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+  gap: 0.5rem 0.7rem;
+}
+
+.setup-panel__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.setup-panel__field-label {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: #6b6559;
+}
+
+.setup-panel__field input,
+.setup-panel__field select {
+  border: 1px solid #d6d3cb;
+  border-radius: 5px;
+  padding: 0.3rem 0.4rem;
+  font: inherit;
+  font-size: 0.85rem;
+  background-color: #fff;
+  min-width: 0;
+}
+
+.setup-panel__hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: #7a7468;
+}
+
+.setup-panel__footer {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.setup-panel__status {
+  font-size: 0.8rem;
+  color: #6b6559;
+}
+
+.setup-panel__status[data-state="error"] {
+  color: #a8332b;
+}
+
+.setup-panel__status[data-state="success"] {
+  color: #2f7a5c;
+}

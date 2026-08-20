@@ -3,16 +3,24 @@ import { fetchCsv } from './data/csvLoader.js';
 import {
   loadProjectConfig,
   loadProjectIndex,
+  normalizeProjectConfig,
+  serializeProjectConfig,
   projectAssetPath,
   projectLayoutPath,
   resolveActiveProjectId,
 } from './data/projectConfig.js';
 import { buildPlantsFromCsv, LayoutDataError } from './data/plantParser.js';
 import { buildLayoutCsv } from './data/layoutExporter.js';
-import { loadLayoutHistory, persistLayout, updateHistoryCursor } from './data/persistence.js';
+import {
+  loadLayoutHistory,
+  persistLayout,
+  persistProjectConfig,
+  updateHistoryCursor,
+} from './data/persistence.js';
 import { computePlantState } from './state/seasonalState.js';
 import { renderViews } from './render/renderViews.js';
 import { createViewTransform } from './render/viewTransform.js';
+import { createSetupPanel } from './interaction/setupPanel.js';
 import { configureViews } from './render/viewConfig.js';
 import { createPlantDragController, createElevationDragController } from './interaction/dragController.js';
 import { buildPlantLabel } from './render/labels.js';
@@ -24,7 +32,9 @@ import { buildTooltipLines } from './render/tooltip.js';
 import { createLayoutHistory } from './history/layoutHistory.js';
 import { captureViewToPng } from './export/viewCapture.js';
 
-const LOCK_STATE_KEY = 'native-landscaping-positions-locked';
+const MODE_KEY = 'native-landscaping-mode';
+const LEGACY_LOCK_STATE_KEY = 'native-landscaping-positions-locked';
+const MODES = ['view', 'edit', 'setup'];
 const EXPORT_MONTH = 6; // June
 const PROJECT_QUERY_PARAM = 'project';
 
@@ -33,7 +43,7 @@ const appState = {
   plants: [],
   month: new Date().getMonth() + 1,
   zoom: DEFAULT_ZOOM,
-  positionsLocked: true,
+  mode: 'view',
   showLabels: false,
   hiddenLayerCount: 0,
   highlightedSpeciesKey: '',
@@ -58,6 +68,7 @@ async function init() {
   const projectNotice = document.getElementById('projectNotice');
   const modeButtons = Array.from(document.querySelectorAll('[data-mode]'));
   const editRow = document.getElementById('editRow');
+  const setupRow = document.getElementById('setupRow');
   const settingsToggleBtn = document.getElementById('settingsToggleBtn');
   const settingsDrawer = document.getElementById('settingsDrawer');
   const exportBundleButton = document.getElementById('exportBundleBtn');
@@ -356,19 +367,35 @@ async function init() {
 
   // One controller per panel; which one to build follows the view's type, and
   // an elevation reads its axis and mirroring off the view's own transform.
-  const dragControllers = viewPanels.map(({ view, svg }) => {
-    const shared = {
-      svg,
-      getPlants: () => appState.plants,
-      getTransform: () => createViewTransform(view),
-      onPositionsChange: () => render(),
-      onHoverPlant: setHoveredPlant,
-      onChangeCommit: () => commitLayoutChange('Moved plant'),
-    };
-    return view.type === 'plan'
-      ? createPlantDragController(shared)
-      : createElevationDragController(shared);
-  });
+  const buildDragControllers = () =>
+    viewPanels.map(({ view, svg }) => {
+      const shared = {
+        svg,
+        getPlants: () => appState.plants,
+        getTransform: () => createViewTransform(view),
+        onPositionsChange: () => render(),
+        onHoverPlant: setHoveredPlant,
+        onChangeCommit: () => commitLayoutChange('Moved plant'),
+      };
+      return view.type === 'plan'
+        ? createPlantDragController(shared)
+        : createElevationDragController(shared);
+    });
+  let dragControllers = buildDragControllers();
+
+  /**
+   * Rebuild the panels from the current project. configureViews reuses the SVG
+   * of any view whose id is unchanged, so the old controllers must be torn down
+   * first or they would double-bind to those elements.
+   */
+  const rebuildViews = () => {
+    dragControllers.forEach((controller) => controller?.destroy?.());
+    viewPanels = configureViews({ container: viewsContainer, template: viewPanelTemplate, project });
+    dragControllers = buildDragControllers();
+    applyMode(appState.mode);
+    refreshMaximizedView();
+    render();
+  };
 
   const cloneMenu = createCloneMenu({
     onClone: (plantId) => {
@@ -438,22 +465,23 @@ async function init() {
     });
   }
 
-  const applyLockState = (locked) => {
-    appState.positionsLocked = locked;
-    dragControllers.forEach((controller) => controller?.setLocked?.(locked));
-    persistLockState(locked);
-  };
-
-  const applyMode = (mode) => {
-    const locked = mode !== 'edit';
+  /**
+   * Plant dragging belongs to Edit mode alone — in Setup mode the pointer
+   * belongs to the setup controller, so the plant controllers stay locked.
+   */
+  function applyMode(mode) {
+    const next = MODES.includes(mode) ? mode : 'view';
+    appState.mode = next;
     modeButtons.forEach((button) => {
-      const isActive = button.dataset.mode === mode;
+      const isActive = button.dataset.mode === next;
       button.classList.toggle('is-active', isActive);
       button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
     });
-    if (editRow) editRow.hidden = mode !== 'edit';
-    applyLockState(locked);
-  };
+    if (editRow) editRow.hidden = next !== 'edit';
+    if (setupRow) setupRow.hidden = next !== 'setup';
+    dragControllers.forEach((controller) => controller?.setLocked?.(next !== 'edit'));
+    persistMode(next);
+  }
 
   modeButtons.forEach((button) => {
     button.addEventListener('click', () => applyMode(button.dataset.mode));
@@ -467,9 +495,43 @@ async function init() {
     });
   }
 
-  const persistedLockState = readPersistedLockState();
-  const initialLockState = persistedLockState !== null ? persistedLockState : true;
-  applyMode(initialLockState ? 'view' : 'edit');
+  const setupPanel = createSetupPanel({
+    root: setupRow,
+    onCommit: (views) => applyViewEdit(views),
+    onSave: async () => {
+      setupPanel.setStatus('Saving…', 'info');
+      const saved = await persistProjectConfig(project, (message, state) =>
+        setupPanel.setStatus(message, state)
+      );
+      if (saved) setupPanel.setStatus('Views saved', 'success');
+    },
+  });
+
+  /**
+   * Validate a candidate views[] the same way a reload would, then swap it in.
+   * Round-tripping through serialize + normalize means a rejected edit leaves
+   * the drawing on the last good state instead of throwing mid-render.
+   */
+  function applyViewEdit(views) {
+    let validated;
+    try {
+      validated = normalizeProjectConfig(
+        { ...serializeProjectConfig(project), views },
+        project.id
+      );
+    } catch (err) {
+      setupPanel.setStatus(err.message, 'error');
+      return;
+    }
+    project.name = validated.name;
+    project.views = validated.views;
+    appState.project = project;
+    rebuildViews();
+    setupPanel.render(project.views);
+  }
+
+  applyMode(readPersistedMode());
+  setupPanel.render(project.views);
   if (exportBundleButton) {
     exportBundleButton.disabled = true;
   }
@@ -879,24 +941,31 @@ function formatFeet(value) {
   return num.toFixed(1);
 }
 
-function readPersistedLockState() {
-  if (typeof localStorage === 'undefined') return null;
+/**
+ * Mode used to be a locked/unlocked boolean, which cannot express a third mode.
+ * Old values migrate on first read: locked meant View, unlocked meant Edit.
+ */
+function readPersistedMode() {
+  if (typeof localStorage === 'undefined') return 'view';
   try {
-    const raw = localStorage.getItem(LOCK_STATE_KEY);
-    if (raw === 'true') return true;
-    if (raw === 'false') return false;
+    const raw = localStorage.getItem(MODE_KEY);
+    if (MODES.includes(raw)) return raw;
+    const legacy = localStorage.getItem(LEGACY_LOCK_STATE_KEY);
+    if (legacy === 'false') return 'edit';
+    if (legacy === 'true') return 'view';
   } catch (err) {
-    console.warn('Unable to read persisted lock state', err);
+    console.warn('Unable to read persisted mode', err);
   }
-  return null;
+  return 'view';
 }
 
-function persistLockState(locked) {
+function persistMode(mode) {
   if (typeof localStorage === 'undefined') return;
   try {
-    localStorage.setItem(LOCK_STATE_KEY, locked ? 'true' : 'false');
+    localStorage.setItem(MODE_KEY, mode);
+    localStorage.removeItem(LEGACY_LOCK_STATE_KEY);
   } catch (err) {
-    console.warn('Unable to persist lock state', err);
+    console.warn('Unable to persist mode', err);
   }
 }
 
