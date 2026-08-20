@@ -1,72 +1,87 @@
 import { projectAssetPath } from '../data/projectConfig.js';
+import { createViewTransform } from './viewTransform.js';
 
 /**
- * Apply the active project's geometry, backgrounds, and labels to the view panels.
+ * Build one panel per entry in the project's views[], and apply each view's
+ * geometry, background, and labels to it.
+ *
+ * Panels are cloned from a `<template>` rather than hand-written, so a project
+ * declaring four views gets four panels. Existing panels are reused when their
+ * view id is unchanged, which matters twice: the SVG element survives, so drag
+ * controllers stay bound to it, and a live edit in Setup mode can re-call this
+ * without tearing down the whole grid.
  *
  * Backgrounds used to live in styles.css, which cannot express one image per
- * project; they are now set here from project config so the CSS and JS cannot
- * drift apart. Everything else — viewBox, aspect ratio, panel headings — likewise
- * comes from the project rather than from global constants.
+ * project; they are set here from project config so the CSS and JS cannot drift.
  *
- * @param {{ topSvg: SVGSVGElement, elevationSvgs: SVGSVGElement[] }} svgRefs
- * @param {{ topView?: HTMLElement, elevationViews?: HTMLElement[] }} [containerRefs]
- * @param {{ labelRefs?: Array<{ label?: HTMLElement, sublabel?: HTMLElement }> }} [labelRefs]
- * @param {object} project normalized project config
+ * @param {{ container: HTMLElement, template: HTMLTemplateElement, project: object }} params
+ * @returns {Array<{ view: object, svg: SVGSVGElement, panel: HTMLElement, container: HTMLElement }>}
  */
-export function configureViews({ svgRefs, containerRefs, labelRefs, project }) {
-  if (!project) return;
-  const { topSvg, elevationSvgs = [] } = svgRefs;
+export function configureViews({ container, template, project }) {
+  if (!container || !template || !project) return [];
   const views = project.views || [];
-  const panels = [
-    {
-      view: views.find((view) => view.type === 'plan'),
-      svg: topSvg,
-      container: containerRefs?.topView,
-      labels: labelRefs?.[0],
-    },
-    ...views
-      .filter((view) => view.type === 'elevation')
-      .map((elevation, index) => ({
-        view: elevation,
-        svg: elevationSvgs[index],
-        container: containerRefs?.elevationViews?.[index],
-        labels: labelRefs?.[index + 1],
-      })),
-  ];
 
-  panels.forEach(({ view, svg, container, labels }) => {
-    if (!view) return;
-    setViewBox(svg, view.viewBox);
+  const reusable = new Map();
+  Array.from(container.querySelectorAll('.view-panel')).forEach((panel) => {
+    reusable.set(panel.dataset.viewPanel, panel);
+  });
+
+  // The first plan view keeps the historical id so existing selectors still work.
+  const firstPlanIndex = views.findIndex((view) => view.type === 'plan');
+
+  const panels = views.map((view, index) => {
+    let panel = reusable.get(view.id);
+    if (panel) {
+      reusable.delete(view.id);
+    } else {
+      panel = template.content.firstElementChild.cloneNode(true);
+      panel.dataset.viewPanel = view.id;
+    }
+    // Appending an element already in the container moves it, so this also
+    // reorders panels to match views[].
+    container.appendChild(panel);
+
+    const svg = panel.querySelector('svg');
+    const viewEl = panel.querySelector('.view');
     if (svg) {
+      svg.id = index === firstPlanIndex ? 'topSvg' : `${view.id}Svg`;
+      svg.setAttribute('viewBox', `0 0 ${view.viewBox.width} ${view.viewBox.height}`);
       svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
     }
-    if (container?.style) {
-      container.style.setProperty(
-        '--view-aspect-ratio',
-        `${view.viewBox.width} / ${view.viewBox.height}`
-      );
+
+    const toggle = panel.querySelector('[data-maximize-target]');
+    if (toggle) {
+      toggle.dataset.maximizeTarget = view.id;
+    }
+
+    if (viewEl?.style) {
+      viewEl.style.setProperty('--view-aspect-ratio', `${view.viewBox.width} / ${view.viewBox.height}`);
       // A view may have no background yet — setting url('projects/x/null')
       // would render a broken tile rather than an empty panel.
       if (view.background) {
-        container.style.backgroundImage = `url('${cssUrl(
-          projectAssetPath(project.id, view.background)
-        )}')`;
+        viewEl.style.backgroundImage = `url('${cssUrl(projectAssetPath(project.id, view.background))}')`;
       } else {
-        container.style.removeProperty('background-image');
+        viewEl.style.removeProperty('background-image');
       }
     }
-    if (labels?.label) {
-      labels.label.textContent = view.label;
-    }
-    if (labels?.sublabel) {
-      labels.sublabel.textContent = view.sublabel;
-    }
+
+    setText(panel.querySelector('[data-view-label]'), view.label);
+    setText(panel.querySelector('[data-view-sublabel]'), view.sublabel);
+    // Each panel reports its own scale; views no longer have to share one.
+    const perFoot = Math.round(createViewTransform(view).pxPerFt);
+    setText(panel.querySelector('[data-scale-summary]'), `1 ft ≈ ${perFoot.toLocaleString()} px`);
+
+    return { view, svg, panel, container: viewEl };
   });
+
+  // Anything left over belongs to a view the project no longer declares.
+  reusable.forEach((panel) => panel.remove());
+
+  return panels;
 }
 
-function setViewBox(svg, viewBox) {
-  if (!svg || !viewBox) return;
-  svg.setAttribute('viewBox', `0 0 ${viewBox.width} ${viewBox.height}`);
+function setText(el, text) {
+  if (el) el.textContent = text;
 }
 
 /** Escape the few characters that would otherwise break out of a CSS url('…'). */

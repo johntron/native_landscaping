@@ -52,24 +52,8 @@ async function init() {
   const scaleInput = document.getElementById('scaleInput');
   const scaleSlider = document.getElementById('scaleSlider');
   const scaleIndicator = document.getElementById('scaleIndicator');
-  const scaleSummaryEls = Array.from(document.querySelectorAll('[data-scale-summary]'));
-  // Elevation panels are positional slots: slot 0 and 1 take whichever compass
-  // directions the active project's config assigns to them.
-  const svgRefs = {
-    topSvg: document.getElementById('topSvg'),
-    elevationSvgs: [document.getElementById('frontSvg'), document.getElementById('sideSvg')],
-  };
-  const containerRefs = {
-    topView: document.getElementById('topView'),
-    elevationViews: [document.getElementById('frontView'), document.getElementById('sideView')],
-  };
-  const labelRefs = ['topView', 'frontView', 'sideView'].map((panelId) => {
-    const panel = document.querySelector(`[data-view-panel="${panelId}"]`);
-    return {
-      label: panel?.querySelector('[data-view-label]'),
-      sublabel: panel?.querySelector('[data-view-sublabel]'),
-    };
-  });
+  const viewsContainer = document.querySelector('.views');
+  const viewPanelTemplate = document.getElementById('viewPanelTemplate');
   const projectSelect = document.getElementById('projectSelect');
   const projectNotice = document.getElementById('projectNotice');
   const modeButtons = Array.from(document.querySelectorAll('[data-mode]'));
@@ -114,10 +98,13 @@ async function init() {
   }
 
   initProjectPicker(projectSelect, projectIndex, project.id);
-  configureViews({ svgRefs, containerRefs, labelRefs, project });
-
-  const viewsContainer = document.querySelector('.views');
-  const maximizeButtons = Array.from(document.querySelectorAll('[data-maximize-target]'));
+  // Panels are cloned per view, so nothing below may cache a panel-specific
+  // element across a rebuild — go through viewPanels instead.
+  let viewPanels = configureViews({
+    container: viewsContainer,
+    template: viewPanelTemplate,
+    project,
+  });
 
   const refreshMaximizedView = () => {
     if (viewsContainer) {
@@ -127,7 +114,10 @@ async function init() {
         viewsContainer.removeAttribute('data-maximized');
       }
     }
-    maximizeButtons.forEach((button) => {
+    viewPanels.forEach(({ view, panel }) => {
+      panel.classList.toggle('is-maximized', view.id === appState.maximizedViewId);
+      const button = panel.querySelector('[data-maximize-target]');
+      if (!button) return;
       const target = button.dataset.maximizeTarget || '';
       const isActive = Boolean(target && target === appState.maximizedViewId);
       button.classList.toggle('is-active', isActive);
@@ -146,8 +136,12 @@ async function init() {
     refreshMaximizedView();
   };
 
-  maximizeButtons.forEach((button) => {
-    button.addEventListener('click', () => toggleViewMaximization(button.dataset.maximizeTarget));
+  // Delegated so the handler survives configureViews replacing panels.
+  viewsContainer?.addEventListener('click', (event) => {
+    const button = event.target.closest?.('[data-maximize-target]');
+    if (button && viewsContainer.contains(button)) {
+      toggleViewMaximization(button.dataset.maximizeTarget);
+    }
   });
 
   refreshMaximizedView();
@@ -282,7 +276,7 @@ async function init() {
   };
   const handleBundleExport = async () => {
     if (isBundleExporting) return;
-    if (!svgRefs.topSvg || svgRefs.elevationSvgs.some((svg) => !svg)) return;
+    if (!viewPanels.length || viewPanels.some(({ svg }) => !svg)) return;
     if (!loadedSpeciesCsv) {
       console.warn('No plants.csv loaded; cannot export bundle.');
       return;
@@ -307,14 +301,11 @@ async function init() {
       if (!JSZipLib) {
         throw new Error('JSZip is not loaded');
       }
-      const panels = [
-        { view: planView, svg: svgRefs.topSvg, fileName: 'plan-view.png' },
-        ...elevationViews.map((elevation, index) => ({
-          view: elevation,
-          svg: svgRefs.elevationSvgs[index],
-          fileName: `${elevation.id}-elevation.png`,
-        })),
-      ];
+      const panels = viewPanels.map(({ view, svg }) => ({
+        view,
+        svg,
+        fileName: `${view.id}-view.png`,
+      }));
       const pngs = await Promise.all(
         panels.map(({ view, svg }) =>
           captureViewToPng({
@@ -358,29 +349,21 @@ async function init() {
   };
   initZoomControls(scaleInput, scaleSlider, applyZoom, appState.zoom);
 
-  const planView = project.views.find((view) => view.type === 'plan');
-  const elevationViews = project.views.filter((view) => view.type === 'elevation');
-  const dragController = createPlantDragController({
-    svg: svgRefs.topSvg,
-    getPlants: () => appState.plants,
-    getTransform: () => createViewTransform(planView),
-    onPositionsChange: () => render(),
-    onHoverPlant: setHoveredPlant,
-    onChangeCommit: () => commitLayoutChange('Moved plant'),
-  });
-  const elevationDragControllers = elevationViews.map((elevation, index) =>
-    createElevationDragController({
-      svg: svgRefs.elevationSvgs[index],
-      // Which yard axis a drag edits, and how a mirrored view flips it, both
-      // come from the view's transform.
+  // One controller per panel; which one to build follows the view's type, and
+  // an elevation reads its axis and mirroring off the view's own transform.
+  const dragControllers = viewPanels.map(({ view, svg }) => {
+    const shared = {
+      svg,
       getPlants: () => appState.plants,
-      getTransform: () => createViewTransform(elevation),
+      getTransform: () => createViewTransform(view),
       onPositionsChange: () => render(),
       onHoverPlant: setHoveredPlant,
       onChangeCommit: () => commitLayoutChange('Moved plant'),
-    })
-  );
-  const dragControllers = [dragController, ...elevationDragControllers];
+    };
+    return view.type === 'plan'
+      ? createPlantDragController(shared)
+      : createElevationDragController(shared);
+  });
 
   const cloneMenu = createCloneMenu({
     onClone: (plantId) => {
@@ -583,13 +566,12 @@ async function init() {
       plant,
       state: computePlantState(plant, month),
     }));
-    renderViews(svgRefs, plantStates, {
+    renderViews(viewPanels, plantStates, {
       showLabels: appState.showLabels,
       hiddenLayerCount: appState.hiddenLayerCount,
       highlightedSpeciesKey: appState.highlightedSpeciesKey,
       targetedPlantId: appState.targetedPlantId,
       hoveredPlantId: appState.hoveredPlantId,
-      project,
     });
   };
 
@@ -651,8 +633,7 @@ async function init() {
     }
   });
 
-  updateScaleIndicator(scaleIndicator, createViewTransform(planView).pxPerFt);
-  updateScaleSummaries(scaleSummaryEls, project.views);
+  updateScaleIndicator(scaleIndicator, createViewTransform(viewPanels[0].view).pxPerFt);
   render();
 }
 
@@ -742,22 +723,6 @@ function updateScaleIndicator(container, pxPerFt) {
     if (line) {
       line.style.width = `${width}px`;
     }
-  });
-}
-
-/** Each panel reports its own scale; views no longer have to share one. */
-function updateScaleSummaries(summaryEls, views) {
-  if (!summaryEls?.length) return;
-  const ordered = [
-    ...views.filter((view) => view.type === 'plan'),
-    ...views.filter((view) => view.type !== 'plan'),
-  ];
-  summaryEls.forEach((el, index) => {
-    if (!el) return;
-    const view = ordered[index];
-    const perFoot = view ? Math.round(createViewTransform(view).pxPerFt) : 0;
-    const formatted = Number.isFinite(perFoot) && perFoot > 0 ? perFoot.toLocaleString() : '0';
-    el.textContent = `1 ft ≈ ${formatted} px`;
   });
 }
 

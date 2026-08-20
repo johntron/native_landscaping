@@ -17,7 +17,7 @@ test.describe('backyard project', () => {
     const rows = await readLayoutRows('backyard');
     expect(rows.length).toBeGreaterThan(0);
 
-    for (const svgId of ['#topSvg', '#frontSvg', '#sideSvg']) {
+    for (const svgId of ['#topSvg', '#southSvg', '#eastSvg']) {
       await expect(page.locator(`${svgId} g[data-plant-id]`)).toHaveCount(rows.length);
     }
 
@@ -30,10 +30,10 @@ test.describe('backyard project', () => {
     await openProject(page, 'backyard');
 
     await expect(
-      page.locator('[data-view-panel="frontView"] [data-view-label]')
+      page.locator('[data-view-panel="south"] [data-view-label]')
     ).toHaveText('South elevation');
     await expect(
-      page.locator('[data-view-panel="sideView"] [data-view-label]')
+      page.locator('[data-view-panel="east"] [data-view-label]')
     ).toHaveText('East elevation');
     await expect(page.locator('#topSvg')).toHaveAttribute('viewBox', '0 0 800 600');
   });
