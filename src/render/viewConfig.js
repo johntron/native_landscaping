@@ -37,9 +37,12 @@ export function configureViews({ container, template, project }) {
       panel = template.content.firstElementChild.cloneNode(true);
       panel.dataset.viewPanel = view.id;
     }
-    // Appending an element already in the container moves it, so this also
-    // reorders panels to match views[].
-    container.appendChild(panel);
+    // Only move a panel that is actually out of place. Re-appending one that is
+    // already correct still counts as a DOM move, which disconnects its subtree
+    // and drops any pointer capture — that ends a handle drag mid-gesture.
+    if (container.children[index] !== panel) {
+      container.insertBefore(panel, container.children[index] || null);
+    }
 
     const svg = panel.querySelector('svg');
     const viewEl = panel.querySelector('.view');

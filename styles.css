@@ -127,6 +127,11 @@ h1 {
   color: #fff;
 }
 
+.mode-switch__btn[data-mode="setup"][aria-pressed="true"] {
+  background: linear-gradient(90deg, #4a4a7a 0%, #6b6b9e 100%);
+  color: #fff;
+}
+
 .settings-toggle {
   border: 1px solid #c7ced8;
   background-color: #fff;

@@ -117,6 +117,25 @@ test.describe('setup mode', () => {
     await expect(items.nth(2)).toContainText('East elevation');
   });
 
+  test('every mode button looks active when it is', async ({ page }) => {
+    await openProject(page, 'backyard');
+
+    // The pill's active styling used to enumerate view and edit by name, so a
+    // third mode read as pressed to a screen reader but looked unselected.
+    const paint = (mode) =>
+      page.locator(`[data-mode="${mode}"]`).evaluate((el) => {
+        const style = getComputedStyle(el);
+        return `${style.backgroundImage}|${style.color}`;
+      });
+
+    const inactive = await paint('setup');
+    for (const mode of ['edit', 'setup', 'view']) {
+      await page.locator(`[data-mode="${mode}"]`).click();
+      await expect(page.locator(`[data-mode="${mode}"]`)).toHaveAttribute('aria-pressed', 'true');
+      expect(await paint(mode), `${mode} is painted as the active mode`).not.toBe(inactive);
+    }
+  });
+
   test('mode survives a reload, and the old locked/unlocked flag migrates', async ({ page }) => {
     await openProject(page, 'backyard');
     await page.locator('[data-mode="setup"]').click();
@@ -273,6 +292,35 @@ test.describe('setup overlay', () => {
     expect(Number(await groundY())).toBeLessThan(beforeGround);
     expect(await plantPath()).not.toBe(beforePlant);
     expect(await fieldValue(page, 'Ground height (ft)')).not.toBe(beforeField);
+  });
+
+  test('a handle drag keeps following the pointer across many frames', async ({ page }) => {
+    await openProject(page, 'backyard');
+    await page.locator('[data-mode="setup"]').click();
+
+    const width = () => fieldValue(page, 'Width (ft)');
+    const start = await handlePoint(page, 'topSvg', 'min-mid');
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+
+    // Re-rendering the panels used to re-append every one of them, and moving an
+    // element in the DOM drops its pointer capture — so the drag died on the
+    // first repaint. Step slowly enough to cross several frames.
+    const widths = [];
+    for (let step = 1; step <= 5; step += 1) {
+      await page.mouse.move(start.x + step * 12, start.y, { steps: 2 });
+      await page.waitForTimeout(120);
+      widths.push(Number(await width()));
+    }
+    await page.mouse.up();
+
+    // Every step must have narrowed the view further; a dropped capture shows up
+    // as the value freezing after the first move.
+    for (let i = 1; i < widths.length; i += 1) {
+      expect(widths[i], `step ${i + 1} kept tracking (saw ${widths.join(', ')})`).toBeLessThan(
+        widths[i - 1]
+      );
+    }
   });
 
   test('dragging a plan edge handle resizes the view and the form together', async ({ page }) => {
