@@ -118,7 +118,6 @@ export function normalizeProjectConfig(raw, id) {
     id,
     name: String(raw.name || id),
     views,
-    ...legacyProjection(views),
   };
 }
 
@@ -247,42 +246,6 @@ function normalizeExtent(raw, projectId, viewId) {
     );
   }
   return { width, height };
-}
-
-/**
- * Fields the app still reads while beads nl-tz7.3 / nl-tz7.4 rewire it onto
- * `views[]`. Derived, never authored — delete this once nothing consumes it.
- *
- * `pixelsPerInch` was global; per-view scales can now differ, so the first view
- * speaks for the project.
- */
-function legacyProjection(views) {
-  const plan = views.find((view) => view.type === 'plan') || views[0];
-  const pxPerFt = views[0].viewBox.width / views[0].extentFt.width;
-  return {
-    pixelsPerInch: pxPerFt / INCHES_PER_FOOT,
-    plan: {
-      label: plan.label,
-      sublabel: plan.sublabel,
-      viewBox: plan.viewBox,
-      background: plan.background,
-    },
-    elevations: views
-      .filter((view) => view.type === 'elevation')
-      .map((view) => {
-        const viewPxPerFt = view.viewBox.width / view.extentFt.width;
-        return {
-          id: view.id,
-          viewFrom: view.viewFrom,
-          label: view.label,
-          sublabel: view.sublabel,
-          viewBox: view.viewBox,
-          background: view.background,
-          leftOffsetPx: -view.originFt.x * viewPxPerFt,
-          bottomOffsetPx: -view.originFt.y * viewPxPerFt,
-        };
-      }),
-  };
 }
 
 /**

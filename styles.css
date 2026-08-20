@@ -763,7 +763,8 @@ select {
 /* Grid layout for the three perspectives */
 .views {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  /* --view-zoom scales the panels only; the yard-to-pixel mapping is per view. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(320px * var(--view-zoom, 1))), 1fr));
   gap: 0.9rem;
   padding: 0.35rem 0.15rem 0.35rem;
 }

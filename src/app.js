@@ -1,9 +1,4 @@
-import {
-  DEFAULT_PIXELS_PER_INCH,
-  INCHES_PER_FOOT,
-  MONTH_NAMES,
-  SCALE_LIMITS,
-} from './constants.js';
+import { DEFAULT_ZOOM, INCHES_PER_FOOT, MONTH_NAMES, ZOOM_LIMITS } from './constants.js';
 import { fetchCsv } from './data/csvLoader.js';
 import {
   loadProjectConfig,
@@ -12,12 +7,12 @@ import {
   projectLayoutPath,
   resolveActiveProjectId,
 } from './data/projectConfig.js';
-import { resolveElevationOrientation } from './render/elevationOrientation.js';
 import { buildPlantsFromCsv, LayoutDataError } from './data/plantParser.js';
 import { buildLayoutCsv } from './data/layoutExporter.js';
 import { loadLayoutHistory, persistLayout, updateHistoryCursor } from './data/persistence.js';
 import { computePlantState } from './state/seasonalState.js';
 import { renderViews } from './render/renderViews.js';
+import { createViewTransform } from './render/viewTransform.js';
 import { configureViews } from './render/viewConfig.js';
 import { createPlantDragController, createElevationDragController } from './interaction/dragController.js';
 import { buildPlantLabel } from './render/labels.js';
@@ -37,7 +32,7 @@ const appState = {
   project: null,
   plants: [],
   month: new Date().getMonth() + 1,
-  pixelsPerInch: DEFAULT_PIXELS_PER_INCH,
+  zoom: DEFAULT_ZOOM,
   positionsLocked: true,
   showLabels: false,
   hiddenLayerCount: 0,
@@ -112,7 +107,6 @@ async function init() {
     return;
   }
   appState.project = project;
-  appState.pixelsPerInch = project.pixelsPerInch;
   document.title = `${project.name} Visualization`;
   const projectTitle = document.getElementById('projectTitle');
   if (projectTitle) {
@@ -314,8 +308,8 @@ async function init() {
         throw new Error('JSZip is not loaded');
       }
       const panels = [
-        { view: project.plan, svg: svgRefs.topSvg, fileName: 'plan-view.png' },
-        ...project.elevations.map((elevation, index) => ({
+        { view: planView, svg: svgRefs.topSvg, fileName: 'plan-view.png' },
+        ...elevationViews.map((elevation, index) => ({
           view: elevation,
           svg: svgRefs.elevationSvgs[index],
           fileName: `${elevation.id}-elevation.png`,
@@ -356,31 +350,31 @@ async function init() {
       isBundleExporting = false;
     }
   };
-  const applyScale = (value) => {
-    appState.pixelsPerInch = value;
-    updateScaleIndicator(scaleIndicator, value);
-    updateScaleSummaries(scaleSummaryEls, value);
-    render();
+  // Zoom only resizes the panels; plant coordinates and the background photo
+  // are fixed by each view's own feet-to-pixels transform.
+  const applyZoom = (value) => {
+    appState.zoom = value;
+    viewsContainer?.style.setProperty('--view-zoom', String(value));
   };
-  initScaleControls(scaleInput, scaleSlider, applyScale, project.pixelsPerInch);
+  initZoomControls(scaleInput, scaleSlider, applyZoom, appState.zoom);
 
+  const planView = project.views.find((view) => view.type === 'plan');
+  const elevationViews = project.views.filter((view) => view.type === 'elevation');
   const dragController = createPlantDragController({
     svg: svgRefs.topSvg,
     getPlants: () => appState.plants,
-    getPixelsPerInch: () => appState.pixelsPerInch,
+    getTransform: () => createViewTransform(planView),
     onPositionsChange: () => render(),
     onHoverPlant: setHoveredPlant,
     onChangeCommit: () => commitLayoutChange('Moved plant'),
   });
-  const elevationDragControllers = project.elevations.map((elevation, index) =>
+  const elevationDragControllers = elevationViews.map((elevation, index) =>
     createElevationDragController({
       svg: svgRefs.elevationSvgs[index],
-      // Dragging in an elevation edits the yard axis that runs horizontally in it.
-      axis: resolveElevationOrientation(elevation.viewFrom).axisKey,
-      mirrored: resolveElevationOrientation(elevation.viewFrom).mirrored,
-      leftOffsetPx: elevation.leftOffsetPx,
+      // Which yard axis a drag edits, and how a mirrored view flips it, both
+      // come from the view's transform.
       getPlants: () => appState.plants,
-      getPixelsPerInch: () => appState.pixelsPerInch,
+      getTransform: () => createViewTransform(elevation),
       onPositionsChange: () => render(),
       onHoverPlant: setHoveredPlant,
       onChangeCommit: () => commitLayoutChange('Moved plant'),
@@ -589,7 +583,7 @@ async function init() {
       plant,
       state: computePlantState(plant, month),
     }));
-    renderViews(svgRefs, plantStates, appState.pixelsPerInch, {
+    renderViews(svgRefs, plantStates, {
       showLabels: appState.showLabels,
       hiddenLayerCount: appState.hiddenLayerCount,
       highlightedSpeciesKey: appState.highlightedSpeciesKey,
@@ -657,8 +651,8 @@ async function init() {
     }
   });
 
-  updateScaleIndicator(scaleIndicator, appState.pixelsPerInch);
-  updateScaleSummaries(scaleSummaryEls, appState.pixelsPerInch);
+  updateScaleIndicator(scaleIndicator, createViewTransform(planView).pxPerFt);
+  updateScaleSummaries(scaleSummaryEls, project.views);
   render();
 }
 
@@ -704,10 +698,10 @@ function initMonthSlider(sliderEl, readoutEl, initialMonth) {
   }
 }
 
-function initScaleControls(inputEl, sliderEl, onChange, initialValue = DEFAULT_PIXELS_PER_INCH) {
+function initZoomControls(inputEl, sliderEl, onChange, initialValue = DEFAULT_ZOOM) {
   if (!inputEl || !sliderEl) return;
 
-  const { min, max, step } = SCALE_LIMITS;
+  const { min, max, step } = ZOOM_LIMITS;
   [inputEl, sliderEl].forEach((el) => {
     el.min = String(min);
     el.max = String(max);
@@ -715,9 +709,9 @@ function initScaleControls(inputEl, sliderEl, onChange, initialValue = DEFAULT_P
   });
 
   const apply = (rawValue) => {
-    const parsed = clampScaleValue(Number(rawValue));
+    const parsed = clampZoomValue(Number(rawValue));
     if (parsed === null) return;
-    inputEl.value = formatScaleValue(parsed);
+    inputEl.value = formatZoomValue(parsed);
     sliderEl.value = String(parsed);
     onChange?.(parsed);
   };
@@ -728,13 +722,17 @@ function initScaleControls(inputEl, sliderEl, onChange, initialValue = DEFAULT_P
   apply(initialValue);
 }
 
-function updateScaleIndicator(container, pixelsPerInch) {
+/**
+ * The reference bars are drawn at the view's own scale, which no longer moves —
+ * zoom resizes the panel around them rather than restretching the yard.
+ */
+function updateScaleIndicator(container, pxPerFt) {
   if (!container) return;
   const items = container.querySelectorAll('.scale-indicator__item');
   items.forEach((item) => {
     const inches = resolveInches(item);
     if (!inches) return;
-    const width = Math.max(inches * pixelsPerInch, 4);
+    const width = Math.max((inches / INCHES_PER_FOOT) * pxPerFt, 4);
     const line = item.querySelector('.scale-indicator__line');
     if (line) {
       line.style.width = `${width}px`;
@@ -742,11 +740,17 @@ function updateScaleIndicator(container, pixelsPerInch) {
   });
 }
 
-function updateScaleSummaries(summaryEls, pixelsPerInch) {
+/** Each panel reports its own scale; views no longer have to share one. */
+function updateScaleSummaries(summaryEls, views) {
   if (!summaryEls?.length) return;
-  const perFoot = Math.round((pixelsPerInch || 0) * INCHES_PER_FOOT);
-  summaryEls.forEach((el) => {
+  const ordered = [
+    ...views.filter((view) => view.type === 'plan'),
+    ...views.filter((view) => view.type !== 'plan'),
+  ];
+  summaryEls.forEach((el, index) => {
     if (!el) return;
+    const view = ordered[index];
+    const perFoot = view ? Math.round(createViewTransform(view).pxPerFt) : 0;
     const formatted = Number.isFinite(perFoot) && perFoot > 0 ? perFoot.toLocaleString() : '0';
     el.textContent = `1 ft ≈ ${formatted} px`;
   });
@@ -773,9 +777,9 @@ function showLoadError(message, { hint = DEFAULT_LOAD_ERROR_HINT } = {}) {
   }
 }
 
-function clampScaleValue(value) {
+function clampZoomValue(value) {
   if (!Number.isFinite(value)) return null;
-  const { min, max } = SCALE_LIMITS;
+  const { min, max } = ZOOM_LIMITS;
   if (value < min) return min;
   if (value > max) return max;
   return value;
@@ -789,8 +793,8 @@ function clampMonthValue(value) {
   return Math.round(parsed);
 }
 
-function formatScaleValue(value) {
-  return value.toFixed(3);
+function formatZoomValue(value) {
+  return value.toFixed(2);
 }
 
 function renderSpeciesTable(plants, handlers = {}) {
@@ -1049,15 +1053,14 @@ function clonePlantById(state, plantId) {
   if (!plantId) return null;
   const source = state.plants.find((p) => String(p.id) === String(plantId));
   if (!source) return null;
-  const planViewBox = state.project.plan.viewBox;
-  const maxXFeet = planViewBox.width / (INCHES_PER_FOOT * state.pixelsPerInch);
-  const maxYFeet = planViewBox.height / (INCHES_PER_FOOT * state.pixelsPerInch);
+  const planView = state.project.views.find((view) => view.type === 'plan');
+  const { originFt, extentFt } = createViewTransform(planView);
   const offset = 1.1;
   const clone = {
     ...source,
     id: buildCloneId(state.plants, source.id),
-    x: clampFeet(source.x + offset, 0, maxXFeet),
-    y: clampFeet(source.y + offset * 0.6, 0, maxYFeet),
+    x: clampFeet(source.x + offset, originFt.x, originFt.x + extentFt.width),
+    y: clampFeet(source.y + offset * 0.6, originFt.y, originFt.y + extentFt.height),
   };
   clone.layer = classifyPlantLayer(clone);
   state.plants = [...state.plants, clone];

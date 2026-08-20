@@ -1,6 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { renderTopView } from '../src/render/topView.js';
+
+// 800x600 px over 26.67x20 ft is 30 px/ft — the old 2.5 px/in, stated in feet.
+const PLAN_VIEW = {
+  id: 'plan',
+  type: 'plan',
+  viewBox: { width: 800, height: 600 },
+  originFt: { x: 0, y: 0 },
+  extentFt: { width: 800 / 30, height: 600 / 30 },
+};
 import { resetDocument } from './helpers/fakeDom.js';
 
 const sharedState = {
@@ -52,7 +61,7 @@ test('renderTopView clears nodes and renders groups along with highlight/target 
     },
   ];
 
-  renderTopView(svg, plantStates, 2.5, {
+  renderTopView(svg, plantStates, PLAN_VIEW, {
     highlightedSpeciesKey: 'bouteloua curtipendula',
     targetedPlantId: 'alpha',
     hoveredPlantId: 'beta',

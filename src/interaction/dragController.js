@@ -1,5 +1,3 @@
-import { INCHES_PER_FOOT, PLAN_VIEWBOX } from '../constants.js';
-
 const MIN_HITBOX_RADIUS_PX = 28; // generous target for touch devices
 
 /**
@@ -8,13 +6,13 @@ const MIN_HITBOX_RADIUS_PX = 28; // generous target for touch devices
  * @param {Object} options
  * @param {SVGSVGElement} options.svg
  * @param {() => Array<any>} options.getPlants
- * @param {() => number} options.getPixelsPerInch
+ * @param {() => object} options.getTransform view transform for the panel being dragged
  * @param {() => void} options.onPositionsChange
  */
 export function createPlantDragController({
   svg,
   getPlants,
-  getPixelsPerInch,
+  getTransform,
   onPositionsChange,
   onHoverPlant,
   onChangeCommit,
@@ -47,7 +45,7 @@ export function createPlantDragController({
     if (state.locked || !event.isPrimary) return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
 
-    const ctx = buildPointerContext(svg, event, getPixelsPerInch());
+    const ctx = buildPointerContext(svg, event, getTransform());
     if (!ctx) {
       notifyHover('');
       return;
@@ -73,7 +71,7 @@ export function createPlantDragController({
   }
 
   function handlePointerMove(event) {
-    const ctx = buildPointerContext(svg, event, getPixelsPerInch());
+    const ctx = buildPointerContext(svg, event, getTransform());
     updateHoverFromContext(event, ctx);
     if (!state.activePlant || event.pointerId !== state.pointerId) return;
     if (!ctx) return;
@@ -83,7 +81,7 @@ export function createPlantDragController({
 
   function handlePointerUp(event) {
     if (event.pointerId !== state.pointerId) return;
-    const ctx = buildPointerContext(svg, event, getPixelsPerInch());
+    const ctx = buildPointerContext(svg, event, getTransform());
     const moved = state.hasMoved;
     cancelActive();
     if (moved) {
@@ -121,9 +119,11 @@ export function createPlantDragController({
   }
 
   function updatePlantPosition(ctx) {
-    const { viewBox, pixelsPerInch, positionFeet } = ctx;
-    const clampX = clamp(positionFeet.x - state.offsetFeet.x, 0, viewBoxToFeet(viewBox.width, pixelsPerInch));
-    const clampY = clamp(positionFeet.y - state.offsetFeet.y, 0, viewBoxToFeet(viewBox.height, pixelsPerInch));
+    const { transform, positionFeet } = ctx;
+    // A plant stays inside the patch of yard the view actually covers.
+    const { originFt, extentFt } = transform;
+    const clampX = clamp(positionFeet.x - state.offsetFeet.x, originFt.x, originFt.x + extentFt.width);
+    const clampY = clamp(positionFeet.y - state.offsetFeet.y, originFt.y, originFt.y + extentFt.height);
     const previousX = state.activePlant.x;
     const previousY = state.activePlant.y;
 
@@ -176,22 +176,18 @@ export function createPlantDragController({
 /**
  * Drag along one yard axis from an elevation view.
  *
- * `mirrored` and `leftOffsetPx` must match the elevation's rendering (see
- * elevationOrientation.js) so the pointer maps back to the same yard position the
- * plant was drawn at — otherwise dragging in a mirrored view moves plants backwards.
+ * The pointer maps back through the view's own transform, so the mirrored
+ * directions come out right without this file knowing the compass table —
+ * otherwise dragging in a mirrored view moves plants backwards.
  */
 export function createElevationDragController({
   svg,
-  axis = 'x',
-  mirrored = false,
-  leftOffsetPx = 0,
   getPlants,
-  getPixelsPerInch,
+  getTransform,
   onPositionsChange,
   onHoverPlant,
   onChangeCommit,
 }) {
-  const axisKey = axis === 'y' ? 'y' : 'x';
   const state = {
     locked: true,
     activePlant: null,
@@ -220,7 +216,7 @@ export function createElevationDragController({
     if (state.locked || !event.isPrimary) return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
 
-    const ctx = buildPointerContext(svg, event, getPixelsPerInch());
+    const ctx = buildPointerContext(svg, event, getTransform());
     if (!ctx) {
       notifyHover('');
       return;
@@ -240,7 +236,7 @@ export function createElevationDragController({
     state.activePlant = target;
     state.pointerId = event.pointerId;
     const axisPosition = pointerAxisFeet(ctx);
-    const axisValue = Number(target[axisKey]) || 0;
+    const axisValue = Number(target[axisKeyFor(ctx)]) || 0;
     state.axisOffsetFeet = axisPosition - axisValue;
     svg.setPointerCapture(event.pointerId);
     svg.style.cursor = 'grabbing';
@@ -250,7 +246,7 @@ export function createElevationDragController({
   }
 
   function handlePointerMove(event) {
-    const ctx = buildPointerContext(svg, event, getPixelsPerInch());
+    const ctx = buildPointerContext(svg, event, getTransform());
     updateHoverFromContext(event);
     if (!state.activePlant || event.pointerId !== state.pointerId) return;
     if (!ctx) return;
@@ -292,18 +288,19 @@ export function createElevationDragController({
     }
   }
 
+  function axisKeyFor(ctx) {
+    return ctx.transform.orientation.axisKey;
+  }
+
   function pointerAxisFeet(ctx) {
-    const offsetFeet = leftOffsetPx / (INCHES_PER_FOOT * ctx.pixelsPerInch);
-    const unmirrored = mirrored
-      ? viewBoxToFeet(ctx.viewBox.width, ctx.pixelsPerInch) - ctx.positionFeet.x
-      : ctx.positionFeet.x;
-    return unmirrored - offsetFeet;
+    return ctx.transform.xToAxis(ctx.viewBoxPoint.x);
   }
 
   function updatePlantPosition(ctx) {
-    const axisLimit = viewBoxToFeet(ctx.viewBox.width, ctx.pixelsPerInch);
+    const { originFt, extentFt } = ctx.transform;
+    const axisKey = axisKeyFor(ctx);
     const rawAxis = pointerAxisFeet(ctx) - state.axisOffsetFeet;
-    const clamped = clamp(rawAxis, 0, axisLimit);
+    const clamped = clamp(rawAxis, originFt.x, originFt.x + extentFt.width);
     const previous = state.activePlant[axisKey];
     state.activePlant[axisKey] = clamped;
     if (Math.abs(clamped - previous) > 1e-6) {
@@ -349,14 +346,13 @@ export function createElevationDragController({
 }
 
 function pickPlantHit(plants, ctx) {
-  const { viewBox, pixelsPerInch, viewBoxPoint, scaleFactor } = ctx;
-  const toPixels = (feet) => feet * INCHES_PER_FOOT * pixelsPerInch;
+  const { transform, viewBoxPoint, scaleFactor } = ctx;
+  const toPixels = transform.toPx;
   const minRadius = MIN_HITBOX_RADIUS_PX * scaleFactor;
   const candidates = [];
 
   plants.forEach((plant) => {
-    const cx = toPixels(plant.x);
-    const cy = viewBox.height - toPixels(plant.y);
+    const { x: cx, y: cy } = transform.planToViewBox(plant);
     const dx = viewBoxPoint.x - cx;
     const dy = viewBoxPoint.y - cy;
     const baseRadius = toPixels(plant.width) / 2;
@@ -389,30 +385,30 @@ function findPlantIdFromEvent(event) {
   return group.getAttribute('data-plant-id') || '';
 }
 
-function buildPointerContext(svg, event, pixelsPerInch) {
+/**
+ * Screen point -> viewBox point -> yard feet, using the panel's own transform.
+ * The viewBox comes from the transform rather than the DOM so the pointer and
+ * the renderer cannot disagree about what the panel covers.
+ */
+function buildPointerContext(svg, event, transform) {
+  if (!transform) return null;
   const rect = svg.getBoundingClientRect();
   if (!rect.width || !rect.height) return null;
-  const vb = svg.viewBox?.baseVal || PLAN_VIEWBOX;
+  const { viewBox } = transform;
 
-  const scaleX = vb.width / rect.width;
-  const scaleY = vb.height / rect.height;
-  const viewBoxX = (event.clientX - rect.left) * scaleX;
-  const viewBoxY = (event.clientY - rect.top) * scaleY;
+  const scaleX = viewBox.width / rect.width;
+  const scaleY = viewBox.height / rect.height;
+  const viewBoxPoint = {
+    x: (event.clientX - rect.left) * scaleX,
+    y: (event.clientY - rect.top) * scaleY,
+  };
 
   return {
-    viewBox: { width: vb.width, height: vb.height },
-    viewBoxPoint: { x: viewBoxX, y: viewBoxY },
-    positionFeet: {
-      x: viewBoxX / (INCHES_PER_FOOT * pixelsPerInch),
-      y: (vb.height - viewBoxY) / (INCHES_PER_FOOT * pixelsPerInch),
-    },
-    pixelsPerInch,
+    transform,
+    viewBoxPoint,
+    positionFeet: transform.type === 'plan' ? transform.viewBoxToPlan(viewBoxPoint) : null,
     scaleFactor: Math.max(scaleX, scaleY),
   };
-}
-
-function viewBoxToFeet(viewBoxDimension, pixelsPerInch) {
-  return viewBoxDimension / (INCHES_PER_FOOT * pixelsPerInch);
 }
 
 function clamp(value, min, max) {

@@ -1,9 +1,5 @@
-import {
-  DEFAULT_PIXELS_PER_INCH,
-  INCHES_PER_FOOT,
-  PLAN_VIEWBOX,
-  PLANT_BLEND_OPACITY,
-} from '../constants.js';
+import { PLANT_BLEND_OPACITY } from '../constants.js';
+import { createViewTransform } from './viewTransform.js';
 import { makeRng, seedForPlant } from '../utils/rng.js';
 import { getSpeciesKey } from '../utils/speciesKey.js';
 import { clearSvg, createSvgElement } from './svgUtils.js';
@@ -19,30 +15,29 @@ const TARGET_COLOR = '#1b74d8';
 const TARGET_OUTLINE_OPACITY = 0.95;
 
 /**
- * Render the plan view using wavy domed foliage silhouettes scaled to plant width.
+ * Render a plan view using wavy domed foliage silhouettes scaled to plant width.
+ *
+ * The view's own transform supplies the scale, so a detail crop — a plan view
+ * with a non-zero origin and a smaller extent — renders through this same path.
+ *
  * @param {SVGSVGElement} svg
  * @param {Array<{ plant: any, state: any }>} plantStates
- * @param {number} pixelsPerInch
- * @param {{ showLabels?: boolean, viewBox?: { width: number, height: number } }} [options]
+ * @param {object} view a normalized plan view (see createViewTransform)
+ * @param {{ showLabels?: boolean }} [options]
  */
-export function renderTopView(
-  svg,
-  plantStates,
-  pixelsPerInch = DEFAULT_PIXELS_PER_INCH,
-  options = {}
-) {
+export function renderTopView(svg, plantStates, view, options = {}) {
+  const transform = createViewTransform(view);
   const {
     showLabels = false,
     highlightedSpeciesKey = '',
     targetedPlantId = '',
     hoveredPlantId = '',
-    viewBox = PLAN_VIEWBOX,
   } = options;
   clearSvg(svg);
   const normalizedHighlightKey = (highlightedSpeciesKey || '').toLowerCase();
   const normalizedTargetId = String(targetedPlantId || '');
   const normalizedHoveredId = String(hoveredPlantId || '');
-  const toPixels = (feet) => feet * INCHES_PER_FOOT * pixelsPerInch;
+  const toPixels = transform.toPx;
   const highlightTargets = [];
   const targetMarkers = [];
 
@@ -56,8 +51,7 @@ export function renderTopView(
       'data-plant-id': plant.id,
       'data-species-key': speciesKey,
     });
-    const cx = toPixels(plant.x);
-    const cy = viewBox.height - toPixels(plant.y); // origin bottom-left for yard coordinates
+    const { x: cx, y: cy } = transform.planToViewBox(plant);
     const radius = toPixels(plant.width) / 2;
     const canopySeed = seedForPlant(plant.id);
     const canopyPoints = buildWavyCirclePoints(cx, cy, radius, makeRng(canopySeed));
