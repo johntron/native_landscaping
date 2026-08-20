@@ -182,6 +182,77 @@ export function resolveHandleDrag(view, handleId, point) {
   return withDerivedViewBox(originFt, extentFt, transform.pxPerFt);
 }
 
+/**
+ * Measure a two-point drag across the view's background photo.
+ *
+ * The photo is stretched to fill the viewBox (`background-size: 100% 100%` in
+ * styles.css), so viewBox pixels map proportionally onto the image and a
+ * measurement taken here is a measurement of the photo. Scale is uniform, so a
+ * diagonal drag is as valid as an axis-aligned one.
+ *
+ * @returns {{ pixels: number, feet: number, pxPerFt: number } | null}
+ */
+export function measureRuler(view, from, to) {
+  if (!view || !from || !to) return null;
+  const transform = createViewTransform(view);
+  const pixels = Math.hypot(Number(to.x) - Number(from.x), Number(to.y) - Number(from.y));
+  if (!Number.isFinite(pixels)) return null;
+  return { pixels, feet: transform.toFeet(pixels), pxPerFt: transform.pxPerFt };
+}
+
+/**
+ * A drag shorter than this is a misclick, not a measurement. It matches the
+ * controllers' hit radius: inside it, a pointer is "on" a thing rather than
+ * having travelled across one, and a 3px span would solve to geometry that is
+ * perfectly valid and wildly wrong.
+ */
+export const MIN_RULER_PIXELS = 28;
+
+/**
+ * Solve a view's real-world extent from a known length in its photo.
+ *
+ * The drag says "this many viewBox pixels" and the typed length says "that is
+ * this many feet". Everything else follows: the view keeps its resolution and
+ * its anchor against the photo, and only how much yard the photo covers moves.
+ *
+ * Resolution is held rather than the viewBox, so the patch has the same shape
+ * as a handle drag's and "px per ft" in the setup form keeps meaning what it
+ * says. The viewBox therefore changes size — visually a no-op, because the
+ * photo fills whatever box it is given.
+ *
+ * Anchoring: a plan's `originFt` IS its bottom-left corner and an elevation's
+ * `originFt.x` IS its near edge, so both sit on a photo edge at any scale and
+ * survive untouched. An elevation's ground line does not — it floats at
+ * `-originFt.y` feet above the bottom — so that one scales with the extent,
+ * keeping the ground on the photo row the user placed it on.
+ *
+ * @param {object} view a normalized view
+ * @param {{x: number, y: number}} from viewBox point
+ * @param {{x: number, y: number}} to viewBox point
+ * @param {number} lengthFt what the measured span really is
+ * @returns {{ originFt: {x:number,y:number}, extentFt: {width:number,height:number},
+ *             viewBox: {width:number,height:number} } | null}
+ */
+export function resolveRulerCalibration(view, from, to, lengthFt) {
+  const measured = measureRuler(view, from, to);
+  if (!measured || measured.pixels < MIN_RULER_PIXELS) return null;
+  const feet = Number(lengthFt);
+  if (!Number.isFinite(feet) || feet <= 0) return null;
+
+  const transform = createViewTransform(view);
+  const scale = feet / measured.feet;
+  const originFt = { ...transform.originFt };
+  if (transform.type === 'elevation') originFt.y *= scale;
+  return withDerivedViewBox(
+    originFt,
+    {
+      width: transform.extentFt.width * scale,
+      height: transform.extentFt.height * scale,
+    },
+    transform.pxPerFt
+  );
+}
+
 function withDerivedViewBox(originFt, extentFt, pxPerFt) {
   return {
     originFt,
@@ -216,7 +287,7 @@ export function clearSetupOverlay(svg) {
  * Draw the guides into a view's SVG, on top of the plants. Called after every
  * render because rendering clears the SVG.
  */
-export function renderSetupOverlay(svg, view) {
+export function renderSetupOverlay(svg, view, ruler) {
   if (!svg || !view) return null;
   clearSetupOverlay(svg);
   const geometry = buildOverlayGeometry(view);
@@ -297,8 +368,60 @@ export function renderSetupOverlay(svg, view) {
   label.textContent = geometry.readout.text;
   group.appendChild(label);
 
+  if (ruler?.from && ruler?.to) appendRuler(group, view, ruler);
+
   svg.appendChild(group);
   return group;
+}
+
+/**
+ * The measuring segment, drawn while the drag is live and left in place after
+ * it so the user can see what they are typing a length for.
+ */
+function appendRuler(group, view, ruler) {
+  const measured = measureRuler(view, ruler.from, ruler.to);
+  if (!measured) return;
+  group.appendChild(
+    createSvgElement('line', {
+      x1: ruler.from.x,
+      y1: ruler.from.y,
+      x2: ruler.to.x,
+      y2: ruler.to.y,
+      stroke: '#c1121f',
+      'stroke-width': 3,
+      'stroke-linecap': 'round',
+      'data-setup-ruler': '',
+    })
+  );
+  [ruler.from, ruler.to].forEach((end) => {
+    group.appendChild(
+      createSvgElement('circle', {
+        cx: end.x,
+        cy: end.y,
+        r: 5,
+        fill: '#fff',
+        stroke: '#c1121f',
+        'stroke-width': 2.5,
+        'data-setup-ruler-end': '',
+      })
+    );
+  });
+
+  // Above the midpoint, so the segment itself is never covered by its label.
+  const text = createSvgElement('text', {
+    x: (ruler.from.x + ruler.to.x) / 2,
+    y: (ruler.from.y + ruler.to.y) / 2 - 10,
+    'text-anchor': 'middle',
+    'font-size': 16,
+    'font-weight': 700,
+    fill: '#c1121f',
+    stroke: '#fff',
+    'stroke-width': 3,
+    'paint-order': 'stroke fill',
+    'data-setup-ruler-readout': '',
+  });
+  text.textContent = `${round(measured.feet)} ft at this scale`;
+  group.appendChild(text);
 }
 
 function round(value) {

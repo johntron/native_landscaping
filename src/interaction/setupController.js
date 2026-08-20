@@ -13,14 +13,33 @@ const MIN_HITBOX_RADIUS_PX = 28; // matches dragController; generous for touch
  * the app validates it before it becomes the live view, which is why nothing
  * here mutates the view it was handed.
  *
+ * Armed with `setRuler(true)` the same pointer draws a measuring segment
+ * instead: handles are ignored for the duration, and the segment is reported
+ * through `onRuler` for the app to draw and to ask a length for.
+ *
  * @param {{ svg: SVGSVGElement, getView: () => object,
- *           onChange: (patch: object) => void, onCommit?: () => void }} options
+ *           onChange: (patch: object) => void, onCommit?: () => void,
+ *           onRuler?: (segment: {from: object, to: object, done: boolean}) => void }} options
  */
-export function createSetupController({ svg, getView, onChange, onCommit }) {
-  const state = { locked: true, handleId: '', pointerId: null, frame: 0, pending: null };
+export function createSetupController({ svg, getView, onChange, onCommit, onRuler }) {
+  const state = {
+    locked: true,
+    handleId: '',
+    pointerId: null,
+    frame: 0,
+    pending: null,
+    ruler: false,
+    from: null,
+    to: null,
+  };
 
   if (!svg) {
-    return { setLocked: () => {}, isLocked: () => true, destroy: () => {} };
+    return {
+      setLocked: () => {},
+      isLocked: () => true,
+      setRuler: () => {},
+      destroy: () => {},
+    };
   }
 
   const listeners = [
@@ -53,6 +72,18 @@ export function createSetupController({ svg, getView, onChange, onCommit }) {
     const context = toViewBoxPoint(event);
     if (!context) return;
 
+    if (state.ruler) {
+      // A measurement starts wherever the pointer went down; there is nothing
+      // to hit-test, which is why the ruler cannot also move a handle.
+      state.from = context.point;
+      state.to = context.point;
+      state.pointerId = event.pointerId;
+      svg.setPointerCapture(event.pointerId);
+      onRuler?.({ from: state.from, to: state.from, done: false });
+      event.preventDefault();
+      return;
+    }
+
     const geometry = buildOverlayGeometry(context.view);
     const handle = pickHandle(geometry, context.point, MIN_HITBOX_RADIUS_PX * context.scaleFactor);
     if (!handle) return;
@@ -67,6 +98,16 @@ export function createSetupController({ svg, getView, onChange, onCommit }) {
   function handlePointerMove(event) {
     if (state.locked) return;
     const context = toViewBoxPoint(event);
+    if (state.from && event.pointerId === state.pointerId) {
+      if (!context) return;
+      // Held outside `pending`, which the frame throttle empties: the release
+      // needs the last point the pointer reached, not the last one drawn.
+      state.to = context.point;
+      state.pending = { from: state.from, to: state.to, done: false };
+      queueChange();
+      event.preventDefault();
+      return;
+    }
     if (!state.handleId || event.pointerId !== state.pointerId) {
       updateHoverCursor(context);
       return;
@@ -78,7 +119,7 @@ export function createSetupController({ svg, getView, onChange, onCommit }) {
   }
 
   function updateHoverCursor(context) {
-    if (!context) return;
+    if (!context || state.ruler) return;
     const geometry = buildOverlayGeometry(context.view);
     const handle = pickHandle(geometry, context.point, MIN_HITBOX_RADIUS_PX * context.scaleFactor);
     svg.style.cursor = handle ? cursorFor(handle) : 'default';
@@ -86,6 +127,14 @@ export function createSetupController({ svg, getView, onChange, onCommit }) {
 
   function handlePointerUp(event) {
     if (event.pointerId !== state.pointerId) return;
+    if (state.from) {
+      const from = state.from;
+      const to = state.to || from;
+      flushPending();
+      release();
+      onRuler?.({ from, to, done: true });
+      return;
+    }
     const wasDragging = Boolean(state.handleId);
     // A flick can finish inside a single frame. Without this the coalesced
     // change is still pending when release() drops it, and the whole gesture
@@ -100,9 +149,15 @@ export function createSetupController({ svg, getView, onChange, onCommit }) {
       cancelAnimationFrame(state.frame);
       state.frame = 0;
     }
-    const patch = state.pending;
+    deliver(state.pending);
     state.pending = null;
-    if (patch) onChange?.(patch);
+  }
+
+  /** One pending payload, two destinations: a ruler segment is not a view patch. */
+  function deliver(payload) {
+    if (!payload) return;
+    if (payload.from) onRuler?.(payload);
+    else onChange?.(payload);
   }
 
   /**
@@ -113,9 +168,9 @@ export function createSetupController({ svg, getView, onChange, onCommit }) {
     if (state.frame) return;
     state.frame = requestAnimationFrame(() => {
       state.frame = 0;
-      const patch = state.pending;
+      const payload = state.pending;
       state.pending = null;
-      if (patch) onChange?.(patch);
+      deliver(payload);
     });
   }
 
@@ -126,7 +181,25 @@ export function createSetupController({ svg, getView, onChange, onCommit }) {
     state.handleId = '';
     state.pointerId = null;
     state.pending = null;
-    svg.style.cursor = state.locked ? 'default' : 'crosshair';
+    state.from = null;
+    state.to = null;
+    svg.style.cursor = restingCursor();
+  }
+
+  /** Crosshair says "this view is the one being set up"; locked says nothing. */
+  function restingCursor() {
+    return state.locked ? 'default' : 'crosshair';
+  }
+
+  /**
+   * Arm or disarm the measuring gesture. Arming mid-drag would leave a handle
+   * half-moved, so any gesture in flight is dropped first.
+   */
+  function setRuler(active) {
+    const next = Boolean(active);
+    if (next === state.ruler) return;
+    state.ruler = next;
+    release();
   }
 
   function setLocked(locked) {
@@ -135,7 +208,7 @@ export function createSetupController({ svg, getView, onChange, onCommit }) {
     // See dragController: this element has two controllers, so touch-action is
     // expressed as a class rather than an inline property they overwrite.
     svg.classList.toggle('is-setup-enabled', !state.locked);
-    svg.style.cursor = state.locked ? 'default' : 'crosshair';
+    svg.style.cursor = restingCursor();
   }
 
   function destroy() {
@@ -144,7 +217,7 @@ export function createSetupController({ svg, getView, onChange, onCommit }) {
     listeners.forEach(([type, handler]) => svg.removeEventListener(type, handler));
   }
 
-  return { setLocked, isLocked: () => state.locked, destroy };
+  return { setLocked, isLocked: () => state.locked, setRuler, destroy };
 }
 
 function cursorFor(handle) {
