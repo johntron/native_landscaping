@@ -42,9 +42,15 @@ export function configureViews({ svgRefs, containerRefs, labelRefs, project }) {
         '--view-aspect-ratio',
         `${view.viewBox.width} / ${view.viewBox.height}`
       );
-      container.style.backgroundImage = `url('${cssUrl(
-        projectAssetPath(project.id, view.background)
-      )}')`;
+      // A view may have no background yet — setting url('projects/x/null')
+      // would render a broken tile rather than an empty panel.
+      if (view.background) {
+        container.style.backgroundImage = `url('${cssUrl(
+          projectAssetPath(project.id, view.background)
+        )}')`;
+      } else {
+        container.style.removeProperty('background-image');
+      }
     }
     if (labels?.label) {
       labels.label.textContent = view.label;
