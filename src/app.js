@@ -681,8 +681,13 @@ function initProjectPicker(selectEl, projectIndex, activeId) {
   });
 }
 
-/** Absolute URL for a background declared relative to the project directory. */
+/**
+ * Absolute URL for a background declared relative to the project directory, or
+ * null when the view has no image yet — captureViewToPng skips the background
+ * rather than fetching projects/<slug>/null.
+ */
 function backgroundUrlFor(project, view) {
+  if (!view?.background) return null;
   return new URL(projectAssetPath(project.id, view.background), document.baseURI).toString();
 }
 
