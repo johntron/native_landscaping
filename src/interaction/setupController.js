@@ -132,7 +132,9 @@ export function createSetupController({ svg, getView, onChange, onCommit }) {
   function setLocked(locked) {
     state.locked = Boolean(locked);
     if (state.locked) release();
-    svg.style.touchAction = state.locked ? 'auto' : 'none';
+    // See dragController: this element has two controllers, so touch-action is
+    // expressed as a class rather than an inline property they overwrite.
+    svg.classList.toggle('is-setup-enabled', !state.locked);
     svg.style.cursor = state.locked ? 'default' : 'crosshair';
   }
 

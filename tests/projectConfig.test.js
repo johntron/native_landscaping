@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   isValidProjectId,
   normalizeProjectConfig,
@@ -280,4 +283,49 @@ test('views[] validation rejects the ways a view can be unusable', () => {
     [{ id: 'x', type: 'plan', extentFt: { width: 40, height: 30 }, background: '../../secret.webp' }],
     /relative to the project directory/
   );
+});
+
+
+// --- the project.json files this repo actually ships ---
+
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+function loadShippedProject(id) {
+  const raw = JSON.parse(
+    readFileSync(path.join(REPO_ROOT, 'projects', id, 'project.json'), 'utf8')
+  );
+  return normalizeProjectConfig(raw, id);
+}
+
+test('projects/backyard still lands on the pixels its legacy file named', () => {
+  // It was converted from {plan, elevations[]} by hand. The photos did not move,
+  // so 27 px/ft and the 80/100 px insets must survive the conversion exactly.
+  const config = loadShippedProject('backyard');
+  const byId = Object.fromEntries(config.views.map((view) => [view.id, view]));
+  assert.deepEqual(Object.keys(byId), ['plan', 'south', 'east']);
+
+  const plan = createViewTransform(byId.plan);
+  assert.ok(Math.abs(plan.pxPerFt / INCHES_PER_FOOT - 2.25) < 1e-9);
+  assert.deepEqual(byId.plan.originFt, { x: 0, y: 0 });
+
+  const south = createViewTransform(byId.south);
+  assert.ok(Math.abs(south.groundY - (600 - 100)) < 1e-9);
+  assert.ok(Math.abs(south.axisToX(0) - 0) < 1e-9);
+
+  const east = createViewTransform(byId.east);
+  assert.ok(Math.abs(east.groundY - (600 - 100)) < 1e-9);
+  assert.ok(Math.abs(east.axisToX(0) - 80) < 1e-9);
+});
+
+test('projects/example-frontyard ships a detail view cropped out of its plan', () => {
+  const config = loadShippedProject('example-frontyard');
+  const detail = config.views.find((view) => view.backgroundFrom);
+  assert.ok(detail, 'expected a view borrowing a background');
+  const source = config.views.find((view) => view.id === detail.backgroundFrom);
+  // The multi-panel and crop paths only get permanent e2e coverage while this
+  // project keeps a fourth view.
+  assert.equal(config.views.length, 4);
+  assert.equal(source.type, detail.type);
+  assert.ok(detail.extentFt.width < source.extentFt.width);
+  assert.ok(detail.originFt.x >= source.originFt.x);
 });

@@ -13,6 +13,7 @@ export function createPlantDragController({
   svg,
   getPlants,
   getTransform,
+  getBounds,
   onPositionsChange,
   onHoverPlant,
   onChangeCommit,
@@ -124,10 +125,11 @@ export function createPlantDragController({
 
   function updatePlantPosition(ctx) {
     const { transform, positionFeet } = ctx;
-    // A plant stays inside the patch of yard the view actually covers.
-    const { originFt, extentFt } = transform;
-    const clampX = clamp(positionFeet.x - state.offsetFeet.x, originFt.x, originFt.x + extentFt.width);
-    const clampY = clamp(positionFeet.y - state.offsetFeet.y, originFt.y, originFt.y + extentFt.height);
+    // A plant stays inside the shared yard bounds, not this view's own extent —
+    // see render/yardBounds.js for why the two differ.
+    const bounds = boundsFor(getBounds, transform);
+    const clampX = clamp(positionFeet.x - state.offsetFeet.x, bounds.x.min, bounds.x.max);
+    const clampY = clamp(positionFeet.y - state.offsetFeet.y, bounds.y.min, bounds.y.max);
     const previousX = state.activePlant.x;
     const previousY = state.activePlant.y;
 
@@ -167,7 +169,11 @@ export function createPlantDragController({
       cancelActive();
       notifyHover('');
     }
-    svg.style.touchAction = state.locked ? 'auto' : 'pan-y';
+    // A class, not svg.style.touchAction: the setup controller shares this
+    // element and also has a say, and whichever wrote the inline property last
+    // silently won. Each controller now toggles its own class and CSS combines
+    // them. See the touch rules in styles.css.
+    svg.classList.toggle('is-drag-enabled', !state.locked);
     svg.style.cursor = state.locked ? 'default' : 'grab';
   }
 
@@ -178,6 +184,7 @@ export function createPlantDragController({
    */
   function destroy() {
     cancelActive();
+    svg.classList.remove('is-drag-enabled');
     listeners.forEach(([type, handler]) => svg.removeEventListener(type, handler));
   }
 
@@ -199,6 +206,7 @@ export function createElevationDragController({
   svg,
   getPlants,
   getTransform,
+  getBounds,
   onPositionsChange,
   onHoverPlant,
   onChangeCommit,
@@ -316,10 +324,19 @@ export function createElevationDragController({
   }
 
   function updatePlantPosition(ctx) {
-    const { originFt, extentFt } = ctx.transform;
     const axisKey = axisKeyFor(ctx);
+    // The drawing may reach farther along this axis than the yard does; clamp to
+    // the yard so the plant cannot slide out of the plan view. Without shared
+    // bounds, fall back to the horizontal extent of this drawing — originFt.x
+    // and extentFt.width are the axis, whichever yard axis that happens to be.
+    const { originFt, extentFt } = ctx.transform;
+    const shared = typeof getBounds === 'function' ? getBounds() : null;
+    const axisBounds = shared?.[axisKey] || {
+      min: originFt.x,
+      max: originFt.x + extentFt.width,
+    };
     const rawAxis = pointerAxisFeet(ctx) - state.axisOffsetFeet;
-    const clamped = clamp(rawAxis, originFt.x, originFt.x + extentFt.width);
+    const clamped = clamp(rawAxis, axisBounds.min, axisBounds.max);
     const previous = state.activePlant[axisKey];
     state.activePlant[axisKey] = clamped;
     if (Math.abs(clamped - previous) > 1e-6) {
@@ -354,7 +371,11 @@ export function createElevationDragController({
       cancelActive();
       notifyHover('');
     }
-    svg.style.touchAction = state.locked ? 'auto' : 'pan-y';
+    // A class, not svg.style.touchAction: the setup controller shares this
+    // element and also has a say, and whichever wrote the inline property last
+    // silently won. Each controller now toggles its own class and CSS combines
+    // them. See the touch rules in styles.css.
+    svg.classList.toggle('is-drag-enabled', !state.locked);
     svg.style.cursor = state.locked ? 'default' : 'grab';
   }
 
@@ -365,6 +386,7 @@ export function createElevationDragController({
    */
   function destroy() {
     cancelActive();
+    svg.classList.remove('is-drag-enabled');
     listeners.forEach(([type, handler]) => svg.removeEventListener(type, handler));
   }
 
@@ -438,6 +460,20 @@ function buildPointerContext(svg, event, transform) {
     viewBoxPoint,
     positionFeet: transform.type === 'plan' ? transform.viewBoxToPlan(viewBoxPoint) : null,
     scaleFactor: Math.max(scaleX, scaleY),
+  };
+}
+
+/**
+ * Shared yard bounds when the app supplies them, otherwise the view's own
+ * extent — which keeps the controllers usable on their own in tests.
+ */
+function boundsFor(getBounds, transform) {
+  const bounds = typeof getBounds === 'function' ? getBounds() : null;
+  if (bounds?.x && bounds?.y) return bounds;
+  const { originFt, extentFt } = transform;
+  return {
+    x: { min: originFt.x, max: originFt.x + extentFt.width },
+    y: { min: originFt.y, max: originFt.y + extentFt.height },
   };
 }
 

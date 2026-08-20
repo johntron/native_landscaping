@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPlantsFromCsv, LayoutDataError, parsePlantLayoutCsv, parseSpeciesCsv } from '../src/data/plantParser.js';
+import {
+  buildPlantsFromCsv,
+  createPlantFromSpecies,
+  LayoutDataError,
+  parsePlantLayoutCsv,
+  parseSpeciesCsv,
+} from '../src/data/plantParser.js';
+import { buildLayoutCsv } from '../src/data/layoutExporter.js';
 
 const speciesHeader = 'id,common_name,botanical_name,growing_season_months,flowering_season_months,foliage_color_spring,foliage_color_summer,foliage_color_fall,foliage_color_winter,flower_color,width_ft,height_ft,growth_shape';
 
@@ -145,4 +152,30 @@ test('content mistakes are LayoutDataError so the UI can name the real reason', 
   const unknownCsv = 'id,botanical_name,x_ft,y_ft\nmystery,Nothing realis,1,1';
 
   assert.throws(() => buildPlantsFromCsv(speciesCsv, unknownCsv), LayoutDataError);
+});
+
+test('a plant built from the catalog round-trips through the layout CSV', () => {
+  // The payoff of sharing one builder: a plant added in the browser has to
+  // survive being written to planting_layout.csv and read back, and the two
+  // sides key on different fields (buildLayoutCsv writes botanicalName,
+  // buildPlantsFromCsv matches on the normalized botanicalKey).
+  const speciesCsv = `${speciesHeader}\n`
+    + 'c,Autumn sage,Salvia greggii,3-11,3-11,,#4d8c4d,,,red,3,4,mound';
+  const species = parseSpeciesCsv(speciesCsv);
+
+  const added = createPlantFromSpecies(species[0], { id: 'salvia-greggii-1', x: 12.5, y: 7.25 });
+
+  assert.equal(added.id, 'salvia-greggii-1');
+  assert.equal(added.botanicalName, 'Salvia greggii');
+  assert.equal(added.width, 3);
+  assert.equal(added.height, 4);
+  assert.ok(added.layer, 'the layer is computed, as it is for CSV-loaded plants');
+
+  const reloaded = buildPlantsFromCsv(speciesCsv, buildLayoutCsv([added]));
+
+  assert.equal(reloaded.length, 1);
+  assert.deepStrictEqual(
+    { ...reloaded[0], x: Number(reloaded[0].x.toFixed(3)), y: Number(reloaded[0].y.toFixed(3)) },
+    { ...added, x: 12.5, y: 7.25 }
+  );
 });

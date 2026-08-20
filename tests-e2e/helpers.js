@@ -8,7 +8,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 /** The write-safe server; see scratch-fixture.mjs. */
 export const SCRATCH_BASE = `http://127.0.0.1:${(Number(process.env.E2E_PORT) || 8123) + 1}`;
 
-/** Parse a project's planting_layout.csv into {id, botanicalName} rows. */
+/** Parse a project's planting_layout.csv into {id, botanicalName, xFt, yFt} rows. */
 export async function readLayoutRows(projectId) {
   const csv = await readFile(
     path.join(REPO_ROOT, 'projects', projectId, 'planting_layout.csv'),
@@ -19,8 +19,13 @@ export async function readLayoutRows(projectId) {
     .slice(1) // drop header
     .filter((line) => line.trim())
     .map((line) => {
-      const [id, botanicalName] = line.split(',');
-      return { id, botanicalName: (botanicalName || '').trim() };
+      const [id, botanicalName, xFt, yFt] = line.split(',');
+      return {
+        id,
+        botanicalName: (botanicalName || '').trim(),
+        xFt: Number.parseFloat(xFt),
+        yFt: Number.parseFloat(yFt),
+      };
     });
 }
 
@@ -121,4 +126,44 @@ export async function dragInPanel(page, svgId, { kind = 'plan', dx = 45, dy = 25
   await page.mouse.move(target.x + dx, target.y + dy, { steps: 8 });
   await page.mouse.up();
   return { grabbed, moved: (await snapshot()) !== before };
+}
+
+/**
+ * Drive a real touch gesture through CDP.
+ *
+ * page.mouse never produces touch input and page.touchscreen only taps, so
+ * neither exercises `touch-action` — a gesture built on them would pass against
+ * an app whose drags are being stolen by the scroller. Input.dispatchTouchEvent
+ * goes in as genuine touch, which the compositor routes through touch-action
+ * the same way a finger does.
+ *
+ * The move is stepped rather than jumped: the scroll threshold is crossed by
+ * accumulated movement, and one big hop can miss it in either direction.
+ */
+export async function touchGesture(page, { x, y, dx = 0, dy = 0, steps = 10, holdMs = 0 }) {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x, y }],
+  });
+  if (holdMs) await page.waitForTimeout(holdMs);
+  for (let step = 1; step <= steps; step += 1) {
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{ x: x + (dx * step) / steps, y: y + (dy * step) / steps }],
+    });
+    await page.waitForTimeout(16);
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.detach();
+}
+
+/** Where a plant sits in yard feet, straight off the app's own state. */
+export async function plantPosition(page, plantId) {
+  return page.evaluate((id) => {
+    const group = document.querySelector(`#topSvg g[data-plant-id="${id}"]`);
+    if (!group) return null;
+    const label = group.querySelector('text');
+    return label ? { x: Number(label.getAttribute('x')), y: Number(label.getAttribute('y')) } : null;
+  }, plantId);
 }
