@@ -1,16 +1,6 @@
-import {
-  DEFAULT_PIXELS_PER_INCH,
-  ELEVATION_VIEWBOX,
-  INCHES_PER_FOOT,
-  SOUTH_ELEVATION_BOTTOM_OFFSET_PX,
-  SOUTH_ELEVATION_LEFT_OFFSET_PX,
-  PLANT_BLEND_OPACITY,
-} from '../constants.js';
-import {
-  compareElevationDepth,
-  elevationAxisToViewBoxX,
-  resolveElevationOrientation,
-} from './elevationOrientation.js';
+import { PLANT_BLEND_OPACITY } from '../constants.js';
+import { compareElevationDepth } from './elevationOrientation.js';
+import { createViewTransform } from './viewTransform.js';
 import { getSpeciesKey } from '../utils/speciesKey.js';
 import { makeRng, seedForPlant } from '../utils/rng.js';
 import { clearSvg, createSvgElement } from './svgUtils.js';
@@ -30,29 +20,16 @@ const TARGET_OUTLINE_OPACITY = 0.95;
  *
  * @param {SVGSVGElement} svg
  * @param {Array<{ plant: any, state: any }>} plantStates
- * @param {number} pixelsPerInch
- * @param {{ id?: string, viewFrom: string, viewBox?: { width: number, height: number },
- *           bottomOffsetPx?: number, leftOffsetPx?: number }} elevation
+ * @param {object} view a normalized elevation view (see createViewTransform)
  * @param {object} [options]
  */
-export function renderElevationView(
-  svg,
-  plantStates,
-  pixelsPerInch = DEFAULT_PIXELS_PER_INCH,
-  elevation = { viewFrom: 'south' },
-  options = {}
-) {
+export function renderElevationView(svg, plantStates, view, options = {}) {
   clearSvg(svg);
-  const {
-    viewFrom,
-    viewBox = ELEVATION_VIEWBOX,
-    bottomOffsetPx = SOUTH_ELEVATION_BOTTOM_OFFSET_PX,
-    leftOffsetPx = SOUTH_ELEVATION_LEFT_OFFSET_PX,
-  } = elevation || {};
-  const orientation = resolveElevationOrientation(viewFrom);
-  const { axisKey, depthKey, mirrored, farIsHigh } = orientation;
-  const elevationId = elevation?.id || orientation.viewFrom;
-  const toPixels = (feet) => feet * INCHES_PER_FOOT * pixelsPerInch;
+  const transform = createViewTransform(view);
+  const { viewBox, orientation, groundY } = transform;
+  const { axisKey, depthKey, farIsHigh } = orientation;
+  const elevationId = transform.id;
+  const toPixels = transform.toPx;
   const {
     showLabels = false,
     highlightedSpeciesKey = '',
@@ -106,15 +83,9 @@ export function renderElevationView(
     });
     const canopySeed = seedForPlant(plant.id);
     const rng = makeRng(canopySeed);
-    const axisValue = plant[axisKey];
-    const cx = elevationAxisToViewBoxX(axisValue, toPixels, {
-      mirrored,
-      leftOffsetPx,
-      viewBoxWidth: viewBox.width,
-    });
+    const cx = transform.axisToX(plant[axisKey]);
     const width = toPixels(plant.width);
     const height = toPixels(plant.height);
-    const groundY = viewBox.height - bottomOffsetPx;
     const profileGeometry = resolveProfileGeometry(width, height, plant.growthShape);
     const { adjustedWidth, adjustedHeight } = profileGeometry;
     const canopyBounds = resolveCanopyBounds(plant.growthShape, groundY, adjustedHeight);

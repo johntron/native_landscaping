@@ -9,6 +9,7 @@ import {
   resolveActiveProjectId,
 } from '../src/data/projectConfig.js';
 import { ELEVATION_VIEWBOX, INCHES_PER_FOOT, PLAN_VIEWBOX } from '../src/constants.js';
+import { createViewTransform } from '../src/render/viewTransform.js';
 
 function makeConfig(overrides = {}) {
   return {
@@ -68,17 +69,17 @@ test('resolveActiveProjectId falls back and reports that it did', () => {
 
 test('normalizeProjectConfig fills gaps from the global defaults', () => {
   const config = normalizeProjectConfig(makeConfig(), 'backyard');
+  const [plan, south, east] = config.views;
   assert.equal(config.id, 'backyard');
-  assert.deepEqual(config.plan.viewBox, { width: 800, height: 600 });
-  // The elevations declared no viewBox or offsets, so constants supply them.
-  assert.deepEqual(config.elevations[0].viewBox, {
+  assert.deepEqual(plan.viewBox, { width: 800, height: 600 });
+  // The elevations declared no viewBox, so constants supply one.
+  assert.deepEqual(south.viewBox, {
     width: ELEVATION_VIEWBOX.width,
     height: ELEVATION_VIEWBOX.height,
   });
-  assert.equal(config.elevations[0].label, 'South elevation');
-  assert.equal(config.elevations[0].sublabel, 'Looking North');
-  assert.equal(config.elevations[1].sublabel, 'Looking West');
-  assert.equal(typeof config.elevations[0].bottomOffsetPx, 'number');
+  assert.equal(south.label, 'South elevation');
+  assert.equal(south.sublabel, 'Looking North');
+  assert.equal(east.sublabel, 'Looking West');
 });
 
 test('normalizeProjectConfig rejects malformed configs', () => {
@@ -117,7 +118,10 @@ test('invalid numbers fall back rather than producing a broken viewBox', () => {
     makeConfig({ plan: { viewBox: { width: -5, height: 'wide' }, background: 'img/top.webp' } }),
     'backyard'
   );
-  assert.deepEqual(config.plan.viewBox, { width: PLAN_VIEWBOX.width, height: PLAN_VIEWBOX.height });
+  assert.deepEqual(config.views[0].viewBox, {
+    width: PLAN_VIEWBOX.width,
+    height: PLAN_VIEWBOX.height,
+  });
 });
 
 test('layout path is scoped to the project directory', () => {
@@ -179,11 +183,14 @@ test('the legacy shape migrates to feet-authored views', () => {
 });
 
 test('migration round-trips back to the pixel offsets it came from', () => {
-  const config = normalizeProjectConfig(BACKYARD_LEGACY, 'backyard');
-  assert.equal(config.pixelsPerInch, 2.25);
-  assert.ok(Math.abs(config.elevations[0].leftOffsetPx - 80) < 1e-9);
-  assert.ok(Math.abs(config.elevations[0].bottomOffsetPx - 100) < 1e-9);
-  assert.deepEqual(config.plan.viewBox, { width: 800, height: 600 });
+  const [plan, east] = normalizeProjectConfig(BACKYARD_LEGACY, 'backyard').views;
+  const planTransform = createViewTransform(plan);
+  const eastTransform = createViewTransform(east);
+  assert.equal(planTransform.pxPerFt / INCHES_PER_FOOT, 2.25);
+  assert.deepEqual(plan.viewBox, { width: 800, height: 600 });
+  // groundY and the near-edge inset land back on the pixels the legacy file named.
+  assert.ok(Math.abs(eastTransform.groundY - (600 - 100)) < 1e-9);
+  assert.ok(Math.abs(eastTransform.axisToX(0) - 80) < 1e-9);
 });
 
 test('serializeProjectConfig omits everything normalize would have supplied', () => {

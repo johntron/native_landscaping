@@ -16,19 +16,22 @@ import { projectAssetPath } from '../data/projectConfig.js';
 export function configureViews({ svgRefs, containerRefs, labelRefs, project }) {
   if (!project) return;
   const { topSvg, elevationSvgs = [] } = svgRefs;
+  const views = project.views || [];
   const panels = [
     {
-      view: project.plan,
+      view: views.find((view) => view.type === 'plan'),
       svg: topSvg,
       container: containerRefs?.topView,
       labels: labelRefs?.[0],
     },
-    ...project.elevations.map((elevation, index) => ({
-      view: elevation,
-      svg: elevationSvgs[index],
-      container: containerRefs?.elevationViews?.[index],
-      labels: labelRefs?.[index + 1],
-    })),
+    ...views
+      .filter((view) => view.type === 'elevation')
+      .map((elevation, index) => ({
+        view: elevation,
+        svg: elevationSvgs[index],
+        container: containerRefs?.elevationViews?.[index],
+        labels: labelRefs?.[index + 1],
+      })),
   ];
 
   panels.forEach(({ view, svg, container, labels }) => {

@@ -1,6 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { renderElevationView } from '../src/render/elevationViews.js';
+
+// 800x600 px over 33.33x25 ft is 24 px/ft — the old 2 px/in, stated in feet.
+const PX_PER_FT = 24;
+function elevationView(viewFrom, { bottomOffsetPx = 100, leftOffsetPx = 0 } = {}) {
+  return {
+    id: viewFrom,
+    type: 'elevation',
+    viewFrom,
+    viewBox: { width: 800, height: 600 },
+    originFt: { x: -leftOffsetPx / PX_PER_FT, y: -bottomOffsetPx / PX_PER_FT },
+    extentFt: { width: 800 / PX_PER_FT, height: 600 / PX_PER_FT },
+  };
+}
 import { PLANT_BLEND_OPACITY } from '../src/constants.js';
 import { resetDocument } from './helpers/fakeDom.js';
 
@@ -36,7 +49,7 @@ function renderTreeCanopyPath(width) {
     },
   ];
 
-  renderElevationView(svg, plantStates, 2, { id: 'south', viewFrom: 'south' });
+  renderElevationView(svg, plantStates, elevationView('south'));
   const canopyPaths = svg.querySelectorAll(`path[fill-opacity="${PLANT_BLEND_OPACITY}"]`);
   assert.equal(canopyPaths.length, 1, 'tree profile should include one canopy path');
   return canopyPaths[0]?.getAttribute('d');
@@ -55,13 +68,7 @@ function renderAt(viewFrom, plants) {
   const doc = resetDocument();
   const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
   const plantStates = plants.map((plant) => ({ plant, state: evergreenState }));
-  renderElevationView(svg, plantStates, 2, {
-    id: viewFrom,
-    viewFrom,
-    viewBox: { width: 800, height: 600 },
-    bottomOffsetPx: 100,
-    leftOffsetPx: 0,
-  });
+  renderElevationView(svg, plantStates, elevationView(viewFrom));
   return Array.from(svg.querySelectorAll('g[data-plant-id]')).map((g) =>
     g.getAttribute('data-plant-id')
   );
@@ -101,13 +108,7 @@ test('mirrored elevations flip which side of the drawing a plant lands on', () =
   const doc = resetDocument();
   const measure = (viewFrom, plant) => {
     const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    renderElevationView(svg, [{ plant, state: evergreenState }], 2, {
-      id: viewFrom,
-      viewFrom,
-      viewBox: { width: 800, height: 600 },
-      bottomOffsetPx: 100,
-      leftOffsetPx: 0,
-    });
+    renderElevationView(svg, [{ plant, state: evergreenState }], elevationView(viewFrom));
     // The silhouette path carries the plant's horizontal placement.
     const path = svg.querySelectorAll('path')[0];
     const numbers = (path.getAttribute('d').match(/-?\d+(\.\d+)?/g) || []).map(Number);
