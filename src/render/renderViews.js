@@ -3,19 +3,17 @@ import { renderElevationView } from './elevationViews.js';
 import { filterPlantStatesByHiddenLayers } from '../state/layers.js';
 
 /**
- * @param {{ topSvg: SVGSVGElement, elevationSvgs: SVGSVGElement[] }} svgRefs
+ * @param {Array<{ view: object, svg: SVGSVGElement }>} panels one per project view
  * @param {Array<{ plant: any, state: any }>} plantStates
- * @param {object} options `project` carries the active project config (views[]).
+ * @param {object} options
  */
-export function renderViews(svgRefs, plantStates, options = {}) {
-  const { topSvg, elevationSvgs = [] } = svgRefs;
+export function renderViews(panels, plantStates, options = {}) {
   const {
     showLabels = false,
     hiddenLayerCount = 0,
     highlightedSpeciesKey = '',
     targetedPlantId = '',
     hoveredPlantId = '',
-    project,
   } = options;
   const filtered = filterPlantStatesByHiddenLayers(plantStates, hiddenLayerCount);
   const topOrdered = orderTopViewPlantStates(filtered);
@@ -25,18 +23,14 @@ export function renderViews(svgRefs, plantStates, options = {}) {
     targetedPlantId,
     hoveredPlantId,
   };
-  const views = project?.views || [];
-  const planView = views.find((view) => view.type === 'plan');
-  if (planView) {
-    renderTopView(topSvg, topOrdered, planView, renderOptions);
-  }
-
-  // Elevation panels are still positional slots; nl-tz7.4 makes them config-driven.
-  const elevations = views.filter((view) => view.type === 'elevation');
-  elevationSvgs.forEach((svg, index) => {
-    const elevation = elevations[index];
-    if (!svg || !elevation) return;
-    renderElevationView(svg, filtered, elevation, renderOptions);
+  panels.forEach(({ view, svg }) => {
+    if (!svg || !view) return;
+    // Plan and crop views layer by height; elevations sort along their own depth axis.
+    if (view.type === 'plan') {
+      renderTopView(svg, topOrdered, view, renderOptions);
+    } else {
+      renderElevationView(svg, filtered, view, renderOptions);
+    }
   });
 }
 

@@ -124,18 +124,21 @@
             </div>
           </div>
         </div>
-        <!-- The views container holds the top‑down, front and side perspectives. -->
-        <main class="views">
-          <div class="view-panel" data-view-panel="topView">
+        <!--
+          One panel per entry in the project's views[]; configureViews clones this
+          template, so adding a view to project.json adds a panel.
+        -->
+        <template id="viewPanelTemplate">
+          <div class="view-panel">
             <div class="view-panel__header">
               <p class="view-label">
-                <span class="view-label__name" data-view-label>Plan</span>
-                <span class="view-label__subtitle" data-view-sublabel>Looking Down</span>
+                <span class="view-label__name" data-view-label></span>
+                <span class="view-label__subtitle" data-view-sublabel></span>
               </p>
               <button
                 class="view-panel__toggle"
                 type="button"
-                data-maximize-target="topView"
+                data-maximize-target
                 aria-pressed="false"
                 title="Maximize this view"
               >
@@ -143,72 +146,19 @@
                 <span class="view-panel__toggle-text">Maximize</span>
               </button>
             </div>
-            <div class="view" id="topView">
+            <div class="view">
               <div class="view__overlay">
                 <div class="view-scale" aria-hidden="true">
                   <span class="view-scale__label">Scale</span>
                   <span class="view-scale__value" data-scale-summary>1 ft = 0 px</span>
                 </div>
               </div>
-              <!-- The SVG overlay uses a fixed viewBox measured in yard units; configured at runtime from constants. -->
-              <svg id="topSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+              <!-- viewBox is measured in yard units; configured at runtime from the view. -->
+              <svg xmlns="http://www.w3.org/2000/svg"></svg>
             </div>
           </div>
-          <div class="view-panel" data-view-panel="frontView">
-            <div class="view-panel__header">
-              <p class="view-label">
-                <span class="view-label__name" data-view-label>South elevation</span>
-                <span class="view-label__subtitle" data-view-sublabel>Looking North</span>
-              </p>
-              <button
-                class="view-panel__toggle"
-                type="button"
-                data-maximize-target="frontView"
-                aria-pressed="false"
-                title="Maximize this view"
-              >
-                <span class="view-panel__toggle-icon" aria-hidden="true">⤢</span>
-                <span class="view-panel__toggle-text">Maximize</span>
-              </button>
-            </div>
-            <div class="view" id="frontView">
-              <div class="view__overlay">
-                <div class="view-scale" aria-hidden="true">
-                  <span class="view-scale__label">Scale</span>
-                  <span class="view-scale__value" data-scale-summary>1 ft = 0 px</span>
-                </div>
-              </div>
-              <svg id="frontSvg" xmlns="http://www.w3.org/2000/svg"></svg>
-            </div>
-          </div>
-          <div class="view-panel" data-view-panel="sideView">
-            <div class="view-panel__header">
-              <p class="view-label">
-                <span class="view-label__name" data-view-label>East elevation</span>
-                <span class="view-label__subtitle" data-view-sublabel>Looking West</span>
-              </p>
-              <button
-                class="view-panel__toggle"
-                type="button"
-                data-maximize-target="sideView"
-                aria-pressed="false"
-                title="Maximize this view"
-              >
-                <span class="view-panel__toggle-icon" aria-hidden="true">⤢</span>
-                <span class="view-panel__toggle-text">Maximize</span>
-              </button>
-            </div>
-            <div class="view" id="sideView">
-              <div class="view__overlay">
-                <div class="view-scale" aria-hidden="true">
-                  <span class="view-scale__label">Scale</span>
-                  <span class="view-scale__value" data-scale-summary>1 ft = 0 px</span>
-                </div>
-              </div>
-              <svg id="sideSvg" xmlns="http://www.w3.org/2000/svg"></svg>
-            </div>
-          </div>
-        </main>
+        </template>
+        <main class="views"></main>
       </div>
       <div class="species-table" id="speciesTable"></div>
       <div class="data-actions">
