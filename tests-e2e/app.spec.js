@@ -157,10 +157,25 @@ test.describe('setup mode', () => {
     await openProject(page, 'backyard');
     await page.locator('[data-mode="setup"]').click();
 
-    // Feet and pixels are one scale: 800px over 20ft is 40 px/ft.
+    // Feet are authored freely in both directions: a view can be 30 ft by 10 ft.
+    // The drawing is derived, so the two never drift into a non-uniform scale.
     const width = page.locator('.setup-panel__field', { hasText: 'Width (ft)' }).locator('input');
-    await width.fill('20');
+    const height = page.locator('.setup-panel__field', { hasText: 'Height (ft)' }).locator('input');
+    await width.fill('30');
     await width.press('Enter');
+    await height.fill('10');
+    await height.press('Enter');
+    await expect(width).toHaveValue('30'); // setting height must not rewrite width
+    await expect(page.locator('#topSvg')).toHaveAttribute('viewBox', '0 0 810 270');
+
+    // Resolution rescales the drawing without changing the yard it covers.
+    const resolution = page
+      .locator('.setup-panel__field', { hasText: 'Resolution (px per ft)' })
+      .locator('input');
+    await resolution.fill('40');
+    await resolution.press('Enter');
+    await expect(page.locator('#topSvg')).toHaveAttribute('viewBox', '0 0 1200 400');
+    await expect(width).toHaveValue('30');
     await expect(page.locator('[data-view-panel="plan"] [data-scale-summary]')).toHaveText(
       '1 ft ≈ 40 px'
     );
