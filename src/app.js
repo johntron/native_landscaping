@@ -107,6 +107,11 @@ async function init() {
   });
 
   const refreshMaximizedView = () => {
+    // A rebuild can drop the maximized view. Without this, data-maximized stays
+    // set with nothing matching .is-maximized, which hides every panel.
+    if (appState.maximizedViewId && !viewPanels.some(({ view }) => view.id === appState.maximizedViewId)) {
+      appState.maximizedViewId = '';
+    }
     if (viewsContainer) {
       if (appState.maximizedViewId) {
         viewsContainer.dataset.maximized = appState.maximizedViewId;

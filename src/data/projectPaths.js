@@ -25,6 +25,7 @@ export function resolveProjectPaths(projectId, publicDir) {
     projectDir,
     layoutFile: path.join(projectDir, 'planting_layout.csv'),
     historyFile: path.join(projectDir, 'layout-history.json'),
+    configFile: path.join(projectDir, 'project.json'),
   };
 }
 

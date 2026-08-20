@@ -1,3 +1,4 @@
+import { serializeProjectConfig } from './projectConfig.js';
 import { buildLayoutCsv } from './layoutExporter.js';
 
 const DEFAULT_DESCRIPTION = 'Manual layout update';
@@ -104,6 +105,43 @@ export async function persistLayout(plants, description, updateStatus, options =
     if (updateStatus) {
       updateStatus('Saving requires running `node server.js`', 'error');
     }
+    return null;
+  }
+}
+
+/**
+ * Save the project's view configuration. Unlike the layout there is no history
+ * stack — a view's geometry is setup, not a design decision worth undoing, and
+ * the layout history machinery stays layout-only.
+ *
+ * @param {object} config a normalized project config
+ * @param {(message: string, state: string) => void} [updateStatus]
+ * @param {{ projectId?: string, fetchFn?: Function }} [options]
+ */
+export async function persistProjectConfig(config, updateStatus, options = {}) {
+  if (!config || typeof config !== 'object') return null;
+  const fetchFn = options.fetchFn || defaultFetch();
+  if (!fetchFn) {
+    updateStatus?.('Saving requires running `node server.js`', 'error');
+    return null;
+  }
+  try {
+    const response = await fetchFn(apiUrl('/api/project', options.projectId || config.id), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(serializeProjectConfig(config)),
+    });
+    if (!response.ok) {
+      // The server explains what it rejected; surface that rather than a bare code.
+      const detail = await response.json().catch(() => null);
+      throw new Error(detail?.error || `View config save failed (${response.status})`);
+    }
+    const data = await response.json();
+    updateStatus?.('Views saved', 'success');
+    return data;
+  } catch (err) {
+    console.warn('Unable to persist view config', err);
+    updateStatus?.(err.message || 'Saving requires running `node server.js`', 'error');
     return null;
   }
 }

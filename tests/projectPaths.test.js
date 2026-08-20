@@ -10,6 +10,7 @@ test('resolves the per-project data files under projects/', () => {
   assert.equal(paths.projectId, 'backyard');
   assert.equal(paths.layoutFile, path.join(PUBLIC_DIR, 'projects/backyard/planting_layout.csv'));
   assert.equal(paths.historyFile, path.join(PUBLIC_DIR, 'projects/backyard/layout-history.json'));
+  assert.equal(paths.configFile, path.join(PUBLIC_DIR, 'projects/backyard/project.json'));
 });
 
 test('rejects ids that could escape the projects directory', () => {

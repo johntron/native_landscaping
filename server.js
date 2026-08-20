@@ -2,6 +2,10 @@ import http from 'node:http';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { buildLayoutCsv } from './src/data/layoutExporter.js';
+import {
+  normalizeProjectConfig,
+  serializeProjectConfig,
+} from './src/data/projectConfig.js';
 import { projectIdFromUrl, resolveProjectPaths } from './src/data/projectPaths.js';
 
 const envPort = Number(process.env.PORT);
@@ -68,6 +72,25 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (pathname === '/api/project' && req.method === 'POST') {
+    try {
+      const { configFile, projectId } = resolveProjectPaths(projectIdFromUrl(url), PUBLIC_DIR);
+      const body = await collectPayload(req, { requirePlants: false });
+      // The id comes from the directory, never from the body — a client that
+      // names a different project must not be able to write to it.
+      const config = normalizeProjectConfig({ ...body, id: undefined }, projectId);
+      await writeJsonAtomic(configFile, serializeProjectConfig(config));
+      console.log(`Project config saved for '${projectId}' (${config.views.length} views)`);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ config: serializeProjectConfig(config) }));
+    } catch (err) {
+      console.error(err);
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
   if (pathname === '/api/history/cursor' && req.method === 'POST') {
     try {
       const { historyFile, layoutFile, projectId } = resolveProjectPaths(projectIdFromUrl(url), PUBLIC_DIR);
@@ -121,6 +144,22 @@ function makeEntry(plants, description, id) {
     description: description || 'Manual layout update',
     plants,
   };
+}
+
+/**
+ * Write JSON through a temporary file in the same directory, so a crash or a
+ * concurrent read never sees a half-written project.json. Same directory
+ * matters: rename is only atomic within a filesystem.
+ */
+async function writeJsonAtomic(targetFile, value) {
+  const tempFile = `${targetFile}.${process.pid}.tmp`;
+  try {
+    await fs.writeFile(tempFile, `${JSON.stringify(value, null, 2)}\n`);
+    await fs.rename(tempFile, targetFile);
+  } catch (err) {
+    await fs.rm(tempFile, { force: true });
+    throw err;
+  }
 }
 
 async function writeLayoutFile(layoutFile, plants) {
