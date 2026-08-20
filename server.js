@@ -76,6 +76,13 @@ const server = http.createServer(async (req, res) => {
     try {
       const { configFile, projectId } = resolveProjectPaths(projectIdFromUrl(url), PUBLIC_DIR);
       const body = await collectPayload(req, { requirePlants: false });
+      // The legacy {plan, elevations[]} reader exists for files already on disk,
+      // not for request bodies: without this, a body missing views[] migrates
+      // into one default blank plan view and silently overwrites the project.
+      // There is no config history to recover from.
+      if (!Array.isArray(body.views)) {
+        throw new Error('Missing views[]');
+      }
       // The id comes from the directory, never from the body — a client that
       // names a different project must not be able to write to it.
       const config = normalizeProjectConfig({ ...body, id: undefined }, projectId);
