@@ -31,15 +31,19 @@ export function createPlantDragController({
     return {
       setLocked: () => {},
       isLocked: () => true,
+      destroy: () => {},
     };
   }
 
-  svg.addEventListener('pointerdown', handlePointerDown);
-  svg.addEventListener('pointermove', handlePointerMove);
-  svg.addEventListener('pointerup', handlePointerUp);
-  svg.addEventListener('pointercancel', handlePointerUp);
-  svg.addEventListener('lostpointercapture', handlePointerUp);
-  svg.addEventListener('pointerleave', handlePointerLeave);
+  const listeners = [
+    ['pointerdown', handlePointerDown],
+    ['pointermove', handlePointerMove],
+    ['pointerup', handlePointerUp],
+    ['pointercancel', handlePointerUp],
+    ['lostpointercapture', handlePointerUp],
+    ['pointerleave', handlePointerLeave],
+  ];
+  listeners.forEach(([type, handler]) => svg.addEventListener(type, handler));
 
   function handlePointerDown(event) {
     if (state.locked || !event.isPrimary) return;
@@ -167,9 +171,20 @@ export function createPlantDragController({
     svg.style.cursor = state.locked ? 'default' : 'grab';
   }
 
+  /**
+   * Setup mode rebuilds panels, and configureViews reuses the SVG of a view
+   * whose id did not change — so a controller that outlives its rebuild would
+   * double-bind to the same element.
+   */
+  function destroy() {
+    cancelActive();
+    listeners.forEach(([type, handler]) => svg.removeEventListener(type, handler));
+  }
+
   return {
     setLocked,
     isLocked: () => state.locked,
+    destroy,
   };
 }
 
@@ -202,15 +217,19 @@ export function createElevationDragController({
     return {
       setLocked: () => {},
       isLocked: () => true,
+      destroy: () => {},
     };
   }
 
-  svg.addEventListener('pointerdown', handlePointerDown);
-  svg.addEventListener('pointermove', handlePointerMove);
-  svg.addEventListener('pointerup', handlePointerUp);
-  svg.addEventListener('pointercancel', handlePointerUp);
-  svg.addEventListener('lostpointercapture', handlePointerUp);
-  svg.addEventListener('pointerleave', handlePointerLeave);
+  const listeners = [
+    ['pointerdown', handlePointerDown],
+    ['pointermove', handlePointerMove],
+    ['pointerup', handlePointerUp],
+    ['pointercancel', handlePointerUp],
+    ['lostpointercapture', handlePointerUp],
+    ['pointerleave', handlePointerLeave],
+  ];
+  listeners.forEach(([type, handler]) => svg.addEventListener(type, handler));
 
   function handlePointerDown(event) {
     if (state.locked || !event.isPrimary) return;
@@ -339,9 +358,20 @@ export function createElevationDragController({
     svg.style.cursor = state.locked ? 'default' : 'grab';
   }
 
+  /**
+   * Setup mode rebuilds panels, and configureViews reuses the SVG of a view
+   * whose id did not change — so a controller that outlives its rebuild would
+   * double-bind to the same element.
+   */
+  function destroy() {
+    cancelActive();
+    listeners.forEach(([type, handler]) => svg.removeEventListener(type, handler));
+  }
+
   return {
     setLocked,
     isLocked: () => state.locked,
+    destroy,
   };
 }
 
