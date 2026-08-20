@@ -27,7 +27,12 @@ import { renderViews } from './render/renderViews.js';
 import { createViewTransform } from './render/viewTransform.js';
 import { createSetupPanel } from './interaction/setupPanel.js';
 import { createSetupController } from './interaction/setupController.js';
-import { clearSetupOverlay, renderSetupOverlay } from './render/setupOverlay.js';
+import {
+  clearSetupOverlay,
+  measureRuler,
+  renderSetupOverlay,
+  resolveRulerCalibration,
+} from './render/setupOverlay.js';
 import { configureViews } from './render/viewConfig.js';
 import { createPlantDragController, createElevationDragController } from './interaction/dragController.js';
 import { buildPlantLabel } from './render/labels.js';
@@ -60,6 +65,10 @@ const appState = {
   targetedPlantId: '',
   hoveredPlantId: '',
   maximizedViewId: '',
+  // The Setup-mode ruler: {viewId, from, to} in that view's viewBox pixels,
+  // standing from the end of the drag until a length is applied or it is
+  // dismissed. See resolveRulerCalibration.
+  ruler: null,
 };
 
 let loadedSpeciesCsv = '';
@@ -437,6 +446,7 @@ async function init() {
         svg,
         getView: () => liveView(view.id),
         onChange: (patch) => applyViewEdit(patchView(project.views, view.id, patch)),
+        onRuler: (segment) => showRulerSegment(view.id, segment),
       })
     );
   let setupControllers = buildSetupControllers();
@@ -621,12 +631,39 @@ async function init() {
    */
   function syncSetupOverlay() {
     const selectedId = appState.mode === 'setup' ? setupPanel.getSelectedId() : '';
+    const armed = Boolean(selectedId) && setupPanel.isRulerArmed();
     viewPanels.forEach(({ view, svg }, index) => {
       const isSelected = view.id === selectedId;
       setupControllers[index]?.setLocked?.(!isSelected);
-      if (isSelected) renderSetupOverlay(svg, view);
-      else clearSetupOverlay(svg);
+      // Only the selected view measures: a ruler armed everywhere would let a
+      // drag on a neighbouring panel look live and do nothing.
+      setupControllers[index]?.setRuler?.(isSelected && armed);
+      if (!isSelected) {
+        clearSetupOverlay(svg);
+        return;
+      }
+      renderSetupOverlay(svg, view, appState.ruler?.viewId === view.id ? appState.ruler : null);
     });
+  }
+
+  /**
+   * A measuring segment, live during the drag and left standing after it so the
+   * user can see what they are typing a length for.
+   */
+  function showRulerSegment(viewId, segment) {
+    appState.ruler = { viewId, from: segment.from, to: segment.to };
+    // The panel only learns the measurement once the drag is over. Growing it
+    // by a row mid-gesture pushes the canvas down under the pointer, which
+    // bends the very measurement being taken.
+    if (segment.done) {
+      setupPanel.setMeasurement(measureRuler(liveView(viewId), segment.from, segment.to));
+    }
+    syncSetupOverlay();
+  }
+
+  function clearRulerSegment() {
+    appState.ruler = null;
+    setupPanel.setMeasurement(null);
   }
 
   modeButtons.forEach((button) => {
@@ -644,7 +681,37 @@ async function init() {
   const setupPanel = createSetupPanel({
     root: setupRow,
     onCommit: (views) => applyViewEdit(views),
-    onSelect: () => syncSetupOverlay(),
+    onSelect: () => {
+      // The segment was measured against another view's photo; it means
+      // nothing over this one.
+      appState.ruler = null;
+      syncSetupOverlay();
+    },
+    onRulerToggle: () => {
+      appState.ruler = null;
+      syncSetupOverlay();
+    },
+    onRulerApply: (lengthFt) => {
+      const segment = appState.ruler;
+      const view = segment && liveView(segment.viewId);
+      const patch = view && resolveRulerCalibration(view, segment.from, segment.to, lengthFt);
+      if (!patch) {
+        setupPanel.setStatus(
+          'That measurement will not solve: drag further across the photo, and give a length above zero.',
+          'error'
+        );
+        return;
+      }
+      // Cleared before the rebuild: the segment's pixel coordinates belong to
+      // the old scale, and redrawing it over the new one looks like a bug.
+      const viewId = segment.viewId;
+      clearRulerSegment();
+      applyViewEdit(patchView(project.views, viewId, patch));
+      setupPanel.setStatus(
+        `Scaled ${view.label} to ${Math.round(patch.extentFt.width * 100) / 100} ft across.`,
+        'success'
+      );
+    },
     onSave: async () => {
       setupPanel.setStatus('Saving…', 'info');
       const saved = await persistProjectConfig(project, (message, state) =>

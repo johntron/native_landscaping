@@ -13,12 +13,27 @@ import { VIEW_FROM_DIRECTIONS } from '../render/elevationOrientation.js';
  * form re-reads from the project after every commit rather than trusting what
  * the user typed.
  */
-export function createSetupPanel({ root, onCommit, onSave, onSelect }) {
+export function createSetupPanel({
+  root,
+  onCommit,
+  onSave,
+  onSelect,
+  onRulerToggle,
+  onRulerApply,
+}) {
   if (!root) {
-    return { render: () => {}, getSelectedId: () => '', setStatus: () => {} };
+    return {
+      render: () => {},
+      getSelectedId: () => '',
+      setStatus: () => {},
+      isRulerArmed: () => false,
+      setMeasurement: () => {},
+    };
   }
 
-  const state = { selectedId: '', views: [], status: null };
+  // The ruler's state lives here rather than in the form, because the form is
+  // rebuilt wholesale on every commit and a measurement has to outlive that.
+  const state = { selectedId: '', views: [], status: null, ruler: false, measurement: null };
 
   function render(views) {
     state.views = Array.isArray(views) ? views : [];
@@ -175,6 +190,7 @@ export function createSetupPanel({ root, onCommit, onSave, onSelect }) {
       )
     );
     wrap.appendChild(grid);
+    wrap.appendChild(buildRuler(view));
     wrap.appendChild(
       el(
         'p',
@@ -183,6 +199,69 @@ export function createSetupPanel({ root, onCommit, onSave, onSelect }) {
           'Drop background images in the project folder under img/ and type the path, e.g. img/east.webp.'
       )
     );
+    return wrap;
+  }
+
+  /**
+   * Calibrate against the background photo: drag across something whose real
+   * length you know, then say what that length is. The solve lives in
+   * src/render/setupOverlay.js; this is only the affordance for it.
+   */
+  function buildRuler(view) {
+    const wrap = el('div', 'setup-panel__ruler');
+    const toggle = button(
+      state.ruler ? 'Stop measuring' : 'Measure a known length',
+      'button pill-button setup-panel__ruler-toggle',
+      () => {
+        state.ruler = !state.ruler;
+        if (!state.ruler) state.measurement = null;
+        render(state.views);
+        onRulerToggle?.(state.ruler);
+      }
+    );
+    toggle.dataset.rulerToggle = '';
+    toggle.setAttribute('aria-pressed', state.ruler ? 'true' : 'false');
+    toggle.classList.toggle('is-active', state.ruler);
+    wrap.appendChild(toggle);
+
+    if (!state.ruler) return wrap;
+
+    if (!state.measurement) {
+      wrap.appendChild(
+        el(
+          'p',
+          'setup-panel__hint',
+          `Drag across a known length on ${view.label}'s photo — a fence panel, a ` +
+            'driveway, a doorway.'
+        )
+      );
+      return wrap;
+    }
+
+    wrap.appendChild(
+      el(
+        'p',
+        'setup-panel__hint setup-panel__ruler-readout',
+        `Measured ${Math.round(state.measurement.pixels)} px — ` +
+          `${roundForDisplay(state.measurement.feet)} ft at the current scale.`
+      )
+    );
+    // Deliberately blank rather than pre-filled with the current reading: a
+    // pre-filled field that already says the right number fires no change
+    // event, so the obvious "yes, that one" gesture would do nothing.
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.step = '0.1';
+    input.min = '0';
+    input.placeholder = 'e.g. 8';
+    input.dataset.rulerLength = '';
+    input.addEventListener('change', (event) => {
+      const parsed = Number(event.target.value);
+      if (Number.isFinite(parsed)) onRulerApply?.(parsed);
+    });
+    const wrapped = field('Real length (ft)', input);
+    wrapped.classList.add('setup-panel__ruler-field');
+    wrap.appendChild(wrapped);
     return wrap;
   }
 
@@ -203,6 +282,12 @@ export function createSetupPanel({ root, onCommit, onSave, onSelect }) {
     getSelectedId: () => state.selectedId,
     setStatus: (message, stateName) => {
       state.status = message ? { message, state: stateName || 'info' } : null;
+      render(state.views);
+    },
+    isRulerArmed: () => state.ruler,
+    /** @param {{pixels: number, feet: number}|null} measurement */
+    setMeasurement: (measurement) => {
+      state.measurement = measurement;
       render(state.views);
     },
   };

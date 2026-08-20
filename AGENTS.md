@@ -86,6 +86,14 @@ you drag the crop rectangle, ground line, and near edge directly on the drawing;
 *Save views* writes the file back through `POST /api/project`. Hand-editing works
 too, but Setup mode cannot produce a geometry the renderers disagree with.
 
+The fastest way to get a view's `extentFt` right is *Measure a known length*:
+arm it, drag across something in the background photo whose real length you know
+— a fence panel, a driveway, a doorway — and type that length. The photo fills
+the viewBox, so the span solves the whole view's scale
+(`resolveRulerCalibration` in `src/render/setupOverlay.js`). A plan's corner and
+an elevation's near edge sit on a photo edge at any scale and stay put; the
+ground line scales with the extent so it keeps the photo row it was placed on.
+
 #### The views[] schema
 
 A project declares `views[]`, and every view is authored **in feet**:

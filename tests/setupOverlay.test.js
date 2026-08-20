@@ -2,12 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { resetDocument } from './helpers/fakeDom.js';
 import {
+  MIN_RULER_PIXELS,
   buildOverlayGeometry,
   chooseGridStepFt,
   clearSetupOverlay,
+  measureRuler,
   pickHandle,
   renderSetupOverlay,
   resolveHandleDrag,
+  resolveRulerCalibration,
 } from '../src/render/setupOverlay.js';
 import { VIEW_FROM_DIRECTIONS } from '../src/render/elevationOrientation.js';
 
@@ -170,3 +173,76 @@ test('a plan overlay outlines the rect it covers', () => {
   assert.equal(svg.querySelectorAll('rect[data-setup-guide]').length, 1);
   assert.equal(svg.querySelectorAll('circle[data-setup-handle]').length, 8);
 });
+
+test('the ruler reads a drag in the feet the view currently claims', () => {
+  // 200 px at 20 px/ft, measured on the diagonal of a 120-160 triangle.
+  const measured = measureRuler(PLAN, { x: 40, y: 30 }, { x: 200, y: 150 });
+  assert.equal(measured.pixels, 200);
+  assert.equal(measured.feet, 10);
+  assert.equal(measured.pxPerFt, 20);
+});
+
+test('calibrating to a longer real length stretches the yard the photo covers', () => {
+  // The span the drag crossed reads as 10 ft; the user says it is really 20.
+  const patch = resolveRulerCalibration(PLAN, { x: 0, y: 0 }, { x: 200, y: 0 }, 20);
+  assert.equal(patch.extentFt.width, 80);
+  assert.equal(patch.extentFt.height, 60);
+  // Resolution is held, so the drawing grows with the extent — the photo fills
+  // whatever box it is given, so this is a visual no-op.
+  assert.equal(patch.viewBox.width / patch.extentFt.width, 20);
+  // A plan's origin IS its bottom-left corner, so it sits on the same pixel at
+  // any scale and must not move.
+  assert.deepEqual(patch.originFt, { x: 0, y: 0 });
+});
+
+test('calibration is uniform: the same span solves the same however it is drawn', () => {
+  const across = resolveRulerCalibration(PLAN, { x: 10, y: 500 }, { x: 210, y: 500 }, 8);
+  const diagonal = resolveRulerCalibration(PLAN, { x: 0, y: 0 }, { x: 120, y: 160 }, 8);
+  assert.deepEqual(diagonal.extentFt, across.extentFt);
+});
+
+test('calibrating a mirrored elevation keeps its near edge and ground on the photo', () => {
+  const view = elevation('north'); // north and west are the mirrored directions
+  const before = buildOverlayGeometry(view);
+  const patch = resolveRulerCalibration(view, { x: 100, y: 100 }, { x: 300, y: 100 }, 5);
+  // 200 px read as 10 ft and are really 5, so the view covers half as much yard.
+  assert.equal(patch.extentFt.width, 20);
+  const after = buildOverlayGeometry({ ...view, ...patch });
+
+  // The near edge is the right-hand side on a mirrored elevation. Both it and
+  // the ground line have to stay on the same fraction of the photo, or
+  // calibrating would slide the guides off the features they were placed on.
+  assert.equal(before.transform.axisToX(before.transform.originFt.x) / before.transform.viewBox.width, 1);
+  assert.equal(after.transform.axisToX(after.transform.originFt.x) / after.transform.viewBox.width, 1);
+  assert.equal(
+    round(before.transform.groundY / before.transform.viewBox.height),
+    round(after.transform.groundY / after.transform.viewBox.height)
+  );
+  // The ground still means height zero; it is the feet that rescaled.
+  assert.equal(after.transform.originFt.y, -1.25);
+});
+
+test('a misclick or a nonsense length solves to nothing at all', () => {
+  const tiny = { x: MIN_RULER_PIXELS - 1, y: 0 };
+  assert.equal(resolveRulerCalibration(PLAN, { x: 0, y: 0 }, tiny, 10), null);
+  assert.equal(resolveRulerCalibration(PLAN, { x: 0, y: 0 }, { x: 0, y: 0 }, 10), null);
+  [0, -4, Number.NaN, 'twelve'].forEach((length) => {
+    assert.equal(resolveRulerCalibration(PLAN, { x: 0, y: 0 }, { x: 200, y: 0 }, length), null);
+  });
+});
+
+test('renderSetupOverlay draws the measuring segment only when there is one', () => {
+  const doc = resetDocument();
+  const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  renderSetupOverlay(svg, PLAN);
+  assert.equal(svg.querySelectorAll('line[data-setup-ruler]').length, 0);
+
+  renderSetupOverlay(svg, PLAN, { from: { x: 0, y: 0 }, to: { x: 200, y: 0 } });
+  assert.equal(svg.querySelectorAll('line[data-setup-ruler]').length, 1);
+  assert.equal(svg.querySelectorAll('circle[data-setup-ruler-end]').length, 2);
+  assert.match(svg.querySelectorAll('text[data-setup-ruler-readout]')[0].textContent, /10 ft/);
+});
+
+function round(value) {
+  return Math.round(value * 1e6) / 1e6;
+}

@@ -323,6 +323,44 @@ test.describe('setup overlay', () => {
     }
   });
 
+  test('measuring a known length in the photo rescales the view to match', async ({ page }) => {
+    await openProject(page, 'backyard');
+    await page.locator('[data-mode="setup"]').click();
+
+    // Arming the ruler suspends handle dragging on the selected view.
+    await page.locator('[data-ruler-toggle]').click();
+    await expect(page.locator('[data-ruler-toggle]')).toHaveAttribute('aria-pressed', 'true');
+
+    // Drag across exactly half the panel, so the arithmetic is exact: whatever
+    // that span is said to be, the whole view is twice it.
+    // Two round-trips on purpose: the scroll has to land before the rect is
+    // read, or the drag starts at coordinates the page has since moved.
+    await page.evaluate(() => document.getElementById('topSvg').scrollIntoView({ block: 'center' }));
+    const span = await page.evaluate(() => {
+      const rect = document.getElementById('topSvg').getBoundingClientRect();
+      return {
+        y: rect.top + rect.height / 2,
+        from: rect.left + rect.width * 0.25,
+        to: rect.left + rect.width * 0.75,
+      };
+    });
+    await page.mouse.move(span.from, span.y);
+    await page.mouse.down();
+    await page.mouse.move(span.to, span.y, { steps: 8 });
+    // The segment is drawn while the drag is live, not only once it ends.
+    await expect(page.locator('#topSvg line[data-setup-ruler]')).toHaveCount(1);
+    await page.mouse.up();
+
+    await expect(page.locator('.setup-panel__ruler-readout')).toContainText('px');
+    await page.locator('[data-ruler-length]').fill('10');
+    await page.locator('[data-ruler-length]').press('Enter');
+
+    expect(Number(await fieldValue(page, 'Width (ft)'))).toBeCloseTo(20, 1);
+    // The segment belongs to the old scale, so it must not survive the rescale.
+    await expect(page.locator('#topSvg line[data-setup-ruler]')).toHaveCount(0);
+    await expect(page.locator('.setup-panel__status')).toContainText('20 ft across');
+  });
+
   test('dragging a plan edge handle resizes the view and the form together', async ({ page }) => {
     await openProject(page, 'backyard');
     await page.locator('[data-mode="setup"]').click();

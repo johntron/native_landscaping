@@ -1460,6 +1460,32 @@ select {
   color: #7a7468;
 }
 
+/* Calibration against the background photo. The red matches the measuring
+   segment drawn on the canvas, so the panel and the drawing read as one tool. */
+.setup-panel__ruler {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.45rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px dashed #d6d3cb;
+  border-radius: 7px;
+}
+
+.setup-panel__ruler-toggle.is-active {
+  border-color: #c1121f;
+  color: #c1121f;
+}
+
+.setup-panel__ruler-readout {
+  color: #c1121f;
+  font-weight: 600;
+}
+
+.setup-panel__ruler-field {
+  max-width: 190px;
+}
+
 .setup-panel__footer {
   flex-direction: row;
   align-items: center;
