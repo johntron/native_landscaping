@@ -20,6 +20,7 @@ export function createSetupPanel({
   onSelect,
   onRulerToggle,
   onRulerApply,
+  onUploadBackground,
 }) {
   if (!root) {
     return {
@@ -168,6 +169,7 @@ export function createSetupPanel({
         patch({ background: value.trim() || null })
       )
     );
+    grid.appendChild(uploadField(view));
     grid.appendChild(
       selectField(
         'Borrow background from',
@@ -196,10 +198,33 @@ export function createSetupPanel({
         'p',
         'setup-panel__hint',
         `Drawing is ${Math.round(view.viewBox.width)} × ${Math.round(view.viewBox.height)} px. ` +
-          'Drop background images in the project folder under img/ and type the path, e.g. img/east.webp.'
+          'Upload a photo above, or drop one into the project folder under img/ and type its path.'
       )
     );
     return wrap;
+  }
+
+  /**
+   * Pick a photo for this view. The file never becomes the background directly:
+   * the app resizes and re-encodes it, uploads the result, and commits the path
+   * the server chose — so the text field above stays the single description of
+   * where the image lives.
+   */
+  function uploadField(view) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    // Advisory only — the real allowlist is on the server, which checks the
+    // bytes rather than the extension. SVG is left out on both sides.
+    input.accept = 'image/png,image/jpeg,image/webp';
+    input.dataset.backgroundUpload = '';
+    input.addEventListener('change', (event) => {
+      const file = event.target.files?.[0];
+      // Clearing lets the same file be picked twice in a row, which is what
+      // happens whenever the first attempt failed.
+      event.target.value = '';
+      if (file) onUploadBackground?.(file, view.id);
+    });
+    return field('Upload photo', input);
   }
 
   /**

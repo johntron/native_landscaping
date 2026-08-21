@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openProject, readLayoutRows } from './helpers.js';
+import { openProject, openScratchProject, readLayoutRows, readScratchLayout } from './helpers.js';
 
 // These specs assert on DOM structure rather than screenshots: the point is a
 // cheap, readable signal that the real page boots and renders the real CSV.
@@ -412,10 +412,15 @@ test.describe('project switching', () => {
   });
 
   test('a detail view borrows the plan photo and shows only its rectangle', async ({ page }) => {
-    await openProject(page, 'example-frontyard');
+    // The scratch fixture's own project, not example-frontyard: that one is
+    // editable in the app, and a Setup Save dropping its fourth view broke this
+    // test twice (nl-2p3). The geometry asserted below is now owned by
+    // tests-e2e/scratch-fixture.mjs.
+    await openScratchProject(page, 'detail-crop');
 
-    // Four panels: the multi-view path is only exercised in the browser here.
-    await expect(page.locator('.view-panel')).toHaveCount(4);
+    // Two panels: the multi-view and crop paths are only exercised in the
+    // browser here.
+    await expect(page.locator('.view-panel')).toHaveCount(2);
     await expect(page.locator('[data-view-panel="street-bed"] [data-view-label]')).toHaveText(
       'Street bed'
     );
@@ -428,20 +433,22 @@ test.describe('project switching', () => {
         position: el.style.backgroundPosition,
       }));
     // The detail declares no background of its own; it crops the plan's photo to
-    // its 9x6 ft rectangle at (3, 3). See src/render/backgroundCrop.js.
-    expect(style.image).toContain('img/plan.svg');
+    // its 10 x 6.667 ft rectangle at (5, 5). See src/render/backgroundCrop.js.
+    expect(style.image).toContain('img/top.webp');
+    const PLAN = { width: 800 / 27, height: 600 / 27 };
+    const CROP = { x: 5, y: 5, width: 10, height: 180 / 27 };
     // Chrome re-serializes inline percentages, so compare the numbers.
     const percents = (value) => value.split(' ').map((part) => Number.parseFloat(part));
     const [sizeX, sizeY] = percents(style.size);
-    expect(sizeX).toBeCloseTo((12 / 9) * 100, 2); // full width over crop width
-    expect(sizeY).toBeCloseTo((25 / 6) * 100, 2);
+    expect(sizeX).toBeCloseTo((PLAN.width / CROP.width) * 100, 2); // full width over crop width
+    expect(sizeY).toBeCloseTo((PLAN.height / CROP.height) * 100, 2);
     const [posX, posY] = percents(style.position);
     // The denominator is the leftover travel, not the full extent.
-    expect(posX).toBeCloseTo(((3 - 2) / (12 - 9)) * 100, 2);
+    expect(posX).toBeCloseTo((CROP.x / (PLAN.width - CROP.width)) * 100, 2);
     // …and plan y grows north while CSS y grows down.
-    expect(posY).toBeCloseTo(100 - ((3 - 2) / (25 - 6)) * 100, 2);
+    expect(posY).toBeCloseTo(100 - (CROP.y / (PLAN.height - CROP.height)) * 100, 2);
 
-    // The stylesheet's 100% 100% stretch must still apply to the uncropped plan.
+    // The stylesheet's `contain` must still apply to the uncropped plan.
     const planSize = await page
       .locator('[data-view-panel="plan"] .view')
       .evaluate((el) => el.style.backgroundSize);
@@ -450,8 +457,12 @@ test.describe('project switching', () => {
     // Plants inside the rectangle are drawn over the cropped photo. The set is
     // derived from the CSV rather than named, so curating the layout in the app
     // cannot turn this into a false failure.
-    const inside = (await readLayoutRows('example-frontyard')).filter(
-      (row) => row.xFt >= 3 && row.xFt <= 12 && row.yFt >= 3 && row.yFt <= 9
+    const inside = (await readScratchLayout('detail-crop')).filter(
+      (row) =>
+        row.x >= CROP.x &&
+        row.x <= CROP.x + CROP.width &&
+        row.y >= CROP.y &&
+        row.y <= CROP.y + CROP.height
     );
     expect(inside.length).toBeGreaterThan(0);
     for (const row of inside) {

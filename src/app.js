@@ -22,6 +22,7 @@ import {
   persistProjectConfig,
   updateHistoryCursor,
 } from './data/persistence.js';
+import { compressBackgroundImage, uploadViewBackground } from './data/backgroundUpload.js';
 import { computePlantState } from './state/seasonalState.js';
 import { renderViews } from './render/renderViews.js';
 import { createViewTransform } from './render/viewTransform.js';
@@ -709,6 +710,36 @@ async function init() {
         'success'
       );
     },
+    /**
+     * Picked photo to live background: compress, upload, then commit the path
+     * the server chose. The view is only patched after the bytes are on disk —
+     * committing first would point the drawing at a file that may never arrive.
+     */
+    onUploadBackground: async (file, viewId) => {
+      setupPanel.setStatus('Preparing photo…', 'info');
+      try {
+        const { blob, contentType, width, height } = await compressBackgroundImage(file);
+        setupPanel.setStatus(`Uploading ${formatFileSize(blob.size)}…`, 'info');
+        const background = await uploadViewBackground({
+          projectId: project.id,
+          viewId,
+          blob,
+          contentType,
+        });
+        // The photo is on disk either way, but if the candidate views[] is
+        // refused the panel is still showing the old background — and
+        // applyViewEdit has already explained why. Reporting success over the
+        // top of that would be a straight lie.
+        if (!applyViewEdit(patchView(project.views, viewId, { background }))) return;
+        setupPanel.setStatus(
+          `Background set — ${width}×${height}, ${formatFileSize(blob.size)}. Save views to keep it.`,
+          'success'
+        );
+      } catch (err) {
+        console.warn('Background upload failed', err);
+        setupPanel.setStatus(err.message || 'Background upload failed', 'error');
+      }
+    },
     onSave: async () => {
       setupPanel.setStatus('Saving…', 'info');
       const saved = await persistProjectConfig(project, (message, state) =>
@@ -722,6 +753,9 @@ async function init() {
    * Validate a candidate views[] the same way a reload would, then swap it in.
    * Round-tripping through serialize + normalize means a rejected edit leaves
    * the drawing on the last good state instead of throwing mid-render.
+   *
+   * @returns {boolean} whether the edit was applied — a caller that reports its
+   * own success afterwards must not paper over the rejection message set here.
    */
   function applyViewEdit(views) {
     // A standing segment's pixel coordinates belong to the geometry being
@@ -737,13 +771,14 @@ async function init() {
       );
     } catch (err) {
       setupPanel.setStatus(err.message, 'error');
-      return;
+      return false;
     }
     project.name = validated.name;
     project.views = validated.views;
     appState.project = project;
     rebuildViews();
     setupPanel.render(project.views);
+    return true;
   }
 
   applyMode(readPersistedMode());
@@ -1160,6 +1195,11 @@ function formatFeet(value) {
   const num = Number(value);
   if (!Number.isFinite(num)) return '';
   return num.toFixed(1);
+}
+
+function formatFileSize(bytes) {
+  const kb = Number(bytes) / 1024;
+  return kb >= 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${Math.round(kb)} KB`;
 }
 
 /** Replace one view in a list with a shallow-merged copy. */

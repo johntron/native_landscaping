@@ -1,4 +1,5 @@
 import http from 'node:http';
+import crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { buildLayoutCsv } from './src/data/layoutExporter.js';
@@ -7,6 +8,13 @@ import {
   serializeProjectConfig,
 } from './src/data/projectConfig.js';
 import { projectIdFromUrl, resolveProjectPaths } from './src/data/projectPaths.js';
+import {
+  MAX_UPLOAD_BYTES,
+  imageTypeForContentType,
+  resolveBackgroundTarget,
+  sniffImageType,
+  supersededBackgrounds,
+} from './src/data/backgroundStore.js';
 
 const envPort = Number(process.env.PORT);
 const PORT = Number.isFinite(envPort) ? envPort : 8000;
@@ -121,6 +129,60 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (pathname === '/api/view-background' && req.method === 'POST') {
+    try {
+      const { projectDir, projectId } = resolveProjectPaths(projectIdFromUrl(url), PUBLIC_DIR);
+      const viewId = url.searchParams.get('view') || '';
+
+      // Three independent checks, in cost order: the header the client
+      // declared, the size as it arrives, and the bytes themselves. Only the
+      // last one is trustworthy, but failing early on the first two keeps a
+      // hostile client from making us buffer anything.
+      const declared = imageTypeForContentType(req.headers['content-type']);
+      if (!declared) {
+        res.writeHead(415, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Background must be a WebP, JPEG, or PNG image' }));
+        req.destroy();
+        return;
+      }
+
+      const body = await collectBinaryBody(req, MAX_UPLOAD_BYTES);
+      const sniffed = sniffImageType(body);
+      if (!sniffed || sniffed.contentType !== declared.contentType) {
+        throw new Error('Image bytes do not match the declared image type');
+      }
+
+      const contentHash = crypto.createHash('sha256').update(body).digest('hex').slice(0, 12);
+      const { dir, file, relativePath } = resolveBackgroundTarget({
+        projectDir,
+        viewId,
+        contentHash,
+        ext: sniffed.ext,
+      });
+
+      await fs.mkdir(dir, { recursive: true });
+      await writeFileAtomic(file, body);
+      await removeSupersededBackgrounds(dir, viewId, path.basename(file));
+
+      console.log(`Background saved for '${projectId}' view '${viewId}' (${body.length} bytes)`);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ background: relativePath, bytes: body.length }));
+    } catch (err) {
+      console.error(err);
+      const tooLarge = err.code === 'PAYLOAD_TOO_LARGE';
+      res.writeHead(tooLarge ? 413 : 400, {
+        'Content-Type': 'application/json',
+        // The rest of an oversized body is never read, so the connection
+        // cannot be reused; say so and hang up once the error is delivered.
+        ...(tooLarge ? { Connection: 'close' } : {}),
+      });
+      res.end(JSON.stringify({ error: err.message }), () => {
+        if (tooLarge) req.destroy();
+      });
+    }
+    return;
+  }
+
   await serveStaticFile(res, pathname);
 });
 
@@ -230,6 +292,68 @@ async function serveStaticFile(res, pathname) {
   } catch (err) {
     res.writeHead(404);
     res.end('Not found');
+  }
+}
+
+/**
+ * Read a request body as bytes, refusing one that grows past `limit`.
+ *
+ * The cap is checked as chunks arrive, not at the end: a check in the 'end'
+ * handler has already buffered whatever was sent. Content-Length is not
+ * consulted at all — it is a claim, and the accumulated length is a fact.
+ */
+function collectBinaryBody(req, limit) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    let aborted = false;
+    req.on('data', (chunk) => {
+      if (aborted) return;
+      size += chunk.length;
+      if (size > limit) {
+        aborted = true;
+        // Pause rather than destroy: the socket has to stay alive long enough
+        // to carry the 413 back, or the client sees a dropped connection and
+        // has no idea why. server.js destroys it once the response is out.
+        req.pause();
+        const err = new Error(`Image is larger than ${Math.round(limit / 1024 / 1024)} MB`);
+        err.code = 'PAYLOAD_TOO_LARGE';
+        reject(err);
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
+/** Same temp-then-rename discipline as writeJsonAtomic, for opaque bytes. */
+async function writeFileAtomic(targetFile, contents) {
+  const tempFile = `${targetFile}.${process.pid}.tmp`;
+  try {
+    await fs.writeFile(tempFile, contents);
+    await fs.rename(tempFile, targetFile);
+  } catch (err) {
+    await fs.rm(tempFile, { force: true });
+    throw err;
+  }
+}
+
+/**
+ * Drop a view's earlier uploads. Best effort: the new background is already on
+ * disk and usable, so a failure to tidy up must not fail the request.
+ */
+async function removeSupersededBackgrounds(dir, viewId, keepFileName) {
+  try {
+    const entries = await fs.readdir(dir);
+    await Promise.all(
+      supersededBackgrounds(entries, viewId, keepFileName).map((name) =>
+        fs.rm(path.join(dir, name), { force: true })
+      )
+    );
+  } catch (err) {
+    console.warn(`Could not remove superseded backgrounds in ${dir}:`, err.message);
   }
 }
 
