@@ -44,16 +44,68 @@ The priority is **ecological legibility and usability**, not UI flashiness.
 
 There is **no build step**.
 
-Suggested local workflow:
+The app runs in **Docker**, not as a bare `npm run serve`: `docker-compose.yml`
+defines service `web` (container `native_landscaping-web-1`) on
+`127.0.0.1:8080`, with the repo bind-mounted at `/app` and a `cloudflared`
+sidecar in front of it. The bind mount means the code on disk *is* the code in
+the container; only the node process can be stale.
 
-- Serve the project root as static files:
-  - Option 1 (Node): `npx serve .`
-  - Option 2 (Python 3): `python -m http.server 8000`
-- Open `http://localhost:8000` and load `index.html`.
-- Run automated tests when updating parsing/state logic: `npm test`.
+### After every change: test, commit, restart
 
-If you introduce tooling (Vite, React, tests, etc.), keep it lightweight and
-document the commands in this file under a new “Tooling” section.
+This is a standing instruction, not a suggestion, and it is standing
+authorization — do all three without being asked:
+
+```bash
+npm test                     # 1. gate
+git add … && git commit      # 2. commit the change
+docker compose restart web   # 3. restart the DEPLOYED server
+```
+
+Restart **every time**, even though `src/` is bind-mounted and served fresh per
+request so only `server.js` strictly needs it (see “Restarting the server”
+below). The point is that the deployed process is known-current after every
+change rather than reasoned about case by case. Never restart `cloudflared` —
+it self-heals, and its token is what keeps this project's tunnel separate from
+every other one on the host.
+
+Pushing to `origin` is **not** part of this loop; ask first.
+
+For a throwaway static server with no persistence API, `npx serve .` or
+`python -m http.server 8000` still work. Run `npm test` when touching parsing or
+state logic. If you introduce tooling (Vite, React, etc.), keep it lightweight
+and document the commands under “Tooling”.
+
+### Restarting the server
+
+Node does not hot-reload, so a long-running process keeps serving the routes it
+booted with while happily serving updated `src/` files on reload. A POST to a
+route added after the server started falls through to the static handler and
+returns **404, not 400** — that 404 is the signature of a stale server, not of a
+missing route.
+
+**Verify the restart; do not trust the command's output.**
+
+```bash
+docker inspect native_landscaping-web-1 --format '{{.State.StartedAt}} {{.State.Pid}}'   # before
+docker compose restart web
+docker inspect native_landscaping-web-1 --format '{{.State.StartedAt}} {{.State.Pid}}'   # after — both must change
+docker compose exec -T web node -e "console.log(process.uptime())"                       # ~0 on a real restart
+```
+
+Two traps:
+
+- `docker compose ps` prints **elapsed** uptime. Two hours after a real restart
+  it reads `Up 2 hours`, which looks exactly like a restart that never happened.
+  That is the display, not a failure — compare `StartedAt` instead.
+- `ps` is not installed in `node:22-slim`. Use `docker compose exec -T web node -e`.
+
+Then confirm the served bytes actually carry the change — `curl` the module and
+grep for an identifier that only exists in the new code.
+
+If someone reports a change is still not live after a *verified* restart,
+suspect their browser tab rather than the server: `server.js` sends
+`Cache-Control: no-store`, so nothing is cached, but a page loaded before the
+deploy keeps its ES module graph until an actual reload.
 
 ---
 
@@ -515,7 +567,7 @@ When the user delegates work, here are examples of useful tasks:
 ## Tooling
 
 - Run `npm test` to execute `node tests/run-tests.cjs`, which covers the layout history stack and the persistence module (ensuring the app hits `/api/layout` when committing changes).
-- Run `npm run serve` (or `node server.js`) to launch the bundled static + persistence server. `/api/layout`, `/api/history`, `/api/history/cursor`, `/api/project`, `/api/features`, and `/api/view-background` are all scoped by a required `?project=<slug>` query parameter and write inside that project's directory only.
+- Run `npm run serve` (or `node server.js`) to launch the bundled static + persistence server locally — but the deployed instance is the Docker `web` service, and every change ends with `docker compose restart web`; see **Dev Workflow**. `/api/layout`, `/api/history`, `/api/history/cursor`, `/api/project`, `/api/features`, and `/api/view-background` are all scoped by a required `?project=<slug>` query parameter and write inside that project's directory only.
 - No external dependencies are required to execute `npm test`; `npm run test:e2e` needs the `@playwright/test` devDependency (see below). Run `npm install` once before serving the app: `index.html` loads JSZip from `node_modules/jszip/dist/jszip.min.js`.
 
 ### End-to-end browser tests (Playwright)

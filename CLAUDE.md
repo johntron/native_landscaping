@@ -91,13 +91,32 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 
 ## Build & Test
 
-_Add your build and test commands here_
-
 ```bash
-# Example:
-# npm install
-# npm test
+npm test                     # Node test suite — the gate
+npm run test:e2e             # Playwright browser tests in tests-e2e/
+docker compose restart web   # deploy: restart the running server (never cloudflared)
 ```
+
+## Git and deploy policy — this repository OPTS IN
+
+The Beads block below describes a *conservative* default in which an agent does
+not commit without being asked. **This repository overrides that.** The standing
+instruction from the repository owner is:
+
+> After each change, once tests pass, commit it **and** restart the deployed
+> server (`docker compose restart web`). Both steps, every time, without asking.
+
+Treat that as the **team-maintainer** profile the block refers to: committing and
+restarting are pre-authorized. Two limits still hold — **pushing to `origin` is
+not** covered, nor is `bd dolt push`; ask first. And a current "do not commit"
+instruction from the user still wins over this file.
+
+`docker compose ps` reports *elapsed* uptime, so a real restart reads "Up 2
+hours" hours later and looks like it never happened. Verify with
+`docker inspect … {{.State.StartedAt}} {{.State.Pid}}` before and after, and check
+the served bytes carry the change. Full detail — including why the restart is
+required even though `src/` is bind-mounted — is under **Dev Workflow** in
+[AGENTS.md](AGENTS.md), which is canonical.
 
 ## Architecture Overview
 
