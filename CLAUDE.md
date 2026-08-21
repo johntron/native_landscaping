@@ -26,7 +26,9 @@ authored once in FEET and projected into every view by
 `GET /api/features` and saves through `POST /api/features` (fetching the file
 directly would log a console 404 for every project that has never drawn one), and
 elevations sort features and plants into ONE far-to-near list so a fence hides the
-shrub behind it. Elevations are driven by a `viewFrom` compass direction, and a plant drag is
+shrub behind it; features are drawn in the fourth toolbar mode, **Features**, on a plan
+view only (elevations are derived and read-only), and like Setup mode it saves only when
+asked. Elevations are driven by a `viewFrom` compass direction, and a plant drag is
 clamped to the shared yard rather than to the view it is dragged in — see the
 "Projects" section of AGENTS.md for the axis/mirror table, the views[] schema, and how
 to add a project.

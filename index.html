@@ -27,7 +27,7 @@
       <div class="view-shell">
         <div class="view-toolbar">
           <div class="view-toolbar__row view-toolbar__row--top">
-            <div class="mode-switch" id="modeSwitch" role="group" aria-label="View, edit, or set up the drawings">
+            <div class="mode-switch" id="modeSwitch" role="group" aria-label="View, edit, set up, or draw features on the drawings">
               <button type="button" class="mode-switch__btn" data-mode="view" aria-pressed="true">
                 <span class="mode-switch__icon" aria-hidden="true">&#128065;</span> View
               </button>
@@ -36,6 +36,9 @@
               </button>
               <button type="button" class="mode-switch__btn" data-mode="setup" aria-pressed="false">
                 <span class="mode-switch__icon" aria-hidden="true">&#9707;</span> Setup
+              </button>
+              <button type="button" class="mode-switch__btn" data-mode="features" aria-pressed="false">
+                <span class="mode-switch__icon" aria-hidden="true">&#9638;</span> Features
               </button>
             </div>
             <button type="button" id="settingsToggleBtn" class="settings-toggle" aria-expanded="false" aria-controls="settingsDrawer">
@@ -80,6 +83,7 @@
           </div>
           <!-- Populated by createSetupPanel from the project's views[]. -->
           <div class="setup-row" id="setupRow" hidden></div>
+          <div class="setup-row" id="featureRow" hidden></div>
           <div class="edit-row" id="editRow" hidden>
             <div class="toggle-row">
               <label class="pill-switch" for="labelToggle">

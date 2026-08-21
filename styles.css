@@ -1354,13 +1354,21 @@ select {
   position: static;
 }
 
-.setup-panel__section {
+/*
+ * Setup and Features are two panels with one visual language, so every rule
+ * below carries both blocks' hooks. The class names stay distinct because the
+ * two panels are distinct components — a shared name makes a selector for one
+ * of them silently match the other.
+ */
+.setup-panel__section,
+.feature-panel__section {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
 
-.setup-panel__heading {
+.setup-panel__heading,
+.feature-panel__heading {
   margin: 0;
   font-size: 0.78rem;
   font-weight: 700;
@@ -1369,7 +1377,8 @@ select {
   color: #6b6559;
 }
 
-.setup-panel__list {
+.setup-panel__list,
+.feature-panel__list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -1378,7 +1387,8 @@ select {
   gap: 0.3rem;
 }
 
-.setup-panel__item {
+.setup-panel__item,
+.feature-panel__item {
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -1388,12 +1398,14 @@ select {
   padding: 0.25rem 0.35rem 0.25rem 0.15rem;
 }
 
-.setup-panel__item.is-selected {
+.setup-panel__item.is-selected ,
+.feature-panel__item.is-selected {
   border-color: #2f7a8c;
   box-shadow: inset 3px 0 0 #2f7a8c;
 }
 
-.setup-panel__pick {
+.setup-panel__pick,
+.feature-panel__pick {
   flex: 1;
   display: flex;
   align-items: baseline;
@@ -1408,18 +1420,21 @@ select {
   cursor: pointer;
 }
 
-.setup-panel__item-kind {
+.setup-panel__item-kind,
+.feature-panel__item-kind {
   font-size: 0.72rem;
   font-weight: 500;
   color: #7a7468;
 }
 
-.setup-panel__item-actions {
+.setup-panel__item-actions,
+.feature-panel__item-actions {
   display: flex;
   gap: 0.15rem;
 }
 
-.setup-panel__icon-btn {
+.setup-panel__icon-btn,
+.feature-panel__icon-btn {
   width: 1.9rem;
   height: 1.9rem;
   border: 1px solid #ddd8d1;
@@ -1431,40 +1446,48 @@ select {
   cursor: pointer;
 }
 
-.setup-panel__icon-btn:disabled {
+.setup-panel__icon-btn:disabled,
+.feature-panel__icon-btn:disabled {
   opacity: 0.35;
   cursor: default;
 }
 
-.setup-panel__icon-btn:not(:disabled):hover {
+.setup-panel__icon-btn:not(:disabled):hover ,
+.feature-panel__icon-btn:not(:disabled):hover {
   border-color: #2f7a8c;
   color: #2f7a8c;
 }
 
-.setup-panel__add {
+.setup-panel__add,
+.feature-panel__add {
   align-self: flex-start;
 }
 
-.setup-panel__grid {
+.setup-panel__grid,
+.feature-panel__grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
   gap: 0.5rem 0.7rem;
 }
 
-.setup-panel__field {
+.setup-panel__field,
+.feature-panel__field {
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
 }
 
-.setup-panel__field-label {
+.setup-panel__field-label,
+.feature-panel__field-label {
   font-size: 0.74rem;
   font-weight: 600;
   color: #6b6559;
 }
 
 .setup-panel__field input,
-.setup-panel__field select {
+.feature-panel__field input,
+.setup-panel__field select ,
+.feature-panel__field select {
   border: 1px solid #d6d3cb;
   border-radius: 5px;
   padding: 0.3rem 0.4rem;
@@ -1476,12 +1499,14 @@ select {
 
 /* A file input is far wider than the grid cell it shares with the number
    fields; the smaller type keeps the button and a filename both inside it. */
-.setup-panel__field input[type='file'] {
+.setup-panel__field input[type='file'] ,
+.feature-panel__field input[type='file'] {
   padding: 0.2rem;
   font-size: 0.75rem;
 }
 
-.setup-panel__hint {
+.setup-panel__hint,
+.feature-panel__hint {
   margin: 0;
   font-size: 0.75rem;
   color: #7a7468;
@@ -1489,7 +1514,8 @@ select {
 
 /* Calibration against the background photo. The red matches the measuring
    segment drawn on the canvas, so the panel and the drawing read as one tool. */
-.setup-panel__ruler {
+.setup-panel__ruler,
+.feature-panel__ruler {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -1499,36 +1525,43 @@ select {
   border-radius: 7px;
 }
 
-.setup-panel__ruler-toggle.is-active {
+.setup-panel__ruler-toggle.is-active ,
+.feature-panel__ruler-toggle.is-active {
   border-color: #c1121f;
   color: #c1121f;
 }
 
-.setup-panel__ruler-readout {
+.setup-panel__ruler-readout,
+.feature-panel__ruler-readout {
   color: #c1121f;
   font-weight: 600;
 }
 
-.setup-panel__ruler-field {
+.setup-panel__ruler-field,
+.feature-panel__ruler-field {
   max-width: 190px;
 }
 
-.setup-panel__footer {
+.setup-panel__footer,
+.feature-panel__footer {
   flex-direction: row;
   align-items: center;
   gap: 0.6rem;
 }
 
-.setup-panel__status {
+.setup-panel__status,
+.feature-panel__status {
   font-size: 0.8rem;
   color: #6b6559;
 }
 
-.setup-panel__status[data-state="error"] {
+.setup-panel__status[data-state="error"],
+.feature-panel__status[data-state="error"] {
   color: #a8332b;
 }
 
-.setup-panel__status[data-state="success"] {
+.setup-panel__status[data-state="success"],
+.feature-panel__status[data-state="success"] {
   color: #2f7a5c;
 }
 
@@ -1546,10 +1579,25 @@ select {
  * that drawing is editable. The toolbar, panel headers, and the page around
  * the drawings still pan.
  *
- * Two controllers share each SVG, so this is driven by a class per controller
- * rather than by svg.style.touchAction, which they used to overwrite in turn.
+ * Several controllers share each SVG, so this is driven by a class per
+ * controller rather than by svg.style.touchAction, which they used to overwrite
+ * in turn.
  */
 .view svg.is-drag-enabled,
-.view svg.is-setup-enabled {
+.view svg.is-setup-enabled,
+.view svg.is-features-enabled {
   touch-action: none;
+}
+
+/* Features mode: one add button per primitive, and the read-only kind field. */
+.feature-panel__adders {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.feature-panel__field-static {
+  font-size: 0.8rem;
+  color: #5f645c;
+  padding: 0.3rem 0;
 }
