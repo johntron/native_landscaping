@@ -195,6 +195,18 @@ payoff: a fence between the viewer and a shrub actually hides it. An extended
 footprint is drawn whole at its nearest edge rather than split at each plant —
 exactly right for a box, since nothing is planted inside a house.
 
+**Features are drawn in Features mode, on a PLAN view only.** A footprint lives in
+plan space and a height is a number in a form field, so elevations stay derived and
+read-only — that restriction is most of what keeps the editor small. Select a shape
+by clicking it, drag it to move, drag a vertex to reshape; the list adds, deletes,
+and reorders (array order is the plan's z-order). Every gesture reports a *candidate*
+through `onChange` and the app validates it with `normalizeFeatures` before it becomes
+live, so a refused edit leaves the drawing on the last good state. A new wall or box
+is created with a real `heightFt` on purpose: the normalizer refuses one without a
+positive height, and the first frame of a new fence must not be what trips that guard.
+Unlike a plant drag and like Setup mode, editing does **not** auto-save — press *Save
+features*.
+
 Features load through `GET /api/features` and save through `POST /api/features`
 (`loadProjectFeatures` / `persistFeatures` in `src/data/persistence.js`). The
 load deliberately does *not* fetch `features.json` off disk: most projects have
@@ -336,14 +348,18 @@ Top view uses the yard coordinate system (origin at SW corner, y increasing nort
 
 - Month selector (`#monthSelect`) controls seasonal state.
 - Scale input + slider are **zoom**: they resize the panels on screen only, with bounds in `SCALE_LIMITS`. Physical scale belongs to each view's `extentFt`.
-- Mode pills switch between View, Edit (drag plants), and Setup (define views).
+- Mode pills switch between View, Edit (drag plants), Setup (define views), and Features
+  (draw the yard model).
 - Lock toggle enables/disables drag-to-move behavior powered by `createPlantDragController`, which clamps edits to the viewBox and triggers rerenders.
-- **Each view SVG has two controllers, so neither may own an inline style.** The drag and
-  setup controllers are bound to the same element; while both wrote `svg.style.touchAction`
+- **Each view SVG has several controllers, so none may own an inline style.** The drag,
+  setup, and (on plans) feature controllers are bound to the same element; while both wrote
+  `svg.style.touchAction`
   the later writer silently won and Edit mode sat at `touch-action: auto`, so the page
   scroller took every drag. Each now toggles its own class (`is-drag-enabled`,
-  `is-setup-enabled`) and `styles.css` combines them — see the comment there for why neither
-  `pan-y` nor per-plant `touch-action` works. `svg.style.cursor` still has this bug (nl-jfm).
+  `is-setup-enabled`, `is-features-enabled`) and `styles.css` combines them — see the comment
+  there for why neither `pan-y` nor per-plant `touch-action` works. `svg.style.cursor` still
+  has this bug and now has three writers (nl-jfm). `applyMode` decides all the lock states in
+  one place, so exactly one kind of controller is ever unlocked.
 - Touch is covered by `tests-e2e/touch.spec.js` under its own phone-sized Playwright project.
   It drives **real touch through CDP** (`Input.dispatchTouchEvent`, wrapped as `touchGesture`
   in `tests-e2e/helpers.js`): `page.mouse` is not touch and `page.touchscreen` only taps, so
@@ -376,6 +392,7 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
 - `src/data/backgroundStore.js` – server-side upload guards: allowed types, magic-byte
   sniff, and the filename the server (never the client) chooses.
 - `src/interaction/setupPanel.js`, `src/interaction/setupController.js`, `src/render/setupOverlay.js` – Setup mode's form, on-canvas handles, and guides.
+- `src/interaction/featurePanel.js`, `src/interaction/featureController.js`, `src/render/featureOverlay.js` – Features mode's list, plan-only drag handles, and selection outline.
 - `src/data/plantParser.js` – merges species/layout CSVs, normalizes month specs, aliases, and seasonal palettes.
 - `src/data/layoutExporter.js` – converts in-memory plants back to CSV with consistent precision/escaping.
 - `src/render/*` – view configuration, SVG helpers, tooltip builder, plan view and elevation renderers.

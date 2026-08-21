@@ -33,6 +33,7 @@ export const SCRATCH_PROJECTS = [
   'background-upload',
   'detail-crop',
   'features-save',
+  'features-edit',
 ];
 
 /**

@@ -113,3 +113,117 @@ test('the app draws saved features in every view, and boots clean without any', 
   await expect(page.locator('#topSvg g[data-feature-id]')).toHaveCount(0);
   expect(consoleErrors).toEqual([]);
 });
+
+/**
+ * The editor. Its own project again, because every gesture here rewrites
+ * features.json and a spec sharing that file with another one breaks it.
+ */
+test.describe('features mode', () => {
+  const EDIT = 'features-edit';
+
+  test.beforeEach(async ({ request }) => {
+    // Each test starts from an empty yard rather than from what the last one left.
+    await request.post(featuresUrl(EDIT), { data: { features: [] } });
+  });
+
+  async function enterFeaturesMode(page) {
+    await openScratchProject(page, EDIT);
+    await page.locator('[data-mode="features"]').click();
+    await expect(page.locator('#featureRow')).toBeVisible();
+  }
+
+  /** The plan panel's centre, in page coordinates. */
+  async function planCentre(page) {
+    const svg = page.locator('#topSvg');
+    await svg.scrollIntoViewIfNeeded();
+    const box = await svg.boundingBox();
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  }
+
+  test('a shape can be added, moved, reshaped, and deleted', async ({ page }) => {
+    await enterFeaturesMode(page);
+
+    await page.locator('#featureRow button', { hasText: '+ box' }).click();
+    const shape = page.locator('#topSvg g[data-feature-id="box"]');
+    await expect(shape).toHaveCount(1);
+    // One model, every view: the elevations get a silhouette of the same box.
+    expect(await page.locator('.view svg g[data-feature-id="box"]').count()).toBeGreaterThan(1);
+
+    // It lands in the middle of the plan, so the centre of the panel is inside it.
+    const centre = await planCentre(page);
+    const before = await shape.locator('polygon').getAttribute('points');
+    // One model projected into every view: an elevation has to follow the plan
+    // drag, and this is the assertion a later render optimization would break.
+    const silhouette = page.locator('.view svg:not(#topSvg) g[data-feature-id="box"] rect').first();
+    const silhouetteBefore = await silhouette.getAttribute('x');
+
+    await page.mouse.move(centre.x, centre.y);
+    await page.mouse.down();
+    await page.mouse.move(centre.x + 60, centre.y + 40, { steps: 8 });
+    await page.mouse.up();
+
+    const afterMove = await shape.locator('polygon').getAttribute('points');
+    expect(afterMove).not.toEqual(before);
+    expect(await silhouette.getAttribute('x')).not.toEqual(silhouetteBefore);
+    // Moving translates the shape: its width in pixels is unchanged.
+    expect(spanOf(afterMove)).toBeCloseTo(spanOf(before), 1);
+
+    // Dragging a corner reshapes rather than translates.
+    const handle = page.locator('#topSvg circle[data-feature-handle="vertex:0"]');
+    await expect(handle).toHaveCount(1);
+    const handleBox = await handle.boundingBox();
+    await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(handleBox.x - 80, handleBox.y - 50, { steps: 8 });
+    await page.mouse.up();
+    const afterReshape = await shape.locator('polygon').getAttribute('points');
+    expect(spanOf(afterReshape)).toBeGreaterThan(spanOf(afterMove) + 1);
+
+    // Saving writes the yard model, and it comes back the same shape.
+    await page.locator('#featureRow button', { hasText: 'Save features' }).click();
+    await expect(page.locator('#featureRow .feature-panel__status')).toHaveText('Features saved');
+    const saved = await (await page.request.get(featuresUrl(EDIT))).json();
+    expect(saved.features).toHaveLength(1);
+    expect(saved.features[0].id).toBe('box');
+
+    await page.locator('#featureRow [aria-label="Remove"]').first().click();
+    await expect(page.locator('#topSvg g[data-feature-id]')).toHaveCount(0);
+  });
+
+  test('a rejected edit leaves the drawing on the last good state', async ({ page }) => {
+    await enterFeaturesMode(page);
+    await page.locator('#featureRow button', { hasText: '+ wall' }).click();
+    const shape = page.locator('#topSvg g[data-feature-id="wall"] polyline');
+    const before = await shape.getAttribute('points');
+
+    // A wall with no height renders as nothing in an elevation, so
+    // normalizeFeatures refuses it. The drawing must not follow the refusal.
+    const height = page.locator('#featureRow input[type="number"]').first();
+    await height.fill('0');
+    await height.blur();
+
+    await expect(page.locator('#featureRow .feature-panel__status')).toContainText('heightFt');
+    await expect(shape).toHaveAttribute('points', before);
+    await expect(page.locator('#topSvg g[data-feature-id="wall"]')).toHaveCount(1);
+  });
+
+  test('features are edited on the plan only; elevations stay derived', async ({ page }) => {
+    await enterFeaturesMode(page);
+    await page.locator('#featureRow button', { hasText: '+ box' }).click();
+
+    // Handles are drawn on plans and nowhere else — an elevation is a projection
+    // of the model, not a second place to edit it. Scoped to elevation panels
+    // rather than to "not #topSvg": a project may have several plan views, and
+    // every one of them edits the shared model.
+    await expect(page.locator('#topSvg circle[data-feature-handle]')).not.toHaveCount(0);
+    const elevations = page.locator('[data-view-panel]').filter({ hasNotText: 'Looking Down' });
+    await expect(elevations.locator('circle[data-feature-handle]')).toHaveCount(0);
+    await expect(elevations.locator('g[data-feature-id="box"]')).not.toHaveCount(0);
+  });
+});
+
+/** Width in pixels of a polygon's points attribute, for translate-vs-reshape. */
+function spanOf(points) {
+  const xs = points.split(' ').map((pair) => Number(pair.split(',')[0]));
+  return Math.max(...xs) - Math.min(...xs);
+}
