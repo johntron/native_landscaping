@@ -6,16 +6,16 @@
       "id": "plan",
       "type": "plan",
       "viewBox": {
-        "width": 597.8492882559476,
-        "height": 606.153576354689
+        "width": 200,
+        "height": 600
       },
       "originFt": {
         "x": 2,
-        "y": 14.833316758684116
+        "y": 2
       },
       "extentFt": {
-        "width": 29.89246441279738,
-        "height": 30.30767881773445
+        "width": 10,
+        "height": 30
       },
       "background": "img/plan-130d05047b7d.webp"
     },
@@ -59,6 +59,7 @@
     {
       "id": "view",
       "type": "elevation",
+      "viewFrom": "south",
       "viewBox": {
         "width": 249.92136631408937,
         "height": 187.44102473556703
@@ -67,12 +68,7 @@
         "width": 9.37205123677835,
         "height": 7.029038427583763
       },
-      "background": "img/view-635426f71bf6.webp",
-      "viewFrom": "south",
-      "originFt": {
-        "x": 0,
-        "y": 0
-      }
+      "background": "img/view-635426f71bf6.webp"
     }
   ]
 }
