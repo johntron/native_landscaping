@@ -207,13 +207,19 @@ test.describe('features mode', () => {
     await expect(page.locator('#topSvg g[data-feature-id="wall"]')).toHaveCount(1);
   });
 
-  test('changing the selection never moves the drawing under the pointer', async ({ page }) => {
+  test('nothing in the panel ever moves the drawing under the pointer', async ({ page }) => {
     await enterFeaturesMode(page);
-    await page.locator('#featureRow button', { hasText: '+ wall' }).click();
-    await page.locator('#featureRow button', { hasText: '+ surface' }).click();
-
     const planTop = async () => (await page.locator('#topSvg').boundingBox()).y;
+
+    // The panel sits directly above the drawing, so its height is the drawing's
+    // position. Adding a shape used to push the canvas down 154 px and every
+    // shape after it another 45, so the click that followed landed nowhere near
+    // where it was aimed.
     const settled = await planTop();
+    await page.locator('#featureRow button', { hasText: '+ wall' }).click();
+    expect(await planTop(), 'the first shape moved the drawing').toBe(settled);
+    await page.locator('#featureRow button', { hasText: '+ surface' }).click();
+    expect(await planTop(), 'a later shape moved the drawing').toBe(settled);
 
     // Deselecting used to collapse the form and yank the canvas up about a
     // hundred pixels, so the click after it landed nowhere near where it was
