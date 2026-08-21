@@ -35,7 +35,8 @@
         "width": 10.627009489616261,
         "height": 15.940514234424391
       },
-      "background": "img/north-c2bd4c04b539.webp"
+      "background": "img/north-c2bd4c04b539.webp",
+      "viewerAtFt": 20
     },
     {
       "id": "west",
@@ -62,11 +63,15 @@
       "viewFrom": "south",
       "viewBox": {
         "width": 249.92136631408937,
-        "height": 187.44102473556703
+        "height": 533.3333333333334
+      },
+      "originFt": {
+        "x": 2,
+        "y": -8.553805096672585
       },
       "extentFt": {
         "width": 9.37205123677835,
-        "height": 7.029038427583763
+        "height": 20
       },
       "background": "img/view-635426f71bf6.webp"
     }
