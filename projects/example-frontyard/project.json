@@ -6,32 +6,36 @@
       "id": "plan",
       "type": "plan",
       "viewBox": {
-        "width": 240,
-        "height": 500
+        "width": 597.8492882559476,
+        "height": 606.153576354689
       },
       "originFt": {
         "x": 2,
-        "y": 2
+        "y": 14.833316758684116
       },
       "extentFt": {
-        "width": 12,
-        "height": 25
+        "width": 29.89246441279738,
+        "height": 30.30767881773445
       },
-      "background": "img/plan.svg"
+      "background": "img/plan-130d05047b7d.webp"
     },
     {
       "id": "north",
       "type": "elevation",
       "viewFrom": "north",
       "viewBox": {
-        "width": 240,
-        "height": 360
+        "width": 212.54018979232524,
+        "height": 318.81028468848785
+      },
+      "originFt": {
+        "x": 0,
+        "y": -7.1365343829237
       },
       "extentFt": {
-        "width": 12,
-        "height": 18
+        "width": 10.627009489616261,
+        "height": 15.940514234424391
       },
-      "background": "img/north.svg"
+      "background": "img/north-c2bd4c04b539.webp"
     },
     {
       "id": "west",
@@ -39,33 +43,36 @@
       "viewFrom": "east",
       "sublabel": "Looking west",
       "viewBox": {
-        "width": 500,
-        "height": 360
-      },
-      "extentFt": {
-        "width": 25,
-        "height": 18
-      },
-      "background": "img/west.svg"
-    },
-    {
-      "id": "street-bed",
-      "type": "plan",
-      "label": "Street bed",
-      "sublabel": "Detail",
-      "viewBox": {
-        "width": 180,
-        "height": 120
+        "width": 286.97952432851844,
+        "height": 206.62525751653328
       },
       "originFt": {
-        "x": 3,
-        "y": 3
+        "x": 0,
+        "y": -3.196864496043244
       },
       "extentFt": {
-        "width": 9,
-        "height": 6
+        "width": 14.348976216425921,
+        "height": 10.331262875826663
       },
-      "backgroundFrom": "plan"
+      "background": "img/west-2f2cbd505c49.webp"
+    },
+    {
+      "id": "view",
+      "type": "elevation",
+      "viewBox": {
+        "width": 249.92136631408937,
+        "height": 187.44102473556703
+      },
+      "extentFt": {
+        "width": 9.37205123677835,
+        "height": 7.029038427583763
+      },
+      "background": "img/view-635426f71bf6.webp",
+      "viewFrom": "south",
+      "originFt": {
+        "x": 0,
+        "y": 0
+      }
     }
   ]
 }
