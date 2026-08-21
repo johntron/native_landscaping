@@ -1009,6 +1009,11 @@ async function init() {
       projectId: project.id,
     });
     appState.features = (await loadProjectFeatures(undefined, { projectId: project.id })).features;
+    // The panel was built before this await resolved, so it is holding the empty
+    // list the app started with. Re-render it here rather than inside render():
+    // the panel rebuilds its DOM outright, and doing that on every month-slider
+    // frame would take the focus out of the field being typed in.
+    featurePanel.render(appState.features);
     const historyEntries = historyData.entries || [];
     const historyCursor = typeof historyData.cursor === 'number' ? historyData.cursor : -1;
     layoutHistoryInstance = createLayoutHistory(initialPlants, {
