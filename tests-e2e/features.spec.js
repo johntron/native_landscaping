@@ -207,6 +207,34 @@ test.describe('features mode', () => {
     await expect(page.locator('#topSvg g[data-feature-id="wall"]')).toHaveCount(1);
   });
 
+  test('changing the selection never moves the drawing under the pointer', async ({ page }) => {
+    await enterFeaturesMode(page);
+    await page.locator('#featureRow button', { hasText: '+ wall' }).click();
+    await page.locator('#featureRow button', { hasText: '+ surface' }).click();
+
+    const planTop = async () => (await page.locator('#topSvg').boundingBox()).y;
+    const settled = await planTop();
+
+    // Deselecting used to collapse the form and yank the canvas up about a
+    // hundred pixels, so the click after it landed nowhere near where it was
+    // aimed. Nothing about the selection may move the drawing.
+    const svg = await page.locator('#topSvg').boundingBox();
+    await page.mouse.click(svg.x + 12, svg.y + 12);
+    await expect(page.locator('#topSvg circle[data-feature-handle]')).toHaveCount(0);
+    expect(await planTop()).toBe(settled);
+
+    // Nor may switching between kinds: a surface has no height to edit, but the
+    // field holds its place rather than vanishing.
+    await page.locator('#featureRow .feature-panel__pick', { hasText: 'wall' }).click();
+    expect(await planTop()).toBe(settled);
+    await page.locator('#featureRow .feature-panel__pick', { hasText: 'surface' }).click();
+    expect(await planTop()).toBe(settled);
+    await expect(page.locator('#featureRow input[type="number"]').first()).toBeDisabled();
+
+    // And the shape itself is still there through all of it.
+    await expect(page.locator('#topSvg g[data-feature-id="wall"] polyline')).toHaveCount(1);
+  });
+
   test('features are edited on the plan only; elevations stay derived', async ({ page }) => {
     await enterFeaturesMode(page);
     await page.locator('#featureRow button', { hasText: '+ box' }).click();

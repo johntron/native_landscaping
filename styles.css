@@ -1601,3 +1601,12 @@ select {
   color: #5f645c;
   padding: 0.3rem 0;
 }
+
+/*
+ * The features form keeps its slot whether or not something is selected. Its
+ * height is what the canvas below it sits on, and a panel that grows and
+ * shrinks with the selection moves the drawing out from under the pointer.
+ */
+.feature-panel__form {
+  min-height: 8.5rem;
+}

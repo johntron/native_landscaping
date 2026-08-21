@@ -107,10 +107,31 @@ export function createFeaturePanel({ root, onCommit, onSave, onSelect, onAdd }) 
     return wrap;
   }
 
+  /**
+   * The form slot is always present, selection or not.
+   *
+   * A section that appears and disappears moves the canvas underneath it by
+   * about a hundred pixels, so adding a shape pushed the drawing down and
+   * clicking to deselect yanked it back up — and the next click landed
+   * somewhere other than where it was aimed. The setup panel documents the same
+   * hazard for the ruler readout: growing the panel mid-gesture bends the very
+   * measurement being taken.
+   */
   function buildForm() {
     const feature = selected();
-    const wrap = el('div', 'feature-panel__section');
-    if (!feature) return wrap;
+    // With nothing drawn there is nothing to select, so no selection can move
+    // the canvas and the slot is not worth reserving. It appears with the first
+    // shape — a deliberate button press, not a gesture on the drawing — and
+    // stays put from then on.
+    if (!state.features.length) return el('div');
+    const wrap = el('div', 'feature-panel__section feature-panel__form');
+    if (!feature) {
+      wrap.appendChild(el('h3', 'feature-panel__heading', 'No feature selected'));
+      wrap.appendChild(
+        el('p', 'feature-panel__hint', 'Click a shape on the plan, or pick one from the list.')
+      );
+      return wrap;
+    }
     wrap.appendChild(el('h3', 'feature-panel__heading', 'Selected feature'));
 
     const patch = (changes) =>
@@ -124,11 +145,17 @@ export function createFeaturePanel({ root, onCommit, onSave, onSelect, onAdd }) 
     // a path, so switching would need the footprint rebuilt. Delete and re-add.
     grid.appendChild(readOnlyField('Kind', `${feature.type} — ${TYPE_HINTS[feature.type]}`));
 
-    if (feature.type !== 'surface') {
-      grid.appendChild(
-        numberField('Height (ft)', feature.heightFt, 0.5, (value) => patch({ heightFt: value }))
-      );
+    // Always rendered, disabled for a surface rather than omitted: a field that
+    // comes and goes with the selected kind moves the canvas the same way the
+    // whole form did.
+    const height = numberField('Height (ft)', feature.heightFt, 0.5, (value) =>
+      patch({ heightFt: value })
+    );
+    if (feature.type === 'surface') {
+      height.querySelector('input').disabled = true;
+      height.title = 'A surface is flat by definition';
     }
+    grid.appendChild(height);
     grid.appendChild(
       numberField('Base (ft)', feature.baseFt, 0.5, (value) => patch({ baseFt: value }))
     );
