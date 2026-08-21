@@ -32,6 +32,7 @@ export const SCRATCH_PROJECTS = [
   'touch-elevation',
   'background-upload',
   'detail-crop',
+  'features-save',
 ];
 
 /**

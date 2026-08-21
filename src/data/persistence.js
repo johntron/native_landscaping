@@ -1,4 +1,5 @@
 import { serializeProjectConfig } from './projectConfig.js';
+import { normalizeFeatures, serializeFeatures } from './featureConfig.js';
 import { buildLayoutCsv } from './layoutExporter.js';
 
 const DEFAULT_DESCRIPTION = 'Manual layout update';
@@ -143,6 +144,76 @@ export async function persistProjectConfig(config, updateStatus, options = {}) {
     return data;
   } catch (err) {
     console.warn('Unable to persist view config', err);
+    updateStatus?.(err.message || 'Saving requires running `node server.js`', 'error');
+    return null;
+  }
+}
+
+/**
+ * Load the shared yard model — beds, hardscape, the house footprint.
+ *
+ * This goes through the API rather than fetching features.json off disk, and
+ * the difference is not cosmetic: most projects have never drawn a feature, and
+ * a static fetch for a file that is not there makes the browser log a 404 on
+ * every single page load. The endpoint answers with an empty list instead.
+ *
+ * @param {(message: string, state: string) => void} [updateStatus]
+ * @param {{ projectId?: string, fetchFn?: Function }} [options]
+ * @returns {Promise<{ features: Array<object> }>} empty when nothing can be loaded
+ */
+export async function loadProjectFeatures(updateStatus, options = {}) {
+  const empty = { features: [] };
+  const fetchFn = options.fetchFn || defaultFetch();
+  if (!fetchFn) return empty;
+  try {
+    const response = await fetchFn(apiUrl('/api/features', options.projectId), {
+      cache: 'no-store',
+    });
+    if (!response.ok) {
+      const detail = await response.json().catch(() => null);
+      throw new Error(detail?.error || `Features request failed (${response.status})`);
+    }
+    // Normalized again on arrival: the drawing reads style and heightFt off
+    // every feature, and a response is no more trusted than a file.
+    return normalizeFeatures(await response.json(), options.projectId || 'project');
+  } catch (err) {
+    console.warn('Unable to load yard features', err);
+    updateStatus?.(err.message || 'Unable to load yard features', 'error');
+    return empty;
+  }
+}
+
+/**
+ * Save the yard model. Like the view config and unlike the layout there is no
+ * history stack — features are setup, not a design decision worth undoing.
+ *
+ * @param {Array<object>} features normalized features
+ * @param {(message: string, state: string) => void} [updateStatus]
+ * @param {{ projectId?: string, fetchFn?: Function }} [options]
+ */
+export async function persistFeatures(features, updateStatus, options = {}) {
+  if (!Array.isArray(features)) return null;
+  const fetchFn = options.fetchFn || defaultFetch();
+  if (!fetchFn) {
+    updateStatus?.('Saving requires running `node server.js`', 'error');
+    return null;
+  }
+  try {
+    const response = await fetchFn(apiUrl('/api/features', options.projectId), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(serializeFeatures({ features })),
+    });
+    if (!response.ok) {
+      // The server explains what it rejected; surface that rather than a bare code.
+      const detail = await response.json().catch(() => null);
+      throw new Error(detail?.error || `Feature save failed (${response.status})`);
+    }
+    const data = await response.json();
+    updateStatus?.('Features saved', 'success');
+    return data;
+  } catch (err) {
+    console.warn('Unable to persist yard features', err);
     updateStatus?.(err.message || 'Saving requires running `node server.js`', 'error');
     return null;
   }

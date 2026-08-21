@@ -12,15 +12,21 @@ server), `codegraph explore/node/callers/impact` for code intelligence (also ava
 `codegraph_*` MCP tools).
 
 Multi-project layout: `plants.csv` at the root is the shared species catalog; each yard
-lives in `projects/<slug>/` (`project.json`, `planting_layout.csv`, `img/`) and is listed
-in `projects/index.json`. The active project comes from `?project=<slug>`; switching
+lives in `projects/<slug>/` (`project.json`, `planting_layout.csv`, `img/`, and an
+optional `features.json`) and is listed in `projects/index.json`. The active project comes from `?project=<slug>`; switching
 reloads the page. `project.json` declares `views[]`, each authored in FEET
 (`extentFt` + `originFt`); pixels per foot is derived from `viewBox / extentFt`, the
 Scale control is zoom only, and the Setup toolbar mode is the preferred way to author
 a view — including *Measure a known length*, which solves a view's `extentFt` from a
 drag across its background photo, and *Upload photo*, which resizes and re-encodes a
 picked image in the browser and posts it to `/api/view-background` (the server names
-the file and refuses anything that is not a WebP/JPEG/PNG by its bytes; never SVG). Elevations are driven by a `viewFrom` compass direction, and a plant drag is
+the file and refuses anything that is not a WebP/JPEG/PNG by its bytes; never SVG). `features.json` is the yard model — beds, hardscape, walls, the house footprint —
+authored once in FEET and projected into every view by
+`src/render/featureProjection.js`, never drawn per view; it loads through
+`GET /api/features` and saves through `POST /api/features` (fetching the file
+directly would log a console 404 for every project that has never drawn one), and
+elevations sort features and plants into ONE far-to-near list so a fence hides the
+shrub behind it. Elevations are driven by a `viewFrom` compass direction, and a plant drag is
 clamped to the shared yard rather than to the view it is dragged in — see the
 "Projects" section of AGENTS.md for the axis/mirror table, the views[] schema, and how
 to add a project.
