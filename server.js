@@ -7,6 +7,7 @@ import {
   normalizeProjectConfig,
   serializeProjectConfig,
 } from './src/data/projectConfig.js';
+import { normalizeFeatures, serializeFeatures } from './src/data/featureConfig.js';
 import { projectIdFromUrl, resolveProjectPaths } from './src/data/projectPaths.js';
 import {
   MAX_UPLOAD_BYTES,
@@ -98,6 +99,43 @@ const server = http.createServer(async (req, res) => {
       console.log(`Project config saved for '${projectId}' (${config.views.length} views)`);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ config: serializeProjectConfig(config) }));
+    } catch (err) {
+      console.error(err);
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  if (pathname === '/api/features' && req.method === 'GET') {
+    try {
+      const { featuresFile, projectId } = resolveProjectPaths(projectIdFromUrl(url), PUBLIC_DIR);
+      const features = normalizeFeatures(await readFeaturesFile(featuresFile), projectId);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(serializeFeatures(features)));
+    } catch (err) {
+      console.error(err);
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  if (pathname === '/api/features' && req.method === 'POST') {
+    try {
+      const { featuresFile, projectId } = resolveProjectPaths(projectIdFromUrl(url), PUBLIC_DIR);
+      const body = await collectPayload(req, { requirePlants: false });
+      // An absent features[] means "this body is not a feature list", not "no
+      // features": accepting it would erase the whole yard model, and unlike
+      // the layout there is no history to recover it from.
+      if (!Array.isArray(body.features)) {
+        throw new Error('Missing features[]');
+      }
+      const features = normalizeFeatures(body, projectId);
+      await writeJsonAtomic(featuresFile, serializeFeatures(features));
+      console.log(`Features saved for '${projectId}' (${features.features.length} features)`);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(serializeFeatures(features)));
     } catch (err) {
       console.error(err);
       res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -233,6 +271,20 @@ async function writeJsonAtomic(targetFile, value) {
 
 async function writeLayoutFile(layoutFile, plants) {
   await fs.writeFile(layoutFile, buildLayoutCsv(plants || []));
+}
+
+/**
+ * A project that has never drawn a feature has no features.json, and that is
+ * the normal case rather than an error — it reads as an empty yard model. A
+ * file that exists but is unreadable is a real fault and is left to throw.
+ */
+async function readFeaturesFile(featuresFile) {
+  try {
+    return JSON.parse(await fs.readFile(featuresFile, 'utf-8'));
+  } catch (err) {
+    if (err.code === 'ENOENT') return null;
+    throw err;
+  }
 }
 
 async function readHistoryFile(historyFile) {

@@ -71,6 +71,7 @@ plants.csv                       shared species catalog (all projects)
 projects/index.json              { defaultProject, projects: [{ id, name }] }
 projects/<slug>/project.json     views[]: extent + origin in feet, backgrounds, labels
 projects/<slug>/planting_layout.csv
+projects/<slug>/features.json    yard features in feet; optional, absent means none
 projects/<slug>/img/…            that project's background images
 projects/<slug>/layout-history.json   (generated, gitignored)
 ```
@@ -153,6 +154,53 @@ single project, and a reload keeps that simple and the URL linkable.
 `projects/example-frontyard/` is a throwaway template showing portrait dimensions,
 north/west elevations, and a detail callout cropped out of the plan photo; delete
 it once you have real projects.
+
+#### Yard features
+
+Beds, hardscape, fences, and the house footprint are **yard geometry in feet
+shared by every view**, so they live in `projects/<slug>/features.json` rather
+than in `project.json`, which holds per-view presentation. There is one model
+and every view is a projection of it — never a drawing per view, which is how
+the house ends up drawn three times and the three disagree.
+
+Three primitives, each carrying a footprint *and* a height because it has to
+appear in both a plan and an elevation:
+
+| type | authored as | plan | elevation |
+| --- | --- | --- | --- |
+| `surface` | `footprintFt` polygon, no height | filled polygon | a band on the ground line |
+| `wall` | `pathFt`, ≥ 2 points | open path | rectangle, base to base + height |
+| `box` | `footprintFt` polygon | filled footprint | silhouette rectangle |
+
+`baseFt` lets a feature sit on a step; `style.strokeWidthFt` is in feet like
+everything else, so a feature keeps its weight when a view is rescaled.
+`normalizeFeatures` rejects loudly where a default would hide a shape — a wall
+or box with no positive `heightFt` is refused, because a zero-height wall
+renders as nothing at all. An absent file is *not* an error: it means no
+features.
+
+Silhouettes are deliberately crude rectangles, and `src/render/featureProjection.js`
+does every mapping through `viewTransform`. In an elevation the axis span is
+taken in **pixels after `axisToX`**, never in feet: a mirrored view maps the
+larger axis value to the smaller x, so a min/max in feet puts the rectangle's
+left edge on its right. Two silhouettes come out degenerate and both are
+legitimate — a surface has no height, a wall seen end-on has no width — and
+since SVG draws neither a zero-width nor a zero-height rect at all, both are
+drawn as a line at their stroke weight.
+
+Draw order differs by view type, and `src/render/elevationOrder.js` owns it. A
+plan has no depth, so features go beneath the plants in authoring order. An
+elevation sorts features and plants into **one** list far-to-near, which is the
+payoff: a fence between the viewer and a shrub actually hides it. An extended
+footprint is drawn whole at its nearest edge rather than split at each plant —
+exactly right for a box, since nothing is planted inside a house.
+
+Features load through `GET /api/features` and save through `POST /api/features`
+(`loadProjectFeatures` / `persistFeatures` in `src/data/persistence.js`). The
+load deliberately does *not* fetch `features.json` off disk: most projects have
+never drawn a feature, and a static fetch for a missing file makes the browser
+log a 404 on every page load. Like `project.json` and unlike the layout, there
+is no undo stack — features are setup.
 
 #### Elevation orientation
 
@@ -394,7 +442,7 @@ When the user delegates work, here are examples of useful tasks:
 ## Tooling
 
 - Run `npm test` to execute `node tests/run-tests.cjs`, which covers the layout history stack and the persistence module (ensuring the app hits `/api/layout` when committing changes).
-- Run `npm run serve` (or `node server.js`) to launch the bundled static + persistence server. `/api/layout`, `/api/history`, `/api/history/cursor`, `/api/project`, and `/api/view-background` are all scoped by a required `?project=<slug>` query parameter and write inside that project's directory only.
+- Run `npm run serve` (or `node server.js`) to launch the bundled static + persistence server. `/api/layout`, `/api/history`, `/api/history/cursor`, `/api/project`, `/api/features`, and `/api/view-background` are all scoped by a required `?project=<slug>` query parameter and write inside that project's directory only.
 - No external dependencies are required to execute `npm test`; `npm run test:e2e` needs the `@playwright/test` devDependency (see below). Run `npm install` once before serving the app: `index.html` loads JSZip from `node_modules/jszip/dist/jszip.min.js`.
 
 ### End-to-end browser tests (Playwright)

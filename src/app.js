@@ -18,6 +18,7 @@ import {
 import { buildLayoutCsv } from './data/layoutExporter.js';
 import {
   loadLayoutHistory,
+  loadProjectFeatures,
   persistLayout,
   persistProjectConfig,
   updateHistoryCursor,
@@ -57,9 +58,9 @@ const appState = {
   project: null,
   plants: [],
   // The shared yard model in feet — beds, hardscape, the house — projected into
-  // every view rather than drawn per view (src/data/featureConfig.js). Loading
-  // it waits on GET /api/features: fetching features.json straight off disk
-  // logs a console 404 for every project that has never drawn one.
+  // every view rather than drawn per view. Loaded through GET /api/features:
+  // fetching features.json straight off disk logs a console 404 on every load
+  // of every project that has never drawn one. See src/data/featureConfig.js.
   features: [],
   species: [], // the shared plants.csv catalog, for placing plants not yet in the layout
   month: new Date().getMonth() + 1,
@@ -828,6 +829,7 @@ async function init() {
       layoutCsv: layoutCsvSnapshot,
       projectId: project.id,
     });
+    appState.features = (await loadProjectFeatures(undefined, { projectId: project.id })).features;
     const historyEntries = historyData.entries || [];
     const historyCursor = typeof historyData.cursor === 'number' ? historyData.cursor : -1;
     layoutHistoryInstance = createLayoutHistory(initialPlants, {
