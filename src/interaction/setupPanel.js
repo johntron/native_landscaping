@@ -1,4 +1,8 @@
-import { VIEW_FROM_DIRECTIONS } from '../render/elevationOrientation.js';
+import {
+  VIEW_FROM_DIRECTIONS,
+  resolveElevationOrientation,
+} from '../render/elevationOrientation.js';
+import { describeYardBounds } from '../render/yardBounds.js';
 
 /**
  * The Setup-mode control panel: a list of the project's views, and a form over
@@ -41,7 +45,7 @@ export function createSetupPanel({
     if (!state.views.some((view) => view.id === state.selectedId)) {
       state.selectedId = state.views[0]?.id || '';
     }
-    root.replaceChildren(buildList(), buildForm(), buildFooter());
+    root.replaceChildren(buildList(), buildForm(), buildYard(), buildFooter());
   }
 
   function selected() {
@@ -159,6 +163,16 @@ export function createSetupPanel({
         (value) => patch({ originY: value })
       )
     );
+    if (view.type === 'elevation') {
+      grid.appendChild(
+        optionalNumberField(
+          `Camera stands at (${depthAxisOf(view)} ft)`,
+          view.viewerAtFt,
+          0.1,
+          (value) => patch({ viewerAtFt: value })
+        )
+      );
+    }
     grid.appendChild(
       numberField('Resolution (px per ft)', view.viewBox.width / view.extentFt.width, 1, (value) =>
         patch({ pxPerFt: value })
@@ -290,6 +304,89 @@ export function createSetupPanel({
     return wrap;
   }
 
+  /**
+   * What the views, as currently edited, leave plantable.
+   *
+   * The geometry authored here is per-view, but its consequence is shared: the
+   * yard is the plan narrowed to what every primary elevation can draw, so
+   * moving one view's near edge shrinks where a plant or a feature is allowed
+   * to live in ALL of them. Reframing the plan and leaving the elevations
+   * behind is the way that goes badly — it strands them in the old coordinate
+   * frame, and the yard collapses to a corner or to nothing. Neither shows up
+   * on the canvas, so it is said here, on every edit, before Save.
+   */
+  function buildYard() {
+    const wrap = el('div', 'setup-panel__section setup-panel__yard');
+    wrap.appendChild(el('h3', 'setup-panel__heading', 'Shared yard'));
+    const summary = describeYardBounds(state.views);
+    if (!summary) {
+      wrap.appendChild(
+        el('p', 'setup-panel__hint', 'No plan view, so there is no shared yard to anchor plants to.')
+      );
+      return wrap;
+    }
+
+    if (summary.conflicts.length) {
+      summary.conflicts.forEach((conflict) => {
+        wrap.appendChild(
+          el(
+            'p',
+            'setup-panel__yard-alarm',
+            `"${viewLabel(conflict.id)}" covers ${conflict.axis} ` +
+              `${span(conflict.viewCovers)}, but the plan covers ${span(conflict.planCovers)} — ` +
+              'nothing in the yard can appear in both. Move its near edge into the plan.'
+          )
+        );
+      });
+      return wrap;
+    }
+
+    const narrowed = ['x', 'y'].filter(
+      (axis) =>
+        summary.bounds[axis].min > summary.plan[axis].min ||
+        summary.bounds[axis].max < summary.plan[axis].max
+    );
+    wrap.appendChild(
+      el(
+        'p',
+        narrowed.length ? 'setup-panel__yard-note' : 'setup-panel__hint',
+        `Plants and features can only live in x ${span(summary.bounds.x)}, ` +
+          `y ${span(summary.bounds.y)}.`
+      )
+    );
+    if (!narrowed.length) {
+      wrap.appendChild(el('p', 'setup-panel__hint', 'That is the whole plan.'));
+      return wrap;
+    }
+    const blame = narrowed
+      .flatMap((axis) =>
+        ['min', 'max'].map((edge) =>
+          summary.limits[axis][edge]
+            ? `${viewLabel(summary.limits[axis][edge])} caps ${axis} at ` +
+              `${roundForDisplay(summary.bounds[axis][edge])} ft`
+            : ''
+        )
+      )
+      .filter(Boolean);
+    wrap.appendChild(
+      el(
+        'p',
+        'setup-panel__hint',
+        `The plan covers x ${span(summary.plan.x)}, y ${span(summary.plan.y)}` +
+          (blame.length ? ` — ${blame.join('; ')}.` : '.')
+      )
+    );
+    return wrap;
+  }
+
+  function viewLabel(id) {
+    return state.views.find((view) => view.id === id)?.label || id;
+  }
+
+  function span({ min, max }) {
+    return `${roundForDisplay(min)}\u2013${roundForDisplay(max)} ft`;
+  }
+
   function buildFooter() {
     const wrap = el('div', 'setup-panel__section setup-panel__footer');
     wrap.appendChild(button('Save views', 'button pill-button', () => onSave?.()));
@@ -348,6 +445,12 @@ function applyPatch(view, changes) {
   if ('viewFrom' in changes) next.viewFrom = changes.viewFrom;
   if ('originX' in changes) next.originFt.x = changes.originX;
   if ('originY' in changes) next.originFt.y = changes.originY;
+  if ('viewerAtFt' in changes) {
+    // Blank is a real answer — "this view has no camera position" — and it is
+    // the default, so it has to be reachable by clearing the field.
+    if (changes.viewerAtFt === null) delete next.viewerAtFt;
+    else next.viewerAtFt = changes.viewerAtFt;
+  }
 
   // Resolution carries over from the current view unless the field changed it.
   const pxPerFt =
@@ -446,6 +549,38 @@ function numberField(labelText, value, step, onChange) {
     if (Number.isFinite(parsed)) onChange(parsed);
   });
   return field(labelText, input);
+}
+
+/**
+ * A number the author may also leave unsaid. `numberField` cannot express that:
+ * it parses on change and ignores anything non-finite, so an emptied field
+ * silently keeps the old value. Here blank reports null.
+ */
+function optionalNumberField(labelText, value, step, onChange) {
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.step = String(step);
+  input.placeholder = 'anywhere';
+  input.value = Number.isFinite(value) ? String(roundForDisplay(value)) : '';
+  input.addEventListener('change', (event) => {
+    const raw = event.target.value.trim();
+    if (raw === '') {
+      onChange(null);
+      return;
+    }
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed)) onChange(parsed);
+  });
+  return field(labelText, input);
+}
+
+/** Which yard axis runs INTO an elevation — the one its camera stands on. */
+function depthAxisOf(view) {
+  try {
+    return resolveElevationOrientation(view.viewFrom).depthKey;
+  } catch {
+    return 'depth';
+  }
 }
 
 function selectField(labelText, value, options, onChange) {

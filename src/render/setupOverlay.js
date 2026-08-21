@@ -1,4 +1,5 @@
 import { createViewTransform } from './viewTransform.js';
+import { resolveElevationOrientation } from './elevationOrientation.js';
 import { createSvgElement } from './svgUtils.js';
 
 /**
@@ -50,10 +51,12 @@ function axesFor(transform) {
 
 /**
  * @param {object} view a normalized view
+ * @param {Array<object>} [siblings] the project's other views, for the cameras a
+ *   plan draws; omit and a plan simply shows none.
  * @returns {{ transform: object, stepFt: number, gridLines: Array, guides: Array,
- *             handles: Array, readout: { text: string, x: number, y: number } }}
+ *             handles: Array, cameras: Array, readout: { text: string, x: number, y: number } }}
  */
-export function buildOverlayGeometry(view) {
+export function buildOverlayGeometry(view, siblings = []) {
   const transform = createViewTransform(view);
   const { viewBox, extentFt, originFt, pxPerFt, type } = transform;
   const axes = axesFor(transform);
@@ -117,6 +120,7 @@ export function buildOverlayGeometry(view) {
     gridLines,
     guides,
     handles,
+    cameras: buildCameraGeometry(transform, siblings),
     readout: {
       text:
         type === 'elevation'
@@ -128,6 +132,73 @@ export function buildOverlayGeometry(view) {
       anchor: 'end',
     },
   };
+}
+
+/**
+ * Where each elevation's camera stands, drawn on a PLAN.
+ *
+ * `viewerAtFt` is a position on an elevation's depth axis — the axis running
+ * into the drawing — so there is nowhere in that elevation to draw it: every
+ * point of the picture is at every depth. On a plan the same number is a line,
+ * and the region on the far side of it is exactly what that elevation refuses
+ * to draw. So the cull is shown where it is a shape, not where it was authored.
+ *
+ * `farIsHigh` says which side is behind the camera: south and west stand at the
+ * LOW end of their depth axis and cull below it, north and east stand at the
+ * high end and cull above. Taking the side from the orientation table rather
+ * than from the compass name is what keeps the mirrored pair from swapping.
+ *
+ * A camera outside the plan's own rectangle is still honest — the band is
+ * clamped to the drawing, so it reads as "all of this" or as nothing at all,
+ * which is what it means.
+ */
+function buildCameraGeometry(transform, siblings) {
+  if (transform.type !== 'plan') return [];
+  const { viewBox } = transform;
+  const cameras = [];
+  (Array.isArray(siblings) ? siblings : []).forEach((sibling) => {
+    if (sibling?.type !== 'elevation') return;
+    if (!Number.isFinite(sibling.viewerAtFt)) return;
+    let orientation;
+    try {
+      orientation = resolveElevationOrientation(sibling.viewFrom);
+    } catch {
+      return;
+    }
+    const { depthKey, farIsHigh } = orientation;
+    const alongY = depthKey === 'y';
+    // Yard y grows up the drawing and yard x grows right, so "behind the
+    // camera" is below the line on one axis and left of it on the other.
+    const at = alongY
+      ? transform.planToViewBox({ x: 0, y: sibling.viewerAtFt }).y
+      : transform.planToViewBox({ x: sibling.viewerAtFt, y: 0 }).x;
+    const span = alongY ? viewBox.height : viewBox.width;
+    const clamp = (px) => Math.min(Math.max(px, 0), span);
+    // In viewBox pixels the low end of yard y is the BOTTOM, and the low end of
+    // yard x is the left; farIsHigh culls the low end.
+    const from = clamp(alongY ? (farIsHigh ? at : 0) : farIsHigh ? 0 : at);
+    const to = clamp(alongY ? (farIsHigh ? span : at) : farIsHigh ? at : span);
+    const culled = alongY
+      ? { x: 0, y: Math.min(from, to), width: viewBox.width, height: Math.abs(to - from) }
+      : { x: Math.min(from, to), y: 0, width: Math.abs(to - from), height: viewBox.height };
+    // The label belongs on the side the elevation can still see. Put it in the
+    // band and it reads as a caption for the yard being hidden.
+    const bandLeadsIn = alongY ? culled.y === 0 : culled.x === 0;
+    cameras.push({
+      id: sibling.id,
+      label: sibling.label || sibling.id,
+      atFt: sibling.viewerAtFt,
+      orientation: alongY ? 'horizontal' : 'vertical',
+      line: alongY
+        ? { x1: 0, y1: at, x2: viewBox.width, y2: at }
+        : { x1: at, y1: 0, x2: at, y2: viewBox.height },
+      culled,
+      labelAt: alongY
+        ? { x: 8, y: bandLeadsIn ? at + 16 : at - 6, anchor: 'start' }
+        : { x: bandLeadsIn ? at + 6 : at - 6, y: 16, anchor: bandLeadsIn ? 'start' : 'end' },
+    });
+  });
+  return cameras;
 }
 
 /**
@@ -290,12 +361,36 @@ export function clearSetupOverlay(svg) {
 /**
  * Draw the guides into a view's SVG, on top of the plants. Called after every
  * render because rendering clears the SVG.
+ *
+ * `interactive` is what separates the view being edited from its neighbours.
+ * The grid is drawn on whole yard feet precisely so the same 5 ft line lands in
+ * the same place in every view — which is only useful if you can SEE it in
+ * more than one at a time, so every view draws grid, guides, and readout. Only
+ * the selected one gets handles: a circle that looks draggable and is not is
+ * worse than no circle, and the neighbours are reference, not targets.
+ *
+ * @param {SVGElement} svg
+ * @param {object} view a normalized view
+ * @param {{from: object, to: object}|null} [ruler]
+ * @param {{ interactive?: boolean }} [options]
  */
-export function renderSetupOverlay(svg, view, ruler) {
+export function renderSetupOverlay(
+  svg,
+  view,
+  ruler,
+  { interactive = true, views = [], highlightId = '' } = {}
+) {
   if (!svg || !view) return null;
   clearSetupOverlay(svg);
-  const geometry = buildOverlayGeometry(view);
-  const group = createSvgElement('g', { [OVERLAY_GROUP_ATTR]: geometry.transform.id, 'pointer-events': 'none' });
+  const geometry = buildOverlayGeometry(view, views);
+  const group = createSvgElement('g', {
+    [OVERLAY_GROUP_ATTR]: geometry.transform.id,
+    'pointer-events': 'none',
+    'data-setup-interactive': interactive ? 'true' : 'false',
+    // Reference views recede rather than disappear: still readable against a
+    // photo, never mistaken for the one the handles belong to.
+    opacity: interactive ? 1 : 0.55,
+  });
 
   geometry.gridLines.forEach((line) => {
     group.appendChild(
@@ -342,7 +437,53 @@ export function renderSetupOverlay(svg, view, ruler) {
     );
   });
 
-  geometry.handles.forEach((handle) => {
+  // Cameras before the handles so a handle is never buried under a cull band,
+  // and after the guides so the band tints the grid rather than the reverse.
+  geometry.cameras.forEach((camera) => {
+    const emphasised = camera.id === highlightId;
+    if (camera.culled.width > 0 && camera.culled.height > 0) {
+      group.appendChild(
+        createSvgElement('rect', {
+          x: camera.culled.x,
+          y: camera.culled.y,
+          width: camera.culled.width,
+          height: camera.culled.height,
+          fill: '#5b3fa0',
+          'fill-opacity': emphasised ? 0.22 : 0.1,
+          'data-setup-culled': camera.id,
+        })
+      );
+    }
+    group.appendChild(
+      createSvgElement('line', {
+        x1: camera.line.x1,
+        y1: camera.line.y1,
+        x2: camera.line.x2,
+        y2: camera.line.y2,
+        stroke: '#5b3fa0',
+        'stroke-width': emphasised ? 3 : 2,
+        'stroke-dasharray': '2 6',
+        'stroke-linecap': 'round',
+        'data-setup-camera': camera.id,
+      })
+    );
+    const text = createSvgElement('text', {
+      x: camera.labelAt.x,
+      y: camera.labelAt.y,
+      'text-anchor': camera.labelAt.anchor,
+      'font-size': 13,
+      'font-weight': 700,
+      fill: '#5b3fa0',
+      stroke: '#fff',
+      'stroke-width': 3,
+      'paint-order': 'stroke fill',
+      'data-setup-camera-label': camera.id,
+    });
+    text.textContent = `${camera.label} camera · ${round(camera.atFt)} ft`;
+    group.appendChild(text);
+  });
+
+  if (interactive) geometry.handles.forEach((handle) => {
     group.appendChild(
       createSvgElement('circle', {
         cx: handle.x,

@@ -219,6 +219,7 @@ function normalizeView(raw, index, projectId) {
     extentFt: normalizeExtent(raw.extentFt, projectId, id),
     background: normalizeAssetPath(raw.background, projectId, id),
     ...(raw.backgroundFrom ? { backgroundFrom: String(raw.backgroundFrom) } : {}),
+    ...normalizeViewerAt(type, raw.viewerAtFt),
   };
 
   // One derivation of pxPerFt for the whole app: build the transform the
@@ -241,6 +242,29 @@ function defaultLabels(type, viewFrom) {
     label: `${capitalize(viewFrom)} elevation`,
     sublabel: `Looking ${capitalize(oppositeOf(viewFrom))}`,
   };
+}
+
+/**
+ * Where the viewer stands along an elevation's DEPTH axis, in yard feet.
+ *
+ * An elevation authors the axis running across the drawing and the ground
+ * height, and until now said nothing about depth — which put the camera at
+ * infinity and made everything in the yard, in every direction, in front of it.
+ * A wall standing between the photographer and the bed is then drawn over the
+ * bed in the view taken from the other side, which is exactly backwards: from
+ * there the wall is behind the camera.
+ *
+ * **Absent means cull nothing**, and that is deliberate: no existing project
+ * declares one, and the permissive default leaves them drawing exactly what
+ * they drew before. This is the opposite of `normalizeFeatures`, which refuses
+ * a missing height rather than defaulting it — there a default HIDES a shape,
+ * here a default would hide one. Zero is a real position, so the test is
+ * finiteness, never truthiness.
+ */
+function normalizeViewerAt(type, raw) {
+  if (type !== 'elevation' || raw === undefined || raw === null || raw === '') return {};
+  const feet = Number(raw);
+  return Number.isFinite(feet) ? { viewerAtFt: feet } : {};
 }
 
 function normalizePoint(raw) {
@@ -283,6 +307,7 @@ export function serializeProjectConfig(config) {
       out.extentFt = { ...view.extentFt };
       if (view.background) out.background = view.background;
       if (view.backgroundFrom) out.backgroundFrom = view.backgroundFrom;
+      if (view.viewerAtFt !== undefined) out.viewerAtFt = view.viewerAtFt;
       return out;
     }),
   };

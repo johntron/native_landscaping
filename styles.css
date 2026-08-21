@@ -1549,6 +1549,24 @@ select {
   gap: 0.6rem;
 }
 
+/* The shared yard readout. A narrowed yard is worth noticing but is often
+   correct — a photo need not cover the whole plan — so it is emphasis, not
+   alarm. A view that overlaps the plan nowhere always IS a mistake, and gets
+   the error red the status line uses. */
+.setup-panel__yard-note {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #3f3a31;
+  font-weight: 600;
+}
+
+.setup-panel__yard-alarm {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #a8332b;
+  font-weight: 600;
+}
+
 .setup-panel__status,
 .feature-panel__status {
   font-size: 0.8rem;

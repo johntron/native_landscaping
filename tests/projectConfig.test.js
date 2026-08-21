@@ -374,3 +374,55 @@ test('a detail view borrows its background from a wider view of the same kind', 
   assert.ok(detail.extentFt.width < source.extentFt.width);
   assert.ok(detail.originFt.x >= source.originFt.x);
 });
+
+test("an elevation's camera position round-trips, and only an elevation has one", () => {
+  const config = normalizeProjectConfig(
+    makeViewsConfig({
+      views: [
+        {
+          id: 'plan',
+          type: 'plan',
+          viewBox: { width: 800, height: 600 },
+          extentFt: { width: 40, height: 30 },
+          // A plan has no depth axis to stand on, so this is not a field it has.
+          viewerAtFt: 12,
+        },
+        {
+          id: 'north',
+          type: 'elevation',
+          viewFrom: 'north',
+          viewBox: { width: 800, height: 600 },
+          extentFt: { width: 40, height: 30 },
+          viewerAtFt: 0,
+        },
+      ],
+    }),
+    'backyard'
+  );
+  assert.equal(config.views[0].viewerAtFt, undefined);
+  // Zero is a real position — a truthiness test would drop it.
+  assert.equal(config.views[1].viewerAtFt, 0);
+
+  const serialized = serializeProjectConfig(config);
+  assert.equal('viewerAtFt' in serialized.views[0], false);
+  assert.equal(serialized.views[1].viewerAtFt, 0);
+  assert.deepEqual(normalizeProjectConfig(serialized, 'backyard').views, config.views);
+});
+
+test('an absent or unparseable camera position is simply absent', () => {
+  const withoutIt = normalizeProjectConfig(makeViewsConfig(), 'backyard');
+  assert.equal('viewerAtFt' in withoutIt.views[1], false);
+  const serialized = serializeProjectConfig(withoutIt);
+  assert.equal('viewerAtFt' in serialized.views[1], false);
+
+  const garbage = normalizeProjectConfig(
+    makeViewsConfig({
+      views: [
+        ...makeViewsConfig().views.slice(0, 1),
+        { ...makeViewsConfig().views[1], viewerAtFt: 'over there' },
+      ],
+    }),
+    'backyard'
+  );
+  assert.equal('viewerAtFt' in garbage.views[1], false);
+});
