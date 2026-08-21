@@ -51,11 +51,17 @@ function buildPlanShape(feature, projected) {
  */
 function buildElevationShape(feature, projected) {
   if (projected.width === 0 || projected.height === 0) {
+    // A stroke straddles the line it is drawn on, so a flat surface sitting on
+    // the ground would be half buried beneath it — and entirely off the canvas
+    // in a view whose ground line is its bottom edge. Lift the band to rest ON
+    // the ground instead. A zero-WIDTH wall needs no such nudge: it runs up
+    // from the ground rather than along it.
+    const lift = projected.height === 0 ? strokeWidth(projected) / 2 : 0;
     return createSvgElement('line', {
       x1: round(projected.x),
-      y1: round(projected.y),
+      y1: round(projected.y - lift),
       x2: round(projected.x + projected.width),
-      y2: round(projected.y + projected.height),
+      y2: round(projected.y + projected.height - lift),
       stroke: feature.style.stroke,
       'stroke-width': strokeWidth(projected),
       'stroke-linecap': 'round',

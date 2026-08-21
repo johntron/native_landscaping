@@ -155,6 +155,42 @@ test('a new shape arrives usable: real size, real height, unique id', () => {
   assert.equal(createFeatureShape('box', { x: 0, y: 0 }, ['box', 'box-2']).id, 'box-3');
 });
 
+test('a new shape fits inside the yard EVERY view can draw', () => {
+  // The trap: a project whose elevations show a narrow slice has a shared yard
+  // far smaller than its plan. A shape sized and placed by the plan then lands
+  // wholly off-canvas in every elevation — which is what "I do not see it in
+  // the other views" looks like from the outside.
+  const bounds = { x: { min: 5, max: 12 }, y: { min: 20, max: 30 } };
+  const centre = { x: 8.5, y: 25 };
+
+  const wall = createFeatureShape('wall', centre, [], bounds);
+  const wallSpan = wall.pathFt[1].x - wall.pathFt[0].x;
+  assert.ok(wallSpan < bounds.x.max - bounds.x.min, 'the wall fits across the yard');
+  wall.pathFt.forEach((point) => {
+    assert.ok(point.x >= bounds.x.min && point.x <= bounds.x.max, `x ${point.x} inside`);
+    assert.ok(point.y >= bounds.y.min && point.y <= bounds.y.max, `y ${point.y} inside`);
+  });
+
+  const box = createFeatureShape('box', centre, [], bounds);
+  box.footprintFt.forEach((point) => {
+    assert.ok(point.x >= bounds.x.min && point.x <= bounds.x.max, `x ${point.x} inside`);
+    assert.ok(point.y >= bounds.y.min && point.y <= bounds.y.max, `y ${point.y} inside`);
+  });
+
+  // A yard barely wider than nothing still gets a shape with real extent, since
+  // a zero-width footprint is not something the normalizer will accept.
+  const sliver = createFeatureShape('box', { x: 0, y: 0 }, [], {
+    x: { min: -0.1, max: 0.1 },
+    y: { min: -0.1, max: 0.1 },
+  });
+  assert.ok(sliver.footprintFt[1].x - sliver.footprintFt[0].x > 0);
+  assert.doesNotThrow(() => features([sliver]));
+
+  // With no bounds at all the defaults stand, which is what a project with no
+  // elevations to narrow the yard should get.
+  assert.equal(createFeatureShape('wall', centre).pathFt[1].x - centre.x, 6);
+});
+
 test('reordering moves a feature through the z-order', () => {
   const list = features([BED, FENCE]);
   assert.deepEqual(reorderFeatures(list, 'fence', -1).map((f) => f.id), ['fence', 'bed']);

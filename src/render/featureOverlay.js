@@ -20,8 +20,12 @@ const OVERLAY_GROUP_ATTR = 'data-feature-overlay';
 const VERTEX_RADIUS_PX = 6;
 const SELECTION_COLOR = '#1b74d8';
 
-/** Defaults for a newly drawn shape, in feet. */
+/** Defaults for a newly drawn shape, in feet — an upper bound, not a promise. */
 const NEW_SHAPE = { sizeFt: 8, wallLengthFt: 12, wallHeightFt: 6, boxHeightFt: 8 };
+
+/** How much of the shared yard a new shape may span, so it always fits inside it. */
+const NEW_SHAPE_YARD_FRACTION = 0.4;
+const MIN_NEW_SHAPE_FT = 0.5;
 
 /**
  * Handles for the selected feature: one per vertex, plus the shape itself for
@@ -116,20 +120,37 @@ export function grabOffsetFor(feature, pointFt) {
 }
 
 /**
- * A new shape, centred on a plan point. Drawing is two clicks and a drag rather
+ * A new shape, centred on a yard point. Drawing is two clicks and a drag rather
  * than a rubber band: the shape appears at a sensible size and is then reshaped
  * with the same handles everything else uses.
+ *
+ * The size is capped to a fraction of `boundsFt` — the yard EVERY view can draw,
+ * not the yard the plan covers. Those are not the same rectangle: a project
+ * whose elevations show a narrow slice has a shared yard far smaller than its
+ * plan, and a shape sized to the plan lands wholly off-canvas in every
+ * elevation. That is the same trap resolveYardBounds exists to keep plants out
+ * of.
  *
  * A wall and a box are given a real height here, deliberately. normalizeFeatures
  * refuses one without a positive heightFt, and a half-drawn shape must not be
  * the thing that trips that guard — "reject loudly" is for malformed files, not
  * for the first frame of a new fence.
+ *
+ * @param {'surface'|'wall'|'box'} type
+ * @param {{ x: number, y: number }} centerFt
+ * @param {Array<string>} [existingIds]
+ * @param {{ x: {min:number,max:number}, y: {min:number,max:number} }} [boundsFt]
  */
-export function createFeatureShape(type, centerFt, existingIds = []) {
+export function createFeatureShape(type, centerFt, existingIds = [], boundsFt = null) {
   const id = uniqueId(type, existingIds);
-  const half = NEW_SHAPE.sizeFt / 2;
+  const spanX = boundsFt ? boundsFt.x.max - boundsFt.x.min : Infinity;
+  const spanY = boundsFt ? boundsFt.y.max - boundsFt.y.min : Infinity;
+  const fit = (want, ...spans) =>
+    Math.max(MIN_NEW_SHAPE_FT, Math.min(want, ...spans.map((span) => span * NEW_SHAPE_YARD_FRACTION)));
+
+  const half = fit(NEW_SHAPE.sizeFt, spanX, spanY) / 2;
   if (type === 'wall') {
-    const halfLength = NEW_SHAPE.wallLengthFt / 2;
+    const halfLength = fit(NEW_SHAPE.wallLengthFt, spanX) / 2;
     return {
       id,
       type: 'wall',

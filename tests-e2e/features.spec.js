@@ -227,3 +227,48 @@ function spanOf(points) {
   const xs = points.split(' ').map((pair) => Number(pair.split(',')[0]));
   return Math.max(...xs) - Math.min(...xs);
 }
+
+/**
+ * The bug this reproduces: a project whose elevations show a narrow slice of
+ * the yard has a shared yard far smaller than its plan. A new shape sized and
+ * placed by the plan looked right in the plan and was wholly off-canvas in
+ * every elevation — "I do not see the wall in the other views".
+ */
+test.describe('features in a project whose elevations show a narrow slice', () => {
+  const NARROW = 'features-narrow';
+
+  test.beforeEach(async ({ request }) => {
+    await request.post(featuresUrl(NARROW), { data: { features: [] } });
+  });
+
+  for (const type of ['wall', 'box', 'surface']) {
+    test(`a new ${type} lands inside every elevation, not off its canvas`, async ({ page }) => {
+      await openScratchProject(page, NARROW);
+      await page.locator('[data-mode="features"]').click();
+      await page.locator('#featureRow button', { hasText: `+ ${type}` }).click();
+
+      const panels = await page.locator('.view svg').all();
+      expect(panels.length).toBe(3);
+      for (const svg of panels) {
+        const id = await svg.getAttribute('id');
+        const shape = svg.locator(`g[data-feature-id="${type}"] > *`);
+        await expect(shape, `${id} draws the ${type}`).toHaveCount(1);
+
+        // Drawn is not the same as visible: the whole point of the bug was a
+        // shape rendered at coordinates outside the viewBox.
+        const box = await svg.evaluate((node) => ({
+          w: node.viewBox.baseVal.width,
+          h: node.viewBox.baseVal.height,
+        }));
+        const bbox = await shape.evaluate((node) => {
+          const b = node.getBBox();
+          return { x: b.x, y: b.y, width: b.width, height: b.height };
+        });
+        expect(bbox.x, `${id} starts left of its right edge`).toBeLessThan(box.w);
+        expect(bbox.x + bbox.width, `${id} ends right of its left edge`).toBeGreaterThan(0);
+        expect(bbox.y, `${id} starts above its bottom edge`).toBeLessThan(box.h);
+        expect(bbox.y + bbox.height, `${id} ends below its top edge`).toBeGreaterThan(0);
+      }
+    });
+  }
+});

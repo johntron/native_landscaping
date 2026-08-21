@@ -884,9 +884,13 @@ async function init() {
   }
 
   /**
-   * Add a shape at the middle of the yard the plan covers, then select it. It
-   * arrives at a usable size with a real height rather than as a rubber band:
-   * the handles that reshape everything else reshape it too.
+   * Add a shape in the middle of the SHARED yard — the patch every view can
+   * draw — then select it.
+   *
+   * Not the middle of the plan: those are different rectangles whenever the
+   * elevations show a narrower slice than the plan does, and a shape placed and
+   * sized by the plan then lands wholly off-canvas in every elevation. It is
+   * the same trap resolveYardBounds already keeps plant drags out of.
    */
   function addFeature(type) {
     const planView = project.views.find((view) => view.type === 'plan');
@@ -895,11 +899,15 @@ async function init() {
       return;
     }
     const transform = createViewTransform(planView);
-    const center = {
-      x: transform.originFt.x + transform.extentFt.width / 2,
-      y: transform.originFt.y + transform.extentFt.height / 2,
+    const bounds = resolveYardBounds(project.views) || {
+      x: { min: transform.originFt.x, max: transform.originFt.x + transform.extentFt.width },
+      y: { min: transform.originFt.y, max: transform.originFt.y + transform.extentFt.height },
     };
-    const shape = createFeatureShape(type, center, appState.features.map((f) => f.id));
+    const center = {
+      x: (bounds.x.min + bounds.x.max) / 2,
+      y: (bounds.y.min + bounds.y.max) / 2,
+    };
+    const shape = createFeatureShape(type, center, appState.features.map((f) => f.id), bounds);
     if (!applyFeatureEdit([...appState.features, shape])) return;
     featurePanel.setSelectedId(shape.id);
     syncFeatureOverlay();
