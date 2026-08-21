@@ -121,6 +121,7 @@ A project declares `views[]`, and every view is authored **in feet**:
 | `label`, `sublabel` | panel headings; omitted when they match the defaults |
 | `background` | image path relative to the project directory |
 | `backgroundFrom` | id of a view to borrow (and crop) a background from |
+| `viewerAtFt` | elevations only: where the camera stands on the **depth** axis |
 
 **Pixels per foot is derived, never authored**: `viewBox.width / extentFt.width`,
 and the height must agree with it or `createViewTransform` rejects the view as
@@ -227,6 +228,41 @@ Each elevation declares `viewFrom` — the compass side the viewer stands on —
 | `east`     | y               | no       | low x           |
 | `west`     | y               | yes      | high x          |
 
+An elevation also has a **camera**, and until `viewerAtFt` it had none: with no
+depth position the observer sits at infinity, so everything in the yard is in
+front of it. A wall standing between the photographer and the bed was then drawn
+*over* the bed in the view shot from the far side — the one place it is behind
+the camera. `viewerAtFt` is one number in yard feet on the view's depth axis
+(`x` for `east`/`west`, `y` for `north`/`south`), and `south`/`east` put the
+camera at the low end of that axis while `north`/`west` put it at the high end.
+
+**Absent means cull nothing.** No project has to declare one, and one that does
+not draws exactly what it drew before — the opposite default from
+`normalizeFeatures`, which refuses a missing height because there a default
+hides a shape. Zero is a real position, so every test is on finiteness, never
+truthiness.
+
+Two rules follow from it, and they are deliberately asymmetric:
+
+- **A feature entirely behind the camera is culled** from that elevation
+  (`isBehindViewer` in `src/render/elevationOrder.js`). The test is on
+  `depthFt.far`, the edge least behind the camera — not on `depthFt.near`, which
+  is what the sort reads — so a fence the camera stands in the middle of keeps
+  the behaviour it already had rather than half-vanishing.
+- **A plant is never culled.** That would defeat the point of the shared yard,
+  so `resolveYardBounds` narrows the depth axis to the observer instead: a plant
+  cannot be dragged behind any camera in the first place, and the narrowing shows
+  up in Setup mode's "Shared yard" readout rather than as a plant disappearing.
+
+**The cull is drawn on the PLAN, in Setup mode** — a dashed line at each
+elevation's `viewerAtFt` with the yard behind it tinted, labelled on the side
+that elevation can still see, and emphasised while that view is selected. It has
+to be the plan: `viewerAtFt` lives on the depth axis, which in its own elevation
+runs into the page, so every point of that picture is at every depth and there
+is nowhere in it to put the line. On a plan the same number is a line and the
+region past it is a shape. A camera outside the plan's rectangle clamps its band
+to the drawing, so it reads as "all of this" or as nothing, which is what it means.
+
 Mirrored views reflect about the viewBox centre, so `originFt.x` always means the
 **near** edge — which mirroring puts on the *right* for `north` and `west`. Go
 through `viewTransform`'s `axisToX` / `xToAxis` and that is automatic; do the
@@ -245,6 +281,26 @@ The yard is **the first plan view's rectangle, narrowed to what the first
 elevation for each compass direction can draw**. Later views of either kind are
 detail callouts — they show part of the yard by definition, and a plant outside
 one is not lost. If the primary views do not overlap at all, the plan view wins.
+
+Because the yard is shared, **one view's geometry silently shrinks where plants
+and features may live in every other view**. Reframing the plan with a corner
+handle and leaving the elevations behind strands them in the old coordinate
+frame: the yard collapses to whatever corner still overlaps, or — if an
+elevation misses the plan entirely — to nothing that view can draw at all.
+Nothing on the canvas shows it. So `describeYardBounds` reports the resulting
+rectangle, the plan's, and which view holds each edge that differs, and **Setup
+mode reads it out under "Shared yard" on every edit, before Save**; a view that
+overlaps the plan nowhere is called out in red there and, for a project already
+saved that way, in `#projectNotice` at boot. That is the guard — `resolveYardBounds`
+itself still falls back to the plan silently on purpose, because a drag needs
+some bound.
+
+The other half of alignment is the **foot grid, which every view draws in Setup
+mode** — not just the selected one. Grid lines land on whole yard feet so the
+same 5 ft line appears in the same place in every view, which is only a
+reference if you can see it in more than one at a time. Handles, the ruler, and
+pointer capture still belong to the selected view alone; the neighbours are
+drawn at reduced opacity so they read as reference rather than as targets.
 
 ### 1. Background Layers
 

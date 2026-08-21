@@ -246,3 +246,95 @@ test('renderSetupOverlay draws the measuring segment only when there is one', ()
 function round(value) {
   return Math.round(value * 1e6) / 1e6;
 }
+
+test('a handle drag and a ruler solve return patches, never rebuilt views', () => {
+  // app.js applies these with { ...view, ...patch }, so anything a view carries
+  // that the solve does not name survives. nl-jqd was filed for the opposite —
+  // a Setup edit rebuilding a view and dropping originFt on the way — so the
+  // shape of the return value is the invariant, not an implementation detail.
+  const view = {
+    id: 'north',
+    type: 'elevation',
+    viewFrom: 'north',
+    viewBox: { width: 800, height: 400 },
+    originFt: { x: 0, y: -2 },
+    extentFt: { width: 40, height: 20 },
+    viewerAtFt: 21,
+  };
+  const KEYS = ['originFt', 'extentFt', 'viewBox'];
+  assert.deepEqual(Object.keys(resolveHandleDrag(view, 'ground', { x: 100, y: 300 })).sort(), [...KEYS].sort());
+  assert.deepEqual(
+    Object.keys(resolveRulerCalibration(view, { x: 0, y: 0 }, { x: 200, y: 0 }, 5)).sort(),
+    [...KEYS].sort()
+  );
+  // Which means the camera position is neither dropped nor rescaled: it is a
+  // yard coordinate, not an offset anchored to the drawing.
+  assert.equal({ ...view, ...resolveHandleDrag(view, 'near-edge', { x: 100, y: 200 }) }.viewerAtFt, 21);
+  assert.equal(
+    { ...view, ...resolveRulerCalibration(view, { x: 0, y: 0 }, { x: 200, y: 0 }, 5) }.viewerAtFt,
+    21
+  );
+});
+
+test('a plan draws each elevation camera as a line, with the culled yard behind it', () => {
+  // 40 x 30 ft at 20 px/ft. Yard y grows UP the drawing, so y = 20 ft is 400 px
+  // above the bottom, i.e. viewBox y = 200.
+  const cameras = buildOverlayGeometry(PLAN, [
+    elevation('north', { id: 'north', viewerAtFt: 20 }),
+    elevation('south', { id: 'south', viewerAtFt: 20 }),
+  ]).cameras;
+
+  const north = cameras.find((camera) => camera.id === 'north');
+  assert.equal(north.orientation, 'horizontal');
+  assert.deepEqual(north.line, { x1: 0, y1: 200, x2: 800, y2: 200 });
+  // North stands at the HIGH end of y and looks south, so everything above the
+  // line — the top of the drawing — is behind it.
+  assert.deepEqual(north.culled, { x: 0, y: 0, width: 800, height: 200 });
+
+  // South stands at the low end and culls the other side of the same number.
+  const south = cameras.find((camera) => camera.id === 'south');
+  assert.deepEqual(south.line, { x1: 0, y1: 200, x2: 800, y2: 200 });
+  assert.deepEqual(south.culled, { x: 0, y: 200, width: 800, height: 400 });
+
+  // Each label sits on the side its elevation can still see, never inside the
+  // band, where it would read as a caption for the hidden yard.
+  assert.ok(north.labelAt.y > north.line.y1);
+  assert.ok(south.labelAt.y < south.line.y1);
+});
+
+test('east and west run down the drawing and mirror about their number', () => {
+  const cameras = buildOverlayGeometry(PLAN, [
+    elevation('east', { id: 'east', viewerAtFt: 10 }),
+    elevation('west', { id: 'west', viewerAtFt: 10 }),
+  ]).cameras;
+  const east = cameras.find((camera) => camera.id === 'east');
+  const west = cameras.find((camera) => camera.id === 'west');
+  assert.equal(east.orientation, 'vertical');
+  assert.deepEqual(east.line, { x1: 200, y1: 0, x2: 200, y2: 600 });
+  // East stands at high x; west at low x. Same line, opposite bands.
+  assert.deepEqual(east.culled, { x: 200, y: 0, width: 600, height: 600 });
+  assert.deepEqual(west.culled, { x: 0, y: 0, width: 200, height: 600 });
+  assert.equal(east.labelAt.anchor, 'end');
+  assert.equal(west.labelAt.anchor, 'start');
+});
+
+test('a camera outside the plan clamps its band to the drawing', () => {
+  const [beyond] = buildOverlayGeometry(PLAN, [
+    elevation('north', { id: 'north', viewerAtFt: 90 }),
+  ]).cameras;
+  // Standing 60 ft past the far edge hides nothing inside the plan, and the
+  // band must say that rather than running off into negative pixels.
+  assert.deepEqual(beyond.culled, { x: 0, y: 0, width: 800, height: 0 });
+});
+
+test('only an elevation that names a camera draws one', () => {
+  assert.deepEqual(buildOverlayGeometry(PLAN, [elevation('north')]).cameras, []);
+  assert.deepEqual(buildOverlayGeometry(PLAN, [PLAN]).cameras, []);
+  assert.deepEqual(buildOverlayGeometry(PLAN).cameras, []);
+  // An elevation has no place to draw one: its depth axis runs into the page,
+  // so every point of the picture is at every depth.
+  assert.deepEqual(
+    buildOverlayGeometry(elevation('north'), [elevation('south', { viewerAtFt: 5 })]).cameras,
+    []
+  );
+});

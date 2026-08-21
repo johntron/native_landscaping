@@ -97,11 +97,13 @@ function plant(id, x, y) {
 
 const PLANTS = [plant('far', 20, 30), plant('mid', 20, 15), plant('near', 20, 5)];
 
-function order(viewFrom, features = [byId.house]) {
+function order(viewFrom, features = [byId.house], viewerAtFt) {
+  const view = { ...elevationView(viewFrom) };
+  if (viewerAtFt !== undefined) view.viewerAtFt = viewerAtFt;
   return orderElevationItems({
     plantStates: PLANTS,
     features,
-    transform: createViewTransform(elevationView(viewFrom)),
+    transform: createViewTransform(view),
   }).map((item) => (item.kind === 'feature' ? `feature:${item.feature.id}` : item.plant.id));
 }
 
@@ -220,4 +222,39 @@ test('no features is the normal case and changes nothing', () => {
   renderElevationView(withEmpty, PLANTS, elevationView('west'), { features: [] });
   assert.equal(withOut.children.length, withEmpty.children.length);
   assert.equal(withOut.querySelectorAll('g[data-feature-id]').length, 0);
+});
+
+test('a feature entirely behind the camera is not drawn', () => {
+  // example-frontyard's report: the fence at y = 26 is the far backdrop when
+  // the photo is taken from the south, and is behind the photographer when it
+  // is taken from the north walkway at y = 24. Same fence, same model — the
+  // two views disagree because the cameras are on opposite sides of it.
+  assert.deepEqual(order('south', [byId.fence], 2), ['far', 'feature:fence', 'mid', 'near']);
+  assert.deepEqual(order('north', [byId.fence], 24), ['near', 'mid', 'far']);
+});
+
+test('the mirrored pair culls on opposite sides of the same number', () => {
+  // east/west run along the depth axis x; the driveway spans x 0..10.
+  assert.deepEqual(order('east', [byId.driveway], 20).filter((id) => id.startsWith('feature')), [
+    'feature:driveway',
+  ]);
+  assert.deepEqual(order('west', [byId.driveway], 20).filter((id) => id.startsWith('feature')), []);
+});
+
+test('a feature the camera stands in the middle of is kept', () => {
+  // The house spans y 12..20 and the camera is at 16. Culling on depthFt.near
+  // — which is what the SORT reads — would drop it; it is only cut when every
+  // part of it is behind, so a straddling shape keeps today's behaviour.
+  assert.ok(order('south', [byId.house], 16).includes('feature:house'));
+  assert.ok(order('north', [byId.house], 16).includes('feature:house'));
+  // Past its far edge on either side, it does go.
+  assert.ok(!order('south', [byId.house], 21).includes('feature:house'));
+  assert.ok(!order('north', [byId.house], 11).includes('feature:house'));
+});
+
+test('an elevation that names no camera culls nothing', () => {
+  // Every project predating the field is in this case, and must draw exactly
+  // what it drew before.
+  assert.deepEqual(order('north', [byId.fence]), ['near', 'mid', 'feature:fence', 'far']);
+  assert.deepEqual(order('south', [byId.fence]), ['far', 'feature:fence', 'mid', 'near']);
 });

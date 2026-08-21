@@ -49,6 +49,7 @@ const ASPECT_TOLERANCE = 1e-3;
  *   viewBox: { width: number, height: number },
  *   extentFt: { width: number, height: number },
  *   originFt: { x: number, y: number },
+ *   viewerAtFt: number|undefined,
  *   pxPerFt: number,
  *   toPx: (feet: number) => number,
  *   toFeet: (px: number) => number,
@@ -124,6 +125,10 @@ export function createViewTransform(view) {
     extentFt,
     originFt,
     pxPerFt,
+    // Where the viewer stands along the depth axis, in yard feet, or undefined
+    // when the elevation does not say — which means "everything is in front of
+    // the camera", the behaviour every project had before the field existed.
+    viewerAtFt: type === 'elevation' && Number.isFinite(view.viewerAtFt) ? view.viewerAtFt : undefined,
     toPx,
     toFeet,
 

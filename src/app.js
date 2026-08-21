@@ -692,11 +692,20 @@ async function init() {
   }
 
   /**
-   * The overlay belongs to exactly one view at a time, and only in Setup mode.
+   * Every view draws the guides in Setup mode; only the selected one is live.
+   *
+   * The foot grid lands on whole yard feet so that the same 5 ft line appears
+   * in the same place in every view — a cross-view reference, and useless if
+   * only one view ever shows it. That was why getting the views into relative
+   * alignment was guesswork: there was nothing on screen to align against.
+   * Handles, the ruler, and pointer capture still belong to the selected view
+   * alone, so the neighbours read as reference rather than as targets.
+   *
    * Rendering clears each SVG, so this runs after every render rather than once.
    */
   function syncSetupOverlay() {
-    const selectedId = appState.mode === 'setup' ? setupPanel.getSelectedId() : '';
+    const inSetup = appState.mode === 'setup';
+    const selectedId = inSetup ? setupPanel.getSelectedId() : '';
     const armed = Boolean(selectedId) && setupPanel.isRulerArmed();
     viewPanels.forEach(({ view, svg }, index) => {
       const isSelected = view.id === selectedId;
@@ -704,11 +713,19 @@ async function init() {
       // Only the selected view measures: a ruler armed everywhere would let a
       // drag on a neighbouring panel look live and do nothing.
       setupControllers[index]?.setRuler?.(isSelected && armed);
-      if (!isSelected) {
+      if (!inSetup) {
         clearSetupOverlay(svg);
         return;
       }
-      renderSetupOverlay(svg, view, appState.ruler?.viewId === view.id ? appState.ruler : null);
+      renderSetupOverlay(
+        svg,
+        view,
+        isSelected && appState.ruler?.viewId === view.id ? appState.ruler : null,
+        // A plan draws the other views' cameras, so it needs the whole list;
+        // the selected one is emphasised so editing "Camera stands at" has
+        // something moving on screen to read it off.
+        { interactive: isSelected, views: project.views, highlightId: selectedId }
+      );
     });
   }
 
