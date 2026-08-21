@@ -35,6 +35,7 @@ export const SCRATCH_PROJECTS = [
   'features-save',
   'features-edit',
   'features-narrow',
+  'frontyard-save',
 ];
 
 /**
@@ -109,6 +110,87 @@ const NARROW_VIEWS = {
   ],
 };
 
+/**
+ * `frontyard-save` carries example-frontyard's geometry — negative originFt.y on
+ * two elevations, a non-zero origin on the plan — because that is the shape a
+ * Setup-mode Save was found to flatten (nl-jqd). Copied here rather than tested
+ * in place: the real project is live data the running app writes to.
+ */
+const FRONTYARD_SAVE_VIEWS = {
+  "id": "frontyard-save",
+  "name": "frontyard-save",
+  "views": [
+    {
+      "id": "plan",
+      "type": "plan",
+      "viewBox": {
+        "width": 597.8492882559476,
+        "height": 606.153576354689
+      },
+      "originFt": {
+        "x": 2,
+        "y": 14.833316758684116
+      },
+      "extentFt": {
+        "width": 29.89246441279738,
+        "height": 30.30767881773445
+      }
+    },
+    {
+      "id": "north",
+      "type": "elevation",
+      "viewFrom": "north",
+      "viewBox": {
+        "width": 212.54018979232524,
+        "height": 318.81028468848785
+      },
+      "originFt": {
+        "x": 0,
+        "y": -7.1365343829237
+      },
+      "extentFt": {
+        "width": 10.627009489616261,
+        "height": 15.940514234424391
+      }
+    },
+    {
+      "id": "west",
+      "type": "elevation",
+      "viewFrom": "east",
+      "sublabel": "Looking west",
+      "viewBox": {
+        "width": 286.97952432851844,
+        "height": 206.62525751653328
+      },
+      "originFt": {
+        "x": 0,
+        "y": -3.196864496043244
+      },
+      "extentFt": {
+        "width": 14.348976216425921,
+        "height": 10.331262875826663
+      }
+    },
+    {
+      "id": "view",
+      "type": "elevation",
+      "viewBox": {
+        "width": 249.92136631408937,
+        "height": 187.44102473556703
+      },
+      "extentFt": {
+        "width": 9.37205123677835,
+        "height": 7.029038427583763
+      },
+      "viewFrom": "south",
+      "originFt": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ]
+};
+
 /** Files the app is served from; symlinked so the specs test the real source. */
 const LINKED = ['index.html', 'styles.css', 'favicon.svg', 'src', 'plants.csv', 'node_modules'];
 
@@ -142,6 +224,11 @@ export function buildScratchPublicDir() {
   writeFileSync(
     path.join(SCRATCH_DIR, 'projects', 'features-narrow', 'project.json'),
     `${JSON.stringify(NARROW_VIEWS, null, 2)}\n`
+  );
+
+  writeFileSync(
+    path.join(SCRATCH_DIR, 'projects', 'frontyard-save', 'project.json'),
+    `${JSON.stringify(FRONTYARD_SAVE_VIEWS, null, 2)}\n`
   );
 
   writeFileSync(
