@@ -5,7 +5,7 @@ import { filterPlantStatesByHiddenLayers } from '../state/layers.js';
 /**
  * @param {Array<{ view: object, svg: SVGSVGElement }>} panels one per project view
  * @param {Array<{ plant: any, state: any }>} plantStates
- * @param {object} options
+ * @param {object} options `features` is the shared yard model, drawn in every view
  */
 export function renderViews(panels, plantStates, options = {}) {
   const {
@@ -14,6 +14,7 @@ export function renderViews(panels, plantStates, options = {}) {
     highlightedSpeciesKey = '',
     targetedPlantId = '',
     hoveredPlantId = '',
+    features = [],
   } = options;
   const filtered = filterPlantStatesByHiddenLayers(plantStates, hiddenLayerCount);
   const topOrdered = orderTopViewPlantStates(filtered);
@@ -22,6 +23,7 @@ export function renderViews(panels, plantStates, options = {}) {
     highlightedSpeciesKey,
     targetedPlantId,
     hoveredPlantId,
+    features,
   };
   panels.forEach(({ view, svg }) => {
     if (!svg || !view) return;

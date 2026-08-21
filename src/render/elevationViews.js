@@ -1,5 +1,6 @@
 import { PLANT_BLEND_OPACITY } from '../constants.js';
-import { compareElevationDepth } from './elevationOrientation.js';
+import { orderElevationItems } from './elevationOrder.js';
+import { buildFeatureGroup } from './featureViews.js';
 import { createViewTransform } from './viewTransform.js';
 import { getSpeciesKey } from '../utils/speciesKey.js';
 import { makeRng, seedForPlant } from '../utils/rng.js';
@@ -27,7 +28,7 @@ export function renderElevationView(svg, plantStates, view, options = {}) {
   clearSvg(svg);
   const transform = createViewTransform(view);
   const { viewBox, orientation, groundY } = transform;
-  const { axisKey, depthKey, farIsHigh } = orientation;
+  const { axisKey } = orientation;
   const elevationId = transform.id;
   const toPixels = transform.toPx;
   const {
@@ -35,43 +36,23 @@ export function renderElevationView(svg, plantStates, view, options = {}) {
     highlightedSpeciesKey = '',
     targetedPlantId = '',
     hoveredPlantId = '',
+    features = [],
   } = options;
   const normalizedHighlightKey = (highlightedSpeciesKey || '').toLowerCase();
   const normalizedTargetId = String(targetedPlantId || '');
   const normalizedHoveredId = String(hoveredPlantId || '');
   const highlightTargets = [];
   const targetMarkers = [];
-  const sortedPlantStates = [...plantStates].sort((a, b) => {
-    const priorityDiff = stackingPriority(a?.plant, axisKey) - stackingPriority(b?.plant, axisKey);
-    if (priorityDiff !== 0) return priorityDiff; // lower priority drawn first
+  // Features and plants are sorted as ONE list: that interleave is what lets a
+  // fence hide the shrub standing behind it.
+  const drawOrder = orderElevationItems({ plantStates, features, transform });
 
-    // Draw back to front along the depth axis so nearer plants overlap farther ones.
-    const nearDiff = compareElevationDepth(
-      a?.plant?.[depthKey] ?? 0,
-      b?.plant?.[depthKey] ?? 0,
-      farIsHigh
-    );
-    if (nearDiff !== 0) return nearDiff;
-
-    const heightA = a?.plant?.height ?? 0;
-    const heightB = b?.plant?.height ?? 0;
-    if (heightA !== heightB) return heightA - heightB;
-
-    const depthTie = compareElevationDepth(
-      a?.plant?.[depthKey] ?? 0,
-      b?.plant?.[depthKey] ?? 0,
-      farIsHigh
-    );
-    if (depthTie !== 0) return depthTie;
-
-    const widthA = a?.plant?.width ?? 0;
-    const widthB = b?.plant?.width ?? 0;
-    if (widthA !== widthB) return widthA - widthB;
-
-    return String(a?.plant?.id ?? '').localeCompare(String(b?.plant?.id ?? ''));
-  });
-
-  sortedPlantStates.forEach(({ plant, state }) => {
+  drawOrder.forEach((item) => {
+    if (item.kind === 'feature') {
+      svg.appendChild(buildFeatureGroup(item.feature, transform));
+      return;
+    }
+    const { plant, state } = item;
     const speciesKey = getSpeciesKey(plant);
     const isHighlighted = Boolean(normalizedHighlightKey && speciesKey === normalizedHighlightKey);
     const isTargeted = normalizedTargetId && String(plant.id) === normalizedTargetId;
@@ -233,18 +214,6 @@ export function renderElevationView(svg, plantStates, view, options = {}) {
 
   highlightTargets.forEach((target) => appendElevationHighlight(svg, target));
   targetMarkers.forEach((target) => appendElevationTarget(svg, target));
-}
-
-function stackingPriority(plant, axisKey) {
-  if (!plant) return 1;
-  // On east/west elevations (y axis horizontal), force Callirhoe involucrata to render last so it stays in front.
-  if (axisKey === 'y') {
-    const botanical = (plant.botanicalName || plant.botanical_name || '').toLowerCase();
-    if (botanical === 'callirhoe involucrata') {
-      return 2;
-    }
-  }
-  return 1;
 }
 
 function renderProfileSilhouette({

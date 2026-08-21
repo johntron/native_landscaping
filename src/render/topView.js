@@ -3,6 +3,7 @@ import { createViewTransform } from './viewTransform.js';
 import { makeRng, seedForPlant } from '../utils/rng.js';
 import { getSpeciesKey } from '../utils/speciesKey.js';
 import { clearSvg, createSvgElement } from './svgUtils.js';
+import { buildFeatureGroup } from './featureViews.js';
 import { buildFlowerCenters } from './inflorescenceStrategies.js';
 import { pointInPolygon } from './geometry.js';
 import { buildPlantLabel } from './labels.js';
@@ -32,6 +33,7 @@ export function renderTopView(svg, plantStates, view, options = {}) {
     highlightedSpeciesKey = '',
     targetedPlantId = '',
     hoveredPlantId = '',
+    features = [],
   } = options;
   clearSvg(svg);
   const normalizedHighlightKey = (highlightedSpeciesKey || '').toLowerCase();
@@ -40,6 +42,10 @@ export function renderTopView(svg, plantStates, view, options = {}) {
   const toPixels = transform.toPx;
   const highlightTargets = [];
   const targetMarkers = [];
+
+  // A plan has no depth to sort on, so features go underneath the plants in the
+  // order they were authored — the authoring order IS the z-order.
+  features.forEach((feature) => svg.appendChild(buildFeatureGroup(feature, transform)));
 
   plantStates.forEach(({ plant, state }) => {
     const speciesKey = getSpeciesKey(plant);
