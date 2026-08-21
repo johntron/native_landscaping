@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveYardBounds } from '../src/render/yardBounds.js';
+import { resolveYardBounds, resolveYardConflicts } from '../src/render/yardBounds.js';
 
 const plan = (overrides = {}) => ({
   id: 'plan',
@@ -83,4 +83,51 @@ test('the plan view may itself start away from the yard origin', () => {
     x: { min: 2, max: 14 },
     y: { min: 2, max: 27 },
   });
+});
+
+test('a view that overlaps the plan nowhere is reported, not silently dropped', () => {
+  // example-frontyard's shape: its west elevation runs along y 0..14.35 while
+  // the plan starts at y 14.83, so the two miss each other by half a foot. The
+  // bounds fall back to the plan — a drag needs some bound — but that leaves a
+  // view able to draw none of the shared yard, with nothing saying so.
+  const views = [
+    { id: 'plan', type: 'plan', originFt: { x: 0, y: 14.83 }, extentFt: { width: 30, height: 30 } },
+    {
+      id: 'west',
+      type: 'elevation',
+      viewFrom: 'east',
+      originFt: { x: 0, y: 0 },
+      extentFt: { width: 14.35, height: 10 },
+    },
+  ];
+  const conflicts = resolveYardConflicts(views);
+  assert.equal(conflicts.length, 1);
+  assert.equal(conflicts[0].id, 'west');
+  assert.equal(conflicts[0].axis, 'y');
+  assert.deepEqual(conflicts[0].viewCovers, { min: 0, max: 14.35 });
+
+  // The bounds themselves still answer, so a drag is still clamped to something.
+  assert.deepEqual(resolveYardBounds(views).y, { min: 14.83, max: 44.83 });
+});
+
+test('views that do overlap raise nothing, however narrowly', () => {
+  const overlapping = [
+    { id: 'plan', type: 'plan', originFt: { x: 0, y: 0 }, extentFt: { width: 30, height: 30 } },
+    {
+      id: 'west',
+      type: 'elevation',
+      viewFrom: 'east',
+      originFt: { x: 29.9 },
+      extentFt: { width: 5, height: 10 },
+    },
+  ];
+  assert.deepEqual(resolveYardConflicts(overlapping), []);
+  // Touching end to end is not overlapping: there is no yard in both.
+  const touching = [
+    overlapping[0],
+    { ...overlapping[1], originFt: { x: 30 }, extentFt: { width: 5, height: 10 } },
+  ];
+  assert.equal(resolveYardConflicts(touching).length, 1);
+  // And a project with no plan has no shared yard to disagree with.
+  assert.deepEqual(resolveYardConflicts([overlapping[1]]), []);
 });

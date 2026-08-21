@@ -55,11 +55,16 @@ import { buildTooltipLines } from './render/tooltip.js';
 import { createLayoutHistory } from './history/layoutHistory.js';
 import { captureViewToPng } from './export/viewCapture.js';
 import { resolveViewBackground } from './render/backgroundCrop.js';
-import { resolveYardBounds } from './render/yardBounds.js';
+import { resolveYardBounds, resolveYardConflicts } from './render/yardBounds.js';
 
 const MODE_KEY = 'native-landscaping-mode';
 const LEGACY_LOCK_STATE_KEY = 'native-landscaping-positions-locked';
 const MODES = ['view', 'edit', 'setup', 'features'];
+
+/** Feet to one decimal, for a message a person reads rather than a computation. */
+function round1(value) {
+  return Math.round(Number(value) * 10) / 10;
+}
 const EXPORT_MONTH = 6; // June
 const PROJECT_QUERY_PARAM = 'project';
 
@@ -135,6 +140,23 @@ async function init() {
     if (resolved.fellBack && projectNotice) {
       projectNotice.hidden = false;
       projectNotice.textContent = `Unknown project "${resolved.requestedId}" — showing ${project.name}.`;
+    }
+    // A view that overlaps the plan nowhere can draw none of the shared yard:
+    // a plant inside the bounds is invisible in it, and so is any feature,
+    // however it is placed. resolveYardBounds has to fall back silently — a
+    // drag needs some bound — so the disagreement is reported here instead of
+    // going unnoticed.
+    const conflicts = resolveYardConflicts(project.views);
+    if (conflicts.length && projectNotice) {
+      projectNotice.hidden = false;
+      projectNotice.textContent = conflicts
+        .map(
+          (c) =>
+            `View "${c.id}" covers ${c.axis} ${round1(c.viewCovers.min)}–${round1(c.viewCovers.max)} ft, ` +
+            `but the plan covers ${round1(c.planCovers.min)}–${round1(c.planCovers.max)} ft — ` +
+            `nothing in the yard can appear in both.`
+        )
+        .join(' ');
     }
   } catch (err) {
     showLoadError('Unable to load project configuration.');

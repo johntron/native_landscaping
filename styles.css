@@ -1603,10 +1603,20 @@ select {
 }
 
 /*
- * The features form keeps its slot whether or not something is selected. Its
- * height is what the canvas below it sits on, and a panel that grows and
- * shrinks with the selection moves the drawing out from under the pointer.
+ * The features panel is a fixed-height scroller, and that is the whole point:
+ * it sits directly above the drawing, so ANY content that changes its height
+ * moves the canvas out from under the pointer. Adding a shape used to push the
+ * drawing down 154 px and the next click landed nowhere near where it was
+ * aimed. Height comes from the viewport rather than the content, so a list of
+ * one feature and a list of twenty leave the drawing in exactly the same place.
  */
+#featureRow:not([hidden]) {
+  height: clamp(13rem, 34vh, 21rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* The form holds its slot with nothing selected, so the list below it stays put. */
 .feature-panel__form {
   min-height: 8.5rem;
 }

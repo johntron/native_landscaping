@@ -119,11 +119,6 @@ export function createFeaturePanel({ root, onCommit, onSave, onSelect, onAdd }) 
    */
   function buildForm() {
     const feature = selected();
-    // With nothing drawn there is nothing to select, so no selection can move
-    // the canvas and the slot is not worth reserving. It appears with the first
-    // shape — a deliberate button press, not a gesture on the drawing — and
-    // stays put from then on.
-    if (!state.features.length) return el('div');
     const wrap = el('div', 'feature-panel__section feature-panel__form');
     if (!feature) {
       wrap.appendChild(el('h3', 'feature-panel__heading', 'No feature selected'));
