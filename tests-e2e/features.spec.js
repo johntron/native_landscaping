@@ -190,6 +190,21 @@ test.describe('features mode', () => {
     await expect(page.locator('#topSvg g[data-feature-id]')).toHaveCount(0);
   });
 
+  test('the panel lists the saved features on entering the mode, before any edit', async ({
+    page,
+  }) => {
+    // The panel is built before the features finish loading, so it used to hold
+    // the empty list the app starts with: the yard drew its shapes and the list
+    // still said nothing was there until an edit re-rendered it. On a phone the
+    // list is how a feature is picked, so that was the whole editor missing.
+    await page.request.post(featuresUrl(EDIT), { data: { features: [HOUSE] } });
+    await enterFeaturesMode(page);
+
+    await expect(page.locator('#featureRow .feature-panel__item')).toHaveCount(1);
+    await expect(page.locator('#featureRow .feature-panel__pick')).toContainText('House');
+    await expect(page.locator('#featureRow')).not.toContainText('Nothing drawn yet');
+  });
+
   test('a rejected edit leaves the drawing on the last good state', async ({ page }) => {
     await enterFeaturesMode(page);
     await page.locator('#featureRow button', { hasText: '+ wall' }).click();
