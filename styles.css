@@ -920,12 +920,29 @@ select {
 /* Individual view containers share common styles. */
 .view {
   position: relative;
-  width: 100%;
-  /* Maintain a 4:3 aspect ratio matching the 800x600 orthographic backgrounds */
+  /* The panel's shape is the view's own extentFt ratio, set inline by
+     src/render/viewConfig.js — a photo never reshapes it.
+
+     Capping the WIDTH rather than the height is what keeps that promise: with
+     `width: 100%` a `max-height` would clamp the height, leaving both axes
+     constrained, which drops `aspect-ratio` on the floor and stretches the
+     photo again. Capping width leaves height free to follow the ratio, so a
+     tall view gets a narrower panel instead of a page-long one. */
+  width: min(100%, calc(70vh * var(--view-aspect-ratio, 4 / 3)));
+  margin-inline: auto;
   aspect-ratio: var(--view-aspect-ratio, 4 / 3);
-  background-size: 100% 100%;
+  /* `contain`, not `100% 100%`: a photo whose aspect differs from the view's
+     would otherwise be scaled differently on each axis, and a plant placed at
+     the right height in feet would sit at the wrong height against the photo.
+     Uniform scaling keeps the photo and the drawing agreeing; it letterboxes
+     instead of lying. A photo authored to the view's ratio — every background
+     in projects/backyard — fills the panel exactly as it always did. */
+  background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
+  /* The letterbox bars need a surface of their own, or the page shows through
+     and the gap reads as a rendering fault rather than an empty margin. */
+  background-color: #f2f0eb;
   border: 1px solid #ddd8d1;
   border-radius: 4px;
   overflow: hidden;
@@ -1156,6 +1173,9 @@ select {
 
   .views[data-maximized] .view {
     aspect-ratio: auto;
+    /* Height is driven directly here, so the width cap above — which exists to
+       bound a height it does not control — must get out of the way. */
+    width: 100%;
     height: calc(100vh - 3.5rem);
   }
 
@@ -1452,6 +1472,13 @@ select {
   font-size: 0.85rem;
   background-color: #fff;
   min-width: 0;
+}
+
+/* A file input is far wider than the grid cell it shares with the number
+   fields; the smaller type keeps the button and a filename both inside it. */
+.setup-panel__field input[type='file'] {
+  padding: 0.2rem;
+  font-size: 0.75rem;
 }
 
 .setup-panel__hint {

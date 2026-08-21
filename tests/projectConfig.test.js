@@ -1,8 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
   isValidProjectId,
   normalizeProjectConfig,
@@ -288,19 +285,70 @@ test('views[] validation rejects the ways a view can be unusable', () => {
 
 // --- the project.json files this repo actually ships ---
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+/**
+ * These fixtures are inline on purpose.
+ *
+ * They used to read projects/<id>/project.json, but every shipped project is
+ * also editable in the running app: one Setup-mode Save rewrites the file and
+ * fails a test that has nothing to do with the change being made. It happened
+ * twice in two days — see nl-2p3. What is actually under test here is
+ * normalizeProjectConfig, so the input belongs next to the assertions.
+ */
 
-function loadShippedProject(id) {
-  const raw = JSON.parse(
-    readFileSync(path.join(REPO_ROOT, 'projects', id, 'project.json'), 'utf8')
-  );
-  return normalizeProjectConfig(raw, id);
-}
+/** The pixel-authored shape backyard was converted from. */
+const LEGACY_BACKYARD = {
+  name: 'Backyard',
+  defaultPixelsPerInch: 2.25,
+  plan: { viewBox: { width: 800, height: 600 }, background: 'img/top.webp' },
+  elevations: [
+    {
+      id: 'south',
+      viewFrom: 'south',
+      viewBox: { width: 800, height: 600 },
+      bottomOffsetPx: 100,
+      leftOffsetPx: 0,
+      background: 'img/south.webp',
+    },
+    {
+      id: 'east',
+      viewFrom: 'east',
+      viewBox: { width: 800, height: 600 },
+      bottomOffsetPx: 100,
+      leftOffsetPx: 80,
+      background: 'img/east.webp',
+    },
+  ],
+};
 
-test('projects/backyard still lands on the pixels its legacy file named', () => {
-  // It was converted from {plan, elevations[]} by hand. The photos did not move,
+/** A plan view plus a detail callout cropped out of it. */
+const PLAN_WITH_DETAIL = {
+  name: 'Fixture',
+  views: [
+    {
+      id: 'plan',
+      type: 'plan',
+      viewBox: { width: 240, height: 500 },
+      originFt: { x: 2, y: 2 },
+      extentFt: { width: 12, height: 25 },
+      background: 'img/plan.svg',
+    },
+    {
+      id: 'street-bed',
+      type: 'plan',
+      label: 'Street bed',
+      sublabel: 'Detail',
+      viewBox: { width: 180, height: 120 },
+      originFt: { x: 3, y: 3 },
+      extentFt: { width: 9, height: 6 },
+      backgroundFrom: 'plan',
+    },
+  ],
+};
+
+test('the legacy pixel-authored shape migrates to the pixels it named', () => {
+  // backyard was converted from {plan, elevations[]}. The photos did not move,
   // so 27 px/ft and the 80/100 px insets must survive the conversion exactly.
-  const config = loadShippedProject('backyard');
+  const config = normalizeProjectConfig(LEGACY_BACKYARD, 'backyard');
   const byId = Object.fromEntries(config.views.map((view) => [view.id, view]));
   assert.deepEqual(Object.keys(byId), ['plan', 'south', 'east']);
 
@@ -317,14 +365,11 @@ test('projects/backyard still lands on the pixels its legacy file named', () => 
   assert.ok(Math.abs(east.axisToX(0) - 80) < 1e-9);
 });
 
-test('projects/example-frontyard ships a detail view cropped out of its plan', () => {
-  const config = loadShippedProject('example-frontyard');
+test('a detail view borrows its background from a wider view of the same kind', () => {
+  const config = normalizeProjectConfig(PLAN_WITH_DETAIL, 'fixture');
   const detail = config.views.find((view) => view.backgroundFrom);
   assert.ok(detail, 'expected a view borrowing a background');
   const source = config.views.find((view) => view.id === detail.backgroundFrom);
-  // The multi-panel and crop paths only get permanent e2e coverage while this
-  // project keeps a fourth view.
-  assert.equal(config.views.length, 4);
   assert.equal(source.type, detail.type);
   assert.ok(detail.extentFt.width < source.extentFt.width);
   assert.ok(detail.originFt.x >= source.originFt.x);

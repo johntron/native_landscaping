@@ -30,7 +30,42 @@ export const SCRATCH_PROJECTS = [
   'touch-plan',
   'touch-hold',
   'touch-elevation',
+  'background-upload',
+  'detail-crop',
 ];
+
+/**
+ * `detail-crop` is a backyard copy plus a fourth view: a detail callout that
+ * borrows and crops the plan's photo. The crop assertions used to run against
+ * projects/example-frontyard, which the user also edits in the app — one Setup
+ * Save dropped its fourth view and broke the suite (nl-2p3). The fixture owns
+ * this geometry now, so ordinary use of the app cannot fail the test.
+ *
+ * 27 px/ft throughout, matching backyard, so every view stays uniformly scaled.
+ */
+const DETAIL_CROP_VIEWS = {
+  id: 'detail-crop',
+  name: 'detail-crop',
+  views: [
+    {
+      id: 'plan',
+      type: 'plan',
+      viewBox: { width: 800, height: 600 },
+      extentFt: { width: 800 / 27, height: 600 / 27 },
+      background: 'img/top.webp',
+    },
+    {
+      id: 'street-bed',
+      type: 'plan',
+      label: 'Street bed',
+      sublabel: 'Detail',
+      viewBox: { width: 270, height: 180 },
+      originFt: { x: 5, y: 5 },
+      extentFt: { width: 10, height: 180 / 27 },
+      backgroundFrom: 'plan',
+    },
+  ],
+};
 
 /** Files the app is served from; symlinked so the specs test the real source. */
 const LINKED = ['index.html', 'styles.css', 'favicon.svg', 'src', 'plants.csv', 'node_modules'];
@@ -55,6 +90,12 @@ export function buildScratchPublicDir() {
       recursive: true,
     });
   });
+
+  // Written after the copy so it replaces the backyard project.json cpSync laid down.
+  writeFileSync(
+    path.join(SCRATCH_DIR, 'projects', 'detail-crop', 'project.json'),
+    `${JSON.stringify(DETAIL_CROP_VIEWS, null, 2)}\n`
+  );
 
   writeFileSync(
     path.join(SCRATCH_DIR, 'projects', 'index.json'),

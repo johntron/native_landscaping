@@ -86,6 +86,17 @@ you drag the crop rectangle, ground line, and near edge directly on the drawing;
 *Save views* writes the file back through `POST /api/project`. Hand-editing works
 too, but Setup mode cannot produce a geometry the renderers disagree with.
 
+*Upload photo* puts a background on the selected view without touching the
+filesystem: the browser decodes the picked file, scales it to at most 2400 px on
+its long edge, and re-encodes it as WebP, stepping down a quality ladder until
+it fits roughly 800 KB (`src/data/backgroundUpload.js`). The bytes go up as the
+raw body of `POST /api/view-background`, and the **server** names the file —
+`img/<view-id>-<content-hash>.webp` — so nothing a client sends becomes a path.
+The hash is not decoration: the stored `background` string has to change for the
+drawing to re-fetch anything, so a replacement photo lands on a new path and the
+view's earlier uploads are deleted. `src/data/backgroundStore.js` holds the
+guards; see "Uploading a background" below.
+
 The fastest way to get a view's `extentFt` right is *Measure a known length*:
 arm it, drag across something in the background photo whose real length you know
 — a fence panel, a driveway, a doorway — and type that length. The photo fills
@@ -180,11 +191,60 @@ one is not lost. If the primary views do not overlap at all, the plan view wins.
 - Each view's **static background image** is declared in its `project.json` as a
   path relative to the project directory, and applied by `src/render/viewConfig.js`.
   A stylesheet cannot vary backgrounds per project, so `styles.css` no longer sets them.
+- A photo is painted `background-size: contain`, **not** stretched to the panel. A
+  photo whose aspect differs from the view's would otherwise be scaled differently
+  on each axis, and a plant placed at the right height in feet would sit at the
+  wrong height against the photo; uniform scaling keeps the photo and the drawing
+  agreeing, and letterboxes rather than lying. A background authored to the view's
+  own ratio — every image in `projects/backyard/`, all 800×600 against an 800×600
+  viewBox — fills the panel exactly as before. **A photo never reshapes a view**:
+  `extentFt` is the author's yard geometry and an upload leaves it alone.
+- The panel is bounded by capping its **width**, not its height
+  (`width: min(100%, calc(70vh * var(--view-aspect-ratio)))`). With `width: 100%` a
+  `max-height` would constrain both axes, which drops `aspect-ratio` and brings the
+  stretching back; capping width leaves height free to follow the ratio, so a tall
+  view gets a narrower panel instead of a page-long one.
 - Requirements:
   - Must be **orthographic** (no perspective, no vanishing lines).
   - Vector-like: use flat color fields and simple shapes, not noise textures.
   - Exclude columns, patio slabs, feeders, furniture, and plants.
-- JavaScript should treat backgrounds as **read-only assets**; overlays are SVG only.
+- JavaScript treats backgrounds as **read-only assets** while drawing — overlays are
+  SVG only. The one writer is Setup mode's *Upload photo*, which replaces a view's
+  background wholesale and never edits pixels in place.
+
+#### Uploading a background
+
+`POST /api/view-background?project=<slug>&view=<id>` takes the image as the raw
+request body. Deliberately not multipart: there is one file, its name is not the
+client's to choose, and a parser we would have to write is the largest attack
+surface the feature could have. The server therefore never decodes the image —
+it only checks it.
+
+- **Type**: `Content-Type` must be `image/webp`, `image/jpeg`, or `image/png`,
+  *and* the leading bytes must agree with it. A declared type is a string the
+  client picked; the magic-byte sniff is what stops an HTML document being
+  stored as `north.webp`. **SVG is excluded on purpose and must stay excluded** —
+  `serveStaticFile` returns it as `image/svg+xml`, which executes script, so an
+  uploaded SVG would be stored XSS against everyone who opens the project.
+- **Size**: capped at 8 MB, checked as chunks arrive rather than from
+  `Content-Length` (a claim, not a fact). Over the cap the request is paused,
+  answered with 413, and only then destroyed — destroying first drops the
+  connection before the explanation reaches the client.
+- **Path**: the filename is built from the validated view id, a SHA-256 prefix of
+  the content, and an extension derived from the *sniffed* type, then re-checked
+  for containment inside the project's `img/`. View ids are slugs on the same
+  pattern as project ids, for the same reason: this one becomes a filename.
+- **Write**: temp file then rename, like `writeJsonAtomic`, so a crash never
+  leaves a half-written photo. Superseded uploads for that view are removed
+  afterwards, best effort — the new background is already usable, so tidying up
+  must not fail the request.
+
+The client-side re-encode is a second line of defence as well as a size
+reduction: the uploaded bytes are ones the canvas produced from decoded pixels,
+so EXIF, colour profiles, and anything appended to the original file do not
+survive the round trip. EXIF *orientation* is applied during decode
+(`imageOrientation: 'from-image'`) and baked into the pixels, which is what keeps
+a phone photo from landing sideways.
 
 ### 2. Plant Data (CSV)
 
@@ -264,6 +324,9 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
 - `src/render/viewTransform.js` – the one feet↔pixel authority, wrapping that mapping.
 - `src/render/yardBounds.js` – the shared yard a plant may be dragged within.
 - `src/render/backgroundCrop.js` – which photo a view draws, and which patch of it.
+- `src/data/backgroundUpload.js` – browser-side resize/re-encode, and the upload POST.
+- `src/data/backgroundStore.js` – server-side upload guards: allowed types, magic-byte
+  sniff, and the filename the server (never the client) chooses.
 - `src/interaction/setupPanel.js`, `src/interaction/setupController.js`, `src/render/setupOverlay.js` – Setup mode's form, on-canvas handles, and guides.
 - `src/data/plantParser.js` – merges species/layout CSVs, normalizes month specs, aliases, and seasonal palettes.
 - `src/data/layoutExporter.js` – converts in-memory plants back to CSV with consistent precision/escaping.
@@ -331,7 +394,7 @@ When the user delegates work, here are examples of useful tasks:
 ## Tooling
 
 - Run `npm test` to execute `node tests/run-tests.cjs`, which covers the layout history stack and the persistence module (ensuring the app hits `/api/layout` when committing changes).
-- Run `npm run serve` (or `node server.js`) to launch the bundled static + persistence server. `/api/layout`, `/api/history`, and `/api/history/cursor` are all scoped by a required `?project=<slug>` query parameter and write inside that project's directory only.
+- Run `npm run serve` (or `node server.js`) to launch the bundled static + persistence server. `/api/layout`, `/api/history`, `/api/history/cursor`, `/api/project`, and `/api/view-background` are all scoped by a required `?project=<slug>` query parameter and write inside that project's directory only.
 - No external dependencies are required to execute `npm test`; `npm run test:e2e` needs the `@playwright/test` devDependency (see below). Run `npm install` once before serving the app: `index.html` loads JSZip from `node_modules/jszip/dist/jszip.min.js`.
 
 ### End-to-end browser tests (Playwright)
@@ -352,8 +415,9 @@ on port `8123` (override with `E2E_PORT`) and drives the real `index.html` in Ch
   (`tests-e2e/helpers.js` wraps the common ones). Screenshot diffs are noisy here because
   the renderers deliberately jitter canopy outlines.
 - **A spec that writes must use the scratch server.** Dragging a plant auto-saves via
-  `POST /api/layout` and Setup mode's *Save views* posts `/api/project`, either of
-  which would rewrite the repo's `projects/` if pointed at the default server.
+  `POST /api/layout`, Setup mode's *Save views* posts `/api/project`, and
+  *Upload photo* posts `/api/view-background` — any of which would rewrite the
+  repo's `projects/` if pointed at the default server.
   `playwright.config.js` starts a second server on `E2E_PORT + 1` over a throwaway
   root built by `tests-e2e/scratch-fixture.mjs`; reach it through `openScratchProject`
   (`tests-e2e/helpers.js`). Read-only specs use the default server.
