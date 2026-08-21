@@ -56,6 +56,11 @@ const PROJECT_QUERY_PARAM = 'project';
 const appState = {
   project: null,
   plants: [],
+  // The shared yard model in feet — beds, hardscape, the house — projected into
+  // every view rather than drawn per view (src/data/featureConfig.js). Loading
+  // it waits on GET /api/features: fetching features.json straight off disk
+  // logs a console 404 for every project that has never drawn one.
+  features: [],
   species: [], // the shared plants.csv catalog, for placing plants not yet in the layout
   month: new Date().getMonth() + 1,
   zoom: DEFAULT_ZOOM,
@@ -889,6 +894,7 @@ async function init() {
       highlightedSpeciesKey: appState.highlightedSpeciesKey,
       targetedPlantId: appState.targetedPlantId,
       hoveredPlantId: appState.hoveredPlantId,
+      features: appState.features,
     });
     syncSetupOverlay();
   };
