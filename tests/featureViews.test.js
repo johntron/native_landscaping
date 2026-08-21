@@ -173,8 +173,13 @@ test('an elevation draws a silhouette rectangle, and a flat one as a line', () =
   // band that says "driveway" has to be a line.
   const driveway = buildFeatureGroup(byId.driveway, south).children[0];
   assert.equal(driveway.tagName, 'LINE');
-  assert.equal(driveway.getAttribute('y1'), String(south.groundY));
-  assert.equal(driveway.getAttribute('y2'), String(south.groundY));
+  // It rests ON the ground rather than straddling it: a stroke is centred on
+  // its line, so half the band would be buried — and wholly off the canvas in a
+  // view whose ground line is its bottom edge.
+  const lift = Number(driveway.getAttribute('stroke-width')) / 2;
+  assert.equal(Number(driveway.getAttribute('y1')), south.groundY - lift);
+  assert.equal(Number(driveway.getAttribute('y2')), south.groundY - lift);
+  assert.ok(lift > 0);
 
   // Same for the fence seen end-on from the east: zero width, not missing.
   const east = createViewTransform(elevationView('east'));

@@ -34,6 +34,7 @@ export const SCRATCH_PROJECTS = [
   'detail-crop',
   'features-save',
   'features-edit',
+  'features-narrow',
 ];
 
 /**
@@ -69,6 +70,45 @@ const DETAIL_CROP_VIEWS = {
   ],
 };
 
+/**
+ * `features-narrow` is a backyard copy whose elevations show a NARROW slice of
+ * the yard rather than all of it — the plan covers 20 x 15 ft, the elevations
+ * reach only x 5..15 and y 5..12. That mismatch is what made a newly added
+ * feature land wholly off-canvas in every elevation while looking fine in the
+ * plan, so the fixture owns the geometry that reproduces it.
+ *
+ * 27 px/ft throughout, matching backyard, so every view stays uniformly scaled.
+ */
+const NARROW_VIEWS = {
+  id: 'features-narrow',
+  name: 'features-narrow',
+  views: [
+    {
+      id: 'plan',
+      type: 'plan',
+      viewBox: { width: 540, height: 405 },
+      extentFt: { width: 20, height: 15 },
+      background: 'img/top.webp',
+    },
+    {
+      id: 'south',
+      type: 'elevation',
+      viewFrom: 'south',
+      viewBox: { width: 270, height: 216 },
+      originFt: { x: 5, y: 0 },
+      extentFt: { width: 10, height: 8 },
+    },
+    {
+      id: 'east',
+      type: 'elevation',
+      viewFrom: 'east',
+      viewBox: { width: 189, height: 216 },
+      originFt: { x: 5, y: 0 },
+      extentFt: { width: 7, height: 8 },
+    },
+  ],
+};
+
 /** Files the app is served from; symlinked so the specs test the real source. */
 const LINKED = ['index.html', 'styles.css', 'favicon.svg', 'src', 'plants.csv', 'node_modules'];
 
@@ -97,6 +137,11 @@ export function buildScratchPublicDir() {
   writeFileSync(
     path.join(SCRATCH_DIR, 'projects', 'detail-crop', 'project.json'),
     `${JSON.stringify(DETAIL_CROP_VIEWS, null, 2)}\n`
+  );
+
+  writeFileSync(
+    path.join(SCRATCH_DIR, 'projects', 'features-narrow', 'project.json'),
+    `${JSON.stringify(NARROW_VIEWS, null, 2)}\n`
   );
 
   writeFileSync(
