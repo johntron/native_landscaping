@@ -1380,6 +1380,13 @@ select {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  /* The features panel is a fixed-height column flexbox, so a section that is
+     taller than the space left over gets SHRUNK — its box compressed while its
+     fields paint straight out the bottom, under whatever comes next. That is
+     how "Save features" ended up drawn across the Height input on a phone. In a
+     scroller the children keep their natural height and the scrollbar takes the
+     difference. */
+  flex-shrink: 0;
 }
 
 .setup-panel__heading,
@@ -1562,6 +1569,19 @@ select {
   flex-direction: row;
   align-items: center;
   gap: 0.6rem;
+}
+
+/* Save is the one control the panel exists to reach, and inside a fixed-height
+   scroller it would otherwise sit a few hundred pixels below the fold. Pin it
+   to the bottom edge of the scroller — opaque, so the fields scroll under it
+   rather than through it. */
+#featureRow .feature-panel__footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  padding-top: 0.5rem;
+  margin-top: -0.5rem;
+  background-color: #f2f0eb;
 }
 
 /* The shared yard readout. A narrowed yard is worth noticing but is often
