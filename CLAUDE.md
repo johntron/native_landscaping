@@ -13,14 +13,25 @@ server), `codegraph explore/node/callers/impact` for code intelligence (also ava
 
 Multi-project layout: `plants.csv` at the root is the shared species catalog; each yard
 lives in `projects/<slug>/` (`project.json`, `planting_layout.csv`, `img/`, and an
-optional `features.json`) and is listed in `projects/index.json`. The active project comes from `?project=<slug>`; switching
-reloads the page. `project.json` declares `views[]`, each authored in FEET
-(`extentFt` + `originFt`); pixels per foot is derived from `viewBox / extentFt`, the
-Scale control is zoom only, and the Setup toolbar mode is the preferred way to author
-a view — including *Measure a known length*, which solves a view's `extentFt` from a
-drag across its background photo, and *Upload photo*, which resizes and re-encodes a
-picked image in the browser and posts it to `/api/view-background` (the server names
-the file and refuses anything that is not a WebP/JPEG/PNG by its bytes; never SVG). `features.json` is the yard model — beds, hardscape, walls, the house footprint —
+optional `features.json`) and is listed in `projects/index.json`. The active project comes
+from `?project=<slug>`; switching reloads the page.
+
+**`project.json` declares one yard** — `yardFt` (east-west × north-south), `paddingFt`,
+`elevationFt` (above/below the ground line), `pxPerFt` — and **every view's rectangle is
+derived from it**, so two views of one yard cannot disagree about how big it is. Panels are
+sized `extentFt × pxPerFt` at one page-wide screen scale (`src/render/pageScale.js`), which
+is what makes them line up and puts every elevation's ground on the same row. What a view
+still declares is its id, type, `viewFrom`, labels, an optional `viewerAtFt`, and its
+photograph. The **photo is placed, not fitted**: `photoFt` is the rectangle of yard the
+image covers, dragged into position on the drawing and scaled with *Measure a known
+length*, both in the Setup toolbar mode. Nothing writes a view rectangle back to the file.
+Older per-view `extentFt`/`originFt` files are migrated on load — their rectangles become
+their photos' placements, so no picture moves. Detail callouts (`backgroundFrom`) are gone.
+*Upload photo* resizes and re-encodes a picked image in the browser and posts it to
+`/api/view-background` (the server names the file and refuses anything that is not a
+WebP/JPEG/PNG by its bytes; never SVG).
+
+`features.json` is the yard model — beds, hardscape, walls, the house footprint —
 authored once in FEET and projected into every view by
 `src/render/featureProjection.js`, never drawn per view; it loads through
 `GET /api/features` and saves through `POST /api/features` (fetching the file
@@ -30,10 +41,9 @@ shrub behind it; features are drawn in the fourth toolbar mode, **Features**, on
 view only (elevations are derived and read-only), and like Setup mode it saves only when
 asked. Elevations are driven by a `viewFrom` compass direction, and a plant drag is
 clamped to the shared yard rather than to the view it is dragged in — see the
-"Projects" section of AGENTS.md for the axis/mirror table, the views[] schema, and how
+"Projects" section of AGENTS.md for the axis/mirror table, the schema, and how
 to add a project.
 
-<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:6cd5cc61 -->
 ## Beads Issue Tracker
 
 This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.

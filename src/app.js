@@ -54,17 +54,14 @@ import { getSpeciesKey } from './utils/speciesKey.js';
 import { buildTooltipLines } from './render/tooltip.js';
 import { createLayoutHistory } from './history/layoutHistory.js';
 import { captureViewToPng } from './export/viewCapture.js';
-import { resolveViewBackground } from './render/backgroundCrop.js';
-import { resolveYardBounds, resolveYardConflicts } from './render/yardBounds.js';
+import { resolvePhotoPlacement } from './render/photoPlacement.js';
+import { resolveYardBounds } from './render/yardBounds.js';
+import { resolvePageScale } from './render/pageScale.js';
 
 const MODE_KEY = 'native-landscaping-mode';
 const LEGACY_LOCK_STATE_KEY = 'native-landscaping-positions-locked';
 const MODES = ['view', 'edit', 'setup', 'features'];
 
-/** Feet to one decimal, for a message a person reads rather than a computation. */
-function round1(value) {
-  return Math.round(Number(value) * 10) / 10;
-}
 const EXPORT_MONTH = 6; // June
 const PROJECT_QUERY_PARAM = 'project';
 
@@ -141,23 +138,9 @@ async function init() {
       projectNotice.hidden = false;
       projectNotice.textContent = `Unknown project "${resolved.requestedId}" — showing ${project.name}.`;
     }
-    // A view that overlaps the plan nowhere can draw none of the shared yard:
-    // a plant inside the bounds is invisible in it, and so is any feature,
-    // however it is placed. resolveYardBounds has to fall back silently — a
-    // drag needs some bound — so the disagreement is reported here instead of
-    // going unnoticed.
-    const conflicts = resolveYardConflicts(project.views);
-    if (conflicts.length && projectNotice) {
-      projectNotice.hidden = false;
-      projectNotice.textContent = conflicts
-        .map(
-          (c) =>
-            `View "${c.id}" covers ${c.axis} ${round1(c.viewCovers.min)}–${round1(c.viewCovers.max)} ft, ` +
-            `but the plan covers ${round1(c.planCovers.min)}–${round1(c.planCovers.max)} ft — ` +
-            `nothing in the yard can appear in both.`
-        )
-        .join(' ');
-    }
+    // There used to be a warning here about views that could draw none of the
+    // shared yard. It cannot happen any more: every view is derived from the
+    // one declared yard, so a view that misses it is not expressible.
   } catch (err) {
     showLoadError('Unable to load project configuration.');
     console.error(err);
@@ -442,13 +425,34 @@ async function init() {
       isBundleExporting = false;
     }
   };
-  // Zoom only resizes the panels; plant coordinates and the background photo
-  // are fixed by each view's own feet-to-pixels transform.
+  /**
+   * Size every panel from the yard it covers, at one scale for the page.
+   *
+   * Re-run on resize and after any geometry change, because the scale is
+   * chosen to FIT: the widest view fills the available width, or the tallest
+   * fills the height budget, whichever binds first. Zoom multiplies it, which
+   * is the only thing zoom has ever done.
+   */
+  const applyPageScale = () => {
+    if (!viewsContainer) return;
+    const pxPerFt = resolvePageScale({
+      views: project.views,
+      availableWidthPx: viewsContainer.clientWidth,
+      availableHeightPx: window.innerHeight,
+      zoom: appState.zoom,
+    });
+    viewsContainer.style.setProperty('--page-px-per-ft', String(pxPerFt));
+    // The toolbar's scale reference is finally telling the truth about every
+    // panel rather than about the first one.
+    updateScaleIndicator(scaleIndicator, pxPerFt);
+  };
+
   const applyZoom = (value) => {
     appState.zoom = value;
-    viewsContainer?.style.setProperty('--view-zoom', String(value));
+    applyPageScale();
   };
   initZoomControls(scaleInput, scaleSlider, applyZoom, appState.zoom);
+  window.addEventListener('resize', applyPageScale);
 
   // One controller per panel; which one to build follows the view's type, and
   // an elevation reads its axis and mirroring off the view's own transform.
@@ -462,10 +466,10 @@ async function init() {
         // object, and a controller holding the old one would drag against
         // geometry the drawing no longer uses.
         getTransform: () => createViewTransform(liveView(view.id) || view),
-        // Every view clamps to the same yard, not to its own extent: a view can
-        // reach past the yard (an elevation's near-edge inset is margin), and a
-        // plant dragged out there disappears from the other views.
-        getBounds: () => resolveYardBounds(project.views),
+        // Every view clamps to the yard, not to its own extent: a view draws a
+        // margin of padding past the yard on every side, and a plant dragged
+        // out into it would be standing off the property.
+        getBounds: () => resolveYardBounds(project),
         onPositionsChange: () => render(),
         onHoverPlant: setHoveredPlant,
         onChangeCommit: () => commitLayoutChange('Moved plant'),
@@ -484,7 +488,8 @@ async function init() {
       createSetupController({
         svg,
         getView: () => liveView(view.id),
-        onChange: (patch) => applyViewEdit(patchView(project.views, view.id, patch)),
+        onChange: (patch) =>
+          applyViewEdit({ views: patchView(project.views, view.id, patch) }, { keepRuler: true }),
         onRuler: (segment) => showRulerSegment(view.id, segment),
       })
     );
@@ -534,6 +539,8 @@ async function init() {
       featureControllers = buildFeatureControllers();
     }
 
+    // The yard may have changed size, and the page scale is derived from it.
+    applyPageScale();
     applyMode(appState.mode);
     refreshMaximizedView();
     render();
@@ -724,7 +731,12 @@ async function init() {
         // A plan draws the other views' cameras, so it needs the whole list;
         // the selected one is emphasised so editing "Camera stands at" has
         // something moving on screen to read it off.
-        { interactive: isSelected, views: project.views, highlightId: selectedId }
+        {
+          interactive: isSelected,
+          yardFt: project.yardFt,
+          views: project.views,
+          highlightId: selectedId,
+        }
       );
     });
   }
@@ -788,7 +800,7 @@ async function init() {
 
   const setupPanel = createSetupPanel({
     root: setupRow,
-    onCommit: (views) => applyViewEdit(views),
+    onCommit: (candidate) => applyViewEdit(candidate),
     onSelect: () => {
       // The segment was measured against another view's photo; it means
       // nothing over this one.
@@ -816,9 +828,10 @@ async function init() {
       // applyViewEdit drops the segment itself; the panel's own copy of the
       // reading is separate state and has to be cleared here.
       setupPanel.setMeasurement(null);
-      applyViewEdit(patchView(project.views, viewId, patch));
+      applyViewEdit({ views: patchView(project.views, viewId, patch) });
       setupPanel.setStatus(
-        `Scaled ${view.label} to ${Math.round(patch.extentFt.width * 100) / 100} ft across.`,
+        `Scaled ${view.label}'s photo to ` +
+          `${Math.round(patch.photoFt.extentFt.width * 100) / 100} ft across.`,
         'success'
       );
     },
@@ -842,7 +855,10 @@ async function init() {
         // refused the panel is still showing the old background — and
         // applyViewEdit has already explained why. Reporting success over the
         // top of that would be a straight lie.
-        if (!applyViewEdit(patchView(project.views, viewId, { background }))) return;
+        // A new photo is a new picture: whatever placement the last one had
+        // describes a rectangle of a different image, so it goes with it.
+        if (!applyViewEdit({ views: patchView(project.views, viewId, { background, photoFt: undefined }) }))
+          return;
         setupPanel.setStatus(
           `Background set — ${width}×${height}, ${formatFileSize(blob.size)}. Save views to keep it.`,
           'success'
@@ -862,35 +878,47 @@ async function init() {
   });
 
   /**
-   * Validate a candidate views[] the same way a reload would, then swap it in.
+   * Validate a candidate project the same way a reload would, then swap it in.
    * Round-tripping through serialize + normalize means a rejected edit leaves
    * the drawing on the last good state instead of throwing mid-render.
    *
+   * @param {object} candidate a project-shaped patch: the yard, the views, or both
+   * @param {{ keepRuler?: boolean }} [options]
    * @returns {boolean} whether the edit was applied — a caller that reports its
    * own success afterwards must not paper over the rejection message set here.
    */
-  function applyViewEdit(views) {
+  function applyViewEdit(candidate, { keepRuler = false } = {}) {
     // A standing segment's pixel coordinates belong to the geometry being
-    // replaced — the viewBox scales with the extent, so they may not even land
-    // inside the new box, and the measurement in feet describes a scale that no
-    // longer exists.
-    appState.ruler = null;
+    // replaced, so a change to the YARD invalidates it — the viewBox scales
+    // with the yard, and the measurement in feet describes a scale that no
+    // longer exists. Moving a photo does not: the drawing is untouched, and
+    // dropping the segment there would erase the measurement the user is in
+    // the middle of typing a length for.
+    if (!keepRuler) appState.ruler = null;
     let validated;
     try {
       validated = normalizeProjectConfig(
-        { ...serializeProjectConfig(project), views },
+        { ...serializeProjectConfig(project), ...serializeCandidate(candidate) },
         project.id
       );
     } catch (err) {
       setupPanel.setStatus(err.message, 'error');
       return false;
     }
-    project.name = validated.name;
-    project.views = validated.views;
+    Object.assign(project, validated);
     appState.project = project;
     rebuildViews();
-    setupPanel.render(project.views);
+    setupPanel.render(project);
     return true;
+  }
+
+  /**
+   * A candidate carries normalized views, which serializeProjectConfig would
+   * refuse to read from a half-built object. Run it through the same serializer
+   * so the yard, the padding, and each view's photo arrive in file shape.
+   */
+  function serializeCandidate(candidate) {
+    return serializeProjectConfig({ ...project, ...candidate });
   }
 
   /** Swap one feature for its edited candidate, keeping the list's z-order. */
@@ -923,13 +951,10 @@ async function init() {
   }
 
   /**
-   * Add a shape in the middle of the SHARED yard — the patch every view can
-   * draw — then select it.
+   * Add a shape in the middle of the yard, then select it.
    *
-   * Not the middle of the plan: those are different rectangles whenever the
-   * elevations show a narrower slice than the plan does, and a shape placed and
-   * sized by the plan then lands wholly off-canvas in every elevation. It is
-   * the same trap resolveYardBounds already keeps plant drags out of.
+   * Not the middle of the plan panel: that includes the padding drawn around
+   * the yard, and a shape placed there would start life off the property.
    */
   function addFeature(type) {
     const planView = project.views.find((view) => view.type === 'plan');
@@ -938,7 +963,7 @@ async function init() {
       return;
     }
     const transform = createViewTransform(planView);
-    const bounds = resolveYardBounds(project.views) || {
+    const bounds = resolveYardBounds(project) || {
       x: { min: transform.originFt.x, max: transform.originFt.x + transform.extentFt.width },
       y: { min: transform.originFt.y, max: transform.originFt.y + transform.extentFt.height },
     };
@@ -966,7 +991,7 @@ async function init() {
   }
 
   applyMode(readPersistedMode());
-  setupPanel.render(project.views);
+  setupPanel.render(project);
   featurePanel.render(appState.features);
   if (exportBundleButton) {
     exportBundleButton.disabled = true;
@@ -1144,7 +1169,7 @@ async function init() {
     }
   });
 
-  updateScaleIndicator(scaleIndicator, createViewTransform(viewPanels[0].view).pxPerFt);
+  applyPageScale();
   render();
 }
 
@@ -1175,16 +1200,16 @@ function initProjectPicker(selectEl, projectIndex, activeId) {
 
 /**
  * Background to composite under a view's export: an absolute URL plus, for a
- * detail view borrowing a neighbour's photo, the patch of it to draw. Both are
- * null when the view has no image yet — captureViewToPng then skips the
+ * photo that has been placed, the rectangle of the drawing it occupies. Both
+ * are null when the view has no image yet — captureViewToPng then skips the
  * background rather than fetching projects/<slug>/null.
  */
 function backgroundForCapture(project, view) {
-  const { path, crop } = resolveViewBackground(project.views, view);
-  if (!path) return { backgroundUrl: null, sourceRect: null };
+  const { path, rect } = resolvePhotoPlacement(view);
+  if (!path) return { backgroundUrl: null, destRect: null };
   return {
     backgroundUrl: new URL(projectAssetPath(project.id, path), document.baseURI).toString(),
-    sourceRect: crop,
+    destRect: rect,
   };
 }
 

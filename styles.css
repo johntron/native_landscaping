@@ -826,17 +826,27 @@ select {
   font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
 }
 
-/* Grid layout for the three perspectives */
+/*
+ * The views, laid out at ONE scale.
+ *
+ * Panels are not fitted to cells; they are sized from the yard they cover, at
+ * the page's --page-px-per-ft (set by src/render/pageScale.js). A view covering
+ * twice as much yard is twice as wide, which is both the truth and the only
+ * arrangement in which a ruler held to the screen means the same thing in every
+ * panel.
+ *
+ * Bottom-aligned, which is what lines the ground up: every elevation is derived
+ * from the same above/below-ground band, so identical panel heights sharing a
+ * baseline put every ground line on one row of the page. Nothing computes that
+ * alignment — it is a consequence of there being one yard.
+ */
 .views {
-  display: grid;
-  /* --view-zoom scales the panels only; the yard-to-pixel mapping is per view. */
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(320px * var(--view-zoom, 1))), 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: center;
   gap: 0.9rem;
   padding: 0.35rem 0.15rem 0.35rem;
-}
-
-.views[data-maximized] {
-  grid-template-columns: 1fr;
 }
 
 .views[data-maximized] .view-panel {
@@ -845,7 +855,15 @@ select {
 
 .views[data-maximized] .view-panel.is-maximized {
   display: flex;
-  grid-column: 1 / -1;
+  flex: 1 1 100%;
+  align-items: stretch;
+}
+
+/* Maximizing hands the height to the viewport, so the derived width steps back
+   and the aspect ratio keeps the drawing honest. */
+.views[data-maximized] .view {
+  width: min(100%, calc(70vh * var(--view-aspect-ratio, 4 / 3)));
+  margin-inline: auto;
 }
 
 .view-panel {
@@ -853,6 +871,8 @@ select {
   flex-direction: column;
   align-items: flex-start;
   gap: 0.25rem;
+  /* Never wider than the page, however the scale came out. */
+  max-width: 100%;
 }
 
 .view-panel__header {
@@ -935,23 +955,27 @@ select {
 /* Individual view containers share common styles. */
 .view {
   position: relative;
-  /* The panel's shape is the view's own extentFt ratio, set inline by
-     src/render/viewConfig.js — a photo never reshapes it.
+  /* Feet, not fractions: --extent-w and --extent-h are how much yard this view
+     covers (set inline by src/render/viewConfig.js) and --page-px-per-ft is
+     what a foot is worth on screen right now. The panel is their product, so
+     two views of one yard cannot come out at unrelated sizes.
 
-     Capping the WIDTH rather than the height is what keeps that promise: with
-     `width: 100%` a `max-height` would clamp the height, leaving both axes
-     constrained, which drops `aspect-ratio` on the floor and stretches the
-     photo again. Capping width leaves height free to follow the ratio, so a
-     tall view gets a narrower panel instead of a page-long one. */
-  width: min(100%, calc(70vh * var(--view-aspect-ratio, 4 / 3)));
-  margin-inline: auto;
+     The HEIGHT comes from aspect-ratio rather than from a second calc, and
+     that is load-bearing: the two are identical while nothing clamps, but
+     max-width does clamp — zoom multiplies the page scale past the container,
+     and a maximized panel hands its height to the viewport. A separately
+     calculated height would then hold while the width shrank, shearing the
+     panel away from its viewBox: the SVG letterboxes inside it while the
+     photo's percentages are applied to the distorted box, and a plant placed
+     at the right height in feet lands at the wrong height against the photo.
+     Driven by the ratio, a clamped width takes the height down with it. */
+  width: calc(var(--extent-w, 40) * var(--page-px-per-ft, 20) * 1px);
+  max-width: 100%;
   aspect-ratio: var(--view-aspect-ratio, 4 / 3);
-  /* `contain`, not `100% 100%`: a photo whose aspect differs from the view's
-     would otherwise be scaled differently on each axis, and a plant placed at
-     the right height in feet would sit at the wrong height against the photo.
-     Uniform scaling keeps the photo and the drawing agreeing; it letterboxes
-     instead of lying. A photo authored to the view's ratio — every background
-     in projects/backyard — fills the panel exactly as it always did. */
+  /* `contain`, not `100% 100%`: an UNPLACED photo has no rectangle of its own
+     yet, so it is shown whole rather than stretched to a panel whose shape it
+     has no reason to share. Once it is placed, src/render/photoPlacement.js
+     overrides both size and position with the rectangle it actually covers. */
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
@@ -961,44 +985,6 @@ select {
   border: 1px solid #ddd8d1;
   border-radius: 4px;
   overflow: hidden;
-}
-
-.view__overlay {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  display: flex;
-  justify-content: flex-start;
-  align-items: flex-start;
-  padding: 0.35rem 0.4rem;
-  pointer-events: none;
-  z-index: 2;
-}
-
-.view-scale {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.32rem 0.55rem;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid #d6d3cb;
-  border-radius: 6px;
-  font-size: 0.82rem;
-  color: #1f2a35;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-}
-
-.view-scale__label {
-  font-weight: 800;
-  text-transform: uppercase;
-  font-size: 0.72rem;
-  letter-spacing: 0.05em;
-  color: #2f2f2f;
-}
-
-.view-scale__value {
-  font-weight: 700;
-  color: #215a64;
 }
 
 /*
@@ -1174,7 +1160,10 @@ select {
   }
 
   .views {
-    grid-template-columns: 1fr;
+    /* One per row: the shared scale still holds, but a phone has no width to
+       put two panels side by side at it. */
+    flex-direction: column;
+    align-items: center;
   }
 
   .views[data-maximized] .view-panel.is-maximized {

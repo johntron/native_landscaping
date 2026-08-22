@@ -1,41 +1,46 @@
 {
-  "id": "example-frontyard",
   "name": "Example front yard",
+  "yardFt": {
+    "width": 10,
+    "depth": 30
+  },
+  "paddingFt": 2,
+  "elevationFt": {
+    "above": 12,
+    "below": 2
+  },
+  "pxPerFt": 20,
   "views": [
     {
       "id": "plan",
       "type": "plan",
-      "viewBox": {
-        "width": 200,
-        "height": 600
-      },
-      "originFt": {
-        "x": 2,
-        "y": 2
-      },
-      "extentFt": {
-        "width": 10,
-        "height": 30
-      },
-      "background": "img/plan-130d05047b7d.webp"
+      "background": "img/plan-130d05047b7d.webp",
+      "photoFt": {
+        "originFt": {
+          "x": 0,
+          "y": 0
+        },
+        "extentFt": {
+          "width": 10,
+          "height": 30
+        }
+      }
     },
     {
       "id": "north",
       "type": "elevation",
       "viewFrom": "north",
-      "viewBox": {
-        "width": 212.54018979232524,
-        "height": 318.81028468848785
-      },
-      "originFt": {
-        "x": 0,
-        "y": -7.1365343829237
-      },
-      "extentFt": {
-        "width": 10.627009489616261,
-        "height": 15.940514234424391
-      },
       "background": "img/north-c2bd4c04b539.webp",
+      "photoFt": {
+        "originFt": {
+          "x": 0,
+          "y": -7.1365343829237
+        },
+        "extentFt": {
+          "width": 10.627009489616261,
+          "height": 15.940514234424391
+        }
+      },
       "viewerAtFt": 20
     },
     {
@@ -43,37 +48,33 @@
       "type": "elevation",
       "viewFrom": "east",
       "sublabel": "Looking west",
-      "viewBox": {
-        "width": 286.97952432851844,
-        "height": 206.62525751653328
-      },
-      "originFt": {
-        "x": 0,
-        "y": -3.196864496043244
-      },
-      "extentFt": {
-        "width": 14.348976216425921,
-        "height": 10.331262875826663
-      },
-      "background": "img/west-2f2cbd505c49.webp"
+      "background": "img/west-2f2cbd505c49.webp",
+      "photoFt": {
+        "originFt": {
+          "x": 0,
+          "y": -3.196864496043244
+        },
+        "extentFt": {
+          "width": 14.348976216425921,
+          "height": 10.331262875826663
+        }
+      }
     },
     {
       "id": "view",
       "type": "elevation",
       "viewFrom": "south",
-      "viewBox": {
-        "width": 249.92136631408937,
-        "height": 533.3333333333334
-      },
-      "originFt": {
-        "x": 2,
-        "y": -8.553805096672585
-      },
-      "extentFt": {
-        "width": 9.37205123677835,
-        "height": 20
-      },
-      "background": "img/view-635426f71bf6.webp"
+      "background": "img/view-635426f71bf6.webp",
+      "photoFt": {
+        "originFt": {
+          "x": 2,
+          "y": -8.553805096672585
+        },
+        "extentFt": {
+          "width": 9.37205123677835,
+          "height": 20
+        }
+      }
     }
   ]
 }

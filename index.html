@@ -138,7 +138,7 @@
                     <span>10 ft</span>
                   </div>
                 </div>
-                <div class="scale-indicator__hint">Drawn at each view's own scale.</div>
+                <div class="scale-indicator__hint">Every view is drawn at this scale.</div>
               </div>
             </div>
           </div>
@@ -166,12 +166,11 @@
               </button>
             </div>
             <div class="view">
-              <div class="view__overlay">
-                <div class="view-scale" aria-hidden="true">
-                  <span class="view-scale__label">Scale</span>
-                  <span class="view-scale__value" data-scale-summary>1 ft = 0 px</span>
-                </div>
-              </div>
+              <!--
+                The per-panel scale badge is gone: every panel is drawn at the
+                page's one scale now, so the toolbar's scale reference speaks
+                for all of them instead of only for the first.
+              -->
               <!-- viewBox is measured in yard units; configured at runtime from the view. -->
               <svg xmlns="http://www.w3.org/2000/svg"></svg>
             </div>

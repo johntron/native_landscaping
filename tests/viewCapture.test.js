@@ -9,6 +9,7 @@ import { captureViewToPng } from '../src/export/viewCapture.js';
  */
 function withStubbedDom(run) {
   const calls = [];
+  const fills = [];
   const saved = {};
   const set = (key, value) => {
     saved[key] = globalThis[key];
@@ -20,7 +21,13 @@ function withStubbedDom(run) {
       return {
         width: 0,
         height: 0,
-        getContext: () => ({ drawImage: (...args) => calls.push(args) }),
+        getContext: () => ({
+          drawImage: (...args) => calls.push(args),
+          fillRect: (...args) => fills.push(args),
+          set fillStyle(value) {
+            fills.push(value);
+          },
+        }),
         toBlob: (cb) => cb({ type: 'image/png' }),
       };
     },
@@ -44,7 +51,7 @@ function withStubbedDom(run) {
     cloneNode: () => ({ setAttribute() {} }),
   };
 
-  return run({ svg, calls }).finally(() => {
+  return run({ svg, calls, fills }).finally(() => {
     Object.entries(saved).forEach(([key, value]) => {
       globalThis[key] = value;
     });
@@ -65,23 +72,20 @@ test('without a crop the whole photo is stretched over the view', async () => {
   });
 });
 
-test('a crop draws only its rectangle of the source image', async () => {
+test('a placed photo is drawn into its rectangle of the canvas', async () => {
   await withStubbedDom(async ({ svg, calls }) => {
-    // projects/example-frontyard's street-bed: 9x6 ft at (3,3) out of a plan
-    // covering 12x25 ft at (2,2).
+    // A photo covering part of the panel, and hanging off its left edge — the
+    // ordinary case once the panel is sized by the yard rather than the photo.
     await captureViewToPng({
       svg,
       viewBox: { width: 432, height: 288 },
       backgroundUrl: 'plan.svg',
-      sourceRect: { x: 1 / 12, y: 16 / 25, width: 9 / 12, height: 6 / 25 },
-      scale: 1,
+      destRect: { x: -20, y: 30, width: 300, height: 200 },
+      scale: 2,
     });
-    const [, sx, sy, sw, sh, dx, dy, dw, dh] = calls[0];
-    assert.ok(Math.abs(sx - 1000 / 12) < 1e-9, `sx ${sx}`);
-    assert.ok(Math.abs(sy - (800 * 16) / 25) < 1e-9, `sy ${sy}`);
-    assert.ok(Math.abs(sw - (1000 * 9) / 12) < 1e-9, `sw ${sw}`);
-    assert.ok(Math.abs(sh - (800 * 6) / 25) < 1e-9, `sh ${sh}`);
-    assert.deepEqual([dx, dy, dw, dh], [0, 0, 432, 288]);
+    // Destination form: four arguments after the image, in canvas pixels. A
+    // source rect could not say "starts 20 px before the left edge".
+    assert.deepEqual(calls[0].slice(1), [-40, 60, 600, 400]);
   });
 });
 
@@ -89,5 +93,21 @@ test('a view with no background composites only its overlay', async () => {
   await withStubbedDom(async ({ svg, calls }) => {
     await captureViewToPng({ svg, viewBox: { width: 100, height: 100 } });
     assert.equal(calls.length, 1);
+  });
+});
+
+test('the panel surface is painted behind a photo that does not cover it', async () => {
+  await withStubbedDom(async ({ svg, fills }) => {
+    await captureViewToPng({
+      svg,
+      viewBox: { width: 400, height: 300 },
+      backgroundUrl: 'plan.webp',
+      destRect: { x: 40, y: 30, width: 100, height: 75 },
+      scale: 2,
+    });
+    // On screen the uncovered margin is .view's background-color. A view is the
+    // yard plus a margin on every side, so leaving it transparent would put a
+    // hole around every exported drawing rather than around an odd one.
+    assert.deepEqual(fills, ['#f2f0eb', [0, 0, 800, 600]]);
   });
 });

@@ -1,12 +1,16 @@
 import {
+  DEFAULT_ELEVATION_FT,
+  DEFAULT_PADDING_FT,
   DEFAULT_PIXELS_PER_INCH,
+  DEFAULT_PX_PER_FT,
+  DEFAULT_YARD_FT,
   ELEVATION_VIEWBOX,
   INCHES_PER_FOOT,
   PLAN_VIEWBOX,
   SOUTH_ELEVATION_BOTTOM_OFFSET_PX,
   SOUTH_ELEVATION_LEFT_OFFSET_PX,
 } from '../constants.js';
-import { isValidViewFrom } from '../render/elevationOrientation.js';
+import { isValidViewFrom, resolveElevationOrientation } from '../render/elevationOrientation.js';
 import { createViewTransform } from '../render/viewTransform.js';
 
 export const PROJECTS_DIR = 'projects';
@@ -72,13 +76,24 @@ export function resolveActiveProjectId(requestedId, index) {
 /**
  * Normalize a project.json into a fully-populated config.
  *
- * A project declares `views[]`, each authored in feet: `extentFt` is how much
- * yard the view covers and `originFt` is the yard coordinate at its viewBox
- * bottom-left corner. Pixels per foot is derived, never authored.
+ * **A project declares its yard once and every view is derived from it.**
+ * `yardFt` says how far the yard runs east-west (`width`) and north-south
+ * (`depth`); `paddingFt` is the margin drawn around it; `elevationFt` says how
+ * far an elevation reaches above and below the ground line; `pxPerFt` is the
+ * drawing resolution. Nothing about a view's rectangle is authored per view,
+ * which is the whole point: two views of one yard cannot disagree about how big
+ * it is, so their panels line up and their ground lines share a row.
  *
- * The legacy `{plan, elevations[]}` shape — pixel offsets plus a global
- * `defaultPixelsPerInch` — is still read and migrated on the way in. Writes
- * always emit `views[]`; see serializeProjectConfig.
+ * What IS per view is the photograph. `photoFt` is the rectangle of yard the
+ * image covers, in that view's own coordinates — drag it into place, measure a
+ * known length to scale it. A view with no `photoFt` simply fills its panel
+ * with the image, which is where an uncalibrated upload starts.
+ *
+ * Two older shapes are read and migrated on the way in: `views[]` with
+ * per-view `extentFt`/`originFt` (the yard is taken from the plan, and each
+ * view's old rectangle becomes its photo's placement), and the pixel-authored
+ * `{plan, elevations[]}`. Writes always emit the current shape; see
+ * serializeProjectConfig.
  *
  * @param {any} raw
  * @param {string} id project id, taken from the directory name rather than trusted from the file
@@ -96,9 +111,17 @@ export function normalizeProjectConfig(raw, id) {
     throw new Error(`Project "${id}" declares no views`);
   }
 
+  const layout = resolveLayout(raw, rawViews);
+  // An older file authored one rectangle per view and fitted it to the photo.
+  // The rectangle is now derived, so that same rectangle becomes the PHOTO's —
+  // which leaves every picture exactly where it was while the panel around it
+  // changes size. Skipped once the file declares a yard, because then the
+  // rectangles are gone and photoFt is the only placement there is.
+  const sourceViews = raw.yardFt ? rawViews : rawViews.map(adoptRectAsPhoto);
+
   const seenIds = new Set();
-  const views = rawViews.map((view, index) => {
-    const normalized = normalizeView(view, index, id);
+  const views = sourceViews.map((view, index) => {
+    const normalized = normalizeView(view, index, id, layout);
     if (seenIds.has(normalized.id)) {
       throw new Error(`Project "${id}" has two views with the id "${normalized.id}"`);
     }
@@ -106,35 +129,142 @@ export function normalizeProjectConfig(raw, id) {
     return normalized;
   });
 
-  const byId = new Map(views.map((view) => [view.id, view]));
-  views.forEach((view) => {
-    if (!view.backgroundFrom) return;
-    const source = byId.get(view.backgroundFrom);
-    if (!source) {
-      throw new Error(
-        `Project "${id}" view "${view.id}" borrows a background from unknown view "${view.backgroundFrom}"`
-      );
-    }
-    // A borrowed photo is cropped to the borrower's rectangle, which only means
-    // anything if the two views look at the yard the same way.
-    if (source.type !== view.type || source.viewFrom !== view.viewFrom) {
-      throw new Error(
-        `Project "${id}" view "${view.id}" borrows a background from "${source.id}", which looks at the yard differently`
-      );
-    }
-  });
-
   return {
     id,
     name: String(raw.name || id),
+    ...layout,
     views,
   };
 }
 
 /**
- * Rewrite the pixel-authored `{plan, elevations[]}` shape as feet-authored views.
- * `defaultPixelsPerInch` is read here and nowhere else — it is never written back.
+ * Carry an old view's own rectangle over to its photograph.
+ *
+ * Only where there is a photo to place and nothing already placing it: a file
+ * part-way through conversion, or one hand-edited to add `photoFt`, keeps what
+ * it says.
  */
+function adoptRectAsPhoto(view) {
+  if (!view || typeof view !== 'object') return view;
+  if (!view.background || view.photoFt) return view;
+  const width = Number(view.extentFt?.width);
+  const height = Number(view.extentFt?.height);
+  if (!(width > 0) || !(height > 0)) return view;
+  return {
+    ...view,
+    photoFt: { originFt: normalizePoint(view.originFt), extentFt: { width, height } },
+  };
+}
+
+/**
+ * The four numbers every view is derived from, taken from the file or inferred
+ * from the per-view rectangles an older file authored.
+ *
+ * Inferring rather than defaulting matters: a project saved under the old shape
+ * has a yard, it just spelled it out one view at a time. The plan's rectangle
+ * is that yard by definition — `resolveYardBounds` already treated it as such —
+ * and the tallest thing any elevation reached above its ground line is the
+ * headroom they all now share. Nothing moves on screen except the margins.
+ */
+function resolveLayout(raw, rawViews) {
+  const declared = raw.yardFt && Number(raw.yardFt.width) > 0 && Number(raw.yardFt.depth) > 0;
+  const plan = rawViews.find((view) => String(view?.type || '').toLowerCase() === 'plan');
+  const elevations = rawViews.filter(
+    (view) => String(view?.type || '').toLowerCase() === 'elevation'
+  );
+
+  const yardFt = declared
+    ? { width: Number(raw.yardFt.width), depth: Number(raw.yardFt.depth) }
+    : inferYard(plan);
+
+  const paddingFt = normalizeNonNegative(raw.paddingFt, DEFAULT_PADDING_FT);
+
+  const above = normalizePositiveNumber(
+    raw.elevationFt?.above,
+    declared ? DEFAULT_ELEVATION_FT.above : inferHeadroom(elevations)
+  );
+  const below = normalizeNonNegative(raw.elevationFt?.below, DEFAULT_ELEVATION_FT.below);
+
+  const pxPerFt = normalizePositiveNumber(raw.pxPerFt, inferPxPerFt(plan || rawViews[0]));
+
+  return { yardFt, paddingFt, elevationFt: { above, below }, pxPerFt };
+}
+
+/** The yard an old plan view described: its rectangle, measured from zero. */
+function inferYard(plan) {
+  const width = Number(plan?.extentFt?.width);
+  const depth = Number(plan?.extentFt?.height);
+  if (!(width > 0) || !(depth > 0)) return { ...DEFAULT_YARD_FT };
+  return {
+    width: Math.max(width, width + normalizeNumber(plan?.originFt?.x, 0)),
+    depth: Math.max(depth, depth + normalizeNumber(plan?.originFt?.y, 0)),
+  };
+}
+
+/** The most any old elevation reached above its own ground line. */
+function inferHeadroom(elevations) {
+  const heights = elevations
+    .map((view) => Number(view?.extentFt?.height) + normalizeNumber(view?.originFt?.y, 0))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  if (!heights.length) return DEFAULT_ELEVATION_FT.above;
+  return Math.ceil(Math.max(...heights));
+}
+
+function inferPxPerFt(view) {
+  const px = Number(view?.viewBox?.width);
+  const feet = Number(view?.extentFt?.width);
+  if (!(px > 0) || !(feet > 0)) return DEFAULT_PX_PER_FT;
+  return px / feet;
+}
+
+/**
+ * The rectangle a view covers, derived from the yard.
+ *
+ * A plan shows the yard plus its margin on all four sides. An elevation shows
+ * whichever yard axis runs across it — east-west for a view from the north or
+ * south, north-south for one from the east or west — plus the same margin at
+ * both ends, and the shared band of height. `originFt.x` is still the lowest
+ * axis value the view covers; mirroring decides which screen edge that lands
+ * on, and `viewTransform` owns that.
+ *
+ * @param {'plan'|'elevation'} type
+ * @param {string} viewFrom
+ * @param {{ yardFt: object, paddingFt: number, elevationFt: object, pxPerFt: number }} layout
+ */
+export function deriveViewGeometry(type, viewFrom, layout) {
+  const { yardFt, paddingFt, elevationFt, pxPerFt } = layout;
+  if (type === 'plan') {
+    const extentFt = {
+      width: yardFt.width + 2 * paddingFt,
+      height: yardFt.depth + 2 * paddingFt,
+    };
+    return { originFt: { x: -paddingFt, y: -paddingFt }, extentFt, viewBox: scale(extentFt, pxPerFt) };
+  }
+  const axisKey = resolveElevationOrientation(viewFrom).axisKey;
+  const extentFt = {
+    width: (axisKey === 'x' ? yardFt.width : yardFt.depth) + 2 * paddingFt,
+    height: elevationFt.above + elevationFt.below,
+  };
+  return {
+    originFt: { x: -paddingFt, y: -elevationFt.below },
+    extentFt,
+    viewBox: scale(extentFt, pxPerFt),
+  };
+}
+
+/**
+ * Derived pixels, trimmed of float noise.
+ *
+ * 33.6296… ft at 27 px/ft is 908.0000000000001, which ends up in the SVG's
+ * viewBox attribute and in every snapshot of it. Six decimals is far finer than
+ * the 1e-3 relative tolerance createViewTransform allows between the two axes,
+ * so rounding cannot make a view non-uniform.
+ */
+function scale(extentFt, pxPerFt) {
+  const trim = (value) => Math.round(value * 1e6) / 1e6;
+  return { width: trim(extentFt.width * pxPerFt), height: trim(extentFt.height * pxPerFt) };
+}
+
 function migrateLegacyViews(raw, projectId) {
   const pxPerFt =
     normalizePositiveNumber(raw.defaultPixelsPerInch, DEFAULT_PIXELS_PER_INCH) * INCHES_PER_FOOT;
@@ -186,7 +316,7 @@ function extentForViewBox(viewBox, pxPerFt) {
   return { width: viewBox.width / pxPerFt, height: viewBox.height / pxPerFt };
 }
 
-function normalizeView(raw, index, projectId) {
+function normalizeView(raw, index, projectId, layout) {
   const where = `view ${index + 1}`;
   if (!raw || typeof raw !== 'object') {
     throw new Error(`Project "${projectId}" ${where} is not an object`);
@@ -205,8 +335,8 @@ function normalizeView(raw, index, projectId) {
 
   const fallbackId = type === 'elevation' ? viewFrom : 'plan';
   const id = isValidProjectId(raw.id) ? raw.id : fallbackId;
-  const viewBox = normalizeViewBox(raw.viewBox, type === 'plan' ? PLAN_VIEWBOX : ELEVATION_VIEWBOX);
   const defaults = defaultLabels(type, viewFrom);
+  const background = normalizeAssetPath(raw.background, projectId, id);
 
   const view = {
     id,
@@ -214,17 +344,16 @@ function normalizeView(raw, index, projectId) {
     ...(type === 'elevation' ? { viewFrom } : {}),
     label: String(raw.label || defaults.label),
     sublabel: String(raw.sublabel || defaults.sublabel),
-    viewBox,
-    originFt: normalizePoint(raw.originFt),
-    extentFt: normalizeExtent(raw.extentFt, projectId, id),
-    background: normalizeAssetPath(raw.background, projectId, id),
-    ...(raw.backgroundFrom ? { backgroundFrom: String(raw.backgroundFrom) } : {}),
+    ...deriveViewGeometry(type, viewFrom, layout),
+    background,
+    ...normalizePhoto(raw, background),
     ...normalizeViewerAt(type, raw.viewerAtFt),
   };
 
   // One derivation of pxPerFt for the whole app: build the transform the
   // renderers will use, so a non-uniformly scaled view is rejected here rather
-  // than silently stretching the yard over its photo.
+  // than silently stretching the yard over its photo. Derived geometry cannot
+  // produce one, which is the point — but a bad pxPerFt still can.
   try {
     createViewTransform(view);
   } catch (err) {
@@ -232,6 +361,30 @@ function normalizeView(raw, index, projectId) {
   }
 
   return view;
+}
+
+/**
+ * Where the view's photograph sits, as a rectangle of yard in the view's own
+ * coordinates.
+ *
+ * Absent is a real answer and the common one: an image that has never been
+ * calibrated fills its panel, which is both the old behaviour and a sane place
+ * to start dragging from. A file authored under the previous shape carries the
+ * view's own former rectangle here, so its photo lands exactly where it always
+ * did while the panel around it changes size.
+ */
+function normalizePhoto(raw, background) {
+  if (!background) return {};
+  const photo = raw.photoFt;
+  const width = Number(photo?.extentFt?.width);
+  const height = Number(photo?.extentFt?.height);
+  if (!(width > 0) || !(height > 0)) return {};
+  return {
+    photoFt: {
+      originFt: normalizePoint(photo.originFt),
+      extentFt: { width, height },
+    },
+  };
 }
 
 function defaultLabels(type, viewFrom) {
@@ -271,21 +424,11 @@ function normalizePoint(raw) {
   return { x: normalizeNumber(raw?.x, 0), y: normalizeNumber(raw?.y, 0) };
 }
 
-function normalizeExtent(raw, projectId, viewId) {
-  const width = Number(raw?.width);
-  const height = Number(raw?.height);
-  if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
-    throw new Error(
-      `Project "${projectId}" view "${viewId}" needs a positive extentFt in feet (width and height)`
-    );
-  }
-  return { width, height };
-}
-
 /**
  * Render a normalized config back to the shape project.json holds, dropping
- * anything normalizeProjectConfig would have supplied anyway. Without this,
- * every save would bake the inflated labels and zero origins into the file.
+ * anything normalizeProjectConfig would have supplied anyway — the inflated
+ * default labels, and every view rectangle, which is derived from the yard and
+ * must never be written back as authored data.
  *
  * @param {ReturnType<typeof normalizeProjectConfig>} config
  */
@@ -293,20 +436,25 @@ export function serializeProjectConfig(config) {
   return {
     id: config.id,
     name: config.name,
+    yardFt: { ...config.yardFt },
+    paddingFt: config.paddingFt,
+    elevationFt: { ...config.elevationFt },
+    pxPerFt: config.pxPerFt,
     views: config.views.map((view) => {
       const defaults = defaultLabels(view.type, view.viewFrom);
-      const defaultViewBox = view.type === 'plan' ? PLAN_VIEWBOX : ELEVATION_VIEWBOX;
       const out = { id: view.id, type: view.type };
       if (view.type === 'elevation') out.viewFrom = view.viewFrom;
       if (view.label !== defaults.label) out.label = view.label;
       if (view.sublabel !== defaults.sublabel) out.sublabel = view.sublabel;
-      if (view.viewBox.width !== defaultViewBox.width || view.viewBox.height !== defaultViewBox.height) {
-        out.viewBox = { ...view.viewBox };
-      }
-      if (view.originFt.x !== 0 || view.originFt.y !== 0) out.originFt = { ...view.originFt };
-      out.extentFt = { ...view.extentFt };
       if (view.background) out.background = view.background;
-      if (view.backgroundFrom) out.backgroundFrom = view.backgroundFrom;
+      // Geometry is derived from the yard and never written back — that is what
+      // stops a saved file from re-acquiring per-view rectangles that disagree.
+      if (view.photoFt) {
+        out.photoFt = {
+          originFt: { ...view.photoFt.originFt },
+          extentFt: { ...view.photoFt.extentFt },
+        };
+      }
       if (view.viewerAtFt !== undefined) out.viewerAtFt = view.viewerAtFt;
       return out;
     }),
@@ -343,6 +491,12 @@ function normalizeNumber(value, fallback) {
 function normalizePositiveNumber(value, fallback) {
   const num = Number(value);
   return Number.isFinite(num) && num > 0 ? num : fallback;
+}
+
+/** Zero is a legitimate margin; negative is not. */
+function normalizeNonNegative(value, fallback) {
+  const num = Number(value);
+  return Number.isFinite(num) && num >= 0 ? num : fallback;
 }
 
 function capitalize(value) {

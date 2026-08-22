@@ -8,8 +8,12 @@ import {
   projectLayoutPath,
   resolveActiveProjectId,
 } from '../src/data/projectConfig.js';
-import { ELEVATION_VIEWBOX, INCHES_PER_FOOT, PLAN_VIEWBOX } from '../src/constants.js';
+import { INCHES_PER_FOOT, PLAN_VIEWBOX } from '../src/constants.js';
 import { createViewTransform } from '../src/render/viewTransform.js';
+import { resolvePhotoPlacement } from '../src/render/photoPlacement.js';
+
+const close = (actual, expected, what) =>
+  assert.ok(Math.abs(actual - expected) < 1e-9, `${what}: ${actual} !== ${expected}`);
 
 function makeConfig(overrides = {}) {
   return {
@@ -67,16 +71,34 @@ test('resolveActiveProjectId falls back and reports that it did', () => {
   });
 });
 
-test('normalizeProjectConfig fills gaps from the global defaults', () => {
+test('every view is derived from the one declared yard', () => {
   const config = normalizeProjectConfig(makeConfig(), 'backyard');
   const [plan, south, east] = config.views;
   assert.equal(config.id, 'backyard');
-  assert.deepEqual(plan.viewBox, { width: 800, height: 600 });
-  // The elevations declared no viewBox, so constants supply one.
-  assert.deepEqual(south.viewBox, {
-    width: ELEVATION_VIEWBOX.width,
-    height: ELEVATION_VIEWBOX.height,
+
+  // The old plan rectangle — 800 px at 27 px/ft — becomes the yard itself.
+  close(config.yardFt.width, 800 / 27, 'yard width');
+  close(config.yardFt.depth, 600 / 27, 'yard depth');
+  const pad = config.paddingFt;
+
+  // The plan shows the yard plus its margin on all four sides.
+  assert.deepEqual(plan.originFt, { x: -pad, y: -pad });
+  close(plan.extentFt.width, config.yardFt.width + 2 * pad, 'plan width');
+
+  // A view from the south looks along x, one from the east along y, so the two
+  // elevations are as wide as the yard is in THAT direction — and no wider.
+  close(south.extentFt.width, config.yardFt.width + 2 * pad, 'south width');
+  close(east.extentFt.width, config.yardFt.depth + 2 * pad, 'east width');
+  // Their heights are shared, which is what puts their ground lines on one row.
+  assert.deepEqual(south.extentFt.height, east.extentFt.height);
+  close(south.originFt.y, -config.elevationFt.below, 'ground');
+
+  // One scale for the whole project: a foot is the same size in every drawing.
+  config.views.forEach((view) => {
+    close(view.viewBox.width / view.extentFt.width, config.pxPerFt, `${view.id} px/ft`);
+    close(view.viewBox.height / view.extentFt.height, config.pxPerFt, `${view.id} px/ft down`);
   });
+
   assert.equal(south.label, 'South elevation');
   assert.equal(south.sublabel, 'Looking North');
   assert.equal(east.sublabel, 'Looking West');
@@ -118,10 +140,11 @@ test('invalid numbers fall back rather than producing a broken viewBox', () => {
     makeConfig({ plan: { viewBox: { width: -5, height: 'wide' }, background: 'img/top.webp' } }),
     'backyard'
   );
-  assert.deepEqual(config.views[0].viewBox, {
-    width: PLAN_VIEWBOX.width,
-    height: PLAN_VIEWBOX.height,
-  });
+  // The unusable viewBox falls back to the constant, which then describes the
+  // yard; the drawing is derived from that and is positive either way.
+  close(config.yardFt.width, PLAN_VIEWBOX.width / 27, 'yard width');
+  close(config.views[0].viewBox.width, config.views[0].extentFt.width * config.pxPerFt, 'viewBox');
+  assert.ok(config.views[0].viewBox.height > 0);
 });
 
 test('layout path is scoped to the project directory', () => {
@@ -164,53 +187,58 @@ function makeViewsConfig(overrides = {}) {
   };
 }
 
-test('the legacy shape migrates to feet-authored views', () => {
+test('the legacy shape migrates to a yard, and its pixel insets to the photos', () => {
   const config = normalizeProjectConfig(BACKYARD_LEGACY, 'backyard');
   const pxPerFt = 2.25 * INCHES_PER_FOOT; // 27
   const [plan, east] = config.views;
 
   assert.equal(plan.type, 'plan');
-  assert.deepEqual(plan.originFt, { x: 0, y: 0 });
-  assert.deepEqual(plan.extentFt, { width: 800 / pxPerFt, height: 600 / pxPerFt });
   assert.equal(plan.label, 'Plan');
+  close(config.pxPerFt, pxPerFt, 'px/ft');
+  close(config.yardFt.width, 800 / pxPerFt, 'yard width');
 
-  // Pixel insets become negative origins: the drawing starts before the yard's zero.
+  // The view no longer carries the insets — its rectangle comes from the yard.
+  // They describe where the PHOTOGRAPH sits, which is what they always meant:
+  // a pixel inset from the near edge is a negative origin in feet.
   assert.equal(east.type, 'elevation');
   assert.equal(east.viewFrom, 'east');
-  assert.ok(Math.abs(east.originFt.x - -80 / pxPerFt) < 1e-12);
-  assert.ok(Math.abs(east.originFt.y - -100 / pxPerFt) < 1e-12);
+  close(east.photoFt.originFt.x, -80 / pxPerFt, 'photo x');
+  close(east.photoFt.originFt.y, -100 / pxPerFt, 'photo y');
   assert.equal(east.sublabel, 'Looking West');
 });
 
-test('migration round-trips back to the pixel offsets it came from', () => {
-  const [plan, east] = normalizeProjectConfig(BACKYARD_LEGACY, 'backyard').views;
-  const planTransform = createViewTransform(plan);
-  const eastTransform = createViewTransform(east);
-  assert.equal(planTransform.pxPerFt / INCHES_PER_FOOT, 2.25);
-  assert.deepEqual(plan.viewBox, { width: 800, height: 600 });
-  // groundY and the near-edge inset land back on the pixels the legacy file named.
-  assert.ok(Math.abs(eastTransform.groundY - (600 - 100)) < 1e-9);
-  assert.ok(Math.abs(eastTransform.axisToX(0) - 80) < 1e-9);
+test('a migrated photo keeps the size it was drawn at, and only moves', () => {
+  // The panels change shape — that is the point — but the photograph must not
+  // be rescaled by the conversion, or every yard would silently resize itself
+  // against its own picture. An 800 x 600 px background stays 800 x 600 px.
+  const [, east] = normalizeProjectConfig(BACKYARD_LEGACY, 'backyard').views;
+  const { rect } = resolvePhotoPlacement(east);
+  close(rect.width, 800, 'photo width');
+  close(rect.height, 600, 'photo height');
 });
 
-test('serializeProjectConfig omits everything normalize would have supplied', () => {
+test('serializeProjectConfig writes the yard, never a view rectangle', () => {
   const config = normalizeProjectConfig(makeViewsConfig(), 'backyard');
   const serialized = serializeProjectConfig(config);
 
+  assert.deepEqual(serialized.yardFt, { width: 40, depth: 30 });
+  assert.equal(serialized.paddingFt, config.paddingFt);
+  assert.equal(serialized.pxPerFt, config.pxPerFt);
+
+  // A view says what it is and where its photo sits. Its rectangle is derived,
+  // so writing one back is how the views would drift apart again.
   assert.deepEqual(serialized.views[0], {
     id: 'plan',
     type: 'plan',
-    extentFt: { width: 40, height: 30 },
     background: 'img/top.webp',
+    photoFt: { originFt: { x: 0, y: 0 }, extentFt: { width: 40, height: 30 } },
   });
-  // The plan's viewBox, labels and zero origin are all defaults, so none are written.
   assert.deepEqual(serialized.views[1], {
     id: 'east',
     type: 'elevation',
     viewFrom: 'east',
-    originFt: { x: -3, y: -2.5 },
-    extentFt: { width: 40, height: 30 },
     background: 'img/east.webp',
+    photoFt: { originFt: { x: -3, y: -2.5 }, extentFt: { width: 40, height: 30 } },
   });
   assert.equal('defaultPixelsPerInch' in serialized, false);
 });
@@ -221,35 +249,34 @@ test('serialize then normalize is a fixed point', () => {
   assert.deepEqual(reloaded.views, config.views);
 });
 
-test('a non-default label or viewBox survives the round trip', () => {
+test('a custom label and a placed photo survive the round trip', () => {
   const config = normalizeProjectConfig(
-    makeViewsConfig({
+    {
+      name: 'Fixture',
+      yardFt: { width: 20, depth: 16 },
       views: [
         {
-          id: 'shade-bed',
+          id: 'plan',
           type: 'plan',
-          label: 'Shade bed',
-          sublabel: 'Detail',
-          viewBox: { width: 600, height: 450 },
-          originFt: { x: 4, y: 9 },
-          extentFt: { width: 8, height: 6 },
-          backgroundFrom: 'shade-bed',
+          label: 'Whole yard',
+          sublabel: 'From the drone',
+          background: 'img/plan.webp',
+          photoFt: { originFt: { x: 4, y: 9 }, extentFt: { width: 8, height: 6 } },
         },
       ],
-    }),
+    },
     'backyard'
   );
   const serialized = serializeProjectConfig(config);
   assert.deepEqual(serialized.views[0], {
-    id: 'shade-bed',
+    id: 'plan',
     type: 'plan',
-    label: 'Shade bed',
-    sublabel: 'Detail',
-    viewBox: { width: 600, height: 450 },
-    originFt: { x: 4, y: 9 },
-    extentFt: { width: 8, height: 6 },
-    backgroundFrom: 'shade-bed',
+    label: 'Whole yard',
+    sublabel: 'From the drone',
+    background: 'img/plan.webp',
+    photoFt: { originFt: { x: 4, y: 9 }, extentFt: { width: 8, height: 6 } },
   });
+  assert.deepEqual(serialized.yardFt, { width: 20, depth: 16 });
 });
 
 test('views[] validation rejects the ways a view can be unusable', () => {
@@ -257,29 +284,37 @@ test('views[] validation rejects the ways a view can be unusable', () => {
     assert.throws(() => normalizeProjectConfig(makeViewsConfig({ views }), 'backyard'), pattern);
 
   bad([], /declares no views/);
-  bad([{ id: 'x', type: 'oblique', extentFt: { width: 1, height: 1 } }], /unknown type/);
-  bad([{ id: 'x', type: 'elevation', viewFrom: 'up', extentFt: { width: 40, height: 30 } }], /unknown viewFrom/);
-  bad([{ id: 'x', type: 'plan' }], /needs a positive extentFt/);
-  // 800x600 px over 40x20 ft is 20 px/ft across and 30 px/ft down.
-  bad(
-    [{ id: 'x', type: 'plan', viewBox: { width: 800, height: 600 }, extentFt: { width: 40, height: 20 } }],
-    /non-uniformly scaled/
+  bad([{ id: 'x', type: 'oblique' }], /unknown type/);
+  bad([{ id: 'x', type: 'elevation', viewFrom: 'up' }], /unknown viewFrom/);
+  bad([{ id: 'twin', type: 'plan' }, { id: 'twin', type: 'plan' }], /two views with the id "twin"/);
+  bad([{ id: 'x', type: 'plan', background: '../../secret.webp' }], /relative to the project directory/);
+
+  // A view carrying no rectangle at all is no longer an error — it is the
+  // normal case, because the yard supplies one.
+  const bare = normalizeProjectConfig(makeViewsConfig({ views: [{ id: 'x', type: 'plan' }] }), 'backyard');
+  assert.ok(bare.views[0].extentFt.width > 0);
+});
+
+test('a stale backgroundFrom is ignored rather than honoured', () => {
+  // Detail callouts are gone: a view shows the yard, and a photo is placed in
+  // it. A file left over from the crop era must not resurrect the behaviour,
+  // and must not fail to load either.
+  const config = normalizeProjectConfig(
+    {
+      name: 'Fixture',
+      yardFt: { width: 20, depth: 16 },
+      views: [
+        { id: 'plan', type: 'plan', background: 'img/plan.webp' },
+        { id: 'street-bed', type: 'plan', backgroundFrom: 'plan' },
+      ],
+    },
+    'fixture'
   );
-  bad(
-    [
-      { id: 'twin', type: 'plan', extentFt: { width: 40, height: 30 } },
-      { id: 'twin', type: 'plan', extentFt: { width: 40, height: 30 } },
-    ],
-    /two views with the id "twin"/
-  );
-  bad(
-    [{ id: 'x', type: 'plan', extentFt: { width: 40, height: 30 }, backgroundFrom: 'ghost' }],
-    /borrows a background from unknown view "ghost"/
-  );
-  bad(
-    [{ id: 'x', type: 'plan', extentFt: { width: 40, height: 30 }, background: '../../secret.webp' }],
-    /relative to the project directory/
-  );
+  assert.equal('backgroundFrom' in config.views[1], false);
+  assert.equal(config.views[1].background, null);
+  // Both plans cover the same yard, because there is only one yard.
+  assert.deepEqual(config.views[0].extentFt, config.views[1].extentFt);
+  assert.equal('backgroundFrom' in serializeProjectConfig(config).views[1], false);
 });
 
 
@@ -320,59 +355,32 @@ const LEGACY_BACKYARD = {
   ],
 };
 
-/** A plan view plus a detail callout cropped out of it. */
-const PLAN_WITH_DETAIL = {
-  name: 'Fixture',
-  views: [
-    {
-      id: 'plan',
-      type: 'plan',
-      viewBox: { width: 240, height: 500 },
-      originFt: { x: 2, y: 2 },
-      extentFt: { width: 12, height: 25 },
-      background: 'img/plan.svg',
-    },
-    {
-      id: 'street-bed',
-      type: 'plan',
-      label: 'Street bed',
-      sublabel: 'Detail',
-      viewBox: { width: 180, height: 120 },
-      originFt: { x: 3, y: 3 },
-      extentFt: { width: 9, height: 6 },
-      backgroundFrom: 'plan',
-    },
-  ],
-};
-
-test('the legacy pixel-authored shape migrates to the pixels it named', () => {
-  // backyard was converted from {plan, elevations[]}. The photos did not move,
-  // so 27 px/ft and the 80/100 px insets must survive the conversion exactly.
+test('the legacy pixel-authored shape keeps every photo where it was', () => {
+  // backyard was converted from {plan, elevations[]}, and converted again to a
+  // declared yard. Through both conversions the photographs must not move
+  // relative to the yard drawn over them: the 80 and 100 px insets the legacy
+  // file named still separate each photo's edges from the yard's zero.
   const config = normalizeProjectConfig(LEGACY_BACKYARD, 'backyard');
   const byId = Object.fromEntries(config.views.map((view) => [view.id, view]));
   assert.deepEqual(Object.keys(byId), ['plan', 'south', 'east']);
+  close(config.pxPerFt / INCHES_PER_FOOT, 2.25, 'px/inch');
 
-  const plan = createViewTransform(byId.plan);
-  assert.ok(Math.abs(plan.pxPerFt / INCHES_PER_FOOT - 2.25) < 1e-9);
-  assert.deepEqual(byId.plan.originFt, { x: 0, y: 0 });
+  // The yard's zero, measured from each photo's own left and bottom edges.
+  const insetOf = (view) => {
+    const { rect } = resolvePhotoPlacement(view);
+    const transform = createViewTransform(view);
+    return {
+      left: transform.axisToX(0) - rect.x,
+      bottom: rect.y + rect.height - transform.groundY,
+    };
+  };
+  const south = insetOf(byId.south);
+  close(south.left, 0, 'south left inset');
+  close(south.bottom, 100, 'south ground inset');
 
-  const south = createViewTransform(byId.south);
-  assert.ok(Math.abs(south.groundY - (600 - 100)) < 1e-9);
-  assert.ok(Math.abs(south.axisToX(0) - 0) < 1e-9);
-
-  const east = createViewTransform(byId.east);
-  assert.ok(Math.abs(east.groundY - (600 - 100)) < 1e-9);
-  assert.ok(Math.abs(east.axisToX(0) - 80) < 1e-9);
-});
-
-test('a detail view borrows its background from a wider view of the same kind', () => {
-  const config = normalizeProjectConfig(PLAN_WITH_DETAIL, 'fixture');
-  const detail = config.views.find((view) => view.backgroundFrom);
-  assert.ok(detail, 'expected a view borrowing a background');
-  const source = config.views.find((view) => view.id === detail.backgroundFrom);
-  assert.equal(source.type, detail.type);
-  assert.ok(detail.extentFt.width < source.extentFt.width);
-  assert.ok(detail.originFt.x >= source.originFt.x);
+  const east = insetOf(byId.east);
+  close(east.left, 80, 'east left inset');
+  close(east.bottom, 100, 'east ground inset');
 });
 
 test("an elevation's camera position round-trips, and only an elevation has one", () => {
