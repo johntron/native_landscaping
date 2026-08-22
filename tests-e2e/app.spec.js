@@ -122,6 +122,8 @@ test.describe('setup mode', () => {
 
     // The pill's active styling used to enumerate view and edit by name, so a
     // third mode read as pressed to a screen reader but looked unselected.
+    // Features shipped with the same gap, so this loop covers every button in
+    // the switch rather than a list written out beside it.
     const paint = (mode) =>
       page.locator(`[data-mode="${mode}"]`).evaluate((el) => {
         const style = getComputedStyle(el);
@@ -129,7 +131,11 @@ test.describe('setup mode', () => {
       });
 
     const inactive = await paint('setup');
-    for (const mode of ['edit', 'setup', 'view']) {
+    const modes = await page.locator('.mode-switch__btn').evaluateAll((els) =>
+      els.map((el) => el.dataset.mode)
+    );
+    expect(modes).toContain('features');
+    for (const mode of modes) {
       await page.locator(`[data-mode="${mode}"]`).click();
       await expect(page.locator(`[data-mode="${mode}"]`)).toHaveAttribute('aria-pressed', 'true');
       expect(await paint(mode), `${mode} is painted as the active mode`).not.toBe(inactive);

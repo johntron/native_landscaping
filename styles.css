@@ -117,6 +117,16 @@ h1 {
   cursor: pointer;
 }
 
+/*
+ * One accent per mode, and a default underneath them: a mode added to the
+ * switch without a colour of its own still reads as pressed rather than as
+ * nothing selected, which is how Features shipped looking inactive.
+ */
+.mode-switch__btn[aria-pressed="true"] {
+  background: linear-gradient(90deg, #4b4f54 0%, #6b7370 100%);
+  color: #fff;
+}
+
 .mode-switch__btn[data-mode="view"][aria-pressed="true"] {
   background: linear-gradient(90deg, #215a64 0%, #2f7a8c 100%);
   color: #fff;
@@ -129,6 +139,11 @@ h1 {
 
 .mode-switch__btn[data-mode="setup"][aria-pressed="true"] {
   background: linear-gradient(90deg, #4a4a7a 0%, #6b6b9e 100%);
+  color: #fff;
+}
+
+.mode-switch__btn[data-mode="features"][aria-pressed="true"] {
+  background: linear-gradient(90deg, #4b6b3f 0%, #6d8f56 100%);
   color: #fff;
 }
 
