@@ -253,24 +253,34 @@ test.describe('setup overlay', () => {
   const fieldValue = (page, label) =>
     page.locator('.setup-panel__field', { hasText: label }).locator('input').inputValue();
 
-  test('guides appear only in setup mode, and only on the selected view', async ({ page }) => {
+  test('guides appear only in setup mode, and only one view is live', async ({ page }) => {
     await openProject(page, 'backyard');
-    await expect(page.locator('[data-setup-overlay]')).toHaveCount(0);
+    const overlays = page.locator('[data-setup-overlay]');
+    const live = page.locator('[data-setup-interactive="true"]');
+    await expect(overlays).toHaveCount(0);
 
     await page.locator('[data-mode="edit"]').click();
-    await expect(page.locator('[data-setup-overlay]')).toHaveCount(0);
+    await expect(overlays).toHaveCount(0);
 
+    // Every view draws the guides — the foot grid is a cross-view reference and
+    // is useless in one panel alone — but exactly one carries the handles, so
+    // there is only ever one answer to which view is being set up.
     await page.locator('[data-mode="setup"]').click();
-    await expect(page.locator('#topSvg [data-setup-overlay]')).toHaveCount(1);
-    await expect(page.locator('[data-setup-overlay]')).toHaveCount(1);
+    const viewCount = await page.locator('.view svg').count();
+    expect(viewCount).toBeGreaterThan(1);
+    await expect(overlays).toHaveCount(viewCount);
+    await expect(live).toHaveCount(1);
+    await expect(page.locator('#topSvg [data-setup-interactive="true"]')).toHaveCount(1);
+    await expect(page.locator('#topSvg circle[data-setup-handle]').first()).toBeVisible();
 
-    // Selecting another view moves the guides rather than adding a second set.
+    // Selecting another view moves the handles rather than adding a second set.
     await page.locator('.setup-panel__item', { hasText: 'East elevation' }).locator('.setup-panel__pick').click();
-    await expect(page.locator('#eastSvg [data-setup-overlay]')).toHaveCount(1);
-    await expect(page.locator('[data-setup-overlay]')).toHaveCount(1);
+    await expect(page.locator('#eastSvg [data-setup-interactive="true"]')).toHaveCount(1);
+    await expect(live).toHaveCount(1);
+    await expect(page.locator('#topSvg circle[data-setup-handle]')).toHaveCount(0);
 
     await page.locator('[data-mode="view"]').click();
-    await expect(page.locator('[data-setup-overlay]')).toHaveCount(0);
+    await expect(overlays).toHaveCount(0);
   });
 
   test('dragging the east elevation ground line moves it and the plants on it', async ({ page }) => {
