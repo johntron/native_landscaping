@@ -321,3 +321,44 @@ test.describe('features in a project whose elevations show a narrow slice', () =
     });
   }
 });
+
+/*
+ * The panel is a fixed-height scroller (see #featureRow in styles.css). A
+ * column flexbox shrinks its children to fit that height, so the form's box was
+ * squeezed to its min-height while its fields painted straight out the bottom —
+ * and the footer, which comes after it, drew "Save features" across the Height
+ * input. Phone-sized on purpose: with a tall viewport the content fits and the
+ * shrink never happens.
+ */
+test.describe('the features panel on a phone', () => {
+  test.use({ viewport: { width: 393, height: 830 } });
+
+  test('the Save button sits below the form instead of over it', async ({ page }) => {
+    await page.request.post(featuresUrl('features-edit'), { data: { features: [HOUSE] } });
+    await openScratchProject(page, 'features-edit');
+    await page.locator('[data-mode="features"]').click();
+    await page.locator('#featureRow .feature-panel__pick').first().click();
+    await page.locator('#featureRow').evaluate((row) => {
+      row.scrollTop = row.scrollHeight;
+    });
+
+    const geometry = await page.locator('#featureRow').evaluate((row) => {
+      const form = row.querySelector('.feature-panel__form');
+      const footer = row.querySelector('.feature-panel__footer');
+      const height = row.querySelector('input[type="number"]');
+      const box = height.getBoundingClientRect();
+      return {
+        formBottom: form.getBoundingClientRect().bottom,
+        footerTop: footer.getBoundingClientRect().top,
+        // Every section keeps its natural height; the scroller takes the slack.
+        formFits: form.clientHeight >= form.scrollHeight,
+        hitsHeightInput:
+          document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2) === height,
+      };
+    });
+
+    expect(geometry.formFits, 'the form is not compressed below its content').toBe(true);
+    expect(geometry.footerTop).toBeGreaterThanOrEqual(geometry.formBottom);
+    expect(geometry.hitsHeightInput, 'nothing is drawn over the Height input').toBe(true);
+  });
+});
