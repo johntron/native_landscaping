@@ -97,7 +97,9 @@ test('dragging a camera moves that elevation and saves it alone', async ({ page 
     const y = Number(
       document.querySelector('#topSvg line[data-setup-camera="north"]').getAttribute('y1')
     );
-    return { x: rect.left + rect.width / 2, y: rect.top + (y * rect.height) / box.height };
+    // Setup widens the window and starts it at a negative origin, so the offset
+    // counts as much as the scale.
+    return { x: rect.left + rect.width / 2, y: rect.top + ((y - box.y) * rect.height) / box.height };
   });
   await page.mouse.move(at.x, at.y);
   await page.mouse.down();

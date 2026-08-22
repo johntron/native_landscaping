@@ -236,7 +236,6 @@ test('a tall yard is fitted to the viewport, at one scale for every panel', asyn
   await setFeet('Margin around it (ft)', 0);
 
   const view = page.locator('#topSvg').locator('xpath=ancestor::*[contains(@class,"view")][1]');
-  const box = await view.boundingBox();
   const viewportHeight = page.viewportSize().height;
   // .view is content-box with a 1px border, so the fit governs the content
   // height and the bounding box is that plus the two borders.
@@ -245,26 +244,29 @@ test('a tall yard is fitted to the viewport, at one scale for every panel', asyn
     return parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
   });
 
-  // Setup shows one view, so it gets the larger of the two height budgets.
-  expect(box.height - border).toBeLessThanOrEqual(viewportHeight * 0.88 + 1);
+  // Read outside Setup: there the focused panel shows a WIDENED window, with
+  // room around the view for positioning a photo, so its proportions are the
+  // working area's rather than the yard's.
+  const inSetup = await view.boundingBox();
+  await page.locator('[data-mode="view"]').click();
+  const box = await view.boundingBox();
+
+  expect(box.height - border).toBeLessThanOrEqual(viewportHeight * 0.7 + 1);
   // Still exactly 1:5 — the panel is extentFt x the page scale on both axes,
   // so the yard's proportions are the panel's proportions.
   expect(box.width / box.height).toBeCloseTo(10 / 50, 2);
 
-  // Setup shows one view at a time, so the check that a foot is worth the same
-  // on screen everywhere belongs where the panels sit side by side.
-  await page.locator('[data-mode="view"]').click();
-  const plan = await page
-    .locator('#topSvg')
-    .locator('xpath=ancestor::*[contains(@class,"view")][1]')
-    .boundingBox();
+  // Setup shows one drawing and gives it more of the page than four sharing.
+  expect(inSetup.height - border).toBeLessThanOrEqual(viewportHeight * 0.88 + 1);
+  expect(inSetup.height).toBeGreaterThan(box.height);
+
+  // And a foot is worth the same on screen in the elevation beside it: the
+  // south view spans the same 10 ft east-west, so it is exactly as wide.
   const south = await page
     .locator('#southSvg')
     .locator('xpath=ancestor::*[contains(@class,"view")][1]')
     .boundingBox();
-  // The south view spans the same 10 ft east-west as the plan, so it is exactly
-  // as wide.
-  expect(south.width).toBeCloseTo(plan.width, 1);
+  expect(south.width).toBeCloseTo(box.width, 1);
 });
 
 test('an upload that is not an image is refused before anything is written', async ({ page }) => {
