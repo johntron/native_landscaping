@@ -1,8 +1,9 @@
 {
+  "id": "example-frontyard",
   "name": "Example front yard",
   "yardFt": {
-    "width": 10,
-    "depth": 30
+    "width": 6,
+    "depth": 25
   },
   "paddingFt": 2,
   "elevationFt": {
@@ -17,12 +18,12 @@
       "background": "img/plan-130d05047b7d.webp",
       "photoFt": {
         "originFt": {
-          "x": 0,
-          "y": 0
+          "x": -4.41765801856779,
+          "y": -12.06050392396396
         },
         "extentFt": {
-          "width": 10,
-          "height": 30
+          "width": 17.388621692953237,
+          "height": 50.427002909564386
         }
       }
     },
@@ -33,12 +34,12 @@
       "background": "img/north-c2bd4c04b539.webp",
       "photoFt": {
         "originFt": {
-          "x": 0,
-          "y": -7.1365343829237
+          "x": -2.317651858733953,
+          "y": 2.6057769641185686
         },
         "extentFt": {
-          "width": 10.627009489616261,
-          "height": 15.940514234424391
+          "width": 10,
+          "height": 14
         }
       },
       "viewerAtFt": 20
@@ -51,12 +52,12 @@
       "background": "img/west-2f2cbd505c49.webp",
       "photoFt": {
         "originFt": {
-          "x": 0,
-          "y": -3.196864496043244
+          "x": -1.4552974759704522,
+          "y": 1.4489860649635262
         },
         "extentFt": {
-          "width": 14.348976216425921,
-          "height": 10.331262875826663
+          "width": 29,
+          "height": 14
         }
       }
     },
@@ -67,12 +68,12 @@
       "background": "img/view-635426f71bf6.webp",
       "photoFt": {
         "originFt": {
-          "x": 2,
-          "y": -8.553805096672585
+          "x": 4.1718646160564195,
+          "y": 1.6328074773908767
         },
         "extentFt": {
-          "width": 9.37205123677835,
-          "height": 20
+          "width": 10,
+          "height": 14
         }
       }
     }
