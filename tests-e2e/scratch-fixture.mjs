@@ -31,164 +31,105 @@ export const SCRATCH_PROJECTS = [
   'touch-hold',
   'touch-elevation',
   'background-upload',
-  'detail-crop',
+  'placed-photo',
   'features-save',
   'features-edit',
-  'features-narrow',
+  'features-derived',
   'frontyard-save',
 ];
 
 /**
- * `detail-crop` is a backyard copy plus a fourth view: a detail callout that
- * borrows and crops the plan's photo. The crop assertions used to run against
- * projects/example-frontyard, which the user also edits in the app — one Setup
- * Save dropped its fourth view and broke the suite (nl-2p3). The fixture owns
- * this geometry now, so ordinary use of the app cannot fail the test.
+ * `placed-photo` is a backyard copy whose plan photograph covers only PART of
+ * the yard, and sits off its origin.
  *
- * 27 px/ft throughout, matching backyard, so every view stays uniformly scaled.
+ * That is the case a view can no longer be reshaped to hide. A view's rectangle
+ * comes from the yard, so a photo that does not cover the yard is drawn at
+ * whatever size it does cover, wherever it was placed — which the CSS has to
+ * express as a background-size under 100% with a position outside 0–100%.
+ * Exercised in a browser because that is the only place the CSS runs.
+ *
+ * Kept out of projects/example-frontyard on purpose: that one is editable in
+ * the app, and one Setup Save rewrote it and broke the suite (nl-2p3).
  */
-const DETAIL_CROP_VIEWS = {
-  id: 'detail-crop',
-  name: 'detail-crop',
+const PLACED_PHOTO = {
+  id: 'placed-photo',
+  name: 'placed-photo',
+  yardFt: { width: 20, depth: 15 },
+  paddingFt: 2,
+  elevationFt: { above: 10, below: 2 },
+  pxPerFt: 27,
   views: [
     {
       id: 'plan',
       type: 'plan',
-      viewBox: { width: 800, height: 600 },
-      extentFt: { width: 800 / 27, height: 600 / 27 },
       background: 'img/top.webp',
+      // 10 x 7.5 ft of a 20 x 15 ft yard, its corner 5 ft in from the origin.
+      photoFt: { originFt: { x: 5, y: 5 }, extentFt: { width: 10, height: 7.5 } },
     },
-    {
-      id: 'street-bed',
-      type: 'plan',
-      label: 'Street bed',
-      sublabel: 'Detail',
-      viewBox: { width: 270, height: 180 },
-      originFt: { x: 5, y: 5 },
-      extentFt: { width: 10, height: 180 / 27 },
-      backgroundFrom: 'plan',
-    },
+    { id: 'south', type: 'elevation', viewFrom: 'south' },
   ],
 };
 
 /**
- * `features-narrow` is a backyard copy whose elevations show a NARROW slice of
- * the yard rather than all of it — the plan covers 20 x 15 ft, the elevations
- * reach only x 5..15 and y 5..12. That mismatch is what made a newly added
- * feature land wholly off-canvas in every elevation while looking fine in the
- * plan, so the fixture owns the geometry that reproduces it.
+ * `features-derived` is a backyard copy at its own yard size, used to check
+ * that a newly added feature lands inside EVERY view.
  *
- * 27 px/ft throughout, matching backyard, so every view stays uniformly scaled.
+ * The bug it was written for — elevations framed on a narrower slice of yard
+ * than the plan, so a shape placed by the plan was off-canvas in every
+ * elevation — is no longer expressible: the views are derived from one yard.
+ * The test stays as the guard that the derivation actually holds.
  */
-const NARROW_VIEWS = {
-  id: 'features-narrow',
-  name: 'features-narrow',
+const FEATURES_DERIVED = {
+  id: 'features-derived',
+  name: 'features-derived',
+  yardFt: { width: 20, depth: 15 },
+  paddingFt: 2,
+  elevationFt: { above: 8, below: 1 },
+  pxPerFt: 27,
   views: [
-    {
-      id: 'plan',
-      type: 'plan',
-      viewBox: { width: 540, height: 405 },
-      extentFt: { width: 20, height: 15 },
-      background: 'img/top.webp',
-    },
-    {
-      id: 'south',
-      type: 'elevation',
-      viewFrom: 'south',
-      viewBox: { width: 270, height: 216 },
-      originFt: { x: 5, y: 0 },
-      extentFt: { width: 10, height: 8 },
-    },
-    {
-      id: 'east',
-      type: 'elevation',
-      viewFrom: 'east',
-      viewBox: { width: 189, height: 216 },
-      originFt: { x: 5, y: 0 },
-      extentFt: { width: 7, height: 8 },
-    },
+    { id: 'plan', type: 'plan', background: 'img/top.webp' },
+    { id: 'south', type: 'elevation', viewFrom: 'south' },
+    { id: 'east', type: 'elevation', viewFrom: 'east' },
   ],
 };
 
 /**
- * `frontyard-save` carries example-frontyard's geometry — negative originFt.y on
- * two elevations, a non-zero origin on the plan — because that is the shape a
+ * `frontyard-save` carries example-frontyard's shape — a tall narrow yard, four
+ * views, and photographs placed rather than fitted — because that is what a
  * Setup-mode Save was found to flatten (nl-jqd). Copied here rather than tested
  * in place: the real project is live data the running app writes to.
  */
 const FRONTYARD_SAVE_VIEWS = {
-  "id": "frontyard-save",
-  "name": "frontyard-save",
-  "views": [
+  id: 'frontyard-save',
+  name: 'frontyard-save',
+  yardFt: { width: 10, depth: 30 },
+  paddingFt: 2,
+  elevationFt: { above: 12, below: 2 },
+  pxPerFt: 20,
+  views: [
     {
-      "id": "plan",
-      "type": "plan",
-      "viewBox": {
-        "width": 597.8492882559476,
-        "height": 606.153576354689
-      },
-      "originFt": {
-        "x": 2,
-        "y": 14.833316758684116
-      },
-      "extentFt": {
-        "width": 29.89246441279738,
-        "height": 30.30767881773445
-      }
+      id: 'plan',
+      type: 'plan',
+      photoFt: { originFt: { x: 0, y: 0 }, extentFt: { width: 10, height: 30 } },
+      background: 'img/top.webp',
     },
     {
-      "id": "north",
-      "type": "elevation",
-      "viewFrom": "north",
-      "viewBox": {
-        "width": 212.54018979232524,
-        "height": 318.81028468848785
-      },
-      "originFt": {
-        "x": 0,
-        "y": -7.1365343829237
-      },
-      "extentFt": {
-        "width": 10.627009489616261,
-        "height": 15.940514234424391
-      }
+      id: 'north',
+      type: 'elevation',
+      viewFrom: 'north',
+      photoFt: { originFt: { x: 0, y: -7.14 }, extentFt: { width: 10.63, height: 15.94 } },
+      background: 'img/south.webp',
     },
     {
-      "id": "west",
-      "type": "elevation",
-      "viewFrom": "east",
-      "sublabel": "Looking west",
-      "viewBox": {
-        "width": 286.97952432851844,
-        "height": 206.62525751653328
-      },
-      "originFt": {
-        "x": 0,
-        "y": -3.196864496043244
-      },
-      "extentFt": {
-        "width": 14.348976216425921,
-        "height": 10.331262875826663
-      }
+      id: 'west',
+      type: 'elevation',
+      viewFrom: 'east',
+      sublabel: 'Looking west',
+      photoFt: { originFt: { x: 0, y: -3.2 }, extentFt: { width: 14.35, height: 10.33 } },
+      background: 'img/east.webp',
     },
-    {
-      "id": "view",
-      "type": "elevation",
-      "viewBox": {
-        "width": 249.92136631408937,
-        "height": 187.44102473556703
-      },
-      "extentFt": {
-        "width": 9.37205123677835,
-        "height": 7.029038427583763
-      },
-      "viewFrom": "south",
-      "originFt": {
-        "x": 0,
-        "y": 0
-      }
-    }
-  ]
+    { id: 'view', type: 'elevation', viewFrom: 'south' },
+  ],
 };
 
 /** Files the app is served from; symlinked so the specs test the real source. */
@@ -217,13 +158,13 @@ export function buildScratchPublicDir() {
 
   // Written after the copy so it replaces the backyard project.json cpSync laid down.
   writeFileSync(
-    path.join(SCRATCH_DIR, 'projects', 'detail-crop', 'project.json'),
-    `${JSON.stringify(DETAIL_CROP_VIEWS, null, 2)}\n`
+    path.join(SCRATCH_DIR, 'projects', 'placed-photo', 'project.json'),
+    `${JSON.stringify(PLACED_PHOTO, null, 2)}\n`
   );
 
   writeFileSync(
-    path.join(SCRATCH_DIR, 'projects', 'features-narrow', 'project.json'),
-    `${JSON.stringify(NARROW_VIEWS, null, 2)}\n`
+    path.join(SCRATCH_DIR, 'projects', 'features-derived', 'project.json'),
+    `${JSON.stringify(FEATURES_DERIVED, null, 2)}\n`
   );
 
   writeFileSync(

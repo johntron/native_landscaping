@@ -1,6 +1,5 @@
 import { projectAssetPath } from '../data/projectConfig.js';
-import { createViewTransform } from './viewTransform.js';
-import { cropToCssBackground, resolveViewBackground } from './backgroundCrop.js';
+import { placementToCssBackground, resolvePhotoPlacement } from './photoPlacement.js';
 
 /**
  * Build one panel per entry in the project's views[], and apply each view's
@@ -59,22 +58,27 @@ export function configureViews({ container, template, project }) {
     }
 
     if (viewEl?.style) {
+      // Panels are sized by the yard they cover at one page-wide scale, so a
+      // foot is the same size in every view and the elevations share a ground
+      // row. The aspect ratio still backs it up for the maximized case.
       viewEl.style.setProperty('--view-aspect-ratio', `${view.viewBox.width} / ${view.viewBox.height}`);
+      viewEl.style.setProperty('--extent-w', String(view.extentFt.width));
+      viewEl.style.setProperty('--extent-h', String(view.extentFt.height));
       // A view may have no background yet — setting url('projects/x/null')
       // would render a broken tile rather than an empty panel.
-      const background = resolveViewBackground(views, view);
+      const background = resolvePhotoPlacement(view);
       if (background.path) {
         viewEl.style.backgroundImage = `url('${cssUrl(projectAssetPath(project.id, background.path))}')`;
       } else {
         viewEl.style.removeProperty('background-image');
       }
-      // Panels are reused by id, so a view that stops borrowing a background
-      // must have the crop cleared as well as replaced — otherwise it keeps
-      // showing a zoomed patch of its own new photo.
-      const cropCss = cropToCssBackground(background.crop);
-      if (cropCss) {
-        viewEl.style.backgroundSize = cropCss.backgroundSize;
-        viewEl.style.backgroundPosition = cropCss.backgroundPosition;
+      // Panels are reused by id, so a view whose photo stops being placed must
+      // have the placement cleared as well as replaced — otherwise it keeps the
+      // last photo's offset under a new picture.
+      const placement = placementToCssBackground(background.rect, view.viewBox);
+      if (placement) {
+        viewEl.style.backgroundSize = placement.backgroundSize;
+        viewEl.style.backgroundPosition = placement.backgroundPosition;
       } else {
         viewEl.style.removeProperty('background-size');
         viewEl.style.removeProperty('background-position');
@@ -83,9 +87,6 @@ export function configureViews({ container, template, project }) {
 
     setText(panel.querySelector('[data-view-label]'), view.label);
     setText(panel.querySelector('[data-view-sublabel]'), view.sublabel);
-    // Each panel reports its own scale; views no longer have to share one.
-    const perFoot = Math.round(createViewTransform(view).pxPerFt);
-    setText(panel.querySelector('[data-scale-summary]'), `1 ft ≈ ${perFoot.toLocaleString()} px`);
 
     return { view, svg, panel, container: viewEl };
   });

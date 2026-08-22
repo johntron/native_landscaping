@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openProject, openScratchProject, readLayoutRows, readScratchLayout } from './helpers.js';
+import { openProject, openScratchProject, readLayoutRows } from './helpers.js';
 
 // These specs assert on DOM structure rather than screenshots: the point is a
 // cheap, readable signal that the real page boots and renders the real CSV.
@@ -35,7 +35,8 @@ test.describe('backyard project', () => {
     await expect(
       page.locator('[data-view-panel="east"] [data-view-label]')
     ).toHaveText('East elevation');
-    await expect(page.locator('#topSvg')).toHaveAttribute('viewBox', '0 0 800 600');
+    // 29.63 x 22.22 ft of yard plus 2 ft of margin all round, at 27 px/ft.
+    await expect(page.locator('#topSvg')).toHaveAttribute('viewBox', '0 0 908 708');
   });
 
   test('changing the month re-renders the plan view', async ({ page }) => {
@@ -178,20 +179,30 @@ test.describe('setup mode', () => {
     await expect(page.locator('.view-panel')).toHaveCount(3);
   });
 
-  test('form edits reach the drawing, and an invalid one is refused', async ({ page }) => {
+  test('the yard drives every view, and an invalid edit is refused', async ({ page }) => {
     await openProject(page, 'backyard');
     await page.locator('[data-mode="setup"]').click();
 
-    // Feet are authored freely in both directions: a view can be 30 ft by 10 ft.
-    // The drawing is derived, so the two never drift into a non-uniform scale.
-    const width = page.locator('.setup-panel__field', { hasText: 'Width (ft)' }).locator('input');
-    const height = page.locator('.setup-panel__field', { hasText: 'Height (ft)' }).locator('input');
-    await width.fill('30');
-    await width.press('Enter');
-    await height.fill('10');
-    await height.press('Enter');
-    await expect(width).toHaveValue('30'); // setting height must not rewrite width
-    await expect(page.locator('#topSvg')).toHaveAttribute('viewBox', '0 0 810 270');
+    // ONE yard, typed once. Every view's drawing follows from it — which is
+    // what makes the panels line up, and what nothing per-view can undo.
+    const eastWest = page
+      .locator('.setup-panel__field', { hasText: 'East–west (ft)' })
+      .locator('input');
+    const northSouth = page
+      .locator('.setup-panel__field', { hasText: 'North–south (ft)' })
+      .locator('input');
+    await eastWest.fill('30');
+    await eastWest.press('Enter');
+    await northSouth.fill('10');
+    await northSouth.press('Enter');
+    await expect(eastWest).toHaveValue('30'); // one axis never rewrites the other
+
+    // 30 x 10 ft plus 2 ft of margin all round, at 27 px/ft.
+    await expect(page.locator('#topSvg')).toHaveAttribute('viewBox', '0 0 918 378');
+    // A view from the south looks along the yard's 30 ft width; one from the
+    // east looks along its 10 ft depth. Both are derived, so both changed.
+    await expect(page.locator('#southSvg')).toHaveAttribute('viewBox', /^0 0 918 /);
+    await expect(page.locator('#eastSvg')).toHaveAttribute('viewBox', /^0 0 378 /);
 
     // Resolution rescales the drawing without changing the yard it covers.
     const resolution = page
@@ -199,11 +210,8 @@ test.describe('setup mode', () => {
       .locator('input');
     await resolution.fill('40');
     await resolution.press('Enter');
-    await expect(page.locator('#topSvg')).toHaveAttribute('viewBox', '0 0 1200 400');
-    await expect(width).toHaveValue('30');
-    await expect(page.locator('[data-view-panel="plan"] [data-scale-summary]')).toHaveText(
-      '1 ft ≈ 40 px'
-    );
+    await expect(page.locator('#topSvg')).toHaveAttribute('viewBox', '0 0 1360 560');
+    await expect(eastWest).toHaveValue('30');
 
     const name = page.locator('.setup-panel__field', { hasText: 'Name' }).locator('input');
     await name.fill('Overhead');
@@ -227,28 +235,27 @@ test.describe('setup mode', () => {
   });
 });
 
-// Handle drags edit the view in memory; only the Save button writes, so these
+// Photo drags edit the view in memory; only the Save button writes, so these
 // stay on the read-only server like the rest of the suite.
 test.describe('setup overlay', () => {
-  /** Centre of an overlay handle, in viewport coordinates. */
-  async function handlePoint(page, svgId, handleId) {
-    // Centre the panel: page.mouse works in viewport coordinates, and a panel
-    // sitting below the fold puts its handles out of reach.
+  /** Centre of a panel, in viewport coordinates. */
+  async function panelCentre(page, svgId) {
+    // page.mouse works in viewport coordinates, and a panel sitting below the
+    // fold is out of reach.
     await page.evaluate((id) => document.getElementById(id).scrollIntoView({ block: 'center' }), svgId);
-    return page.evaluate(
-      ([id, handle]) => {
-        const svg = document.getElementById(id);
-        const rect = svg.getBoundingClientRect();
-        const box = svg.viewBox.baseVal;
-        const node = svg.querySelector(`circle[data-setup-handle="${handle}"]`);
-        return {
-          x: rect.left + (Number(node.getAttribute('cx')) * rect.width) / box.width,
-          y: rect.top + (Number(node.getAttribute('cy')) * rect.height) / box.height,
-        };
-      },
-      [svgId, handleId]
-    );
+    return page.evaluate((id) => {
+      const rect = document.getElementById(id).getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    }, svgId);
   }
+
+  /** The photo's outline, in the drawing's own pixels. */
+  const photoRect = (page, svgId) =>
+    page.locator(`#${svgId} rect[data-setup-photo]`).evaluate((node) => ({
+      x: Number(node.getAttribute('x')),
+      y: Number(node.getAttribute('y')),
+      width: Number(node.getAttribute('width')),
+    }));
 
   const fieldValue = (page, label) =>
     page.locator('.setup-panel__field', { hasText: label }).locator('input').inputValue();
@@ -262,28 +269,32 @@ test.describe('setup overlay', () => {
     await page.locator('[data-mode="edit"]').click();
     await expect(overlays).toHaveCount(0);
 
-    // Every view draws the guides — the foot grid is a cross-view reference and
-    // is useless in one panel alone — but exactly one carries the handles, so
-    // there is only ever one answer to which view is being set up.
+    // Every view draws the guides — the foot grid and the yard outline are
+    // cross-view references and are useless in one panel alone — but exactly
+    // one is live, so there is only ever one answer to which view is being set
+    // up.
     await page.locator('[data-mode="setup"]').click();
     const viewCount = await page.locator('.view svg').count();
     expect(viewCount).toBeGreaterThan(1);
     await expect(overlays).toHaveCount(viewCount);
     await expect(live).toHaveCount(1);
     await expect(page.locator('#topSvg [data-setup-interactive="true"]')).toHaveCount(1);
-    await expect(page.locator('#topSvg circle[data-setup-handle]').first()).toBeVisible();
+    // The photo outline marks the one panel whose picture can be dragged.
+    await expect(page.locator('#topSvg rect[data-setup-photo]')).toHaveCount(1);
+    // And the yard's own corner is drawn, so there is something to line up to.
+    await expect(page.locator('#topSvg circle[data-setup-guide="origin"]')).toHaveCount(1);
 
-    // Selecting another view moves the handles rather than adding a second set.
+    // Selecting another view moves the live overlay rather than adding a second.
     await page.locator('.setup-panel__item', { hasText: 'East elevation' }).locator('.setup-panel__pick').click();
     await expect(page.locator('#eastSvg [data-setup-interactive="true"]')).toHaveCount(1);
     await expect(live).toHaveCount(1);
-    await expect(page.locator('#topSvg circle[data-setup-handle]')).toHaveCount(0);
+    await expect(page.locator('#topSvg rect[data-setup-photo]')).toHaveCount(0);
 
     await page.locator('[data-mode="view"]').click();
     await expect(overlays).toHaveCount(0);
   });
 
-  test('dragging the east elevation ground line moves it and the plants on it', async ({ page }) => {
+  test('dragging moves the photo and leaves the drawing exactly where it was', async ({ page }) => {
     await openProject(page, 'backyard');
     await page.locator('[data-mode="setup"]').click();
     await page.locator('.setup-panel__item', { hasText: 'East elevation' }).locator('.setup-panel__pick').click();
@@ -293,64 +304,74 @@ test.describe('setup overlay', () => {
     const plantPath = () =>
       page.locator('#eastSvg g[data-plant-id]').first().locator('path').first().getAttribute('d');
 
-    const beforeGround = Number(await groundY());
-    const beforePlant = await plantPath();
-    const beforeField = await fieldValue(page, 'Ground height (ft)');
+    const before = {
+      ground: await groundY(),
+      plant: await plantPath(),
+      photo: await photoRect(page, 'eastSvg'),
+      viewBox: await page.locator('#eastSvg').getAttribute('viewBox'),
+    };
 
-    const start = await handlePoint(page, 'eastSvg', 'ground');
+    const start = await panelCentre(page, 'eastSvg');
     await page.mouse.move(start.x, start.y);
     await page.mouse.down();
-    await page.mouse.move(start.x, start.y - 40, { steps: 8 });
+    await page.mouse.move(start.x + 50, start.y - 40, { steps: 8 });
     await page.mouse.up();
 
-    // The line moved up, the plants standing on it followed, and the numeric
-    // field agrees — all without a reload.
-    expect(Number(await groundY())).toBeLessThan(beforeGround);
-    expect(await plantPath()).not.toBe(beforePlant);
-    expect(await fieldValue(page, 'Ground height (ft)')).not.toBe(beforeField);
+    // This is the inversion the whole redesign turns on. The yard is fixed, so
+    // the ground line, the plants standing on it, and the drawing's own size
+    // are all untouched; the photograph is what moved.
+    expect(await groundY()).toBe(before.ground);
+    expect(await plantPath()).toBe(before.plant);
+    expect(await page.locator('#eastSvg').getAttribute('viewBox')).toBe(before.viewBox);
+    const after = await photoRect(page, 'eastSvg');
+    expect(after.x).toBeGreaterThan(before.photo.x);
+    expect(after.y).toBeLessThan(before.photo.y);
+    expect(after.width).toBeCloseTo(before.photo.width, 6); // moved, never rescaled
   });
 
-  test('a handle drag keeps following the pointer across many frames', async ({ page }) => {
+  test('a photo drag keeps following the pointer across many frames', async ({ page }) => {
     await openProject(page, 'backyard');
     await page.locator('[data-mode="setup"]').click();
 
-    const width = () => fieldValue(page, 'Width (ft)');
-    const start = await handlePoint(page, 'topSvg', 'min-mid');
+    const start = await panelCentre(page, 'topSvg');
     await page.mouse.move(start.x, start.y);
     await page.mouse.down();
 
     // Re-rendering the panels used to re-append every one of them, and moving an
     // element in the DOM drops its pointer capture — so the drag died on the
     // first repaint. Step slowly enough to cross several frames.
-    const widths = [];
+    const offsets = [];
     for (let step = 1; step <= 5; step += 1) {
       await page.mouse.move(start.x + step * 12, start.y, { steps: 2 });
       await page.waitForTimeout(120);
-      widths.push(Number(await width()));
+      offsets.push((await photoRect(page, 'topSvg')).x);
     }
     await page.mouse.up();
 
-    // Every step must have narrowed the view further; a dropped capture shows up
-    // as the value freezing after the first move.
-    for (let i = 1; i < widths.length; i += 1) {
-      expect(widths[i], `step ${i + 1} kept tracking (saw ${widths.join(', ')})`).toBeLessThan(
-        widths[i - 1]
+    // Every step must have carried the photo further east; a dropped capture
+    // shows up as the value freezing after the first move.
+    for (let i = 1; i < offsets.length; i += 1) {
+      expect(offsets[i], `step ${i + 1} kept tracking (saw ${offsets.join(', ')})`).toBeGreaterThan(
+        offsets[i - 1]
       );
     }
   });
 
-  test('measuring a known length in the photo rescales the view to match', async ({ page }) => {
+  test('measuring a known length rescales the photo, not the yard', async ({ page }) => {
     await openProject(page, 'backyard');
     await page.locator('[data-mode="setup"]').click();
 
-    // Arming the ruler suspends handle dragging on the selected view.
+    // Arming the ruler suspends photo dragging on the selected view.
     await page.locator('[data-ruler-toggle]').click();
     await expect(page.locator('[data-ruler-toggle]')).toHaveAttribute('aria-pressed', 'true');
 
-    // Drag across exactly half the panel, so the arithmetic is exact: whatever
-    // that span is said to be, the whole view is twice it.
-    // Two round-trips on purpose: the scroll has to land before the rect is
-    // read, or the drag starts at coordinates the page has since moved.
+    const beforeYard = await fieldValue(page, 'East–west (ft)');
+    const beforeViewBox = await page.locator('#topSvg').getAttribute('viewBox');
+    const beforePhoto = await photoRect(page, 'topSvg');
+
+    // Drag across exactly half the panel. Two round-trips on purpose: the
+    // scroll has to land before the rect is read, or the drag starts at
+    // coordinates the page has since moved.
     await page.evaluate(() => document.getElementById('topSvg').scrollIntoView({ block: 'center' }));
     const span = await page.evaluate(() => {
       const rect = document.getElementById('topSvg').getBoundingClientRect();
@@ -371,50 +392,59 @@ test.describe('setup overlay', () => {
     await page.locator('[data-ruler-length]').fill('10');
     await page.locator('[data-ruler-length]').press('Enter');
 
-    expect(Number(await fieldValue(page, 'Width (ft)'))).toBeCloseTo(20, 1);
-    // The segment belongs to the old scale, so it must not survive the rescale.
+    // Half the panel is far more than 10 ft, so the photo shrinks — and the
+    // yard, which was never what was wrong, does not move at all.
+    await expect(page.locator('.setup-panel__status')).toContainText("photo to");
+    expect((await photoRect(page, 'topSvg')).width).toBeLessThan(beforePhoto.width);
+    expect(await fieldValue(page, 'East–west (ft)')).toBe(beforeYard);
+    expect(await page.locator('#topSvg').getAttribute('viewBox')).toBe(beforeViewBox);
+    // The segment belongs to the photo's old scale, so it must not survive.
     await expect(page.locator('#topSvg line[data-setup-ruler]')).toHaveCount(0);
-    await expect(page.locator('.setup-panel__status')).toContainText('20 ft across');
+  });
 
-    // Any geometry edit invalidates a standing segment the same way, because
-    // the drawing scales with the extent: a segment measured at 600 px would be
-    // drawn outside a view that has since shrunk past it.
+  test('a yard edit invalidates a standing measurement', async ({ page }) => {
+    await openProject(page, 'backyard');
+    await page.locator('[data-mode="setup"]').click();
+    await page.locator('[data-ruler-toggle]').click();
+
+    await page.evaluate(() => document.getElementById('topSvg').scrollIntoView({ block: 'center' }));
+    const span = await page.evaluate(() => {
+      const rect = document.getElementById('topSvg').getBoundingClientRect();
+      return {
+        y: rect.top + rect.height / 2,
+        from: rect.left + rect.width * 0.25,
+        to: rect.left + rect.width * 0.75,
+      };
+    });
     await page.mouse.move(span.from, span.y);
     await page.mouse.down();
     await page.mouse.move(span.to, span.y, { steps: 4 });
     await page.mouse.up();
     await expect(page.locator('#topSvg line[data-setup-ruler]')).toHaveCount(1);
-    await page
-      .locator('.setup-panel__field', { hasText: 'Width (ft)' })
-      .locator('input')
-      .fill('12');
-    await page
-      .locator('.setup-panel__field', { hasText: 'Width (ft)' })
-      .locator('input')
-      .press('Enter');
+
+    // Resizing the yard rescales every drawing, so a segment measured at 600 px
+    // would be drawn outside a view that has since shrunk past it.
+    const eastWest = page
+      .locator('.setup-panel__field', { hasText: 'East–west (ft)' })
+      .locator('input');
+    await eastWest.fill('12');
+    await eastWest.press('Enter');
     await expect(page.locator('#topSvg line[data-setup-ruler]')).toHaveCount(0);
   });
 
-  test('dragging a plan edge handle resizes the view and the form together', async ({ page }) => {
+  test('the photo can be put back to filling its panel', async ({ page }) => {
     await openProject(page, 'backyard');
     await page.locator('[data-mode="setup"]').click();
 
-    const beforeWidth = Number(await fieldValue(page, 'Width (ft)'));
-    const beforeLeft = Number(await fieldValue(page, 'Left edge (ft)'));
-
-    // Pull the left edge inward: the view covers less yard, starting further east.
-    const start = await handlePoint(page, 'topSvg', 'min-mid');
+    const start = await panelCentre(page, 'topSvg');
     await page.mouse.move(start.x, start.y);
     await page.mouse.down();
-    await page.mouse.move(start.x + 60, start.y, { steps: 8 });
+    await page.mouse.move(start.x + 80, start.y, { steps: 6 });
     await page.mouse.up();
+    expect((await photoRect(page, 'topSvg')).x).toBeGreaterThan(0);
 
-    expect(Number(await fieldValue(page, 'Left edge (ft)'))).toBeGreaterThan(beforeLeft);
-    expect(Number(await fieldValue(page, 'Width (ft)'))).toBeLessThan(beforeWidth);
-    // The right-hand edge of the yard the view covers has not moved.
-    const left = Number(await fieldValue(page, 'Left edge (ft)'));
-    const width = Number(await fieldValue(page, 'Width (ft)'));
-    expect(left + width).toBeCloseTo(beforeLeft + beforeWidth, 1);
+    await page.getByRole('button', { name: 'Reset photo to fill the panel' }).click();
+    expect((await photoRect(page, 'topSvg')).x).toBe(0);
   });
 });
 
@@ -427,63 +457,46 @@ test.describe('project switching', () => {
     await expect(page.locator('#projectSelect')).toHaveValue('example-frontyard');
   });
 
-  test('a detail view borrows the plan photo and shows only its rectangle', async ({ page }) => {
+  test('a photo that covers part of the yard is placed, not stretched to fit', async ({ page }) => {
     // The scratch fixture's own project, not example-frontyard: that one is
-    // editable in the app, and a Setup Save dropping its fourth view broke this
-    // test twice (nl-2p3). The geometry asserted below is now owned by
+    // editable in the app, and a Setup Save dropping a view broke this test
+    // twice (nl-2p3). The geometry asserted below is owned by
     // tests-e2e/scratch-fixture.mjs.
-    await openScratchProject(page, 'detail-crop');
+    await openScratchProject(page, 'placed-photo');
 
-    // Two panels: the multi-view and crop paths are only exercised in the
-    // browser here.
     await expect(page.locator('.view-panel')).toHaveCount(2);
-    await expect(page.locator('[data-view-panel="street-bed"] [data-view-label]')).toHaveText(
-      'Street bed'
-    );
 
     const style = await page
-      .locator('[data-view-panel="street-bed"] .view')
+      .locator('[data-view-panel="plan"] .view')
       .evaluate((el) => ({
         image: el.style.backgroundImage,
         size: el.style.backgroundSize,
         position: el.style.backgroundPosition,
       }));
-    // The detail declares no background of its own; it crops the plan's photo to
-    // its 10 x 6.667 ft rectangle at (5, 5). See src/render/backgroundCrop.js.
     expect(style.image).toContain('img/top.webp');
-    const PLAN = { width: 800 / 27, height: 600 / 27 };
-    const CROP = { x: 5, y: 5, width: 10, height: 180 / 27 };
-    // Chrome re-serializes inline percentages, so compare the numbers.
+
+    // The panel is the 20 x 15 ft yard plus 2 ft of margin all round; the photo
+    // covers 10 x 7.5 ft of it, starting 5 ft in from the origin.
+    const PANEL = { width: 24, height: 19 };
+    const PHOTO = { x: 5, y: 5, width: 10, height: 7.5 };
     const percents = (value) => value.split(' ').map((part) => Number.parseFloat(part));
     const [sizeX, sizeY] = percents(style.size);
-    expect(sizeX).toBeCloseTo((PLAN.width / CROP.width) * 100, 2); // full width over crop width
-    expect(sizeY).toBeCloseTo((PLAN.height / CROP.height) * 100, 2);
+    expect(sizeX).toBeCloseTo((PHOTO.width / PANEL.width) * 100, 2);
+    expect(sizeY).toBeCloseTo((PHOTO.height / PANEL.height) * 100, 2);
+
+    // Position divides by the leftover travel — panel minus photo — and the
+    // photo's offset is measured from the panel's corner, 2 ft before the yard.
     const [posX, posY] = percents(style.position);
-    // The denominator is the leftover travel, not the full extent.
-    expect(posX).toBeCloseTo((CROP.x / (PLAN.width - CROP.width)) * 100, 2);
-    // …and plan y grows north while CSS y grows down.
-    expect(posY).toBeCloseTo(100 - (CROP.y / (PLAN.height - CROP.height)) * 100, 2);
+    expect(posX).toBeCloseTo(((PHOTO.x + 2) / (PANEL.width - PHOTO.width)) * 100, 2);
+    // Plan y grows north while CSS y grows down, so the photo's TOP edge is its
+    // north one: 19 - (5 + 7.5 + 2) = 4.5 ft down from the panel's top.
+    expect(posY).toBeCloseTo((4.5 / (PANEL.height - PHOTO.height)) * 100, 2);
 
-    // The stylesheet's `contain` must still apply to the uncropped plan.
-    const planSize = await page
-      .locator('[data-view-panel="plan"] .view')
+    // An unplaced photo still falls back to the stylesheet's `contain`.
+    const elevationSize = await page
+      .locator('[data-view-panel="south"] .view')
       .evaluate((el) => el.style.backgroundSize);
-    expect(planSize).toBe('');
-
-    // Plants inside the rectangle are drawn over the cropped photo. The set is
-    // derived from the CSV rather than named, so curating the layout in the app
-    // cannot turn this into a false failure.
-    const inside = (await readScratchLayout('detail-crop')).filter(
-      (row) =>
-        row.x >= CROP.x &&
-        row.x <= CROP.x + CROP.width &&
-        row.y >= CROP.y &&
-        row.y <= CROP.y + CROP.height
-    );
-    expect(inside.length).toBeGreaterThan(0);
-    for (const row of inside) {
-      await expect(page.locator(`#street-bedSvg g[data-plant-id="${row.id}"]`)).toHaveCount(1);
-    }
+    expect(elevationSize).toBe('');
   });
 
   test('an unknown project falls back to the default and says so', async ({ page }) => {

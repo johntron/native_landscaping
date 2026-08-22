@@ -191,7 +191,11 @@ test('an uploaded photo letterboxes instead of stretching, and leaves the view g
 
   const extent = () => page.evaluate(() =>
     [...document.querySelectorAll('.setup-panel__field')]
-      .filter((f) => /^(Width|Height) \(ft\)$/.test(f.querySelector('.setup-panel__field-label').textContent))
+      .filter((f) =>
+        /^(East–west|North–south) \(ft\)$/.test(
+          f.querySelector('.setup-panel__field-label').textContent
+        )
+      )
       .map((f) => f.querySelector('input').value));
 
   const before = await extent();
@@ -212,27 +216,29 @@ test('an uploaded photo letterboxes instead of stretching, and leaves the view g
   );
   expect(painted).toBe('contain');
 
-  // And the yard geometry is untouched — the photo does not reshape the view.
+  // And the yard is untouched — a photo has never been able to reshape it, and
+  // now it cannot reshape the view it sits behind either.
   expect(await extent()).toEqual(before);
 });
 
-test('a tall view is capped to the viewport without distorting its photo', async ({ page }) => {
+test('a tall yard is fitted to the viewport, at one scale for every panel', async ({ page }) => {
   await openSetup(page);
 
-  // A deliberately extreme portrait extent: uncapped this panel would be many
-  // times the viewport height.
+  // A deliberately extreme portrait yard: at any fixed scale this panel would
+  // be many times the viewport height, so the page scale has to come down.
   const setFeet = async (label, value) => {
     const input = page.locator('.setup-panel__field', { hasText: label }).locator('input');
     await input.fill(String(value));
     await input.dispatchEvent('change');
   };
-  await setFeet('Width (ft)', 10);
-  await setFeet('Height (ft)', 50);
+  await setFeet('East–west (ft)', 10);
+  await setFeet('North–south (ft)', 50);
+  await setFeet('Margin around it (ft)', 0);
 
   const view = page.locator('#topSvg').locator('xpath=ancestor::*[contains(@class,"view")][1]');
   const box = await view.boundingBox();
   const viewportHeight = page.viewportSize().height;
-  // .view is content-box with a 1px border, so the cap governs the content
+  // .view is content-box with a 1px border, so the fit governs the content
   // height and the bounding box is that plus the two borders.
   const border = await view.evaluate((el) => {
     const style = getComputedStyle(el);
@@ -240,9 +246,14 @@ test('a tall view is capped to the viewport without distorting its photo', async
   });
 
   expect(box.height - border).toBeLessThanOrEqual(viewportHeight * 0.7 + 1);
-  // Still exactly 1:5 — the cap works by bounding the width, so the ratio the
-  // view declares is the ratio the panel gets.
+  // Still exactly 1:5 — the panel is extentFt x the page scale on both axes,
+  // so the yard's proportions are the panel's proportions.
   expect(box.width / box.height).toBeCloseTo(10 / 50, 2);
+
+  // And a foot is worth the same on screen in the elevation next to it: the
+  // south view spans the same 10 ft east-west, so it is exactly as wide.
+  const south = page.locator('#southSvg').locator('xpath=ancestor::*[contains(@class,"view")][1]');
+  expect((await south.boundingBox()).width).toBeCloseTo(box.width, 1);
 });
 
 test('an upload that is not an image is refused before anything is written', async ({ page }) => {

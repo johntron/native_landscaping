@@ -35,10 +35,15 @@ test('persistProjectConfig posts the serialized config to the project endpoint',
   assert.equal(calls[0].url, '/api/project?project=backyard');
   assert.equal(calls[0].opts.method, 'POST');
   const body = JSON.parse(calls[0].opts.body);
-  // Serialized, not normalized: the default label and zero origin stay out of the file.
+  // Serialized, not normalized: the default label stays out of the file, and so
+  // does every view rectangle — those are derived from the yard now, and a save
+  // that wrote them back would let the views drift apart again.
   assert.equal('label' in body.views[0], false);
   assert.equal('originFt' in body.views[0], false);
-  assert.deepEqual(body.views[0].extentFt, { width: 40, height: 30 });
+  assert.equal('extentFt' in body.views[0], false);
+  assert.equal('viewBox' in body.views[0], false);
+  // The yard the old per-view rectangle described is carried up to the project.
+  assert.deepEqual(body.yardFt, { width: 40, depth: 30 });
   assert.deepEqual(status, [{ msg: 'Views saved', state: 'success' }]);
   assert.deepEqual(result, { config: { id: 'backyard' } });
 });

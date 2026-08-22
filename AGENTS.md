@@ -121,7 +121,7 @@ in its own `planting_layout.csv`.
 ```
 plants.csv                       shared species catalog (all projects)
 projects/index.json              { defaultProject, projects: [{ id, name }] }
-projects/<slug>/project.json     views[]: extent + origin in feet, backgrounds, labels
+projects/<slug>/project.json     the yard in feet, plus views[]: labels, photos
 projects/<slug>/planting_layout.csv
 projects/<slug>/features.json    yard features in feet; optional, absent means none
 projects/<slug>/img/…            that project's background images
@@ -133,11 +133,94 @@ projects/<slug>/layout-history.json   (generated, gitignored)
 `^[a-z0-9][a-z0-9_-]*$` — they become both URL and file path segments, and the
 server rejects anything else (`src/data/projectPaths.js`).
 
-**Prefer the Setup mode toolbar over hand-editing `project.json`.** It adds,
-reorders, and removes views, edits each one's extent and origin in feet, and lets
-you drag the crop rectangle, ground line, and near edge directly on the drawing;
-*Save views* writes the file back through `POST /api/project`. Hand-editing works
-too, but Setup mode cannot produce a geometry the renderers disagree with.
+**Prefer the Setup mode toolbar over hand-editing `project.json`.** It edits the
+yard, adds/reorders/removes views, and places each view's photograph by dragging
+it on the drawing; *Save views* writes the file back through `POST /api/project`.
+Hand-editing works too, but Setup mode cannot produce a geometry the renderers
+disagree with.
+
+#### The yard, and the views derived from it
+
+A project declares **one yard**, in feet, and every view's rectangle follows from
+it. This is the single most load-bearing fact about the format:
+
+| key | meaning |
+| --- | --- |
+| `yardFt` | how far the yard runs `width` east-west and `depth` north-south |
+| `paddingFt` | margin drawn around it on every side |
+| `elevationFt` | `above` and `below` the ground line, shared by every elevation |
+| `pxPerFt` | drawing resolution; viewBox units per foot |
+
+From those, `deriveViewGeometry` gives each view its `originFt`, `extentFt`, and
+`viewBox`:
+
+- a **plan** covers `yardFt` plus `paddingFt` on all four sides;
+- an **elevation** covers whichever yard axis runs across it — width for a view
+  from the north or south, depth for one from the east or west — plus the same
+  margin at both ends, and `above + below` of height.
+
+Three things fall out, and each one used to be a defect:
+
+- **The panels line up.** Every view is drawn at one screen scale
+  (`src/render/pageScale.js`), sized `extentFt × pxPerFt`, so a foot is the same
+  size everywhere and a view covering twice as much yard is twice as wide.
+- **The elevations share a ground row.** Identical `above`/`below` means
+  identical panel heights; bottom-aligning them is all the alignment there is.
+- **The shared yard cannot shrink.** `resolveYardBounds` returns the declared
+  yard. The old model derived it from whatever the views overlapped, so
+  reframing one view narrowed where plants could live in all of them — silently,
+  and occasionally to nothing.
+
+What a view still declares is what genuinely differs between views:
+
+| key | meaning |
+| --- | --- |
+| `id` | slug; addresses the panel (`data-view-panel`), its SVG (`<id>Svg`), and its export PNG |
+| `type` | `plan` (looking down) or `elevation` (looking horizontally) |
+| `viewFrom` | elevations only — the compass side the viewer stands on |
+| `label`, `sublabel` | panel headings; omitted when they match the defaults |
+| `background` | image path relative to the project directory |
+| `photoFt` | where that photo sits, as a rectangle of yard — see below |
+| `viewerAtFt` | elevations only: where the camera stands on the **depth** axis |
+
+**Nothing writes a view rectangle back.** `serializeProjectConfig` emits the yard
+and the per-view fields above and no geometry at all, which is what stops a save
+from re-acquiring rectangles that can disagree.
+
+Two older shapes are read and migrated on load by `normalizeProjectConfig`: the
+per-view `extentFt`/`originFt` form (the yard is taken from the plan, the
+headroom from the tallest elevation, and **each view's old rectangle becomes its
+photograph's placement**, so no picture moves), and the pixel-authored
+`{plan, elevations[]}` form before it. Detail callouts and `backgroundFrom` are
+gone; a stale `backgroundFrom` in a file is ignored rather than honoured.
+
+#### Placing the photograph
+
+Because a view's rectangle is the yard, the photograph is what moves.
+`photoFt` — `{ originFt, extentFt }` in the view's own coordinates — says which
+rectangle of yard the image covers, and `src/render/photoPlacement.js` maps it
+through the view's transform into the pixels the panel and the PNG export both
+need. Absent means "fills the panel", which is where an uncalibrated upload
+starts.
+
+Two gestures set it, both in Setup mode on the selected view:
+
+- **Drag anywhere on the drawing** to slide the picture (`resolvePhotoDrag`).
+  There is nothing to hit-test, which is why the eight extent handles, their hit
+  radius, and their resize cursors are all gone.
+- **Measure a known length** to scale it (`resolveRulerCalibration`): drag across
+  something whose real length you know and type it. The measurement's midpoint
+  is held fixed, so the thing being measured does not slide out from under the
+  pointer.
+
+The guides are the fixed target the photo is dragged onto: the yard's outline,
+its `0, 0` corner, the ground line, and a foot grid drawn in **every** view so
+the same 5 ft line is visible in more than one panel at a time. A plan also
+marks which side each elevation is looked at from, and each elevation's camera.
+
+The delta is taken in feet through `xToAxis`/`yToHeight` rather than in pixels —
+that is what makes one implementation right for the mirrored directions, where a
+rightward drag is a *decreasing* axis value.
 
 *Upload photo* puts a background on the selected view without touching the
 filesystem: the browser decodes the picked file, scales it to at most 2400 px on
@@ -147,66 +230,26 @@ raw body of `POST /api/view-background`, and the **server** names the file —
 `img/<view-id>-<content-hash>.webp` — so nothing a client sends becomes a path.
 The hash is not decoration: the stored `background` string has to change for the
 drawing to re-fetch anything, so a replacement photo lands on a new path and the
-view's earlier uploads are deleted. `src/data/backgroundStore.js` holds the
-guards; see "Uploading a background" below.
+view's earlier uploads are deleted. A new photo also clears `photoFt`: a
+placement describes a rectangle of a *particular* image.
+`src/data/backgroundStore.js` holds the guards; see "Uploading a background".
 
-The fastest way to get a view's `extentFt` right is *Measure a known length*:
-arm it, drag across something in the background photo whose real length you know
-— a fence panel, a driveway, a doorway — and type that length. The photo fills
-the viewBox, so the span solves the whole view's scale
-(`resolveRulerCalibration` in `src/render/setupOverlay.js`). A plan's corner and
-an elevation's near edge sit on a photo edge at any scale and stay put; the
-ground line scales with the extent so it keeps the photo row it was placed on.
-
-#### The views[] schema
-
-A project declares `views[]`, and every view is authored **in feet**:
-
-| key | meaning |
-| --- | --- |
-| `id` | slug; addresses the panel (`data-view-panel`), its SVG (`<id>Svg`), and its export PNG |
-| `type` | `plan` (looking down) or `elevation` (looking horizontally) |
-| `viewFrom` | elevations only — the compass side the viewer stands on |
-| `extentFt` | how much yard the view covers, `{ width, height }` |
-| `originFt` | the yard coordinate at the viewBox's bottom-left corner |
-| `viewBox` | drawing resolution in px; **derived, not a scale** — see below |
-| `label`, `sublabel` | panel headings; omitted when they match the defaults |
-| `background` | image path relative to the project directory |
-| `backgroundFrom` | id of a view to borrow (and crop) a background from |
-| `viewerAtFt` | elevations only: where the camera stands on the **depth** axis |
-
-**Pixels per foot is derived, never authored**: `viewBox.width / extentFt.width`,
-and the height must agree with it or `createViewTransform` rejects the view as
-non-uniformly scaled. `src/render/viewTransform.js` is the single feet↔pixel
+**Pixels per foot is derived, never authored per view**: `viewBox.width /
+extentFt.width`, and the height must agree with it or `createViewTransform`
+rejects the view as non-uniformly scaled. Derived geometry cannot produce one,
+which is the point. `src/render/viewTransform.js` is the single feet↔pixel
 authority; renderers, drag controllers, and the setup overlay all go through it.
-The toolbar's Scale control is **zoom only** — it resizes panels on screen and
+The toolbar's Scale control is **zoom only** — it multiplies the page scale and
 never touches plant coordinates or the geometry in `project.json`.
-
-For an elevation, `originFt.x` is the value of the horizontal axis at the view's
-**near** edge and `originFt.y` is the ground height at the bottom edge, so a
-negative `originFt.y` lifts the ground line into the drawing.
-
-A **detail callout** is just another view with a smaller `extentFt`, a non-zero
-`originFt`, and `backgroundFrom` pointing at the full view: it re-uses that
-view's photo cropped to its own rectangle (`src/render/backgroundCrop.js`), on
-screen and in the exported PNG alike. The source must look at the yard the same
-way — same `type`, and same `viewFrom` for elevations. Any number of views is
-fine; `projects/example-frontyard/` ships four.
-
-The legacy pixel-authored shape — `{ plan, elevations[] }` with `viewBox`,
-`bottomOffsetPx`, `leftOffsetPx`, and a project-wide `defaultPixelsPerInch` — is
-still read and migrated on load by `normalizeProjectConfig`, so an old
-`project.json` keeps working. Nothing writes it back: saves always emit
-`views[]`.
 
 The active project comes from `?project=<slug>`, falling back to `defaultProject`.
 Switching projects **reloads the page** rather than re-initializing in place: the
 render loop, history stack, and drag controllers are each built once against a
 single project, and a reload keeps that simple and the URL linkable.
 
-`projects/example-frontyard/` is a throwaway template showing portrait dimensions,
-north/west elevations, and a detail callout cropped out of the plan photo; delete
-it once you have real projects.
+`projects/example-frontyard/` is a throwaway template showing a tall narrow yard,
+north/east/south elevations, and photographs placed rather than fitted; delete it
+once you have real projects.
 
 #### Yard features
 
@@ -359,19 +402,16 @@ drawn at reduced opacity so they read as reference rather than as targets.
 - Each view's **static background image** is declared in its `project.json` as a
   path relative to the project directory, and applied by `src/render/viewConfig.js`.
   A stylesheet cannot vary backgrounds per project, so `styles.css` no longer sets them.
-- A photo is painted `background-size: contain`, **not** stretched to the panel. A
-  photo whose aspect differs from the view's would otherwise be scaled differently
-  on each axis, and a plant placed at the right height in feet would sit at the
-  wrong height against the photo; uniform scaling keeps the photo and the drawing
-  agreeing, and letterboxes rather than lying. A background authored to the view's
-  own ratio — every image in `projects/backyard/`, all 800×600 against an 800×600
-  viewBox — fills the panel exactly as before. **A photo never reshapes a view**:
-  `extentFt` is the author's yard geometry and an upload leaves it alone.
-- The panel is bounded by capping its **width**, not its height
-  (`width: min(100%, calc(70vh * var(--view-aspect-ratio)))`). With `width: 100%` a
-  `max-height` would constrain both axes, which drops `aspect-ratio` and brings the
-  stretching back; capping width leaves height free to follow the ratio, so a tall
-  view gets a narrower panel instead of a page-long one.
+- An **unplaced** photo is painted `background-size: contain`, not stretched to
+  the panel: it has no rectangle of its own yet, so it is shown whole rather than
+  distorted to a shape it has no reason to share. Once it is placed,
+  `photoPlacement.js` overrides both size and position with the rectangle the
+  photo actually covers. **A photo never reshapes a view** — the view is the
+  yard, and an upload leaves the yard alone.
+- The panel is `extentFt × --page-px-per-ft` on both axes, one scale for the
+  page (`src/render/pageScale.js`). The scale is chosen so the widest view fits
+  the container or the tallest fits 70vh, whichever binds first, so a tall yard
+  scales the whole page down rather than running page-long on its own.
 - Requirements:
   - Must be **orthographic** (no perspective, no vanishing lines).
   - Vector-like: use flat color fields and simple shapes, not noise textures.
@@ -455,8 +495,8 @@ Top view uses the yard coordinate system (origin at SW corner, y increasing nort
 ### 4. Interaction & Controls
 
 - Month selector (`#monthSelect`) controls seasonal state.
-- Scale input + slider are **zoom**: they resize the panels on screen only, with bounds in `SCALE_LIMITS`. Physical scale belongs to each view's `extentFt`.
-- Mode pills switch between View, Edit (drag plants), Setup (define views), and Features
+- Scale input + slider are **zoom**: they multiply the page scale and nothing else, with bounds in `SCALE_LIMITS`. Physical scale belongs to the project's `yardFt`.
+- Mode pills switch between View, Edit (drag plants), Setup (declare the yard, place photos), and Features
   (draw the yard model).
 - Lock toggle enables/disables drag-to-move behavior powered by `createPlantDragController`, which clamps edits to the viewBox and triggers rerenders.
 - **Each view SVG has several controllers, so none may own an inline style.** The drag,
@@ -494,12 +534,13 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
 - `src/data/projectPaths.js` – server-side resolution of a project's data files (path-traversal guard).
 - `src/render/elevationOrientation.js` – compass → axis/mirror/depth mapping for elevations.
 - `src/render/viewTransform.js` – the one feet↔pixel authority, wrapping that mapping.
-- `src/render/yardBounds.js` – the shared yard a plant may be dragged within.
-- `src/render/backgroundCrop.js` – which photo a view draws, and which patch of it.
+- `src/render/yardBounds.js` – the declared yard a plant may be dragged within.
+- `src/render/photoPlacement.js` – which photo a view draws, and where in the panel it lands.
+- `src/render/pageScale.js` – the one screen scale every panel is drawn at.
 - `src/data/backgroundUpload.js` – browser-side resize/re-encode, and the upload POST.
 - `src/data/backgroundStore.js` – server-side upload guards: allowed types, magic-byte
   sniff, and the filename the server (never the client) chooses.
-- `src/interaction/setupPanel.js`, `src/interaction/setupController.js`, `src/render/setupOverlay.js` – Setup mode's form, on-canvas handles, and guides.
+- `src/interaction/setupPanel.js`, `src/interaction/setupController.js`, `src/render/setupOverlay.js` – Setup mode's yard form, the photo-drag gesture, and the guides it is dragged onto.
 - `src/interaction/featurePanel.js`, `src/interaction/featureController.js`, `src/render/featureOverlay.js` – Features mode's list, plan-only drag handles, and selection outline.
 - `src/data/plantParser.js` – merges species/layout CSVs, normalizes month specs, aliases, and seasonal palettes.
 - `src/data/layoutExporter.js` – converts in-memory plants back to CSV with consistent precision/escaping.

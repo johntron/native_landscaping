@@ -278,13 +278,16 @@ function spanOf(points) {
 }
 
 /**
- * The bug this reproduces: a project whose elevations show a narrow slice of
- * the yard has a shared yard far smaller than its plan. A new shape sized and
- * placed by the plan looked right in the plan and was wholly off-canvas in
- * every elevation — "I do not see the wall in the other views".
+ * The bug this reproduces: a project whose elevations showed a narrower slice
+ * of yard than its plan had a shared yard far smaller than the plan. A new
+ * shape sized and placed by the plan looked right in the plan and was wholly
+ * off-canvas in every elevation — "I do not see the wall in the other views".
+ *
+ * That arrangement is no longer expressible: every view is derived from one
+ * declared yard. The test stays as the guard that the derivation holds.
  */
-test.describe('features in a project whose elevations show a narrow slice', () => {
-  const NARROW = 'features-narrow';
+test.describe('a new feature lands inside every derived view', () => {
+  const NARROW = 'features-derived';
 
   test.beforeEach(async ({ request }) => {
     await request.post(featuresUrl(NARROW), { data: { features: [] } });

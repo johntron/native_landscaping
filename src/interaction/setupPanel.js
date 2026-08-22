@@ -2,14 +2,24 @@ import {
   VIEW_FROM_DIRECTIONS,
   resolveElevationOrientation,
 } from '../render/elevationOrientation.js';
-import { describeYardBounds } from '../render/yardBounds.js';
 
 /**
- * The Setup-mode control panel: a list of the project's views, and a form over
- * the selected one.
+ * The Setup-mode control panel: the yard, a list of the project's views, and a
+ * form over the selected one.
  *
- * Every edit goes through `onCommit(views)`, which hands the app a candidate
- * `views[]` to validate and apply. The panel never mutates the live project
+ * **The yard is the only geometry anyone types.** How far it runs east-west and
+ * north-south, how much margin to draw around it, and how tall the elevations
+ * are — six numbers for the whole project, from which every view's rectangle is
+ * derived. The panel used to ask for an extent and an origin per view, which
+ * was four numbers times however many views, in coordinates that meant
+ * something different per view type, and which could disagree with each other.
+ *
+ * What is left per view is what genuinely differs: what it is called, what it
+ * looks at, and where its photograph sits — and the photograph is placed by
+ * dragging it on the drawing, not by typing.
+ *
+ * Every edit goes through `onCommit(patch)`, which hands the app a candidate
+ * project to validate and apply. The panel never mutates the live project
  * itself — a rejected edit must leave the canvas showing the last good state,
  * and the only way to guarantee that is to let the app own the transition.
  *
@@ -38,14 +48,22 @@ export function createSetupPanel({
 
   // The ruler's state lives here rather than in the form, because the form is
   // rebuilt wholesale on every commit and a measurement has to outlive that.
-  const state = { selectedId: '', views: [], status: null, ruler: false, measurement: null };
+  const state = {
+    selectedId: '',
+    project: { yardFt: { width: 0, depth: 0 }, paddingFt: 0, elevationFt: { above: 0, below: 0 }, pxPerFt: 0, views: [] },
+    views: [],
+    status: null,
+    ruler: false,
+    measurement: null,
+  };
 
-  function render(views) {
-    state.views = Array.isArray(views) ? views : [];
+  function render(project) {
+    state.project = project || state.project;
+    state.views = Array.isArray(state.project.views) ? state.project.views : [];
     if (!state.views.some((view) => view.id === state.selectedId)) {
       state.selectedId = state.views[0]?.id || '';
     }
-    root.replaceChildren(buildList(), buildForm(), buildYard(), buildFooter());
+    root.replaceChildren(buildYard(), buildList(), buildForm(), buildFooter());
   }
 
   function selected() {
@@ -53,10 +71,17 @@ export function createSetupPanel({
   }
 
   /** Commit a transformed copy; the panel keeps no draft of its own. */
-  function commit(nextViews, nextSelectedId) {
+  function commit(patch, nextSelectedId) {
     if (nextSelectedId !== undefined) state.selectedId = nextSelectedId;
-    onCommit?.(nextViews);
+    onCommit?.({ ...state.project, ...patch });
   }
+
+  /** Commit a change to views[] alone. */
+  function commitViews(nextViews, nextSelectedId) {
+    commit({ views: nextViews }, nextSelectedId);
+  }
+
+  const rerender = () => render(state.project);
 
   function buildList() {
     const wrap = el('div', 'setup-panel__section');
@@ -69,7 +94,7 @@ export function createSetupPanel({
 
       const pick = button(`${view.label}`, 'setup-panel__pick', () => {
         state.selectedId = view.id;
-        render(state.views);
+        rerender();
         onSelect?.(view.id);
       });
       pick.setAttribute('aria-pressed', view.id === state.selectedId ? 'true' : 'false');
@@ -79,11 +104,11 @@ export function createSetupPanel({
 
       const actions = el('div', 'setup-panel__item-actions');
       actions.appendChild(
-        iconButton('↑', 'Move up', index === 0, () => commit(moveView(state.views, index, -1)))
+        iconButton('↑', 'Move up', index === 0, () => commitViews(moveView(state.views, index, -1)))
       );
       actions.appendChild(
         iconButton('↓', 'Move down', index === state.views.length - 1, () =>
-          commit(moveView(state.views, index, 1))
+          commitViews(moveView(state.views, index, 1))
         )
       );
       actions.appendChild(
@@ -91,13 +116,13 @@ export function createSetupPanel({
           const copy = { ...view, id: uniqueId(state.views, view.id), label: `${view.label} copy` };
           const next = [...state.views];
           next.splice(index + 1, 0, copy);
-          commit(next, copy.id);
+          commitViews(next, copy.id);
         })
       );
       // A project with no views has nothing to draw, so the last one stays.
       actions.appendChild(
         iconButton('✕', 'Remove', state.views.length < 2, () =>
-          commit(state.views.filter((_, i) => i !== index), '')
+          commitViews(state.views.filter((_, i) => i !== index), '')
         )
       );
       item.appendChild(actions);
@@ -108,7 +133,7 @@ export function createSetupPanel({
     wrap.appendChild(
       button('+ Add view', 'button pill-button setup-panel__add', () => {
         const added = newView(state.views);
-        commit([...state.views, added], added.id);
+        commitViews([...state.views, added], added.id);
       })
     );
     return wrap;
@@ -121,7 +146,7 @@ export function createSetupPanel({
     wrap.appendChild(el('h3', 'setup-panel__heading', 'Selected view'));
 
     const patch = (changes) =>
-      commit(state.views.map((v) => (v.id === view.id ? applyPatch(v, changes) : v)));
+      commitViews(state.views.map((v) => (v.id === view.id ? applyPatch(v, changes) : v)));
 
     const grid = el('div', 'setup-panel__grid');
     grid.appendChild(textField('Name', view.label, (value) => patch({ label: value })));
@@ -137,36 +162,10 @@ export function createSetupPanel({
       );
     }
 
-    grid.appendChild(
-      numberField('Width (ft)', view.extentFt.width, 0.1, (value) =>
-        patch({ extentWidthFt: value })
-      )
-    );
-    grid.appendChild(
-      numberField('Height (ft)', view.extentFt.height, 0.1, (value) =>
-        patch({ extentHeightFt: value })
-      )
-    );
-    grid.appendChild(
-      numberField(
-        view.type === 'elevation' ? 'Near edge (ft)' : 'Left edge (ft)',
-        view.originFt.x,
-        0.1,
-        (value) => patch({ originX: value })
-      )
-    );
-    grid.appendChild(
-      numberField(
-        view.type === 'elevation' ? 'Ground height (ft)' : 'Bottom edge (ft)',
-        view.originFt.y,
-        0.1,
-        (value) => patch({ originY: value })
-      )
-    );
     if (view.type === 'elevation') {
       grid.appendChild(
         optionalNumberField(
-          `Camera stands at (${depthAxisOf(view)} ft)`,
+          `Camera stands ${cameraPrompt(view)}`,
           view.viewerAtFt,
           0.1,
           (value) => patch({ viewerAtFt: value })
@@ -174,47 +173,48 @@ export function createSetupPanel({
       );
     }
     grid.appendChild(
-      numberField('Resolution (px per ft)', view.viewBox.width / view.extentFt.width, 1, (value) =>
-        patch({ pxPerFt: value })
-      )
-    );
-    grid.appendChild(
       textField('Background image', view.background || '', (value) =>
         patch({ background: value.trim() || null })
       )
     );
     grid.appendChild(uploadField(view));
-    grid.appendChild(
-      selectField(
-        'Borrow background from',
-        view.backgroundFrom || '',
-        // Only a view that looks at the yard the same way can be cropped into
-        // this one; anything else would be a meaningless patch of photo.
-        [
-          '',
-          ...state.views
-            .filter(
-              (v) =>
-                v.id !== view.id &&
-                v.background &&
-                v.type === view.type &&
-                v.viewFrom === view.viewFrom
-            )
-            .map((v) => v.id),
-        ],
-        (value) => patch({ backgroundFrom: value || undefined })
-      )
-    );
     wrap.appendChild(grid);
-    wrap.appendChild(buildRuler(view));
+    wrap.appendChild(buildPhoto(view, patch));
+    return wrap;
+  }
+
+  /**
+   * Placing the photograph: the two gestures, and a way back out of both.
+   *
+   * The drawing is fixed — it is the yard — so this is the only geometry left
+   * to get right, and neither half of it is a number anyone can look up. Drag
+   * until the yard outline sits on the yard in the picture; measure something
+   * you know the length of to fix the scale.
+   */
+  function buildPhoto(view, patch) {
+    const wrap = el('div', 'setup-panel__section setup-panel__photo');
+    wrap.appendChild(el('h3', 'setup-panel__heading', 'Place the photo'));
+    if (!view.background) {
+      wrap.appendChild(
+        el('p', 'setup-panel__hint', 'Upload a photo above, and it can be positioned here.')
+      );
+      return wrap;
+    }
     wrap.appendChild(
       el(
         'p',
         'setup-panel__hint',
-        `Drawing is ${Math.round(view.viewBox.width)} × ${Math.round(view.viewBox.height)} px. ` +
-          'Upload a photo above, or drop one into the project folder under img/ and type its path.'
+        state.ruler
+          ? 'Measuring: drag across something in the photo whose real length you know.'
+          : 'Drag the photo on the drawing to line it up with the orange yard outline.'
       )
     );
+    wrap.appendChild(buildRuler(view));
+    const reset = button('Reset photo to fill the panel', 'button pill-button', () =>
+      patch({ photoFt: null })
+    );
+    reset.disabled = !view.photoFt;
+    wrap.appendChild(reset);
     return wrap;
   }
 
@@ -254,7 +254,7 @@ export function createSetupPanel({
       () => {
         state.ruler = !state.ruler;
         if (!state.ruler) state.measurement = null;
-        render(state.views);
+        rerender();
         onRulerToggle?.(state.ruler);
       }
     );
@@ -305,86 +305,62 @@ export function createSetupPanel({
   }
 
   /**
-   * What the views, as currently edited, leave plantable.
+   * The yard every view is derived from.
    *
-   * The geometry authored here is per-view, but its consequence is shared: the
-   * yard is the plan narrowed to what every primary elevation can draw, so
-   * moving one view's near edge shrinks where a plant or a feature is allowed
-   * to live in ALL of them. Reframing the plan and leaving the elevations
-   * behind is the way that goes badly — it strands them in the old coordinate
-   * frame, and the yard collapses to a corner or to nothing. Neither shows up
-   * on the canvas, so it is said here, on every edit, before Save.
+   * Six numbers for the whole project, and the reason the panels line up: two
+   * views cannot disagree about a yard there is only one of. This section used
+   * to be a warning — it read out how much of the yard the views still had in
+   * common, because each carried its own rectangle and reframing one silently
+   * shrank where plants could live in all of them. There is nothing left to
+   * warn about.
    */
   function buildYard() {
     const wrap = el('div', 'setup-panel__section setup-panel__yard');
-    wrap.appendChild(el('h3', 'setup-panel__heading', 'Shared yard'));
-    const summary = describeYardBounds(state.views);
-    if (!summary) {
-      wrap.appendChild(
-        el('p', 'setup-panel__hint', 'No plan view, so there is no shared yard to anchor plants to.')
-      );
-      return wrap;
-    }
+    wrap.appendChild(el('h3', 'setup-panel__heading', 'The yard'));
+    const { yardFt, paddingFt, elevationFt, pxPerFt } = state.project;
 
-    if (summary.conflicts.length) {
-      summary.conflicts.forEach((conflict) => {
-        wrap.appendChild(
-          el(
-            'p',
-            'setup-panel__yard-alarm',
-            `"${viewLabel(conflict.id)}" covers ${conflict.axis} ` +
-              `${span(conflict.viewCovers)}, but the plan covers ${span(conflict.planCovers)} — ` +
-              'nothing in the yard can appear in both. Move its near edge into the plan.'
-          )
-        );
-      });
-      return wrap;
-    }
-
-    const narrowed = ['x', 'y'].filter(
-      (axis) =>
-        summary.bounds[axis].min > summary.plan[axis].min ||
-        summary.bounds[axis].max < summary.plan[axis].max
-    );
-    wrap.appendChild(
-      el(
-        'p',
-        narrowed.length ? 'setup-panel__yard-note' : 'setup-panel__hint',
-        `Plants and features can only live in x ${span(summary.bounds.x)}, ` +
-          `y ${span(summary.bounds.y)}.`
+    const grid = el('div', 'setup-panel__grid');
+    grid.appendChild(
+      numberField('East–west (ft)', yardFt.width, 0.5, (value) =>
+        commit({ yardFt: { ...yardFt, width: value } })
       )
     );
-    if (!narrowed.length) {
-      wrap.appendChild(el('p', 'setup-panel__hint', 'That is the whole plan.'));
-      return wrap;
-    }
-    const blame = narrowed
-      .flatMap((axis) =>
-        ['min', 'max'].map((edge) =>
-          summary.limits[axis][edge]
-            ? `${viewLabel(summary.limits[axis][edge])} caps ${axis} at ` +
-              `${roundForDisplay(summary.bounds[axis][edge])} ft`
-            : ''
-        )
+    grid.appendChild(
+      numberField('North–south (ft)', yardFt.depth, 0.5, (value) =>
+        commit({ yardFt: { ...yardFt, depth: value } })
       )
-      .filter(Boolean);
+    );
+    grid.appendChild(
+      numberField('Margin around it (ft)', paddingFt, 0.5, (value) =>
+        commit({ paddingFt: value })
+      )
+    );
+    grid.appendChild(
+      numberField('Elevations reach up (ft)', elevationFt.above, 1, (value) =>
+        commit({ elevationFt: { ...elevationFt, above: value } })
+      )
+    );
+    grid.appendChild(
+      numberField('Foreground below ground (ft)', elevationFt.below, 0.5, (value) =>
+        commit({ elevationFt: { ...elevationFt, below: value } })
+      )
+    );
+    grid.appendChild(
+      numberField('Resolution (px per ft)', pxPerFt, 1, (value) => commit({ pxPerFt: value }))
+    );
+    wrap.appendChild(grid);
     wrap.appendChild(
       el(
         'p',
         'setup-panel__hint',
-        `The plan covers x ${span(summary.plan.x)}, y ${span(summary.plan.y)}` +
-          (blame.length ? ` — ${blame.join('; ')}.` : '.')
+        `Plants and features live in the ${roundForDisplay(yardFt.width)} × ` +
+          `${roundForDisplay(yardFt.depth)} ft yard; the margin is drawing room around it, ` +
+          'so a plant at the property line still has a grab handle clear of the panel ' +
+          'edge. It is in feet, and the panels shrink as the yard grows — a very large ' +
+          'yard wants a proportionally larger margin.'
       )
     );
     return wrap;
-  }
-
-  function viewLabel(id) {
-    return state.views.find((view) => view.id === id)?.label || id;
-  }
-
-  function span({ min, max }) {
-    return `${roundForDisplay(min)}\u2013${roundForDisplay(max)} ft`;
   }
 
   function buildFooter() {
@@ -404,38 +380,37 @@ export function createSetupPanel({
     getSelectedId: () => state.selectedId,
     setStatus: (message, stateName) => {
       state.status = message ? { message, state: stateName || 'info' } : null;
-      render(state.views);
+      rerender();
     },
     isRulerArmed: () => state.ruler,
     /** @param {{pixels: number, feet: number}|null} measurement */
     setMeasurement: (measurement) => {
       state.measurement = measurement;
-      render(state.views);
+      rerender();
     },
   };
 }
 
 /**
- * Apply one field change.
+ * Apply one field change to a view.
  *
- * Feet are what a person actually knows about their yard, so `extentFt` is
- * authored freely in both directions and the pixel `viewBox` is derived from it
- * at the view's resolution. That makes the aspect ratio whatever the extent
- * says, and makes the non-uniform view createViewTransform rejects unreachable
- * from this form rather than merely guarded against.
- *
- * The earlier version locked extent to the viewBox's aspect, which meant typing
- * a height silently rewrote the width — you could never say "30 ft by 10 ft".
+ * There is no geometry here any more. A view's rectangle is derived from the
+ * project's yard, so the fields that used to live in this function — extent,
+ * origin, resolution — moved up to the yard form, where there is one of each
+ * for the whole project instead of one set per view that could disagree with
+ * the others.
  */
 function applyPatch(view, changes) {
-  const next = { ...view, viewBox: { ...view.viewBox }, extentFt: { ...view.extentFt }, originFt: { ...view.originFt } };
+  const next = { ...view };
 
   if ('label' in changes) next.label = changes.label;
   if ('sublabel' in changes) next.sublabel = changes.sublabel;
   if ('background' in changes) next.background = changes.background;
-  if ('backgroundFrom' in changes) {
-    if (changes.backgroundFrom) next.backgroundFrom = changes.backgroundFrom;
-    else delete next.backgroundFrom;
+  if ('photoFt' in changes) {
+    // Null is "fill the panel again", which is where an uploaded photo starts
+    // and the only way back if a drag went badly.
+    if (changes.photoFt) next.photoFt = changes.photoFt;
+    else delete next.photoFt;
   }
   if ('type' in changes) {
     next.type = changes.type;
@@ -443,31 +418,12 @@ function applyPatch(view, changes) {
     if (next.type === 'plan') delete next.viewFrom;
   }
   if ('viewFrom' in changes) next.viewFrom = changes.viewFrom;
-  if ('originX' in changes) next.originFt.x = changes.originX;
-  if ('originY' in changes) next.originFt.y = changes.originY;
   if ('viewerAtFt' in changes) {
     // Blank is a real answer — "this view has no camera position" — and it is
     // the default, so it has to be reachable by clearing the field.
     if (changes.viewerAtFt === null) delete next.viewerAtFt;
     else next.viewerAtFt = changes.viewerAtFt;
   }
-
-  // Resolution carries over from the current view unless the field changed it.
-  const pxPerFt =
-    'pxPerFt' in changes && changes.pxPerFt > 0
-      ? changes.pxPerFt
-      : next.viewBox.width / next.extentFt.width;
-  if ('extentWidthFt' in changes && changes.extentWidthFt > 0) {
-    next.extentFt.width = changes.extentWidthFt;
-  }
-  if ('extentHeightFt' in changes && changes.extentHeightFt > 0) {
-    next.extentFt.height = changes.extentHeightFt;
-  }
-  // Derived, never authored: the two stay uniform by construction.
-  next.viewBox = {
-    width: next.extentFt.width * pxPerFt,
-    height: next.extentFt.height * pxPerFt,
-  };
   return next;
 }
 
@@ -479,18 +435,10 @@ function moveView(views, index, delta) {
   return next;
 }
 
+/** A new view needs no geometry: the yard supplies it the moment it exists. */
 function newView(views) {
   const id = uniqueId(views, 'view');
-  return {
-    id,
-    type: 'plan',
-    label: 'New view',
-    sublabel: 'Looking Down',
-    viewBox: { width: 800, height: 600 },
-    originFt: { x: 0, y: 0 },
-    extentFt: { width: 30, height: 22.5 },
-    background: null,
-  };
+  return { id, type: 'plan', label: 'New view', sublabel: 'Looking Down', background: null };
 }
 
 /** Ids are path-safe slugs and must be unique within the project. */
@@ -574,12 +522,21 @@ function optionalNumberField(labelText, value, step, onChange) {
   return field(labelText, input);
 }
 
-/** Which yard axis runs INTO an elevation — the one its camera stands on. */
-function depthAxisOf(view) {
+/**
+ * Where an elevation's camera stands, said in compass words.
+ *
+ * The number is a position on the view's DEPTH axis — x for a view from the
+ * east or west, y for one from the north or south — and "x ft" told the reader
+ * nothing about which direction that ran or where it was measured from. The
+ * axis grows east and north from the yard's south-west corner, so that is what
+ * the field says.
+ */
+function cameraPrompt(view) {
   try {
-    return resolveElevationOrientation(view.viewFrom).depthKey;
+    const { depthKey } = resolveElevationOrientation(view.viewFrom);
+    return depthKey === 'y' ? 'this far north (ft)' : 'this far east (ft)';
   } catch {
-    return 'depth';
+    return 'at (ft)';
   }
 }
 

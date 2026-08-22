@@ -5,27 +5,31 @@ import { SCRATCH_DIR } from './scratch-fixture.mjs';
 import { openScratchProject } from './helpers.js';
 
 /**
- * projects/example-frontyard/project.json was found with every originFt gone,
- * including the negative originFt.y that positions each elevation's ground
- * line. serializeProjectConfig omits an origin of {0,0}, so a view that lost
- * its origin in memory leaves no trace of ever having had one — which makes
- * this the kind of damage nothing notices until a drawing looks wrong.
+ * projects/example-frontyard/project.json was once found with every originFt
+ * gone, including the negative values positioning each elevation's ground line
+ * (nl-jqd). A Setup Save had rebuilt each view and dropped a field on the way,
+ * and because the serializer omits a default there was no trace of it ever
+ * having been there — the kind of damage nothing notices until a drawing looks
+ * wrong.
  *
- * This project carries that geometry so a save can be watched over it. Its own
- * copy, per the fixture's convention, and emphatically not the real project:
- * that one is live data the running app writes to.
+ * A view no longer carries an origin, so that exact field cannot be lost. The
+ * same loss is now available one level down: `photoFt` is the only per-view
+ * geometry left, it is likewise omitted when absent, and losing it silently
+ * snaps a carefully placed photograph back to filling its panel. So the spec
+ * follows the field.
+ *
+ * Its own copy of the project, per the fixture's convention, and emphatically
+ * not the real one: that is live data the running app writes to.
  */
 const PROJECT = 'frontyard-save';
 
 test.describe.configure({ mode: 'serial' });
 
-async function origins() {
+async function placements() {
   const cfg = JSON.parse(
     await readFile(path.join(SCRATCH_DIR, 'projects', PROJECT, 'project.json'), 'utf8')
   );
-  return Object.fromEntries(
-    cfg.views.map((view) => [view.id, view.originFt ? { ...view.originFt } : { x: 0, y: 0 }])
-  );
+  return Object.fromEntries(cfg.views.map((view) => [view.id, view.photoFt ?? null]));
 }
 
 async function saveViews(page) {
@@ -33,58 +37,62 @@ async function saveViews(page) {
   await expect(page.locator('#setupRow .setup-panel__status')).toHaveText('Views saved');
 }
 
-test('a save carries every view origin through untouched', async ({ page }) => {
-  const before = await origins();
-  // The fixture's whole point: two elevations sit on a lifted ground line.
-  expect(before.north.y).toBeLessThan(0);
-  expect(before.west.y).toBeLessThan(0);
-  expect(before.plan).toEqual({ x: 2, y: 14.833316758684116 });
+/** The yard's own fields come first in the panel. */
+const yardField = (page, label) =>
+  page.locator('#setupRow .setup-panel__field', { hasText: label }).locator('input');
+
+test('a save carries every photo placement through untouched', async ({ page }) => {
+  const before = await placements();
+  // The fixture's whole point: two elevations sit on a photo lifted above the
+  // ground line, and one view has no placement at all.
+  expect(before.north.originFt.y).toBeLessThan(0);
+  expect(before.west.originFt.y).toBeLessThan(0);
+  expect(before.view).toBe(null);
 
   await openScratchProject(page, PROJECT);
   await page.locator('[data-mode="setup"]').click();
   await saveViews(page);
-  expect(await origins()).toEqual(before);
+  expect(await placements()).toEqual(before);
 
-  // Editing one view must not disturb another's origin — the damage found in
-  // the real project was every view at once, so per-view isolation is the
-  // property worth pinning.
-  const width = page.locator('#setupRow input[type="number"]').first();
-  await width.fill('28');
-  await width.blur();
+  // Resizing the yard reshapes every panel — and must not touch a single
+  // photograph, which is measured in yard feet and did not move.
+  await yardField(page, 'East–west (ft)').fill('14');
+  await yardField(page, 'East–west (ft)').blur();
   await saveViews(page);
-  expect(await origins()).toEqual(before);
+  expect(await placements()).toEqual(before);
 
+  // Nor may renaming one view disturb another's placement — the damage found in
+  // the real project was every view at once, so isolation is the property worth
+  // pinning.
   await page.locator('#setupRow .setup-panel__pick').nth(1).click();
-  const elevationWidth = page.locator('#setupRow input[type="number"]').first();
-  await elevationWidth.fill('11');
-  await elevationWidth.blur();
+  const name = page.locator('#setupRow .setup-panel__field', { hasText: 'Name' }).locator('input');
+  await name.fill('North side');
+  await name.blur();
   await saveViews(page);
-  expect(await origins()).toEqual(before);
+  expect(await placements()).toEqual(before);
 });
 
-test('dragging one view\'s ground line moves that origin and no other', async ({ page }) => {
-  const before = await origins();
+test("dragging one view's photo moves that placement and no other", async ({ page }) => {
+  const before = await placements();
   await openScratchProject(page, PROJECT);
   await page.locator('[data-mode="setup"]').click();
 
-  // Select the north elevation and drag its ground line upward.
+  // Select the north elevation and drag its photo upward.
   await page.locator('#setupRow .setup-panel__pick').nth(1).click();
   const svg = page.locator('#northSvg');
   await svg.scrollIntoViewIfNeeded();
-  // Aim at where the overlay actually drew the handle rather than guessing:
-  // the ground line's position depends on the view's origin and extent, which
-  // is the very thing under test.
-  const handle = svg.locator('[data-setup-handle="ground"]');
-  await expect(handle).toHaveCount(1);
-  const grip = await handle.boundingBox();
-  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+  const box = await svg.boundingBox();
+  const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  await page.mouse.move(centre.x, centre.y);
   await page.mouse.down();
-  await page.mouse.move(grip.x + grip.width / 2, grip.y - 40, { steps: 8 });
+  await page.mouse.move(centre.x, centre.y - 40, { steps: 8 });
   await page.mouse.up();
   await saveViews(page);
 
-  const after = await origins();
-  expect(after.north.y, 'the dragged ground line moved').not.toBe(before.north.y);
+  const after = await placements();
+  expect(after.north.originFt.y, 'the dragged photo moved').toBeGreaterThan(
+    before.north.originFt.y
+  );
   // Everything else is exactly where it was.
   expect(after.plan).toEqual(before.plan);
   expect(after.west).toEqual(before.west);

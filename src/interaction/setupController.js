@@ -1,21 +1,26 @@
-import { buildOverlayGeometry, pickHandle, resolveHandleDrag } from '../render/setupOverlay.js';
-
-const MIN_HITBOX_RADIUS_PX = 28; // matches dragController; generous for touch
+import { resolvePhotoDrag } from '../render/setupOverlay.js';
 
 /**
- * Drag the setup guides on a view.
+ * Drag the photograph under a view's drawing.
  *
  * This is the plant drag controller's sibling: same pointer capture, same
- * rAF-throttled repaint, same generous hit radius. It owns the pointer only in
- * Setup mode, where the plant controllers are locked, so the two never compete.
+ * rAF-throttled repaint. It owns the pointer only in Setup mode, where the
+ * plant controllers are locked, so the two never compete.
  *
- * Every gesture reports a candidate `{originFt, extentFt}` through `onChange`;
- * the app validates it before it becomes the live view, which is why nothing
- * here mutates the view it was handed.
+ * There is nothing to hit-test. A view's rectangle is derived from the declared
+ * yard, so the guides drawn over it are a fixed target and the only thing a
+ * gesture can move is the picture behind them — grab it anywhere. That replaced
+ * eight extent handles, their hit radius, and their eight resize cursors, and
+ * it is a better gesture besides: dragging a photo into place is what the task
+ * actually is.
+ *
+ * Every gesture reports a candidate `{photoFt}` through `onChange`; the app
+ * validates it before it becomes the live view, which is why nothing here
+ * mutates the view it was handed.
  *
  * Armed with `setRuler(true)` the same pointer draws a measuring segment
- * instead: handles are ignored for the duration, and the segment is reported
- * through `onRuler` for the app to draw and to ask a length for.
+ * instead, reported through `onRuler` for the app to draw and to ask a length
+ * for.
  *
  * @param {{ svg: SVGSVGElement, getView: () => object,
  *           onChange: (patch: object) => void, onCommit?: () => void,
@@ -24,7 +29,8 @@ const MIN_HITBOX_RADIUS_PX = 28; // matches dragController; generous for touch
 export function createSetupController({ svg, getView, onChange, onCommit, onRuler }) {
   const state = {
     locked: true,
-    handleId: '',
+    dragFrom: null,
+    dragView: null,
     pointerId: null,
     frame: 0,
     pending: null,
@@ -62,7 +68,6 @@ export function createSetupController({ svg, getView, onChange, onCommit, onRule
     return {
       view,
       point: { x: (event.clientX - rect.left) * scaleX, y: (event.clientY - rect.top) * scaleY },
-      scaleFactor: Math.max(scaleX, scaleY),
     };
   }
 
@@ -84,11 +89,12 @@ export function createSetupController({ svg, getView, onChange, onCommit, onRule
       return;
     }
 
-    const geometry = buildOverlayGeometry(context.view);
-    const handle = pickHandle(geometry, context.point, MIN_HITBOX_RADIUS_PX * context.scaleFactor);
-    if (!handle) return;
-
-    state.handleId = handle.id;
+    // Nothing to grab if there is no photo to move.
+    if (!context.view.background) return;
+    state.dragFrom = context.point;
+    // The view as it was when the gesture began; every frame's delta is
+    // measured against this one, never against the view it has already moved.
+    state.dragView = context.view;
     state.pointerId = event.pointerId;
     svg.setPointerCapture(event.pointerId);
     svg.style.cursor = 'grabbing';
@@ -108,21 +114,15 @@ export function createSetupController({ svg, getView, onChange, onCommit, onRule
       event.preventDefault();
       return;
     }
-    if (!state.handleId || event.pointerId !== state.pointerId) {
-      updateHoverCursor(context);
-      return;
-    }
+    if (!state.dragFrom || event.pointerId !== state.pointerId) return;
     if (!context) return;
-    state.pending = resolveHandleDrag(context.view, state.handleId, context.point);
+    // Measured from where the gesture STARTED, against the view as it was when
+    // it started: reporting a delta from the last frame would compound the
+    // rounding, and reporting one against the already-moved photo would move it
+    // twice per frame.
+    state.pending = resolvePhotoDrag(state.dragView, state.dragFrom, context.point);
     queueChange();
     event.preventDefault();
-  }
-
-  function updateHoverCursor(context) {
-    if (!context || state.ruler) return;
-    const geometry = buildOverlayGeometry(context.view);
-    const handle = pickHandle(geometry, context.point, MIN_HITBOX_RADIUS_PX * context.scaleFactor);
-    svg.style.cursor = handle ? cursorFor(handle) : 'default';
   }
 
   function handlePointerUp(event) {
@@ -135,7 +135,7 @@ export function createSetupController({ svg, getView, onChange, onCommit, onRule
       onRuler?.({ from, to, done: true });
       return;
     }
-    const wasDragging = Boolean(state.handleId);
+    const wasDragging = Boolean(state.dragFrom);
     // A flick can finish inside a single frame. Without this the coalesced
     // change is still pending when release() drops it, and the whole gesture
     // is silently lost.
@@ -161,8 +161,8 @@ export function createSetupController({ svg, getView, onChange, onCommit, onRule
   }
 
   /**
-   * Coalesce to one change per frame. A handle drag rescales the whole view, so
-   * an unthrottled stream would re-render every plant per pointermove.
+   * Coalesce to one change per frame. A photo drag repaints every panel, so an
+   * unthrottled stream would re-render every plant per pointermove.
    */
   function queueChange() {
     if (state.frame) return;
@@ -178,7 +178,8 @@ export function createSetupController({ svg, getView, onChange, onCommit, onRule
     if (state.pointerId !== null && svg.hasPointerCapture(state.pointerId)) {
       svg.releasePointerCapture(state.pointerId);
     }
-    state.handleId = '';
+    state.dragFrom = null;
+    state.dragView = null;
     state.pointerId = null;
     state.pending = null;
     state.from = null;
@@ -186,9 +187,13 @@ export function createSetupController({ svg, getView, onChange, onCommit, onRule
     svg.style.cursor = restingCursor();
   }
 
-  /** Crosshair says "this view is the one being set up"; locked says nothing. */
+  /**
+   * `grab` says the picture under the pointer is the thing that moves; the
+   * ruler's crosshair says a measurement starts here instead.
+   */
   function restingCursor() {
-    return state.locked ? 'default' : 'crosshair';
+    if (state.locked) return 'default';
+    return state.ruler ? 'crosshair' : 'grab';
   }
 
   /**
@@ -200,6 +205,7 @@ export function createSetupController({ svg, getView, onChange, onCommit, onRule
     if (next === state.ruler) return;
     state.ruler = next;
     release();
+    svg.style.cursor = restingCursor();
   }
 
   function setLocked(locked) {
@@ -218,12 +224,4 @@ export function createSetupController({ svg, getView, onChange, onCommit, onRule
   }
 
   return { setLocked, isLocked: () => state.locked, setRuler, destroy };
-}
-
-function cursorFor(handle) {
-  if (handle.axis === 'y') return 'ns-resize';
-  if (handle.axis === 'x') return 'ew-resize';
-  const vertical = handle.edgeY ? (handle.edgeY === 'max' ? 'n' : 's') : '';
-  const horizontal = handle.edgeX ? (handle.edgeX === 'max' ? 'e' : 'w') : '';
-  return `${vertical}${horizontal}-resize`;
 }
