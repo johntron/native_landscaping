@@ -2,8 +2,8 @@
   "id": "example-frontyard",
   "name": "Example front yard",
   "yardFt": {
-    "width": 6,
-    "depth": 25
+    "width": 7,
+    "depth": 13
   },
   "paddingFt": 2,
   "elevationFt": {
@@ -42,7 +42,7 @@
           "height": 14
         }
       },
-      "viewerAtFt": 20
+      "viewerAtFt": 14
     },
     {
       "id": "west",
@@ -59,7 +59,8 @@
           "width": 29,
           "height": 14
         }
-      }
+      },
+      "viewerAtFt": 8.13
     },
     {
       "id": "view",
@@ -75,7 +76,8 @@
           "width": 10,
           "height": 14
         }
-      }
+      },
+      "viewerAtFt": -1
     }
   ]
 }
