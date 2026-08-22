@@ -181,7 +181,7 @@ What a view still declares is what genuinely differs between views:
 | `label`, `sublabel` | panel headings; omitted when they match the defaults |
 | `background` | image path relative to the project directory |
 | `photoFt` | where that photo sits, as a rectangle of yard — see below |
-| `viewerAtFt` | elevations only: where the camera stands on the **depth** axis |
+| `viewerAtFt` | elevations only: where the camera stands on the **depth** axis; defaults to half the margin outside the edge it is taken from |
 
 **Nothing writes a view rectangle back.** `serializeProjectConfig` emits the yard
 and the per-view fields above and no geometry at all, which is what stops a save
@@ -194,33 +194,71 @@ photograph's placement**, so no picture moves), and the pixel-authored
 `{plan, elevations[]}` form before it. Detail callouts and `backgroundFrom` are
 gone; a stale `backgroundFrom` in a file is ignored rather than honoured.
 
+#### What Setup mode is
+
+Setup shows **one view at a time** — the selected one, scaled to the page — plus
+the list to switch between them. Every panel used to draw guides so the foot
+grid could be compared across views, because each view carried its own rectangle
+and had to be aligned against its neighbours by eye. A declared yard leaves
+nothing to align, and the page's whole width spent on one drawing beats four
+small ones. `src/render/pageScale.js` sizes it, with a larger height budget when
+focused and a ceiling on either dimension; margins for an aspect ratio that
+demands them are fine.
+
+Over that drawing: the yard's outline, its `0, 0` corner named on the canvas, an
+elevation's ground line, and a foot grid on whole yard feet. All fixed
+reference. Plants and features are **hidden by default** and switched on from
+the panel — setup is about the yard, and a full planting drawn over a photo is
+noise — except while something is stranded, when the plants *are* the subject
+and the switch says so instead of pretending to turn them off.
+
+**The camera is the one thing that moves.** Where an elevation is looked at from
+is the only per-view number the yard cannot supply, and it is a position on that
+elevation's depth axis — which runs into the page in its own drawing and is a
+line on the plan. So it is drawn and dragged on the plan, and the patch a drag
+reports belongs to a *different* view than the one under the pointer. Camera,
+direction arrow, and the band of yard behind it are ONE object: they were two
+marks for a while, a bar on the yard edge and a dashed line elsewhere, which is
+the same fact drawn twice in two places that could disagree.
+
+#### When the yard no longer contains the design
+
+A view can no longer miss the yard, but the yard is a number a person can type
+below what is standing in it, and `resolveYardBounds` clamps only new drags — a
+plant already outside cannot be dragged back. So the Setup panel counts and
+names them, with how far out each one is.
+
+**Never repaired automatically.** Resizing is exploratory — you type 6, look,
+type 8 — so a yard edit redraws and reports and touches no coordinate; only a
+button moves anything, and each press is one entry in the layout history. The
+two actions are two *intents*, not two transforms, and the panel says so:
+
+- **Scale the whole design to fit** is the "I mis-measured" correction. Every
+  plant and every feature moves together, uniformly, about the yard's corner, so
+  the design keeps its shape. Never enlarging — growing a design to fill a yard
+  is not a repair — and never per-axis, because non-uniform scaling distorts the
+  spacing between plants, which is most of what a planting plan is.
+- **Move inside the boundary** is the "that ground is gone" correction, and
+  touches only what is stranded. Available per plant as well as in bulk.
+
 #### Placing the photograph
 
-Because a view's rectangle is the yard, the photograph is what moves.
 `photoFt` — `{ originFt, extentFt }` in the view's own coordinates — says which
 rectangle of yard the image covers, and `src/render/photoPlacement.js` maps it
 through the view's transform into the pixels the panel and the PNG export both
-need. Absent means "fills the panel", which is where an uncalibrated upload
-starts.
+need. Absent means "fills the panel", painted `background-size: contain` so an
+uncalibrated image is shown whole rather than distorted.
 
-Two gestures set it, both in Setup mode on the selected view:
-
-- **Drag anywhere on the drawing** to slide the picture (`resolvePhotoDrag`).
-  There is nothing to hit-test, which is why the eight extent handles, their hit
-  radius, and their resize cursors are all gone.
-- **Measure a known length** to scale it (`resolveRulerCalibration`): drag across
-  something whose real length you know and type it. The measurement's midpoint
-  is held fixed, so the thing being measured does not slide out from under the
-  pointer.
-
-The guides are the fixed target the photo is dragged onto: the yard's outline,
-its `0, 0` corner, the ground line, and a foot grid drawn in **every** view so
-the same 5 ft line is visible in more than one panel at a time. A plan also
-marks which side each elevation is looked at from, and each elevation's camera.
-
-The delta is taken in feet through `xToAxis`/`yToHeight` rather than in pixels —
-that is what makes one implementation right for the mirrored directions, where a
-rightward drag is a *decreasing* axis value.
+**There is currently no UI for setting it.** Dragging the photo and scaling it
+from a measured length both lived in Setup and were taken out: both wrote
+`photoFt` starting from the PANEL's rectangle when a photo had no placement yet,
+and the panel is the yard's shape, not the picture's — so the first gesture on
+any photo stretched it, 4% on backyard's 800×600 and 39% on a 16:9 upload. The
+ruler went with them rather than surviving alone: under a declared yard it no
+longer solves a view's extent, so all it had left to scale was the photo, by the
+same arithmetic. Placements already in a file still render. What the replacement
+needs is the image's intrinsic aspect, which nothing currently loads — see
+nl-0di.
 
 *Upload photo* puts a background on the selected view without touching the
 filesystem: the browser decodes the picked file, scales it to at most 2400 px on
@@ -328,8 +366,11 @@ depth position the observer sits at infinity, so everything in the yard is in
 front of it. A wall standing between the photographer and the bed was then drawn
 *over* the bed in the view shot from the far side — the one place it is behind
 the camera. `viewerAtFt` is one number in yard feet on the view's depth axis
-(`x` for `east`/`west`, `y` for `north`/`south`), and `south`/`east` put the
-camera at the low end of that axis while `north`/`west` put it at the high end.
+(`x` for `east`/`west`, `y` for `north`/`south`). The side follows `farIsHigh`
+rather than the compass name: `south` and `west` stand at the LOW end of that
+axis — south of the yard, west of it — while `north` and `east` stand past its
+far side. It defaults to half the margin outside that edge, which is where a
+person stands to photograph their yard and which culls nothing.
 
 **Absent means cull nothing.** No project has to declare one, and one that does
 not draws exactly what it drew before — the opposite default from
@@ -540,7 +581,7 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
 - `src/data/backgroundUpload.js` – browser-side resize/re-encode, and the upload POST.
 - `src/data/backgroundStore.js` – server-side upload guards: allowed types, magic-byte
   sniff, and the filename the server (never the client) chooses.
-- `src/interaction/setupPanel.js`, `src/interaction/setupController.js`, `src/render/setupOverlay.js` – Setup mode's yard form, the photo-drag gesture, and the guides it is dragged onto.
+- `src/interaction/setupPanel.js`, `src/interaction/setupController.js`, `src/render/setupOverlay.js` – Setup mode's yard form and stranded-plant list, the camera drag, and the guides.
 - `src/interaction/featurePanel.js`, `src/interaction/featureController.js`, `src/render/featureOverlay.js` – Features mode's list, plan-only drag handles, and selection outline.
 - `src/data/plantParser.js` – merges species/layout CSVs, normalizes month specs, aliases, and seasonal palettes.
 - `src/data/layoutExporter.js` – converts in-memory plants back to CSV with consistent precision/escaping.

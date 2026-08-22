@@ -18,32 +18,50 @@
  * height budget, whichever binds first.
  */
 
-/** How much of the viewport height the tallest view may occupy. */
+/**
+ * How much of the viewport height the tallest view may occupy — more of it when
+ * Setup is showing a single view, since there is nothing to scroll past to
+ * reach the next one.
+ */
 const HEIGHT_BUDGET = 0.7;
+const FOCUSED_HEIGHT_BUDGET = 0.88;
 
 /** Below this a drawing is unreadable, so let the page scroll instead. */
 const MIN_PX_PER_FT = 4;
 
 /**
+ * And a ceiling on either dimension. Filling a 4K display with one small yard
+ * is not more legible, only bigger — the drawing is diagrammatic, and past a
+ * point the extra pixels go into the gaps between plants.
+ */
+const MAX_PANEL_PX = 1100;
+
+/**
  * @param {{ views: Array<{ extentFt: { width: number, height: number } }>,
  *           availableWidthPx: number, availableHeightPx: number,
- *           zoom?: number }} params
+ *           zoom?: number, focused?: boolean }} params
  * @returns {number} screen pixels per yard foot, for every panel alike
  */
-export function resolvePageScale({ views, availableWidthPx, availableHeightPx, zoom = 1 }) {
+export function resolvePageScale({
+  views,
+  availableWidthPx,
+  availableHeightPx,
+  zoom = 1,
+  focused = false,
+}) {
   const list = (Array.isArray(views) ? views : []).filter((view) => view?.extentFt?.width > 0);
   if (!list.length) return MIN_PX_PER_FT;
 
   const widestFt = Math.max(...list.map((view) => view.extentFt.width));
   const tallestFt = Math.max(...list.map((view) => view.extentFt.height));
 
-  const fits = [];
+  const fits = [MAX_PANEL_PX / widestFt, MAX_PANEL_PX / tallestFt];
   if (availableWidthPx > 0) fits.push(availableWidthPx / widestFt);
-  if (availableHeightPx > 0) fits.push((availableHeightPx * HEIGHT_BUDGET) / tallestFt);
-  // Nothing measured yet — the first layout pass, before the container has a
-  // width. A guess here would be visible for one frame; the caller re-runs.
-  if (!fits.length) return MIN_PX_PER_FT;
-
+  if (availableHeightPx > 0) {
+    fits.push(
+      (availableHeightPx * (focused ? FOCUSED_HEIGHT_BUDGET : HEIGHT_BUDGET)) / tallestFt
+    );
+  }
   const factor = Number(zoom) > 0 ? Number(zoom) : 1;
   return Math.max(Math.min(...fits) * factor, MIN_PX_PER_FT);
 }

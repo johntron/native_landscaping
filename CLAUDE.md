@@ -21,10 +21,13 @@ from `?project=<slug>`; switching reloads the page.
 derived from it**, so two views of one yard cannot disagree about how big it is. Panels are
 sized `extentFt × pxPerFt` at one page-wide screen scale (`src/render/pageScale.js`), which
 is what makes them line up and puts every elevation's ground on the same row. What a view
-still declares is its id, type, `viewFrom`, labels, an optional `viewerAtFt`, and its
-photograph. The **photo is placed, not fitted**: `photoFt` is the rectangle of yard the
-image covers, dragged into position on the drawing and scaled with *Measure a known
-length*, both in the Setup toolbar mode. Nothing writes a view rectangle back to the file.
+still declares is its id, type, `viewFrom`, labels, `viewerAtFt`, and its photograph. The
+**photo is placed, not fitted** (`photoFt` = the rectangle of yard the image covers), but
+there is currently no UI for placing it — see nl-0di. Nothing writes a view rectangle back
+to the file. **Setup mode** shows one view at a time with the yard drawn over it; the only
+thing draggable is an elevation's camera, on the plan, as one object with its direction
+arrow. Shrinking the yard below the planting is reported, never auto-repaired: the panel
+names what is outside and offers *scale the whole design to fit* or *move inside*.
 Older per-view `extentFt`/`originFt` files are migrated on load — their rectangles become
 their photos' placements, so no picture moves. Detail callouts (`backgroundFrom`) are gone.
 *Upload photo* resizes and re-encodes a picked image in the browser and posts it to

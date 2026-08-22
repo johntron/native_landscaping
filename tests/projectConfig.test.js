@@ -417,11 +417,23 @@ test("an elevation's camera position round-trips, and only an elevation has one"
   assert.deepEqual(normalizeProjectConfig(serialized, 'backyard').views, config.views);
 });
 
-test('an absent or unparseable camera position is simply absent', () => {
+test('an absent or unparseable camera stands half a margin outside the yard', () => {
+  // Every elevation gets a real position, because a camera you can drag on the
+  // plan has to exist before it can be dragged. The default is where a person
+  // stands to photograph their yard, and it culls nothing — so a project that
+  // never mentioned a camera draws exactly what it drew before.
   const withoutIt = normalizeProjectConfig(makeViewsConfig(), 'backyard');
-  assert.equal('viewerAtFt' in withoutIt.views[1], false);
+  const east = withoutIt.views[1]; // looks along x, standing at the high end
+  assert.equal(east.viewerAtFt, withoutIt.yardFt.width + withoutIt.paddingFt / 2);
+
+  // Defaults stay out of the file, or resizing the yard would bake a stale
+  // camera into a project that never named one.
   const serialized = serializeProjectConfig(withoutIt);
   assert.equal('viewerAtFt' in serialized.views[1], false);
+  assert.equal(
+    normalizeProjectConfig(serialized, 'backyard').views[1].viewerAtFt,
+    east.viewerAtFt
+  );
 
   const garbage = normalizeProjectConfig(
     makeViewsConfig({
@@ -432,5 +444,31 @@ test('an absent or unparseable camera position is simply absent', () => {
     }),
     'backyard'
   );
-  assert.equal('viewerAtFt' in garbage.views[1], false);
+  assert.equal(garbage.views[1].viewerAtFt, east.viewerAtFt);
+});
+
+test('a south-facing camera stands before the yard, a north-facing one past it', () => {
+  const config = normalizeProjectConfig(
+    {
+      name: 'Fixture',
+      yardFt: { width: 20, depth: 16 },
+      paddingFt: 3,
+      views: [
+        { id: 'plan', type: 'plan' },
+        { id: 'south', type: 'elevation', viewFrom: 'south' },
+        { id: 'north', type: 'elevation', viewFrom: 'north' },
+        { id: 'east', type: 'elevation', viewFrom: 'east' },
+        { id: 'west', type: 'elevation', viewFrom: 'west' },
+      ],
+    },
+    'fixture'
+  );
+  const at = Object.fromEntries(config.views.map((v) => [v.id, v.viewerAtFt]));
+  // The pairing follows farIsHigh, not the compass name: south and WEST stand
+  // at the low end of their depth axis (south of the yard, west of it), north
+  // and EAST past its far side. Half a margin out in every case.
+  assert.deepEqual(at.south, -1.5);
+  assert.deepEqual(at.west, -1.5);
+  assert.deepEqual(at.north, 16 + 1.5);
+  assert.deepEqual(at.east, 20 + 1.5);
 });

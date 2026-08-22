@@ -40,9 +40,7 @@ import {
 } from './render/featureOverlay.js';
 import {
   clearSetupOverlay,
-  measureRuler,
   renderSetupOverlay,
-  resolveRulerCalibration,
 } from './render/setupOverlay.js';
 import { configureViews } from './render/viewConfig.js';
 import { createPlantDragController, createElevationDragController } from './interaction/dragController.js';
@@ -435,11 +433,18 @@ async function init() {
    */
   const applyPageScale = () => {
     if (!viewsContainer) return;
+    // Setup shows one view, so it is the only one that has to fit — sizing to
+    // the tallest of four would leave the one on screen small for no reason.
+    const focused = viewsContainer.hasAttribute('data-setup-focus');
+    const shown = focused
+      ? project.views.filter((view) => view.id === setupPanel.getSelectedId())
+      : project.views;
     const pxPerFt = resolvePageScale({
-      views: project.views,
+      views: shown.length ? shown : project.views,
       availableWidthPx: viewsContainer.clientWidth,
       availableHeightPx: window.innerHeight,
       zoom: appState.zoom,
+      focused,
     });
     viewsContainer.style.setProperty('--page-px-per-ft', String(pxPerFt));
     // The toolbar's scale reference is finally telling the truth about every
@@ -481,16 +486,19 @@ async function init() {
   let dragControllers = buildDragControllers();
 
   // One per panel, but only the selected view's is ever unlocked: two panels
-  // accepting handle drags at once would be two answers to "which view is being
-  // set up".
+  // accepting a camera drag at once would be two answers to "which view is
+  // being set up".
   const buildSetupControllers = () =>
     viewPanels.map(({ view, svg }) =>
       createSetupController({
         svg,
         getView: () => liveView(view.id),
-        onChange: (patch) =>
-          applyViewEdit({ views: patchView(project.views, view.id, patch) }, { keepRuler: true }),
-        onRuler: (segment) => showRulerSegment(view.id, segment),
+        getViews: () => project.views,
+        getYard: () => project.yardFt,
+        // A camera is dragged on the PLAN and belongs to an elevation, so the
+        // patch names its own view rather than the one under the pointer.
+        onChange: ({ id, viewerAtFt }) =>
+          applyViewEdit({ views: patchView(project.views, id, { viewerAtFt }) }),
       })
     );
   let setupControllers = buildSetupControllers();
@@ -680,6 +688,13 @@ async function init() {
   function applyMode(mode) {
     const next = MODES.includes(mode) ? mode : 'view';
     appState.mode = next;
+    /**
+   * Plant dragging belongs to Edit mode alone — in Setup mode the pointer
+   * belongs to the setup controller, so the plant controllers stay locked.
+   */
+  function applyMode(mode) {
+    const next = MODES.includes(mode) ? mode : 'view';
+    appState.mode = next;
     modeButtons.forEach((button) => {
       const isActive = button.dataset.mode === next;
       button.classList.toggle('is-active', isActive);
@@ -698,47 +713,45 @@ async function init() {
     persistMode(next);
   }
 
-  /**
-   * Every view draws the guides in Setup mode; only the selected one is live.
-   *
-   * The foot grid lands on whole yard feet so that the same 5 ft line appears
-   * in the same place in every view — a cross-view reference, and useless if
-   * only one view ever shows it. That was why getting the views into relative
-   * alignment was guesswork: there was nothing on screen to align against.
-   * Handles, the ruler, and pointer capture still belong to the selected view
-   * alone, so the neighbours read as reference rather than as targets.
-   *
-   * Rendering clears each SVG, so this runs after every render rather than once.
-   */
   function syncSetupOverlay() {
     const inSetup = appState.mode === 'setup';
     const selectedId = inSetup ? setupPanel.getSelectedId() : '';
-    const armed = Boolean(selectedId) && setupPanel.isRulerArmed();
-    viewPanels.forEach(({ view, svg }, index) => {
+    const show = inSetup ? setupPanel.getShow() : { plants: true, features: true };
+
+    // Setup shows ONE view at a time. Every panel used to draw its guides so the
+    // foot grid could be compared across views, which mattered when each view
+    // carried its own rectangle and had to be aligned by eye. The yard is
+    // declared now, so there is nothing left to align — and the whole page's
+    // width spent on one drawing is worth far more than four small ones.
+    if (viewsContainer) {
+      viewsContainer.toggleAttribute('data-setup-focus', inSetup);
+      viewsContainer.toggleAttribute('data-hide-plants', inSetup && !show.plants);
+      viewsContainer.toggleAttribute('data-hide-features', inSetup && !show.features);
+    }
+
+    viewPanels.forEach(({ view, svg, panel }, index) => {
       const isSelected = view.id === selectedId;
+      panel.classList.toggle('is-setup-focus', inSetup && isSelected);
       setupControllers[index]?.setLocked?.(!isSelected);
-      // Only the selected view measures: a ruler armed everywhere would let a
-      // drag on a neighbouring panel look live and do nothing.
-      setupControllers[index]?.setRuler?.(isSelected && armed);
-      if (!inSetup) {
+      // Only the shown view is drawn. Guides on a hidden panel are work nobody
+      // sees, and they used to be the neighbours' cross-view reference — which
+      // a declared yard has made unnecessary.
+      if (!inSetup || !isSelected) {
         clearSetupOverlay(svg);
         return;
       }
-      renderSetupOverlay(
-        svg,
-        view,
-        isSelected && appState.ruler?.viewId === view.id ? appState.ruler : null,
-        // A plan draws the other views' cameras, so it needs the whole list;
-        // the selected one is emphasised so editing "Camera stands at" has
-        // something moving on screen to read it off.
-        {
-          interactive: isSelected,
-          yardFt: project.yardFt,
-          views: project.views,
-          highlightId: selectedId,
-        }
-      );
+      renderSetupOverlay(svg, view, {
+        interactive: isSelected,
+        yardFt: project.yardFt,
+        // A plan draws every elevation's camera, so it needs the whole list;
+        // the selected one is emphasised so the list and the drawing agree
+        // about which view is being set up.
+        views: project.views,
+        highlightId: selectedId,
+      });
     });
+    // The focused panel has the page to itself, so it is scaled to fill it.
+    applyPageScale();
   }
 
   /**
@@ -763,19 +776,176 @@ async function init() {
     });
   }
 
-  /**
-   * A measuring segment, live during the drag and left standing after it so the
-   * user can see what they are typing a length for.
-   */
-  function showRulerSegment(viewId, segment) {
-    appState.ruler = { viewId, from: segment.from, to: segment.to };
-    // The panel only learns the measurement once the drag is over. Growing it
-    // by a row mid-gesture pushes the canvas down under the pointer, which
-    // bends the very measurement being taken.
-    if (segment.done) {
-      setupPanel.setMeasurement(measureRuler(liveView(viewId), segment.from, segment.to));
-    }
+  modeButtons.forEach((button) => {
+      const isActive = button.dataset.mode === next;
+      button.classList.toggle('is-active', isActive);
+      button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+    if (editRow) editRow.hidden = next !== 'edit';
+    if (setupRow) setupRow.hidden = next !== 'setup';
+    if (featureRow) featureRow.hidden = next !== 'features';
+    viewToolbar?.classList.toggle('is-setup', next === 'setup' || next === 'features');
+    // Three pointer consumers share each SVG, so exactly one mode may unlock
+    // one of them. Deciding it in one place is what keeps them from fighting
+    // over svg.style.cursor the way two controllers on one element do.
+    dragControllers.forEach((controller) => controller?.setLocked?.(next !== 'edit'));
     syncSetupOverlay();
+    syncFeatureOverlay();
+    persistMode(next);
+  }
+
+  /**
+   * Move the plants a resized yard has left outside it.
+   *
+   * Never automatic. Resizing is exploratory — you type 6, look, type 8 — so a
+   * yard edit redraws and reports, and only a button here moves anything. Both
+   * actions are one entry in the layout history, so either is one undo.
+   *
+   * The two are not two mechanisms, they are two intents, and the panel says so:
+   *
+   * - **scale** is the "I mis-measured" correction. Every plant AND every
+   *   feature moves together, uniformly, about the yard's corner, so the design
+   *   keeps its shape. Uniform and never enlarging: a non-uniform fit would
+   *   distort the spacing between plants, which is most of what a planting plan
+   *   is, and growing a design to fill a yard is not a repair.
+   * - **clamp** is the "that ground is gone" correction, and touches only what
+   *   is stranded.
+   *
+   * @param {{ action: 'scale'|'clamp', ids?: Array<string> }} request
+   */
+  function resolveStrandedPlants({ action, ids }) {
+    const yardFt = project.yardFt;
+    if (!(yardFt?.width > 0) || !(yardFt?.depth > 0)) return;
+
+    if (action === 'clamp') {
+      const wanted = new Set(ids || []);
+      appState.plants = appState.plants.map((plant) =>
+        wanted.has(plant.id)
+          ? { ...plant, x: clamp(plant.x, 0, yardFt.width), y: clamp(plant.y, 0, yardFt.depth) }
+          : plant
+      );
+      commitLayoutChange(
+        wanted.size === 1 ? 'Moved a plant inside the yard' : 'Moved plants inside the yard'
+      );
+      setupPanel.render(project);
+      setupPanel.setStatus(
+        `Moved ${wanted.size} inside the boundary.`,
+        'success'
+      );
+      render();
+      return;
+    }
+
+    // The factor comes from what is actually drawn, not from the yard's own
+    // previous size — which nothing remembers by the time a resize has been
+    // typed, deleted, and retyped a few times.
+    const reach = contentReach();
+    if (!reach) return;
+    const factor = Math.min(1, yardFt.width / reach.x, yardFt.depth / reach.y);
+    if (!(factor > 0) || factor >= 1) return;
+
+    appState.plants = appState.plants.map((plant) => ({
+      ...plant,
+      x: round2(plant.x * factor),
+      y: round2(plant.y * factor),
+    }));
+    const features = scaleFeatures(appState.features, factor);
+    commitLayoutChange('Scaled the design to fit the yard');
+    if (features !== appState.features) applyFeatureEdit(features);
+    setupPanel.render(project);
+    setupPanel.setStatus(
+      `Scaled everything to ${Math.round(factor * 100)}% about the yard corner. ` +
+        'Save features to keep the beds and walls at their new size.',
+      'success'
+    );
+    render();
+  }
+
+  /** How far the design reaches from the yard's corner, plants and features alike. */
+  function contentReach() {
+    let x = 0;
+    let y = 0;
+    appState.plants.forEach((plant) => {
+      x = Math.max(x, plant.x);
+      y = Math.max(y, plant.y);
+    });
+    featurePoints(appState.features).forEach((point) => {
+      x = Math.max(x, point.x);
+      y = Math.max(y, point.y);
+    });
+    return x > 0 && y > 0 ? { x, y } : null;
+  }
+
+  /**
+   * Setup draws ONE view: the selected one, scaled to the whole page.
+   *
+   * Every panel used to draw the guides so the foot grid could be compared
+   * across views, because each view carried its own rectangle and had to be
+   * aligned against its neighbours by eye. The yard is declared now, so there
+   * is nothing left to align — and the page's whole width spent on one drawing
+   * beats four small ones for the work that remains, which is framing photos
+   * and placing cameras.
+   *
+   * Rendering clears each SVG, so this runs after every render rather than once.
+   */
+  function syncSetupOverlay() {
+    const inSetup = appState.mode === 'setup';
+    const selectedId = inSetup ? setupPanel.getSelectedId() : '';
+    const show = inSetup ? setupPanel.getShow() : { plants: true, features: true };
+
+    // Setup shows ONE view at a time. Every panel used to draw its guides so the
+    // foot grid could be compared across views, which mattered when each view
+    // carried its own rectangle and had to be aligned by eye. The yard is
+    // declared now, so there is nothing left to align — and the whole page's
+    // width spent on one drawing is worth far more than four small ones.
+    if (viewsContainer) {
+      viewsContainer.toggleAttribute('data-setup-focus', inSetup);
+      viewsContainer.toggleAttribute('data-hide-plants', inSetup && !show.plants);
+      viewsContainer.toggleAttribute('data-hide-features', inSetup && !show.features);
+    }
+
+    viewPanels.forEach(({ view, svg, panel }, index) => {
+      const isSelected = view.id === selectedId;
+      panel.classList.toggle('is-setup-focus', inSetup && isSelected);
+      setupControllers[index]?.setLocked?.(!isSelected);
+      if (!inSetup) {
+        clearSetupOverlay(svg);
+        return;
+      }
+      renderSetupOverlay(svg, view, {
+        interactive: isSelected,
+        yardFt: project.yardFt,
+        // A plan draws every elevation's camera, so it needs the whole list;
+        // the selected one is emphasised so the list and the drawing agree
+        // about which view is being set up.
+        views: project.views,
+        highlightId: selectedId,
+      });
+    });
+    // The focused panel has the page to itself, so it is scaled to fill it.
+    applyPageScale();
+  }
+
+  /**
+   * The feature handles belong to the plan alone, and only in Features mode.
+   * Rendering clears each SVG, so this runs after every render rather than once.
+   */
+  function syncFeatureOverlay() {
+    const editing = appState.mode === 'features';
+    viewPanels.forEach(({ view, svg }, index) => {
+      const active = editing && view.type === 'plan';
+      featureControllers[index]?.setLocked?.(!active);
+      if (!active) {
+        clearFeatureOverlay(svg);
+        return;
+      }
+      renderFeatureOverlay(
+        svg,
+        appState.features,
+        featurePanel.getSelectedId(),
+        createViewTransform(liveView(view.id) || view)
+      );
+    });
   }
 
   modeButtons.forEach((button) => {
@@ -801,40 +971,10 @@ async function init() {
   const setupPanel = createSetupPanel({
     root: setupRow,
     onCommit: (candidate) => applyViewEdit(candidate),
-    onSelect: () => {
-      // The segment was measured against another view's photo; it means
-      // nothing over this one.
-      appState.ruler = null;
-      syncSetupOverlay();
-    },
-    onRulerToggle: () => {
-      appState.ruler = null;
-      syncSetupOverlay();
-    },
-    onRulerApply: (lengthFt) => {
-      const segment = appState.ruler;
-      const view = segment && liveView(segment.viewId);
-      const patch = view && resolveRulerCalibration(view, segment.from, segment.to, lengthFt);
-      if (!patch) {
-        setupPanel.setStatus(
-          'That measurement will not solve: drag further across the photo, and give a length above zero.',
-          'error'
-        );
-        return;
-      }
-      // Cleared before the rebuild: the segment's pixel coordinates belong to
-      // the old scale, and redrawing it over the new one looks like a bug.
-      const viewId = segment.viewId;
-      // applyViewEdit drops the segment itself; the panel's own copy of the
-      // reading is separate state and has to be cleared here.
-      setupPanel.setMeasurement(null);
-      applyViewEdit({ views: patchView(project.views, viewId, patch) });
-      setupPanel.setStatus(
-        `Scaled ${view.label}'s photo to ` +
-          `${Math.round(patch.photoFt.extentFt.width * 100) / 100} ft across.`,
-        'success'
-      );
-    },
+    onSelect: () => syncSetupOverlay(),
+    onShowChange: () => syncSetupOverlay(),
+    onResolveConflicts: (request) => resolveStrandedPlants(request),
+    getPlants: () => appState.plants,
     /**
      * Picked photo to live background: compress, upload, then commit the path
      * the server chose. The view is only patched after the bytes are on disk —
@@ -883,18 +1023,10 @@ async function init() {
    * the drawing on the last good state instead of throwing mid-render.
    *
    * @param {object} candidate a project-shaped patch: the yard, the views, or both
-   * @param {{ keepRuler?: boolean }} [options]
    * @returns {boolean} whether the edit was applied — a caller that reports its
    * own success afterwards must not paper over the rejection message set here.
    */
-  function applyViewEdit(candidate, { keepRuler = false } = {}) {
-    // A standing segment's pixel coordinates belong to the geometry being
-    // replaced, so a change to the YARD invalidates it — the viewBox scales
-    // with the yard, and the measurement in feet describes a scale that no
-    // longer exists. Moving a photo does not: the drawing is untouched, and
-    // dropping the segment there would erase the measurement the user is in
-    // the middle of typing a length for.
-    if (!keepRuler) appState.ruler = null;
+  function applyViewEdit(candidate) {
     let validated;
     try {
       validated = normalizeProjectConfig(
@@ -1048,6 +1180,10 @@ async function init() {
     const currentPlants = layoutHistoryInstance.getCurrentPlants();
     appState.plants = currentPlants.length ? currentPlants : initialPlants;
     updateHistoryControls();
+    // The layout arrives after the panel is first built, and whether the yard
+    // still contains it is the panel's loudest section — so it is rebuilt here
+    // rather than left reporting the empty list it was born with.
+    setupPanel.render(project);
 
     commitLayoutChange = (description) => {
       if (!layoutHistoryInstance) return;
@@ -1418,6 +1554,44 @@ function formatFeet(value) {
 function formatFileSize(bytes) {
   const kb = Number(bytes) / 1024;
   return kb >= 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${Math.round(kb)} KB`;
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(Number(value) || 0, min), max);
+}
+
+function round2(value) {
+  return Math.round(Number(value) * 100) / 100;
+}
+
+/** Every authored point in the feature model, whatever primitive holds it. */
+function featurePoints(features) {
+  return (Array.isArray(features) ? features : []).flatMap(
+    (feature) => feature.footprintFt || feature.pathFt || []
+  );
+}
+
+/**
+ * Scale the feature model about the yard's corner.
+ *
+ * Features move with the plants or not at all: a bed scaled while the plants in
+ * it stay put is worse than either alone. Heights scale too — a fence is not
+ * the same fence at 60% of its footprint — and so does a stroke width in feet.
+ */
+function scaleFeatures(features, factor) {
+  if (!Array.isArray(features) || !features.length) return features;
+  const point = (p) => ({ ...p, x: round2(p.x * factor), y: round2(p.y * factor) });
+  return features.map((feature) => {
+    const next = { ...feature };
+    if (Array.isArray(feature.footprintFt)) next.footprintFt = feature.footprintFt.map(point);
+    if (Array.isArray(feature.pathFt)) next.pathFt = feature.pathFt.map(point);
+    if (Number.isFinite(feature.heightFt)) next.heightFt = round2(feature.heightFt * factor);
+    if (Number.isFinite(feature.baseFt)) next.baseFt = round2(feature.baseFt * factor);
+    if (Number.isFinite(feature.style?.strokeWidthFt)) {
+      next.style = { ...feature.style, strokeWidthFt: round2(feature.style.strokeWidthFt * factor) };
+    }
+    return next;
+  });
 }
 
 /** Replace one view in a list with a shallow-merged copy. */

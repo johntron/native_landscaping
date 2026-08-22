@@ -2,14 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { resetDocument } from './helpers/fakeDom.js';
 import {
-  MIN_RULER_PIXELS,
   buildOverlayGeometry,
   chooseGridStepFt,
   clearSetupOverlay,
-  measureRuler,
+  pickCamera,
   renderSetupOverlay,
-  resolvePhotoDrag,
-  resolveRulerCalibration,
+  resolveCameraDrag,
 } from '../src/render/setupOverlay.js';
 import { VIEW_FROM_DIRECTIONS } from '../src/render/elevationOrientation.js';
 import { createViewTransform } from '../src/render/viewTransform.js';
@@ -78,49 +76,10 @@ test('an elevation draws its ground line and the span of yard across it', () => 
   assert.equal(yard.x2 - yard.x1, YARD.depth * 20);
 });
 
-test('dragging the photo moves it by the drag, in every compass direction', () => {
-  VIEW_FROM_DIRECTIONS.forEach((viewFrom) => {
-    const view = elevation(viewFrom, { background: 'img/x.webp' });
-    const mirrored = buildOverlayGeometry(view).transform.orientation.mirrored;
-    // 100 px to the right of the drawing is 5 ft along the axis — or 5 ft
-    // BACK along it, on a mirrored view, which is the whole reason this is
-    // solved in feet rather than pixels.
-    const dragged = resolvePhotoDrag(view, { x: 300, y: 300 }, { x: 400, y: 300 });
-    const expected = view.originFt.x + (mirrored ? -5 : 5);
-    assert.ok(
-      Math.abs(dragged.photoFt.originFt.x - expected) < 1e-9,
-      `${viewFrom}: ${dragged.photoFt.originFt.x} !== ${expected}`
-    );
-    // Dragging never rescales.
-    assert.deepEqual(dragged.photoFt.extentFt, view.extentFt);
-  });
-});
-
-test('dragging the photo up the drawing raises it in feet', () => {
-  const view = elevation('south', { background: 'img/x.webp' });
-  // 100 px up the drawing at 20 px/ft is 5 ft higher, because drawing y grows
-  // down and yard height grows up.
-  const dragged = resolvePhotoDrag(view, { x: 400, y: 400 }, { x: 400, y: 300 });
-  assert.ok(Math.abs(dragged.photoFt.originFt.y - (view.originFt.y + 5)) < 1e-9);
-});
-
-test('an uncalibrated photo starts from the panel it fills', () => {
-  const view = { ...PLAN, background: 'img/x.webp' };
-  const dragged = resolvePhotoDrag(view, { x: 0, y: 0 }, { x: 200, y: 0 });
-  // No photoFt yet, so the drag starts from the rectangle the photo is
-  // currently drawn over — the panel — and moves it 10 ft east.
-  assert.deepEqual(dragged.photoFt.extentFt, PLAN.extentFt);
-  assert.ok(Math.abs(dragged.photoFt.originFt.x - (PLAN.originFt.x + 10)) < 1e-9);
-});
-
-test('there is nothing to drag on a view with no photo', () => {
-  assert.equal(resolvePhotoDrag(PLAN, { x: 0, y: 0 }, { x: 10, y: 0 }), null);
-});
-
 test('renderSetupOverlay draws one removable group of guides', () => {
   const doc = resetDocument();
   const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  renderSetupOverlay(svg, elevation('west'), null, { yardFt: YARD });
+  renderSetupOverlay(svg, elevation('west'), { yardFt: YARD });
 
   assert.equal(svg.querySelectorAll('g[data-setup-overlay]').length, 1);
   // The ground line, plus the yard's span and its origin marker.
@@ -135,157 +94,71 @@ test('renderSetupOverlay draws one removable group of guides', () => {
   assert.equal(Number(readout.getAttribute('x')), 792);
 
   // Rendering twice must not stack two overlays, and clearing removes it.
-  renderSetupOverlay(svg, elevation('west'), null, { yardFt: YARD });
+  renderSetupOverlay(svg, elevation('west'), { yardFt: YARD });
   assert.equal(svg.querySelectorAll('g[data-setup-overlay]').length, 1);
   clearSetupOverlay(svg);
   assert.equal(svg.querySelectorAll('g[data-setup-overlay]').length, 0);
 });
 
-test('a plan overlay outlines the yard, and the photo it is being lined up with', () => {
+test('a plan overlay outlines the yard and names its corner', () => {
   const doc = resetDocument();
   const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  renderSetupOverlay(svg, { ...PLAN, background: 'img/x.webp' }, null, { yardFt: YARD });
+  renderSetupOverlay(svg, { ...PLAN, background: 'img/x.webp' }, { yardFt: YARD });
   assert.equal(svg.querySelectorAll('rect[data-setup-guide]').length, 1);
-  assert.equal(svg.querySelectorAll('circle[data-setup-guide]').length, 1);
-  // The photo's own edge, so a picture smaller than the panel does not read as
-  // a panel that failed to load.
-  assert.equal(svg.querySelectorAll('rect[data-setup-photo]').length, 1);
-
-  // A neighbouring view is reference, not a target: no photo outline there.
-  const other = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  renderSetupOverlay(other, { ...PLAN, background: 'img/x.webp' }, null, {
-    yardFt: YARD,
-    interactive: false,
-  });
-  assert.equal(other.querySelectorAll('rect[data-setup-photo]').length, 0);
+  assert.equal(svg.querySelectorAll('circle[data-setup-guide="origin"]').length, 1);
 });
 
-test('the ruler reads a drag in the feet the view currently claims', () => {
-  // 200 px at 20 px/ft, measured on the diagonal of a 120-160 triangle.
-  const measured = measureRuler(PLAN, { x: 40, y: 30 }, { x: 200, y: 150 });
-  assert.equal(measured.pixels, 200);
-  assert.equal(measured.feet, 10);
-  assert.equal(measured.pxPerFt, 20);
-});
-
-test('a photo measured too small is scaled up, and the drawing does not move', () => {
-  const view = { ...PLAN, background: 'img/x.webp' };
-  // The span the drag crossed reads as 10 ft; the user says it is really 20,
-  // so the photo is half the size it should be.
-  const patch = resolveRulerCalibration(view, { x: 0, y: 0 }, { x: 200, y: 0 }, 20);
-  assert.equal(patch.photoFt.extentFt.width, 80);
-  assert.equal(patch.photoFt.extentFt.height, 60);
-  // The view is the yard, and the yard was never what was wrong.
-  assert.equal('extentFt' in patch, false);
-  assert.equal('viewBox' in patch, false);
-});
-
-test('the measured span stays under the pointer while the photo scales', () => {
-  const view = { ...PLAN, background: 'img/x.webp' };
-  // Midpoint of the drag is 200 px across, which is 6 ft east of the yard's
-  // zero at 20 px/ft on a panel starting at -4 ft.
-  const patch = resolveRulerCalibration(view, { x: 100, y: 300 }, { x: 300, y: 300 }, 20);
-  const after = { ...view, photoFt: patch.photoFt };
-  const held = 6;
-  // Same view either way — what moved is the photo, so the held foot is still
-  // drawn at the same pixel.
-  assert.equal(
-    createViewTransform(view).planToViewBox({ x: held, y: 0 }).x,
-    createViewTransform(after).planToViewBox({ x: held, y: 0 }).x
-  );
-  // And that foot is still the same fraction along the photo, which is what
-  // "the thing you measured did not move" means once the photo has rescaled.
-  const fraction = (held - patch.photoFt.originFt.x) / patch.photoFt.extentFt.width;
-  assert.ok(Math.abs(fraction - (held - PLAN.originFt.x) / PLAN.extentFt.width) < 1e-9);
-});
-
-test('calibration is uniform: the same span solves the same however it is drawn', () => {
-  const view = { ...PLAN, background: 'img/x.webp' };
-  const across = resolveRulerCalibration(view, { x: 10, y: 500 }, { x: 210, y: 500 }, 8);
-  const diagonal = resolveRulerCalibration(view, { x: 0, y: 0 }, { x: 120, y: 160 }, 8);
-  assert.deepEqual(diagonal.photoFt.extentFt, across.photoFt.extentFt);
-});
-
-test('calibrating a mirrored elevation scales its photo the same way', () => {
-  const view = elevation('north', { background: 'img/x.webp' }); // north and west mirror
-  const patch = resolveRulerCalibration(view, { x: 100, y: 100 }, { x: 300, y: 100 }, 5);
-  // 200 px read as 10 ft and are really 5, so the photo covers half as much yard.
-  assert.equal(patch.photoFt.extentFt.width, 20);
-  // Held about the measurement's midpoint, which on a mirrored view is a
-  // *decreasing* axis value to the right — solved in feet, so it comes out
-  // right without a mirror case here.
-  const midFt = createViewTransform(view).xToAxis(200);
-  const fractionOf = (origin, extent) => (midFt - origin) / extent;
-  assert.ok(
-    Math.abs(
-      fractionOf(patch.photoFt.originFt.x, patch.photoFt.extentFt.width) -
-        fractionOf(view.originFt.x, view.extentFt.width)
-    ) < 1e-9
-  );
-});
-
-test('a misclick or a nonsense length solves to nothing at all', () => {
-  const view = { ...PLAN, background: 'img/x.webp' };
-  const tiny = { x: MIN_RULER_PIXELS - 1, y: 0 };
-  assert.equal(resolveRulerCalibration(view, { x: 0, y: 0 }, tiny, 10), null);
-  assert.equal(resolveRulerCalibration(view, { x: 0, y: 0 }, { x: 0, y: 0 }, 10), null);
-  [0, -4, Number.NaN, 'twelve'].forEach((length) => {
-    assert.equal(resolveRulerCalibration(view, { x: 0, y: 0 }, { x: 200, y: 0 }, length), null);
-  });
-  // Nothing to scale without a photo.
-  assert.equal(resolveRulerCalibration(PLAN, { x: 0, y: 0 }, { x: 200, y: 0 }, 10), null);
-});
-
-test('renderSetupOverlay draws the measuring segment only when there is one', () => {
+test('a camera is one object: a line, an arrow off it, and a grip to drag it', () => {
   const doc = resetDocument();
   const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  renderSetupOverlay(svg, PLAN);
-  assert.equal(svg.querySelectorAll('line[data-setup-ruler]').length, 0);
+  const north = elevation('north', { id: 'north', viewerAtFt: 20 });
+  renderSetupOverlay(svg, PLAN, { yardFt: YARD, views: [north] });
 
-  renderSetupOverlay(svg, PLAN, { from: { x: 0, y: 0 }, to: { x: 200, y: 0 } });
-  assert.equal(svg.querySelectorAll('line[data-setup-ruler]').length, 1);
-  assert.equal(svg.querySelectorAll('circle[data-setup-ruler-end]').length, 2);
-  assert.match(svg.querySelectorAll('text[data-setup-ruler-readout]')[0].textContent, /10 ft/);
+  assert.equal(svg.querySelectorAll('line[data-setup-camera="north"]').length, 1);
+  // The arrow grows off the line rather than sitting somewhere near it: the
+  // direction and the position were two marks for a while, which is the same
+  // fact drawn twice in two places that could disagree.
+  const shaft = svg.querySelectorAll('line[data-setup-camera-arrow="north"]')[0];
+  const line = svg.querySelectorAll('line[data-setup-camera="north"]')[0];
+  assert.equal(shaft.getAttribute('y1'), line.getAttribute('y1'));
+  assert.equal(svg.querySelectorAll('polygon[data-setup-camera-head="north"]').length, 1);
+  assert.equal(svg.querySelectorAll('circle[data-setup-camera-grip="north"]').length, 1);
+
+  // A view that is only reference draws the camera but offers no grip.
+  const other = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  renderSetupOverlay(other, PLAN, { yardFt: YARD, views: [north], interactive: false });
+  assert.equal(other.querySelectorAll('line[data-setup-camera="north"]').length, 1);
+  assert.equal(other.querySelectorAll('circle[data-setup-camera-grip="north"]').length, 0);
 });
 
-function round(value) {
-  return Math.round(value * 1e6) / 1e6;
-}
+test('a camera is grabbable anywhere along its line, and drags along its own axis', () => {
+  const north = elevation('north', { id: 'north', viewerAtFt: 20 });
+  const east = elevation('east', { id: 'east', viewerAtFt: 10 });
+  const geometry = buildOverlayGeometry(PLAN, { yardFt: YARD, views: [north, east] });
 
-test('a photo drag and a ruler solve return patches, never rebuilt views', () => {
-  // app.js applies these with { ...view, ...patch }, so anything a view carries
-  // that the solve does not name survives. nl-jqd was filed for the opposite —
-  // a Setup edit rebuilding a view and dropping originFt on the way — so the
-  // shape of the return value is the invariant, not an implementation detail.
-  const view = {
-    id: 'north',
-    type: 'elevation',
-    viewFrom: 'north',
-    viewBox: { width: 800, height: 400 },
-    originFt: { x: 0, y: -2 },
-    extentFt: { width: 40, height: 20 },
-    background: 'img/x.webp',
-    viewerAtFt: 21,
-  };
-  const KEYS = ['photoFt'];
-  assert.deepEqual(
-    Object.keys(resolvePhotoDrag(view, { x: 0, y: 0 }, { x: 100, y: 300 })).sort(),
-    [...KEYS].sort()
-  );
-  assert.deepEqual(
-    Object.keys(resolveRulerCalibration(view, { x: 0, y: 0 }, { x: 200, y: 0 }, 5)).sort(),
-    [...KEYS].sort()
-  );
-  // Which means the camera position is neither dropped nor rescaled: it is a
-  // yard coordinate, not an offset anchored to the drawing.
-  assert.equal(
-    { ...view, ...resolvePhotoDrag(view, { x: 0, y: 0 }, { x: 100, y: 200 }) }.viewerAtFt,
-    21
-  );
-  assert.equal(
-    { ...view, ...resolveRulerCalibration(view, { x: 0, y: 0 }, { x: 200, y: 0 }, 5) }.viewerAtFt,
-    21
-  );
+  // North's line runs across the drawing at y = 120; far along it horizontally
+  // is still on it.
+  assert.equal(pickCamera(geometry, { x: 700, y: 122 }, 28)?.id, 'north');
+  assert.equal(pickCamera(geometry, { x: 700, y: 400 }, 28), null);
+  // East's runs down it, so only the horizontal distance counts.
+  assert.equal(pickCamera(geometry, { x: 282, y: 500 }, 28)?.id, 'east');
+
+  // Dragging reports feet on the camera's own depth axis, for its OWN view —
+  // not for the plan the gesture happened in.
+  const dragged = resolveCameraDrag(PLAN, 'north', { x: 400, y: 200 }, [north, east]);
+  assert.equal(dragged.id, 'north');
+  // 200 px is 400 px above the bottom of a 600 px drawing starting at -4 ft,
+  // which at 20 px/ft is y = 16 ft.
+  assert.equal(dragged.viewerAtFt, 16);
+
+  // East runs on x, so the same point solves a different number.
+  assert.equal(resolveCameraDrag(PLAN, 'east', { x: 400, y: 200 }, [north, east]).viewerAtFt, 16);
+});
+
+test('a camera cannot be dragged from an elevation, or for a view that is gone', () => {
+  const north = elevation('north', { id: 'north', viewerAtFt: 20 });
+  assert.equal(resolveCameraDrag(elevation('south'), 'north', { x: 1, y: 1 }, [north]), null);
+  assert.equal(resolveCameraDrag(PLAN, 'ghost', { x: 1, y: 1 }, [north]), null);
 });
 
 test('a plan draws each elevation camera as a line, with the culled yard behind it', () => {
