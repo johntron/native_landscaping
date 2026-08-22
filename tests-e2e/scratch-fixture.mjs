@@ -35,6 +35,7 @@ export const SCRATCH_PROJECTS = [
   'features-save',
   'features-edit',
   'features-derived',
+  'yard-conflict',
   'frontyard-save',
 ];
 
@@ -90,6 +91,29 @@ const FEATURES_DERIVED = {
     { id: 'plan', type: 'plan', background: 'img/top.webp' },
     { id: 'south', type: 'elevation', viewFrom: 'south' },
     { id: 'east', type: 'elevation', viewFrom: 'east' },
+  ],
+};
+
+/**
+ * `yard-conflict` is a backyard copy declaring a yard far smaller than the one
+ * its planting was drawn in — 12 x 9 ft against plants spread over roughly
+ * 29 x 22 — so several of them are off the property the moment it loads.
+ *
+ * That is the one way a declared yard can still strand something: no VIEW can
+ * miss the yard, but the yard is a number a person can type below what is
+ * standing in it, and a plant already outside cannot be dragged back. Its own
+ * project because resolving the conflict WRITES the layout.
+ */
+const YARD_CONFLICT = {
+  id: 'yard-conflict',
+  name: 'yard-conflict',
+  yardFt: { width: 12, depth: 9 },
+  paddingFt: 2,
+  elevationFt: { above: 10, below: 2 },
+  pxPerFt: 27,
+  views: [
+    { id: 'plan', type: 'plan', background: 'img/top.webp' },
+    { id: 'south', type: 'elevation', viewFrom: 'south' },
   ],
 };
 
@@ -165,6 +189,11 @@ export function buildScratchPublicDir() {
   writeFileSync(
     path.join(SCRATCH_DIR, 'projects', 'features-derived', 'project.json'),
     `${JSON.stringify(FEATURES_DERIVED, null, 2)}\n`
+  );
+
+  writeFileSync(
+    path.join(SCRATCH_DIR, 'projects', 'yard-conflict', 'project.json'),
+    `${JSON.stringify(YARD_CONFLICT, null, 2)}\n`
   );
 
   writeFileSync(

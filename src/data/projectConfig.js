@@ -347,7 +347,7 @@ function normalizeView(raw, index, projectId, layout) {
     ...deriveViewGeometry(type, viewFrom, layout),
     background,
     ...normalizePhoto(raw, background),
-    ...normalizeViewerAt(type, raw.viewerAtFt),
+    ...normalizeViewerAt(type, raw.viewerAtFt, viewFrom, layout),
   };
 
   // One derivation of pxPerFt for the whole app: build the transform the
@@ -401,23 +401,45 @@ function defaultLabels(type, viewFrom) {
  * Where the viewer stands along an elevation's DEPTH axis, in yard feet.
  *
  * An elevation authors the axis running across the drawing and the ground
- * height, and until now said nothing about depth — which put the camera at
- * infinity and made everything in the yard, in every direction, in front of it.
- * A wall standing between the photographer and the bed is then drawn over the
- * bed in the view taken from the other side, which is exactly backwards: from
- * there the wall is behind the camera.
+ * height, and said nothing about depth — which put the camera at infinity and
+ * made everything in the yard, in every direction, in front of it. A wall
+ * standing between the photographer and the bed is then drawn over the bed in
+ * the view taken from the other side, which is exactly backwards: from there
+ * the wall is behind the camera.
  *
- * **Absent means cull nothing**, and that is deliberate: no existing project
- * declares one, and the permissive default leaves them drawing exactly what
- * they drew before. This is the opposite of `normalizeFeatures`, which refuses
- * a missing height rather than defaulting it — there a default HIDES a shape,
- * here a default would hide one. Zero is a real position, so the test is
- * finiteness, never truthiness.
+ * **Absent defaults to half the margin outside the edge the view is taken
+ * from**, which is where a person stands to photograph their yard, and which
+ * culls nothing — so a project that never mentioned a camera draws exactly what
+ * it drew before. Giving every elevation a real position rather than leaving
+ * some at infinity is what makes the camera a thing you can pick up and drag on
+ * the plan; a control that half the views do not have is not a control.
+ *
+ * Zero is a real position, so a declared value is tested for finiteness, never
+ * truthiness.
  */
-function normalizeViewerAt(type, raw) {
-  if (type !== 'elevation' || raw === undefined || raw === null || raw === '') return {};
-  const feet = Number(raw);
-  return Number.isFinite(feet) ? { viewerAtFt: feet } : {};
+function normalizeViewerAt(type, raw, viewFrom, layout) {
+  if (type !== 'elevation') return {};
+  if (raw !== undefined && raw !== null && raw !== '') {
+    const feet = Number(raw);
+    if (Number.isFinite(feet)) return { viewerAtFt: feet };
+  }
+  return { viewerAtFt: defaultViewerAt(viewFrom, layout) };
+}
+
+/** Half a margin outside the yard edge this elevation is taken from. */
+export function defaultViewerAt(viewFrom, layout) {
+  const { yardFt, paddingFt } = layout;
+  const back = paddingFt / 2;
+  let orientation;
+  try {
+    orientation = resolveElevationOrientation(viewFrom);
+  } catch {
+    return -back;
+  }
+  // farIsHigh puts the far edge at the high end of the depth axis, so the
+  // observer stands below zero; its opposite stands past the far side.
+  if (orientation.farIsHigh) return -back;
+  return (orientation.depthKey === 'y' ? yardFt.depth : yardFt.width) + back;
 }
 
 function normalizePoint(raw) {
@@ -455,7 +477,15 @@ export function serializeProjectConfig(config) {
           extentFt: { ...view.photoFt.extentFt },
         };
       }
-      if (view.viewerAtFt !== undefined) out.viewerAtFt = view.viewerAtFt;
+      // Always present now, so the default is omitted the way a default label
+      // is — otherwise resizing the yard would bake a stale camera into a file
+      // that never mentioned one.
+      if (
+        view.type === 'elevation' &&
+        view.viewerAtFt !== defaultViewerAt(view.viewFrom, config)
+      ) {
+        out.viewerAtFt = view.viewerAtFt;
+      }
       return out;
     }),
   };

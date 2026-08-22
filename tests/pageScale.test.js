@@ -59,3 +59,28 @@ test('a yard too big for the page still draws, and the page scrolls', () => {
   const huge = [{ extentFt: { width: 100000, height: 100000 } }];
   assert.ok(resolvePageScale({ views: huge, availableWidthPx: 800, availableHeightPx: 600 }) >= 4);
 });
+
+test('a single focused view gets more of the height, and neither runs away', () => {
+  // Setup shows one drawing, so there is nothing to scroll past to reach the
+  // next one and it can have more of the page.
+  const one = [{ extentFt: { width: 14, height: 34 } }];
+  const shared = resolvePageScale({ views: one, availableWidthPx: 1400, availableHeightPx: 900 });
+  const focused = resolvePageScale({
+    views: one,
+    availableWidthPx: 1400,
+    availableHeightPx: 900,
+    focused: true,
+  });
+  assert.ok(focused > shared);
+
+  // But no dimension runs away on a very large display: filling 4K with one
+  // small yard is not more legible, only bigger.
+  const small = [{ extentFt: { width: 8, height: 6 } }];
+  const huge = resolvePageScale({
+    views: small,
+    availableWidthPx: 6000,
+    availableHeightPx: 4000,
+    focused: true,
+  });
+  assert.ok(huge * 8 <= 1100 + 1e-9);
+});

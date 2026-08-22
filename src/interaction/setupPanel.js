@@ -32,29 +32,30 @@ export function createSetupPanel({
   onCommit,
   onSave,
   onSelect,
-  onRulerToggle,
-  onRulerApply,
   onUploadBackground,
+  onShowChange,
+  onResolveConflicts,
+  getPlants,
 }) {
   if (!root) {
     return {
       render: () => {},
       getSelectedId: () => '',
+      getShow: () => ({ plants: false, features: false }),
       setStatus: () => {},
-      isRulerArmed: () => false,
-      setMeasurement: () => {},
     };
   }
 
-  // The ruler's state lives here rather than in the form, because the form is
-  // rebuilt wholesale on every commit and a measurement has to outlive that.
   const state = {
     selectedId: '',
     project: { yardFt: { width: 0, depth: 0 }, paddingFt: 0, elevationFt: { above: 0, below: 0 }, pxPerFt: 0, views: [] },
     views: [],
     status: null,
-    ruler: false,
-    measurement: null,
+    // What the single viewport draws besides the guides. Off by default:
+    // setup is about the yard and the views, and a full planting is noise
+    // against a photo being framed. Forced on while a resize has stranded
+    // something, because then the plants ARE the subject.
+    show: { plants: false, features: false },
   };
 
   function render(project) {
@@ -63,7 +64,7 @@ export function createSetupPanel({
     if (!state.views.some((view) => view.id === state.selectedId)) {
       state.selectedId = state.views[0]?.id || '';
     }
-    root.replaceChildren(buildYard(), buildList(), buildForm(), buildFooter());
+    root.replaceChildren(buildYard(), buildConflicts(), buildList(), buildForm(), buildFooter());
   }
 
   function selected() {
@@ -179,42 +180,6 @@ export function createSetupPanel({
     );
     grid.appendChild(uploadField(view));
     wrap.appendChild(grid);
-    wrap.appendChild(buildPhoto(view, patch));
-    return wrap;
-  }
-
-  /**
-   * Placing the photograph: the two gestures, and a way back out of both.
-   *
-   * The drawing is fixed — it is the yard — so this is the only geometry left
-   * to get right, and neither half of it is a number anyone can look up. Drag
-   * until the yard outline sits on the yard in the picture; measure something
-   * you know the length of to fix the scale.
-   */
-  function buildPhoto(view, patch) {
-    const wrap = el('div', 'setup-panel__section setup-panel__photo');
-    wrap.appendChild(el('h3', 'setup-panel__heading', 'Place the photo'));
-    if (!view.background) {
-      wrap.appendChild(
-        el('p', 'setup-panel__hint', 'Upload a photo above, and it can be positioned here.')
-      );
-      return wrap;
-    }
-    wrap.appendChild(
-      el(
-        'p',
-        'setup-panel__hint',
-        state.ruler
-          ? 'Measuring: drag across something in the photo whose real length you know.'
-          : 'Drag the photo on the drawing to line it up with the orange yard outline.'
-      )
-    );
-    wrap.appendChild(buildRuler(view));
-    const reset = button('Reset photo to fill the panel', 'button pill-button', () =>
-      patch({ photoFt: null })
-    );
-    reset.disabled = !view.photoFt;
-    wrap.appendChild(reset);
     return wrap;
   }
 
@@ -239,69 +204,6 @@ export function createSetupPanel({
       if (file) onUploadBackground?.(file, view.id);
     });
     return field('Upload photo', input);
-  }
-
-  /**
-   * Calibrate against the background photo: drag across something whose real
-   * length you know, then say what that length is. The solve lives in
-   * src/render/setupOverlay.js; this is only the affordance for it.
-   */
-  function buildRuler(view) {
-    const wrap = el('div', 'setup-panel__ruler');
-    const toggle = button(
-      state.ruler ? 'Stop measuring' : 'Measure a known length',
-      'button pill-button setup-panel__ruler-toggle',
-      () => {
-        state.ruler = !state.ruler;
-        if (!state.ruler) state.measurement = null;
-        rerender();
-        onRulerToggle?.(state.ruler);
-      }
-    );
-    toggle.dataset.rulerToggle = '';
-    toggle.setAttribute('aria-pressed', state.ruler ? 'true' : 'false');
-    toggle.classList.toggle('is-active', state.ruler);
-    wrap.appendChild(toggle);
-
-    if (!state.ruler) return wrap;
-
-    if (!state.measurement) {
-      wrap.appendChild(
-        el(
-          'p',
-          'setup-panel__hint',
-          `Drag across a known length on ${view.label}'s photo — a fence panel, a ` +
-            'driveway, a doorway.'
-        )
-      );
-      return wrap;
-    }
-
-    wrap.appendChild(
-      el(
-        'p',
-        'setup-panel__hint setup-panel__ruler-readout',
-        `Measured ${Math.round(state.measurement.pixels)} px — ` +
-          `${roundForDisplay(state.measurement.feet)} ft at the current scale.`
-      )
-    );
-    // Deliberately blank rather than pre-filled with the current reading: a
-    // pre-filled field that already says the right number fires no change
-    // event, so the obvious "yes, that one" gesture would do nothing.
-    const input = document.createElement('input');
-    input.type = 'number';
-    input.step = '0.1';
-    input.min = '0';
-    input.placeholder = 'e.g. 8';
-    input.dataset.rulerLength = '';
-    input.addEventListener('change', (event) => {
-      const parsed = Number(event.target.value);
-      if (Number.isFinite(parsed)) onRulerApply?.(parsed);
-    });
-    const wrapped = field('Real length (ft)', input);
-    wrapped.classList.add('setup-panel__ruler-field');
-    wrap.appendChild(wrapped);
-    return wrap;
   }
 
   /**
@@ -360,7 +262,138 @@ export function createSetupPanel({
           'yard wants a proportionally larger margin.'
       )
     );
+    wrap.appendChild(buildShowToggles());
     return wrap;
+  }
+
+  /**
+   * What the viewport draws besides the guides.
+   *
+   * Both off by default. Setup is about stating the yard and framing the views,
+   * and a full planting drawn over a photo being positioned is noise — but a
+   * feature you are checking against the picture, or the plant you are looking
+   * for, is exactly what you want. The plants switch is disabled while
+   * something is out of bounds: `getShow` forces them on there, and a control
+   * that appears to turn them off while they stay on is worse than no control.
+   */
+  function buildShowToggles() {
+    const wrap = el('div', 'setup-panel__toggles');
+    const stranded = outOfBounds().length > 0;
+    wrap.appendChild(
+      checkboxField('Show plants', state.show.plants || stranded, stranded, (value) => {
+        state.show.plants = value;
+        onShowChange?.();
+        rerender();
+      })
+    );
+    wrap.appendChild(
+      checkboxField('Show features', state.show.features, false, (value) => {
+        state.show.features = value;
+        onShowChange?.();
+        rerender();
+      })
+    );
+    return wrap;
+  }
+
+  /**
+   * Plants the yard no longer contains.
+   *
+   * Shrinking a yard below what is standing in it is the one way the declared
+   * yard can still strand something: no VIEW can miss the yard any more, but
+   * the yard is a number a person can type, and `resolveYardBounds` clamps only
+   * new drags — a plant already outside cannot be dragged back in.
+   *
+   * Reported, never repaired on its own. Resizing is exploratory: you type 6,
+   * look, type 8. Anything that moved a plant per keystroke would be
+   * unrecoverable in practice however good the undo stack is. So the list
+   * stands until a button is pressed, and it comes back on reload for a project
+   * saved in that state.
+   */
+  function outOfBounds() {
+    const { yardFt } = state.project;
+    if (!(yardFt?.width > 0) || !(yardFt?.depth > 0)) return [];
+    // Read through rather than snapshotted: the layout finishes loading after
+    // the panel is first built, and the conflict list has to notice.
+    const plants = getPlants?.() || [];
+    return plants.filter(
+      (plant) =>
+        plant.x < 0 || plant.x > yardFt.width || plant.y < 0 || plant.y > yardFt.depth
+    );
+  }
+
+  function buildConflicts() {
+    const wrap = el('div', 'setup-panel__section setup-panel__conflicts');
+    const stranded = outOfBounds();
+    if (!stranded.length) return wrap;
+
+    wrap.appendChild(
+      el('h3', 'setup-panel__heading', `${stranded.length} outside the yard`)
+    );
+    wrap.appendChild(
+      el(
+        'p',
+        'setup-panel__yard-alarm',
+        'These sit off the property as the yard is now measured. They still draw ' +
+          'in the margin, but nothing can be dragged back to where they are.'
+      )
+    );
+
+    const list = el('ul', 'setup-panel__list setup-panel__strays');
+    stranded.forEach((plant) => {
+      const item = el('li', 'setup-panel__item');
+      const name = el('span', 'setup-panel__stray-name', plant.commonName || plant.id);
+      const at = el(
+        'span',
+        'setup-panel__stray-at',
+        `${roundForDisplay(plant.x)}, ${roundForDisplay(plant.y)} ft — ${describeStray(plant)}`
+      );
+      const text = el('div', 'setup-panel__stray-text');
+      text.append(name, at);
+      item.appendChild(text);
+      item.appendChild(
+        button('Move inside', 'setup-panel__stray-action', () =>
+          onResolveConflicts?.({ action: 'clamp', ids: [plant.id] })
+        )
+      );
+      list.appendChild(item);
+    });
+    wrap.appendChild(list);
+
+    const actions = el('div', 'setup-panel__stray-bulk');
+    actions.appendChild(
+      button('Move all inside the boundary', 'button pill-button', () =>
+        onResolveConflicts?.({ action: 'clamp', ids: stranded.map((p) => p.id) })
+      )
+    );
+    actions.appendChild(
+      button('Scale the whole design to fit', 'button pill-button', () =>
+        onResolveConflicts?.({ action: 'scale' })
+      )
+    );
+    wrap.appendChild(actions);
+    wrap.appendChild(
+      el(
+        'p',
+        'setup-panel__hint',
+        'Scaling moves every plant and feature together about the yard corner, so ' +
+          'the design keeps its shape — that is the fix for a yard that was ' +
+          'mis-measured. Moving inside touches only what is stranded, which is the ' +
+          'fix for ground that is genuinely gone.'
+      )
+    );
+    return wrap;
+  }
+
+  /** Which way a stray is out, in the words the yard fields use. */
+  function describeStray(plant) {
+    const { yardFt } = state.project;
+    const ways = [];
+    if (plant.x < 0) ways.push(`${roundForDisplay(-plant.x)} ft west of it`);
+    if (plant.x > yardFt.width) ways.push(`${roundForDisplay(plant.x - yardFt.width)} ft east of it`);
+    if (plant.y < 0) ways.push(`${roundForDisplay(-plant.y)} ft south of it`);
+    if (plant.y > yardFt.depth) ways.push(`${roundForDisplay(plant.y - yardFt.depth)} ft north of it`);
+    return ways.join(' and ');
   }
 
   function buildFooter() {
@@ -378,14 +411,13 @@ export function createSetupPanel({
   return {
     render,
     getSelectedId: () => state.selectedId,
+    /** Plants are forced on while something is stranded; see buildConflicts. */
+    getShow: () => ({
+      plants: state.show.plants || outOfBounds().length > 0,
+      features: state.show.features,
+    }),
     setStatus: (message, stateName) => {
       state.status = message ? { message, state: stateName || 'info' } : null;
-      rerender();
-    },
-    isRulerArmed: () => state.ruler,
-    /** @param {{pixels: number, feet: number}|null} measurement */
-    setMeasurement: (measurement) => {
-      state.measurement = measurement;
       rerender();
     },
   };
@@ -476,6 +508,18 @@ function field(labelText, input) {
   const wrap = el('label', 'setup-panel__field');
   wrap.appendChild(el('span', 'setup-panel__field-label', labelText));
   wrap.appendChild(input);
+  return wrap;
+}
+
+function checkboxField(labelText, checked, disabled, onChange) {
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.checked = Boolean(checked);
+  input.disabled = Boolean(disabled);
+  input.addEventListener('change', (event) => onChange(event.target.checked));
+  const wrap = el('label', 'setup-panel__checkbox');
+  wrap.appendChild(input);
+  wrap.appendChild(el('span', 'setup-panel__field-label', labelText));
   return wrap;
 }
 

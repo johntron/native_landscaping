@@ -72,29 +72,45 @@ test('a save carries every photo placement through untouched', async ({ page }) 
   expect(await placements()).toEqual(before);
 });
 
-test("dragging one view's photo moves that placement and no other", async ({ page }) => {
-  const before = await placements();
+test('dragging a camera moves that elevation and saves it alone', async ({ page }) => {
+  const cameras = async () => {
+    const cfg = JSON.parse(
+      await readFile(path.join(SCRATCH_DIR, 'projects', PROJECT, 'project.json'), 'utf8')
+    );
+    return Object.fromEntries(cfg.views.map((view) => [view.id, view.viewerAtFt ?? null]));
+  };
+  const before = { placements: await placements(), cameras: await cameras() };
+
   await openScratchProject(page, PROJECT);
   await page.locator('[data-mode="setup"]').click();
 
-  // Select the north elevation and drag its photo upward.
-  await page.locator('#setupRow .setup-panel__pick').nth(1).click();
-  const svg = page.locator('#northSvg');
+  // The plan is what carries the cameras, and it is the first view.
+  await page.locator('#setupRow .setup-panel__pick').first().click();
+  const svg = page.locator('#topSvg');
   await svg.scrollIntoViewIfNeeded();
-  const box = await svg.boundingBox();
-  const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-  await page.mouse.move(centre.x, centre.y);
+  const line = svg.locator('line[data-setup-camera="north"]');
+  await expect(line).toHaveCount(1);
+  const at = await page.evaluate(() => {
+    const node = document.getElementById('topSvg');
+    const rect = node.getBoundingClientRect();
+    const box = node.viewBox.baseVal;
+    const y = Number(
+      document.querySelector('#topSvg line[data-setup-camera="north"]').getAttribute('y1')
+    );
+    return { x: rect.left + rect.width / 2, y: rect.top + (y * rect.height) / box.height };
+  });
+  await page.mouse.move(at.x, at.y);
   await page.mouse.down();
-  await page.mouse.move(centre.x, centre.y - 40, { steps: 8 });
+  await page.mouse.move(at.x, at.y + 50, { steps: 8 });
   await page.mouse.up();
   await saveViews(page);
 
-  const after = await placements();
-  expect(after.north.originFt.y, 'the dragged photo moved').toBeGreaterThan(
-    before.north.originFt.y
-  );
-  // Everything else is exactly where it was.
-  expect(after.plan).toEqual(before.plan);
-  expect(after.west).toEqual(before.west);
-  expect(after.view).toEqual(before.view);
+  const after = await cameras();
+  expect(after.north, 'the dragged camera moved').not.toEqual(before.cameras.north);
+  // A camera lives on the elevation it belongs to, not on the plan it is
+  // dragged in, and no other view's is touched.
+  expect(after.plan ?? null).toBe(null);
+  expect(after.west).toEqual(before.cameras.west);
+  // Photographs are a different concern and stayed exactly where they were.
+  expect(await placements()).toEqual(before.placements);
 });

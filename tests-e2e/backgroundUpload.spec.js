@@ -245,15 +245,26 @@ test('a tall yard is fitted to the viewport, at one scale for every panel', asyn
     return parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
   });
 
-  expect(box.height - border).toBeLessThanOrEqual(viewportHeight * 0.7 + 1);
+  // Setup shows one view, so it gets the larger of the two height budgets.
+  expect(box.height - border).toBeLessThanOrEqual(viewportHeight * 0.88 + 1);
   // Still exactly 1:5 — the panel is extentFt x the page scale on both axes,
   // so the yard's proportions are the panel's proportions.
   expect(box.width / box.height).toBeCloseTo(10 / 50, 2);
 
-  // And a foot is worth the same on screen in the elevation next to it: the
-  // south view spans the same 10 ft east-west, so it is exactly as wide.
-  const south = page.locator('#southSvg').locator('xpath=ancestor::*[contains(@class,"view")][1]');
-  expect((await south.boundingBox()).width).toBeCloseTo(box.width, 1);
+  // Setup shows one view at a time, so the check that a foot is worth the same
+  // on screen everywhere belongs where the panels sit side by side.
+  await page.locator('[data-mode="view"]').click();
+  const plan = await page
+    .locator('#topSvg')
+    .locator('xpath=ancestor::*[contains(@class,"view")][1]')
+    .boundingBox();
+  const south = await page
+    .locator('#southSvg')
+    .locator('xpath=ancestor::*[contains(@class,"view")][1]')
+    .boundingBox();
+  // The south view spans the same 10 ft east-west as the plan, so it is exactly
+  // as wide.
+  expect(south.width).toBeCloseTo(plan.width, 1);
 });
 
 test('an upload that is not an image is refused before anything is written', async ({ page }) => {

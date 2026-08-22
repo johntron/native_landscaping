@@ -1,18 +1,22 @@
 import { createViewTransform } from './viewTransform.js';
 import { resolveElevationOrientation } from './elevationOrientation.js';
-import { resolvePhotoPlacement } from './photoPlacement.js';
 import { createSvgElement } from './svgUtils.js';
 
 /**
- * The guides Setup mode draws over a view, and the gestures that move the
- * photograph underneath them.
+ * The guides Setup mode draws over a view, and the one thing in them that moves.
  *
- * A view's rectangle is derived from the declared yard, so there is nothing
- * about it to drag: the guides are a fixed target — the yard's own edges, its
- * origin corner, the ground line, and a foot grid — and the *photo* is what
- * moves. That inversion is the whole of this module's job. Drag anywhere to
- * slide the picture until its yard lines up with the drawn one; measure a known
- * length in it to fix its scale.
+ * A view's rectangle is derived from the declared yard, so almost everything
+ * here is a fixed reference rather than a control: the yard's own edges, its
+ * origin corner, the ground line, and a foot grid on whole yard feet. Setup is
+ * for saying how big the yard is and which views look at it, and those marks
+ * are what makes that legible.
+ *
+ * The exception is the **camera**. Where an elevation is looked at from is the
+ * one per-view number that is not derivable, and it is a position on the plan,
+ * so it is drawn there and dragged there. Camera, direction arrow, and the band
+ * of yard behind it are ONE object: they were two marks for a while, a "looks
+ * this way" bar on the yard edge and a dashed line somewhere else, which is the
+ * same fact drawn twice in two places that could disagree.
  *
  * Geometry is separated from drawing so the arithmetic can be tested without a
  * DOM — `buildOverlayGeometry` returns plain numbers, `renderSetupOverlay` turns
@@ -98,9 +102,9 @@ export function buildOverlayGeometry(view, context = {}) {
     gridLines.push({ orientation: 'horizontal', feet: round(ft), x1: 0, y1: y, x2: viewBox.width, y2: y });
   }
 
-  // The yard itself, and the corner every coordinate is measured from. These
-  // are what a photo is dragged onto: fixed marks in a fixed frame, which is
-  // exactly what the old draggable extent handles could not be.
+  // The yard itself, and the corner every coordinate is measured from. Fixed
+  // marks in a fixed frame — the drawing is the yard, and the yard is what the
+  // author is here to state.
   const guides = [];
   const span = yardSpanAlong(view, yardFt);
   if (type === 'elevation') {
@@ -139,14 +143,7 @@ export function buildOverlayGeometry(view, context = {}) {
     stepFt,
     gridLines,
     guides,
-    cameras: buildCameraGeometry(transform, views),
-    viewers: buildViewerMarkers(transform, views, yardFt),
-    // An uncalibrated photo fills the panel, so its outline IS the panel — drawn
-    // anyway, because the moment it is dragged the outline is the only thing
-    // saying where the picture went.
-    photo: view.background
-      ? resolvePhotoPlacement(view).rect || { x: 0, y: 0, width: viewBox.width, height: viewBox.height }
-      : null,
+    cameras: buildCameraGeometry(transform, views, yardFt),
     readout: {
       text:
         type === 'elevation'
@@ -161,92 +158,25 @@ export function buildOverlayGeometry(view, context = {}) {
 }
 
 /**
- * Which side of the yard each elevation is looked at from, drawn on a PLAN.
+ * Where each elevation is looked at from, drawn on a PLAN as one object.
  *
- * Every elevation now covers the whole yard along its own axis, so a coverage
- * band would shade the entire plan and say nothing. What is still worth seeing
- * — and is the thing the numbers never said out loud — is *which* axis a view
- * runs along and which side its observer stands on. So each elevation gets a
- * bar on the yard edge it is taken from, pointing in.
- *
- * The edge comes from the orientation table rather than from the compass name,
- * for the same reason everything else here does: `north` and `west` are
- * mirrored, and reading the name would put half the bars on the wrong side.
- */
-function buildViewerMarkers(transform, views, yardFt) {
-  if (transform.type !== 'plan' || !yardFt) return [];
-  const markers = [];
-  (Array.isArray(views) ? views : []).forEach((sibling) => {
-    if (sibling?.type !== 'elevation') return;
-    let orientation;
-    try {
-      orientation = resolveElevationOrientation(sibling.viewFrom);
-    } catch {
-      return;
-    }
-    const { depthKey, farIsHigh } = orientation;
-    // farIsHigh means the far edge is the high end of the depth axis, so the
-    // observer stands at the low end of it.
-    const standsAt = farIsHigh ? 0 : depthKey === 'y' ? yardFt.depth : yardFt.width;
-    const corner = transform.planToViewBox({ x: 0, y: 0 });
-    const opposite = transform.planToViewBox({ x: yardFt.width, y: yardFt.depth });
-    const alongY = depthKey === 'y';
-    const at = alongY
-      ? transform.planToViewBox({ x: 0, y: standsAt }).y
-      : transform.planToViewBox({ x: standsAt, y: 0 }).x;
-    // Into the yard, away from the observer.
-    const inward = farIsHigh ? 1 : -1;
-    const flip = alongY ? -1 : 1; // yard y grows up the drawing, x grows right
-    markers.push({
-      id: sibling.id,
-      label: sibling.label || sibling.id,
-      viewFrom: sibling.viewFrom,
-      orientation: alongY ? 'horizontal' : 'vertical',
-      bar: alongY
-        ? { x1: Math.min(corner.x, opposite.x), y1: at, x2: Math.max(corner.x, opposite.x), y2: at }
-        : { x1: at, y1: Math.min(corner.y, opposite.y), x2: at, y2: Math.max(corner.y, opposite.y) },
-      // A short arrow from the bar into the yard, at the middle of the edge.
-      arrow: alongY
-        ? { x: (corner.x + opposite.x) / 2, y: at, dx: 0, dy: inward * flip * 26 }
-        : { x: at, y: (corner.y + opposite.y) / 2, dx: inward * 26, dy: 0 },
-      // The label follows the arrow, but a bar on a panel edge puts the arrow's
-      // tip near it and the text would run off the drawing. Anchored to the
-      // side with room instead, which is always the side the arrow points.
-      label_at: alongY
-        ? {
-            x: (corner.x + opposite.x) / 2,
-            y: at + inward * flip * 40,
-            anchor: 'middle',
-          }
-        : {
-            x: at + inward * 34,
-            y: (corner.y + opposite.y) / 2,
-            anchor: inward > 0 ? 'start' : 'end',
-          },
-    });
-  });
-  return markers;
-}
-
-/**
- * Where each elevation's camera stands, drawn on a PLAN.
- *
- * `viewerAtFt` is a position on an elevation's depth axis — the axis running
- * into the drawing — so there is nowhere in that elevation to draw it: every
- * point of the picture is at every depth. On a plan the same number is a line,
- * and the region on the far side of it is exactly what that elevation refuses
- * to draw. So the cull is shown where it is a shape, not where it was authored.
+ * `viewerAtFt` is a position on an elevation's DEPTH axis — the axis running
+ * into that drawing — so there is nowhere in the elevation itself to show it:
+ * every point of the picture is at every depth. On a plan the same number is a
+ * line, the direction of view is an arrow off that line, and the ground behind
+ * it is the region the elevation refuses to draw. All three are the same fact,
+ * so they are one mark that moves together.
  *
  * `farIsHigh` says which side is behind the camera: south and west stand at the
- * LOW end of their depth axis and cull below it, north and east stand at the
- * high end and cull above. Taking the side from the orientation table rather
- * than from the compass name is what keeps the mirrored pair from swapping.
+ * LOW end of their depth axis and look up it, north and east stand at the high
+ * end and look down it. Taking the side from the orientation table rather than
+ * from the compass name is what keeps the mirrored pair from swapping.
  *
  * A camera outside the plan's own rectangle is still honest — the band is
  * clamped to the drawing, so it reads as "all of this" or as nothing at all,
  * which is what it means.
  */
-function buildCameraGeometry(transform, siblings) {
+function buildCameraGeometry(transform, siblings, yardFt) {
   if (transform.type !== 'plan') return [];
   const { viewBox } = transform;
   const cameras = [];
@@ -275,18 +205,35 @@ function buildCameraGeometry(transform, siblings) {
     const culled = alongY
       ? { x: 0, y: Math.min(from, to), width: viewBox.width, height: Math.abs(to - from) }
       : { x: Math.min(from, to), y: 0, width: Math.abs(to - from), height: viewBox.height };
-    // The label belongs on the side the elevation can still see. Put it in the
-    // band and it reads as a caption for the yard being hidden.
+
+    // Which way the arrow points: away from the culled band, into the yard the
+    // elevation can see. In drawing pixels, not in feet — the y flip is already
+    // baked into `at`, so comparing pixels needs no second mirror case.
     const bandLeadsIn = alongY ? culled.y === 0 : culled.x === 0;
+    const towards = bandLeadsIn ? 1 : -1;
+    // Along the line, the arrow sits at the middle of the yard it looks at, so
+    // it lands on the picture rather than in a corner.
+    const middle = alongY
+      ? transform.planToViewBox({ x: (yardFt?.width ?? 0) / 2, y: 0 }).x
+      : transform.planToViewBox({ x: 0, y: (yardFt?.depth ?? 0) / 2 }).y;
+
     cameras.push({
       id: sibling.id,
       label: sibling.label || sibling.id,
       atFt: sibling.viewerAtFt,
       orientation: alongY ? 'horizontal' : 'vertical',
+      // The axis the drag moves along — the other one is fixed by the line.
+      axis: alongY ? 'y' : 'x',
+      at,
       line: alongY
         ? { x1: 0, y1: at, x2: viewBox.width, y2: at }
         : { x1: at, y1: 0, x2: at, y2: viewBox.height },
       culled,
+      // Grown off the line itself, so there is one thing to grab and one thing
+      // that moves.
+      arrow: alongY
+        ? { x: middle, y: at, dx: 0, dy: towards * ARROW_PX }
+        : { x: at, y: middle, dx: towards * ARROW_PX, dy: 0 },
       labelAt: alongY
         ? { x: 8, y: bandLeadsIn ? at + 16 : at - 6, anchor: 'start' }
         : { x: bandLeadsIn ? at + 6 : at - 6, y: 16, anchor: bandLeadsIn ? 'start' : 'end' },
@@ -295,137 +242,69 @@ function buildCameraGeometry(transform, siblings) {
   return cameras;
 }
 
-/**
- * The rectangle of yard a view's photo covers, defaulting to the whole panel.
- *
- * An uploaded photo starts uncalibrated, which means "fills the panel". Before
- * it can be dragged it has to become a rectangle in feet, and the panel's own
- * rectangle is the one that leaves it exactly where it is drawn.
- */
-function photoRectFt(transform, view) {
-  if (view.photoFt) {
-    return {
-      originFt: { ...view.photoFt.originFt },
-      extentFt: { ...view.photoFt.extentFt },
-    };
-  }
-  return {
-    originFt: { ...transform.originFt },
-    extentFt: { ...transform.extentFt },
-  };
-}
+/** How far the direction arrow reaches off the camera line, in viewBox pixels. */
+const ARROW_PX = 34;
 
 /**
- * Slide the photograph by a drag, in the view's own coordinates.
+ * Move one elevation's camera to a dragged point, in yard feet.
  *
- * The delta is taken in FEET through the axis inverses rather than in pixels,
- * which is what makes one implementation right for a mirrored elevation: on a
- * north or west view a rightward drag is a *decreasing* axis value, and
- * `xToAxis` already knows that. Same for the vertical, where drawing y grows
- * down and yard y grows up.
+ * Returned as a patch for the SIBLING view, not for the plan being dragged in —
+ * which is the whole oddity of this control and the reason it carries the id.
  *
- * @returns {{ photoFt: { originFt: object, extentFt: object } } | null}
+ * @returns {{ id: string, viewerAtFt: number } | null}
  */
-export function resolvePhotoDrag(view, from, to) {
-  if (!view?.background || !from || !to) return null;
-  let transform;
+export function resolveCameraDrag(view, cameraId, point, siblings) {
+  if (view?.type !== 'plan') return null;
+  const sibling = (Array.isArray(siblings) ? siblings : []).find((v) => v?.id === cameraId);
+  if (!sibling) return null;
+  let orientation;
   try {
-    transform = createViewTransform(view);
+    orientation = resolveElevationOrientation(sibling.viewFrom);
   } catch {
     return null;
   }
-  const axes = axesFor(transform);
-  const dx = axes.fromX(to.x) - axes.fromX(from.x);
-  const dy = axes.fromY(to.y) - axes.fromY(from.y);
-  if (!Number.isFinite(dx) || !Number.isFinite(dy)) return null;
-
-  const photo = photoRectFt(transform, view);
-  return {
-    photoFt: {
-      originFt: { x: photo.originFt.x + dx, y: photo.originFt.y + dy },
-      extentFt: photo.extentFt,
-    },
-  };
-}
-
-/**
- * Measure a two-point drag across the view's background photo.
- *
- * Reported in the view's feet, which is what the reader wants to see while
- * dragging: "this is currently 8.4 ft". Scale is uniform, so a diagonal drag is
- * as valid as an axis-aligned one.
- *
- * @returns {{ pixels: number, feet: number, pxPerFt: number } | null}
- */
-export function measureRuler(view, from, to) {
-  if (!view || !from || !to) return null;
   const transform = createViewTransform(view);
-  const pixels = Math.hypot(Number(to.x) - Number(from.x), Number(to.y) - Number(from.y));
-  if (!Number.isFinite(pixels)) return null;
-  return { pixels, feet: transform.toFeet(pixels), pxPerFt: transform.pxPerFt };
+  const feet = transform.viewBoxToPlan(point);
+  const viewerAtFt = orientation.depthKey === 'y' ? feet.y : feet.x;
+  if (!Number.isFinite(viewerAtFt)) return null;
+  return { id: cameraId, viewerAtFt: round(viewerAtFt) };
 }
 
 /**
- * A drag shorter than this is a misclick, not a measurement: a 3px span solves
- * to geometry that is perfectly valid and wildly wrong, which is exactly what
- * validation cannot catch.
+ * The camera line nearest a point, within `radius` viewBox pixels.
  *
- * A fixed floor in viewBox space, deliberately not the controllers' hit radius
- * — that one is scaled to screen pixels, and a measurement's usefulness is a
- * property of the photo it is taken from, not of how big the panel happens to
- * be drawn.
+ * A line is grabbable anywhere along it, so only the axis it moves counts
+ * toward the distance — the same rule the old guide handles used, and the
+ * reason a camera can be caught at the edge of the drawing rather than only
+ * where its label happens to be.
  */
-export const MIN_RULER_PIXELS = 28;
-
-/**
- * Scale the photograph from a known length measured in it.
- *
- * The drag says "this many feet, at the size the photo is currently drawn" and
- * the typed length says "no, that is this many feet". The ratio is how much the
- * photo has to grow or shrink; the view does not move at all, because the view
- * is the yard and the yard is not what was wrong.
- *
- * The measurement's MIDPOINT is held fixed. Anchoring on a corner of the photo
- * would slide whatever the user just pointed at out from under the pointer,
- * which reads as the tool ignoring the drag; holding the thing being measured
- * makes the correction look like what it is.
- *
- * @param {object} view a normalized view
- * @param {{x: number, y: number}} from viewBox point
- * @param {{x: number, y: number}} to viewBox point
- * @param {number} lengthFt what the measured span really is
- * @returns {{ photoFt: { originFt: object, extentFt: object } } | null}
- */
-export function resolveRulerCalibration(view, from, to, lengthFt) {
-  const measured = measureRuler(view, from, to);
-  if (!measured || measured.pixels < MIN_RULER_PIXELS) return null;
-  const feet = Number(lengthFt);
-  if (!Number.isFinite(feet) || feet <= 0) return null;
-  if (!view.background) return null;
-
-  const transform = createViewTransform(view);
-  const axes = axesFor(transform);
-  const scale = feet / measured.feet;
-  const photo = photoRectFt(transform, view);
-
-  // The held point, in the view's own feet.
-  const anchor = {
-    x: axes.fromX((from.x + to.x) / 2),
-    y: axes.fromY((from.y + to.y) / 2),
-  };
-  return {
-    photoFt: {
-      originFt: {
-        x: anchor.x - (anchor.x - photo.originFt.x) * scale,
-        y: anchor.y - (anchor.y - photo.originFt.y) * scale,
-      },
-      extentFt: {
-        width: photo.extentFt.width * scale,
-        height: photo.extentFt.height * scale,
-      },
-    },
-  };
+export function pickCamera(geometry, point, radius) {
+  let best = null;
+  (geometry?.cameras || []).forEach((camera) => {
+    const distance = Math.abs((camera.axis === 'y' ? point.y : point.x) - camera.at);
+    if (distance <= radius && (!best || distance < best.distance)) best = { camera, distance };
+  });
+  return best ? best.camera : null;
 }
+
+/*
+ * Positioning the photograph — dragging it, and scaling it from a measured
+ * length — lived here and has been taken out for now.
+ *
+ * Both wrote `photoFt` starting from the PANEL's rectangle when a photo had no
+ * placement yet, and the panel is the yard's shape, not the picture's. So the
+ * first gesture on any photo stretched it: 4% on backyard's 800x600 into a
+ * 33.6 x 26.2 ft panel, 39% on a 16:9 upload. Placements already in a file
+ * still render (src/render/photoPlacement.js); there is simply no longer a way
+ * to create a bad one by hand.
+ *
+ * The ruler went with them rather than surviving alone: under a declared yard
+ * it no longer solves the view's extent — the yard does that — so all it had
+ * left to scale was the photo, by the same stretching arithmetic.
+ *
+ * What the replacement needs is the image's intrinsic aspect, which nothing
+ * currently loads; see nl-0di.
+ */
 
 /** Remove any overlay previously drawn into this SVG. */
 export function clearSetupOverlay(svg) {
@@ -446,13 +325,11 @@ export function clearSetupOverlay(svg) {
  *
  * @param {SVGElement} svg
  * @param {object} view a normalized view
- * @param {{from: object, to: object}|null} [ruler]
  * @param {{ interactive?: boolean, yardFt?: object, views?: Array<object>, highlightId?: string }} [options]
  */
 export function renderSetupOverlay(
   svg,
   view,
-  ruler,
   { interactive = true, yardFt = null, views = [], highlightId = '' } = {}
 ) {
   if (!svg || !view) return null;
@@ -466,26 +343,6 @@ export function renderSetupOverlay(
     // photo, never mistaken for the one being edited.
     opacity: interactive ? 1 : 0.55,
   });
-
-  // The photo's own edge, on the view being edited. Without it a picture that
-  // is smaller than the panel just looks like a panel that failed to load, and
-  // one that is larger gives no clue how much is off-screen.
-  if (interactive && geometry.photo) {
-    group.appendChild(
-      createSvgElement('rect', {
-        x: geometry.photo.x,
-        y: geometry.photo.y,
-        width: geometry.photo.width,
-        height: geometry.photo.height,
-        fill: 'none',
-        stroke: '#c1121f',
-        'stroke-width': 1.5,
-        'stroke-dasharray': '4 4',
-        'stroke-opacity': 0.7,
-        'data-setup-photo': '',
-      })
-    );
-  }
 
   geometry.gridLines.forEach((line) => {
     group.appendChild(
@@ -561,49 +418,6 @@ export function renderSetupOverlay(
     );
   });
 
-  geometry.viewers.forEach((marker) => {
-    const emphasised = marker.id === highlightId;
-    group.appendChild(
-      createSvgElement('line', {
-        x1: marker.bar.x1,
-        y1: marker.bar.y1,
-        x2: marker.bar.x2,
-        y2: marker.bar.y2,
-        stroke: '#2f7a8c',
-        'stroke-width': emphasised ? 6 : 4,
-        'stroke-opacity': emphasised ? 0.95 : 0.5,
-        'stroke-linecap': 'round',
-        'data-setup-viewer': marker.id,
-      })
-    );
-    group.appendChild(
-      createSvgElement('line', {
-        x1: marker.arrow.x,
-        y1: marker.arrow.y,
-        x2: marker.arrow.x + marker.arrow.dx,
-        y2: marker.arrow.y + marker.arrow.dy,
-        stroke: '#2f7a8c',
-        'stroke-width': emphasised ? 3 : 2,
-        'stroke-opacity': emphasised ? 0.95 : 0.5,
-        'data-setup-viewer-arrow': marker.id,
-      })
-    );
-    const text = createSvgElement('text', {
-      x: marker.label_at.x,
-      y: marker.label_at.y,
-      'text-anchor': marker.label_at.anchor,
-      'font-size': 13,
-      'font-weight': 700,
-      fill: '#2f7a8c',
-      stroke: '#fff',
-      'stroke-width': 3,
-      'paint-order': 'stroke fill',
-      'data-setup-viewer-label': marker.id,
-    });
-    text.textContent = `${marker.label} looks this way`;
-    group.appendChild(text);
-  });
-
   // Cameras after the guides so the band tints the grid rather than the reverse.
   geometry.cameras.forEach((camera) => {
     const emphasised = camera.id === highlightId;
@@ -633,6 +447,41 @@ export function renderSetupOverlay(
         'data-setup-camera': camera.id,
       })
     );
+    // Grown off the line, not placed near it: one object, so what you grab and
+    // what tells you which way it faces cannot end up disagreeing.
+    const tip = { x: camera.arrow.x + camera.arrow.dx, y: camera.arrow.y + camera.arrow.dy };
+    group.appendChild(
+      createSvgElement('line', {
+        x1: camera.arrow.x,
+        y1: camera.arrow.y,
+        x2: tip.x,
+        y2: tip.y,
+        stroke: '#5b3fa0',
+        'stroke-width': emphasised ? 3 : 2,
+        'data-setup-camera-arrow': camera.id,
+      })
+    );
+    group.appendChild(
+      createSvgElement('polygon', {
+        points: arrowHead(camera.arrow, tip),
+        fill: '#5b3fa0',
+        'fill-opacity': emphasised ? 1 : 0.7,
+        'data-setup-camera-head': camera.id,
+      })
+    );
+    if (interactive) {
+      group.appendChild(
+        createSvgElement('circle', {
+          cx: camera.axis === 'y' ? camera.arrow.x : camera.at,
+          cy: camera.axis === 'y' ? camera.at : camera.arrow.y,
+          r: 7,
+          fill: '#fff',
+          stroke: '#5b3fa0',
+          'stroke-width': 2.5,
+          'data-setup-camera-grip': camera.id,
+        })
+      );
+    }
     const text = createSvgElement('text', {
       x: camera.labelAt.x,
       y: camera.labelAt.y,
@@ -665,60 +514,20 @@ export function renderSetupOverlay(
   label.textContent = geometry.readout.text;
   group.appendChild(label);
 
-  if (ruler?.from && ruler?.to) appendRuler(group, view, ruler);
-
   svg.appendChild(group);
   return group;
 }
 
-/**
- * The measuring segment, drawn while the drag is live and left in place after
- * it so the user can see what they are typing a length for.
- */
-function appendRuler(group, view, ruler) {
-  const measured = measureRuler(view, ruler.from, ruler.to);
-  if (!measured) return;
-  group.appendChild(
-    createSvgElement('line', {
-      x1: ruler.from.x,
-      y1: ruler.from.y,
-      x2: ruler.to.x,
-      y2: ruler.to.y,
-      stroke: '#c1121f',
-      'stroke-width': 3,
-      'stroke-linecap': 'round',
-      'data-setup-ruler': '',
-    })
-  );
-  [ruler.from, ruler.to].forEach((end) => {
-    group.appendChild(
-      createSvgElement('circle', {
-        cx: end.x,
-        cy: end.y,
-        r: 5,
-        fill: '#fff',
-        stroke: '#c1121f',
-        'stroke-width': 2.5,
-        'data-setup-ruler-end': '',
-      })
-    );
-  });
-
-  // Above the midpoint, so the segment itself is never covered by its label.
-  const text = createSvgElement('text', {
-    x: (ruler.from.x + ruler.to.x) / 2,
-    y: (ruler.from.y + ruler.to.y) / 2 - 10,
-    'text-anchor': 'middle',
-    'font-size': 16,
-    'font-weight': 700,
-    fill: '#c1121f',
-    stroke: '#fff',
-    'stroke-width': 3,
-    'paint-order': 'stroke fill',
-    'data-setup-ruler-readout': '',
-  });
-  text.textContent = `${round(measured.feet)} ft at this scale`;
-  group.appendChild(text);
+/** A solid triangle at the arrow's tip, sized to the shaft it sits on. */
+function arrowHead(arrow, tip) {
+  const size = 8;
+  // One of dx/dy is always zero — the arrow runs along the depth axis — so the
+  // perpendicular is the other one, and no trigonometry is needed.
+  const alongY = arrow.dx === 0;
+  const sign = alongY ? Math.sign(arrow.dy) : Math.sign(arrow.dx);
+  return alongY
+    ? `${tip.x},${tip.y} ${tip.x - size},${tip.y - sign * size} ${tip.x + size},${tip.y - sign * size}`
+    : `${tip.x},${tip.y} ${tip.x - sign * size},${tip.y - size} ${tip.x - sign * size},${tip.y + size}`;
 }
 
 function round(value) {

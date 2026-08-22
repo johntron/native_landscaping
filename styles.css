@@ -849,7 +849,28 @@ select {
   padding: 0.35rem 0.15rem 0.35rem;
 }
 
+/*
+ * Setup shows one view at a time, so the page's whole width goes to it. The
+ * grid used to matter because the foot grid had to be compared across panels
+ * to align views by eye; the yard is declared now and there is nothing to
+ * align, while framing a photo and placing a camera both want the drawing as
+ * large as it will go.
+ */
+.views[data-setup-focus] .view-panel:not(.is-setup-focus),
 .views[data-maximized] .view-panel {
+  display: none;
+}
+
+.views[data-setup-focus] .view-panel.is-setup-focus {
+  flex: 1 1 100%;
+  align-items: center;
+}
+
+/* Setup draws the yard, not the planting: both are off by default and switched
+   on from the panel. Hidden in CSS rather than skipped in the renderer, so the
+   drawing the toggles reveal is the same one every other mode renders. */
+.views[data-hide-plants] g[data-plant-id],
+.views[data-hide-features] g[data-feature-id] {
   display: none;
 }
 
@@ -1661,4 +1682,78 @@ select {
 /* The form holds its slot with nothing selected, so the list below it stays put. */
 .feature-panel__form {
   min-height: 8.5rem;
+}
+
+
+/* --- Setup mode: visibility toggles and the stranded-plant list --- */
+
+.setup-panel__toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 0.6rem;
+}
+
+.setup-panel__checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+
+.setup-panel__checkbox input:disabled + .setup-panel__field-label {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* Loud on purpose: a plant off the property is invisible in the drawing that
+   caused it, so the panel is the only place it can be noticed. */
+.setup-panel__conflicts:not(:empty) {
+  border: 1px solid #d9a07f;
+  border-left: 3px solid #9a4a2f;
+  border-radius: 6px;
+  background-color: #fdf3ee;
+  padding: 0.75rem 0.9rem;
+}
+
+.setup-panel__strays .setup-panel__item {
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.setup-panel__stray-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.setup-panel__stray-name {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #1f2a35;
+}
+
+.setup-panel__stray-at {
+  font-size: 0.78rem;
+  color: #7a5442;
+  font-variant-numeric: tabular-nums;
+}
+
+.setup-panel__stray-action {
+  flex: 0 0 auto;
+  border: 1px solid #d6d3cb;
+  border-radius: 999px;
+  background-color: #fff;
+  color: #2f7a8c;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.25rem 0.7rem;
+  cursor: pointer;
+}
+
+.setup-panel__stray-bulk {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.7rem;
 }

@@ -235,216 +235,140 @@ test.describe('setup mode', () => {
   });
 });
 
-// Photo drags edit the view in memory; only the Save button writes, so these
+// Camera drags edit the view in memory; only the Save button writes, so these
 // stay on the read-only server like the rest of the suite.
 test.describe('setup overlay', () => {
-  /** Centre of a panel, in viewport coordinates. */
-  async function panelCentre(page, svgId) {
-    // page.mouse works in viewport coordinates, and a panel sitting below the
-    // fold is out of reach.
-    await page.evaluate((id) => document.getElementById(id).scrollIntoView({ block: 'center' }), svgId);
-    return page.evaluate((id) => {
-      const rect = document.getElementById(id).getBoundingClientRect();
-      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-    }, svgId);
-  }
-
-  /** The photo's outline, in the drawing's own pixels. */
-  const photoRect = (page, svgId) =>
-    page.locator(`#${svgId} rect[data-setup-photo]`).evaluate((node) => ({
-      x: Number(node.getAttribute('x')),
-      y: Number(node.getAttribute('y')),
-      width: Number(node.getAttribute('width')),
+  /** Where a camera's line sits in the plan drawing, in viewBox pixels. */
+  const cameraAt = (page, id) =>
+    page.locator(`#topSvg line[data-setup-camera="${id}"]`).evaluate((node) => ({
+      x: Number(node.getAttribute('x1')),
+      y: Number(node.getAttribute('y1')),
     }));
 
-  const fieldValue = (page, label) =>
-    page.locator('.setup-panel__field', { hasText: label }).locator('input').inputValue();
+  /** Viewport coordinates of a point in the plan's own drawing units. */
+  async function planPoint(page, x, y) {
+    await page.evaluate(() => document.getElementById('topSvg').scrollIntoView({ block: 'center' }));
+    return page.evaluate(
+      ([px, py]) => {
+        const svg = document.getElementById('topSvg');
+        const rect = svg.getBoundingClientRect();
+        const box = svg.viewBox.baseVal;
+        return {
+          x: rect.left + (px * rect.width) / box.width,
+          y: rect.top + (py * rect.height) / box.height,
+        };
+      },
+      [x, y]
+    );
+  }
 
-  test('guides appear only in setup mode, and only one view is live', async ({ page }) => {
+  test('setup shows one view at a time, with the yard drawn on it', async ({ page }) => {
     await openProject(page, 'backyard');
     const overlays = page.locator('[data-setup-overlay]');
-    const live = page.locator('[data-setup-interactive="true"]');
     await expect(overlays).toHaveCount(0);
 
     await page.locator('[data-mode="edit"]').click();
     await expect(overlays).toHaveCount(0);
 
-    // Every view draws the guides — the foot grid and the yard outline are
-    // cross-view references and are useless in one panel alone — but exactly
-    // one is live, so there is only ever one answer to which view is being set
-    // up.
+    // One panel, one overlay. Every panel used to draw guides so the foot grid
+    // could be compared across views; the yard is declared now, so there is
+    // nothing to align and the page's whole width goes to one drawing.
     await page.locator('[data-mode="setup"]').click();
-    const viewCount = await page.locator('.view svg').count();
-    expect(viewCount).toBeGreaterThan(1);
-    await expect(overlays).toHaveCount(viewCount);
-    await expect(live).toHaveCount(1);
-    await expect(page.locator('#topSvg [data-setup-interactive="true"]')).toHaveCount(1);
-    // The photo outline marks the one panel whose picture can be dragged.
-    await expect(page.locator('#topSvg rect[data-setup-photo]')).toHaveCount(1);
-    // And the yard's own corner is drawn, so there is something to line up to.
+    expect(await page.locator('.view-panel').count()).toBeGreaterThan(1);
+    await expect(page.locator('.view-panel:visible')).toHaveCount(1);
+    await expect(overlays).toHaveCount(1);
     await expect(page.locator('#topSvg circle[data-setup-guide="origin"]')).toHaveCount(1);
+    await expect(page.locator('#topSvg rect[data-setup-guide="yard"]')).toHaveCount(1);
 
-    // Selecting another view moves the live overlay rather than adding a second.
+    // Selecting another view swaps which one is shown.
     await page.locator('.setup-panel__item', { hasText: 'East elevation' }).locator('.setup-panel__pick').click();
-    await expect(page.locator('#eastSvg [data-setup-interactive="true"]')).toHaveCount(1);
-    await expect(live).toHaveCount(1);
-    await expect(page.locator('#topSvg rect[data-setup-photo]')).toHaveCount(0);
+    await expect(page.locator('.view-panel:visible')).toHaveCount(1);
+    await expect(page.locator('#eastSvg')).toBeVisible();
+    await expect(page.locator('#topSvg')).toBeHidden();
 
     await page.locator('[data-mode="view"]').click();
     await expect(overlays).toHaveCount(0);
+    await expect(page.locator('#topSvg')).toBeVisible();
   });
 
-  test('dragging moves the photo and leaves the drawing exactly where it was', async ({ page }) => {
+  test('the plan draws every elevation camera as one draggable object', async ({ page }) => {
     await openProject(page, 'backyard');
     await page.locator('[data-mode="setup"]').click();
-    await page.locator('.setup-panel__item', { hasText: 'East elevation' }).locator('.setup-panel__pick').click();
 
-    const groundY = () =>
-      page.locator('#eastSvg line[data-setup-guide="ground"]').getAttribute('y1');
-    const plantPath = () =>
-      page.locator('#eastSvg g[data-plant-id]').first().locator('path').first().getAttribute('d');
+    // Both elevations, and each is a line plus an arrow grown off it — one
+    // object, so the position and the direction cannot disagree.
+    for (const id of ['south', 'east']) {
+      await expect(page.locator(`#topSvg line[data-setup-camera="${id}"]`)).toHaveCount(1);
+      await expect(page.locator(`#topSvg line[data-setup-camera-arrow="${id}"]`)).toHaveCount(1);
+      await expect(page.locator(`#topSvg polygon[data-setup-camera-head="${id}"]`)).toHaveCount(1);
+      await expect(page.locator(`#topSvg circle[data-setup-camera-grip="${id}"]`)).toHaveCount(1);
+    }
+  });
 
-    const before = {
-      ground: await groundY(),
-      plant: await plantPath(),
-      photo: await photoRect(page, 'eastSvg'),
-      viewBox: await page.locator('#eastSvg').getAttribute('viewBox'),
-    };
+  test('dragging a camera moves that elevation, and only that one', async ({ page }) => {
+    await openProject(page, 'backyard');
+    await page.locator('[data-mode="setup"]').click();
 
-    const start = await panelCentre(page, 'eastSvg');
-    await page.mouse.move(start.x, start.y);
+    const before = { south: await cameraAt(page, 'south'), east: await cameraAt(page, 'east') };
+    // South's camera runs across the drawing, so grab it anywhere along its line.
+    const grip = await planPoint(page, 400, before.south.y);
+    await page.mouse.move(grip.x, grip.y);
     await page.mouse.down();
-    await page.mouse.move(start.x + 50, start.y - 40, { steps: 8 });
+    await page.mouse.move(grip.x, grip.y - 60, { steps: 8 });
     await page.mouse.up();
 
-    // This is the inversion the whole redesign turns on. The yard is fixed, so
-    // the ground line, the plants standing on it, and the drawing's own size
-    // are all untouched; the photograph is what moved.
-    expect(await groundY()).toBe(before.ground);
-    expect(await plantPath()).toBe(before.plant);
-    expect(await page.locator('#eastSvg').getAttribute('viewBox')).toBe(before.viewBox);
-    const after = await photoRect(page, 'eastSvg');
-    expect(after.x).toBeGreaterThan(before.photo.x);
-    expect(after.y).toBeLessThan(before.photo.y);
-    expect(after.width).toBeCloseTo(before.photo.width, 6); // moved, never rescaled
+    const after = { south: await cameraAt(page, 'south'), east: await cameraAt(page, 'east') };
+    expect(after.south.y).toBeLessThan(before.south.y);
+    // The arrow came with it — it is part of the same object.
+    const shaftY = await page
+      .locator('#topSvg line[data-setup-camera-arrow="south"]')
+      .evaluate((n) => Number(n.getAttribute('y1')));
+    expect(shaftY).toBeCloseTo(after.south.y, 6);
+    // And nothing else moved.
+    expect(after.east).toEqual(before.east);
   });
 
-  test('a photo drag keeps following the pointer across many frames', async ({ page }) => {
+  test('a camera drag keeps following the pointer across many frames', async ({ page }) => {
     await openProject(page, 'backyard');
     await page.locator('[data-mode="setup"]').click();
 
-    const start = await panelCentre(page, 'topSvg');
+    const start = await planPoint(page, 400, (await cameraAt(page, 'south')).y);
     await page.mouse.move(start.x, start.y);
     await page.mouse.down();
 
-    // Re-rendering the panels used to re-append every one of them, and moving an
-    // element in the DOM drops its pointer capture — so the drag died on the
+    // Re-rendering the panels used to re-append every one of them, and moving
+    // an element in the DOM drops its pointer capture — so the drag died on the
     // first repaint. Step slowly enough to cross several frames.
-    const offsets = [];
+    const seen = [];
     for (let step = 1; step <= 5; step += 1) {
-      await page.mouse.move(start.x + step * 12, start.y, { steps: 2 });
+      await page.mouse.move(start.x, start.y - step * 10, { steps: 2 });
       await page.waitForTimeout(120);
-      offsets.push((await photoRect(page, 'topSvg')).x);
+      seen.push((await cameraAt(page, 'south')).y);
     }
     await page.mouse.up();
 
-    // Every step must have carried the photo further east; a dropped capture
-    // shows up as the value freezing after the first move.
-    for (let i = 1; i < offsets.length; i += 1) {
-      expect(offsets[i], `step ${i + 1} kept tracking (saw ${offsets.join(', ')})`).toBeGreaterThan(
-        offsets[i - 1]
+    for (let i = 1; i < seen.length; i += 1) {
+      expect(seen[i], `step ${i + 1} kept tracking (saw ${seen.join(', ')})`).toBeLessThan(
+        seen[i - 1]
       );
     }
   });
 
-  test('measuring a known length rescales the photo, not the yard', async ({ page }) => {
+  test('plants and features are hidden in setup until asked for', async ({ page }) => {
     await openProject(page, 'backyard');
     await page.locator('[data-mode="setup"]').click();
 
-    // Arming the ruler suspends photo dragging on the selected view.
-    await page.locator('[data-ruler-toggle]').click();
-    await expect(page.locator('[data-ruler-toggle]')).toHaveAttribute('aria-pressed', 'true');
+    // Setup is about the yard, not the planting; a full layout over a photo
+    // being framed is noise.
+    const plants = page.locator('#topSvg g[data-plant-id]').first();
+    await expect(plants).toBeHidden();
 
-    const beforeYard = await fieldValue(page, 'East–west (ft)');
-    const beforeViewBox = await page.locator('#topSvg').getAttribute('viewBox');
-    const beforePhoto = await photoRect(page, 'topSvg');
+    await page.locator('.setup-panel__checkbox', { hasText: 'Show plants' }).locator('input').check();
+    await expect(plants).toBeVisible();
 
-    // Drag across exactly half the panel. Two round-trips on purpose: the
-    // scroll has to land before the rect is read, or the drag starts at
-    // coordinates the page has since moved.
-    await page.evaluate(() => document.getElementById('topSvg').scrollIntoView({ block: 'center' }));
-    const span = await page.evaluate(() => {
-      const rect = document.getElementById('topSvg').getBoundingClientRect();
-      return {
-        y: rect.top + rect.height / 2,
-        from: rect.left + rect.width * 0.25,
-        to: rect.left + rect.width * 0.75,
-      };
-    });
-    await page.mouse.move(span.from, span.y);
-    await page.mouse.down();
-    await page.mouse.move(span.to, span.y, { steps: 8 });
-    // The segment is drawn while the drag is live, not only once it ends.
-    await expect(page.locator('#topSvg line[data-setup-ruler]')).toHaveCount(1);
-    await page.mouse.up();
-
-    await expect(page.locator('.setup-panel__ruler-readout')).toContainText('px');
-    await page.locator('[data-ruler-length]').fill('10');
-    await page.locator('[data-ruler-length]').press('Enter');
-
-    // Half the panel is far more than 10 ft, so the photo shrinks — and the
-    // yard, which was never what was wrong, does not move at all.
-    await expect(page.locator('.setup-panel__status')).toContainText("photo to");
-    expect((await photoRect(page, 'topSvg')).width).toBeLessThan(beforePhoto.width);
-    expect(await fieldValue(page, 'East–west (ft)')).toBe(beforeYard);
-    expect(await page.locator('#topSvg').getAttribute('viewBox')).toBe(beforeViewBox);
-    // The segment belongs to the photo's old scale, so it must not survive.
-    await expect(page.locator('#topSvg line[data-setup-ruler]')).toHaveCount(0);
-  });
-
-  test('a yard edit invalidates a standing measurement', async ({ page }) => {
-    await openProject(page, 'backyard');
-    await page.locator('[data-mode="setup"]').click();
-    await page.locator('[data-ruler-toggle]').click();
-
-    await page.evaluate(() => document.getElementById('topSvg').scrollIntoView({ block: 'center' }));
-    const span = await page.evaluate(() => {
-      const rect = document.getElementById('topSvg').getBoundingClientRect();
-      return {
-        y: rect.top + rect.height / 2,
-        from: rect.left + rect.width * 0.25,
-        to: rect.left + rect.width * 0.75,
-      };
-    });
-    await page.mouse.move(span.from, span.y);
-    await page.mouse.down();
-    await page.mouse.move(span.to, span.y, { steps: 4 });
-    await page.mouse.up();
-    await expect(page.locator('#topSvg line[data-setup-ruler]')).toHaveCount(1);
-
-    // Resizing the yard rescales every drawing, so a segment measured at 600 px
-    // would be drawn outside a view that has since shrunk past it.
-    const eastWest = page
-      .locator('.setup-panel__field', { hasText: 'East–west (ft)' })
-      .locator('input');
-    await eastWest.fill('12');
-    await eastWest.press('Enter');
-    await expect(page.locator('#topSvg line[data-setup-ruler]')).toHaveCount(0);
-  });
-
-  test('the photo can be put back to filling its panel', async ({ page }) => {
-    await openProject(page, 'backyard');
-    await page.locator('[data-mode="setup"]').click();
-
-    const start = await panelCentre(page, 'topSvg');
-    await page.mouse.move(start.x, start.y);
-    await page.mouse.down();
-    await page.mouse.move(start.x + 80, start.y, { steps: 6 });
-    await page.mouse.up();
-    expect((await photoRect(page, 'topSvg')).x).toBeGreaterThan(0);
-
-    await page.getByRole('button', { name: 'Reset photo to fill the panel' }).click();
-    expect((await photoRect(page, 'topSvg')).x).toBe(0);
+    // And every other mode is unaffected — they are hidden, not unrendered.
+    await page.locator('[data-mode="view"]').click();
+    await expect(plants).toBeVisible();
   });
 });
 
