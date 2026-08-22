@@ -494,7 +494,7 @@ async function init() {
         svg,
         getView: () => liveView(view.id),
         getViews: () => project.views,
-        getYard: () => project.yardFt,
+        getLayout: () => ({ yardFt: project.yardFt, paddingFt: project.paddingFt }),
         // A camera is dragged on the PLAN and belongs to an elevation, so the
         // patch names its own view rather than the one under the pointer.
         onChange: ({ id, viewerAtFt }) =>
@@ -724,6 +724,11 @@ async function init() {
     // declared now, so there is nothing left to align — and the whole page's
     // width spent on one drawing is worth far more than four small ones.
     if (viewsContainer) {
+      // Setup's focused panel and a maximized one are two answers to "which
+      // panel is showing", and they can name different views. Setup wins while
+      // it is on; refreshMaximizedView puts the other back on the way out.
+      if (inSetup) viewsContainer.removeAttribute('data-maximized');
+      else refreshMaximizedView();
       viewsContainer.toggleAttribute('data-setup-focus', inSetup);
       viewsContainer.toggleAttribute('data-hide-plants', inSetup && !show.plants);
       viewsContainer.toggleAttribute('data-hide-features', inSetup && !show.features);
@@ -743,6 +748,7 @@ async function init() {
       renderSetupOverlay(svg, view, {
         interactive: isSelected,
         yardFt: project.yardFt,
+        paddingFt: project.paddingFt,
         // A plan draws every elevation's camera, so it needs the whole list;
         // the selected one is emphasised so the list and the drawing agree
         // about which view is being set up.
@@ -842,7 +848,19 @@ async function init() {
     const reach = contentReach();
     if (!reach) return;
     const factor = Math.min(1, yardFt.width / reach.x, yardFt.depth / reach.y);
-    if (!(factor > 0) || factor >= 1) return;
+    if (!(factor > 0) || factor >= 1) {
+      // Nothing overshoots the far side, so everything stranded is off the
+      // SOUTH or WEST edge — at a negative coordinate, which shrinking about
+      // the origin only pushes further out. Saying so beats a button that
+      // appears to do nothing.
+      setupPanel.setStatus(
+        'Scaling cannot help here: what is outside is off the south or west edge, ' +
+          'and scaling about the yard corner only moves it further out. Move those ' +
+          'inside the boundary instead.',
+        'error'
+      );
+      return;
+    }
 
     appState.plants = appState.plants.map((plant) => ({
       ...plant,
@@ -851,17 +869,27 @@ async function init() {
     }));
     const features = scaleFeatures(appState.features, factor);
     commitLayoutChange('Scaled the design to fit the yard');
-    if (features !== appState.features) applyFeatureEdit(features);
+    // The layout is written the moment it changes and features are not, so
+    // leaving these to a separate Save would land a reload in exactly the state
+    // this action exists to prevent: beds at one size, the plants in them at
+    // another.
+    const featuresChanged = features !== appState.features && applyFeatureEdit(features);
+    if (featuresChanged) saveFeatures();
     setupPanel.render(project);
     setupPanel.setStatus(
-      `Scaled everything to ${Math.round(factor * 100)}% about the yard corner. ` +
-        'Save features to keep the beds and walls at their new size.',
+      `Scaled everything to ${Math.round(factor * 100)}% about the yard corner` +
+        (featuresChanged ? ', features included.' : '.'),
       'success'
     );
     render();
   }
 
-  /** How far the design reaches from the yard's corner, plants and features alike. */
+  /**
+   * How far the design reaches from the yard's corner, plants and features alike.
+   *
+   * Only the far side: scaling about the origin is what "fit" means here, and a
+   * negative coordinate is not something it can pull in.
+   */
   function contentReach() {
     let x = 0;
     let y = 0;
@@ -915,6 +943,7 @@ async function init() {
       renderSetupOverlay(svg, view, {
         interactive: isSelected,
         yardFt: project.yardFt,
+        paddingFt: project.paddingFt,
         // A plan draws every elevation's camera, so it needs the whole list;
         // the selected one is emphasised so the list and the drawing agree
         // about which view is being set up.

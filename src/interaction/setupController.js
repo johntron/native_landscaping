@@ -22,10 +22,10 @@ const MIN_HITBOX_RADIUS_PX = 28; // matches dragController; generous for touch
  * views it was handed.
  *
  * @param {{ svg: SVGSVGElement, getView: () => object, getViews: () => Array<object>,
- *           getYard: () => object,
+ *           getLayout: () => object,
  *           onChange: (patch: object) => void, onCommit?: () => void }} options
  */
-export function createSetupController({ svg, getView, getViews, getYard, onChange, onCommit }) {
+export function createSetupController({ svg, getView, getViews, getLayout, onChange, onCommit }) {
   const state = { locked: true, cameraId: '', pointerId: null, frame: 0, pending: null };
 
   if (!svg) {
@@ -62,7 +62,7 @@ export function createSetupController({ svg, getView, getViews, getYard, onChang
 
   function cameraAt(context) {
     const geometry = buildOverlayGeometry(context.view, {
-      yardFt: getYard?.(),
+      ...(getLayout?.() || {}),
       views: getViews?.() || [],
     });
     return pickCamera(geometry, context.point, MIN_HITBOX_RADIUS_PX * context.scaleFactor);
@@ -152,8 +152,14 @@ export function createSetupController({ svg, getView, getViews, getYard, onChang
     svg.style.cursor = restingCursor();
   }
 
+  /**
+   * Nothing here claims the resting cursor. Three controllers share this
+   * element and the last writer wins (nl-jfm), so the only cursors this one
+   * sets are the ones it owns outright: a resize over a camera, a grab while
+   * dragging one.
+   */
   function restingCursor() {
-    return state.locked ? 'default' : 'default';
+    return 'default';
   }
 
   function setLocked(locked) {

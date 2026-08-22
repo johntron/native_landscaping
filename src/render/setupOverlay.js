@@ -1,5 +1,6 @@
 import { createViewTransform } from './viewTransform.js';
 import { resolveElevationOrientation } from './elevationOrientation.js';
+import { defaultViewerAt } from '../data/projectConfig.js';
 import { createSvgElement } from './svgUtils.js';
 
 /**
@@ -83,7 +84,7 @@ function yardSpanAlong(view, yardFt) {
  *             readout: { text: string, x: number, y: number } }}
  */
 export function buildOverlayGeometry(view, context = {}) {
-  const { yardFt = null, views = [] } = context;
+  const { yardFt = null, paddingFt = 0, views = [] } = context;
   const transform = createViewTransform(view);
   const { viewBox, extentFt, originFt, pxPerFt, type } = transform;
   const axes = axesFor(transform);
@@ -143,7 +144,7 @@ export function buildOverlayGeometry(view, context = {}) {
     stepFt,
     gridLines,
     guides,
-    cameras: buildCameraGeometry(transform, views, yardFt),
+    cameras: buildCameraGeometry(transform, views, yardFt, paddingFt),
     readout: {
       text:
         type === 'elevation'
@@ -176,26 +177,30 @@ export function buildOverlayGeometry(view, context = {}) {
  * clamped to the drawing, so it reads as "all of this" or as nothing at all,
  * which is what it means.
  */
-function buildCameraGeometry(transform, siblings, yardFt) {
-  if (transform.type !== 'plan') return [];
+function buildCameraGeometry(transform, siblings, yardFt, paddingFt) {
+  if (transform.type !== 'plan' || !yardFt) return [];
   const { viewBox } = transform;
   const cameras = [];
   (Array.isArray(siblings) ? siblings : []).forEach((sibling) => {
     if (sibling?.type !== 'elevation') return;
-    if (!Number.isFinite(sibling.viewerAtFt)) return;
     let orientation;
     try {
       orientation = resolveElevationOrientation(sibling.viewFrom);
     } catch {
       return;
     }
+    // An elevation that declares no camera still gets one drawn, so there is
+    // something to pick up — but it is NOT culling, and the band below is what
+    // says so. The first drag commits a real position.
+    const declared = Number.isFinite(sibling.viewerAtFt);
+    const atFt = declared ? sibling.viewerAtFt : defaultViewerAt(sibling.viewFrom, { yardFt, paddingFt });
     const { depthKey, farIsHigh } = orientation;
     const alongY = depthKey === 'y';
     // Yard y grows up the drawing and yard x grows right, so "behind the
     // camera" is below the line on one axis and left of it on the other.
     const at = alongY
-      ? transform.planToViewBox({ x: 0, y: sibling.viewerAtFt }).y
-      : transform.planToViewBox({ x: sibling.viewerAtFt, y: 0 }).x;
+      ? transform.planToViewBox({ x: 0, y: atFt }).y
+      : transform.planToViewBox({ x: atFt, y: 0 }).x;
     const span = alongY ? viewBox.height : viewBox.width;
     const clamp = (px) => Math.min(Math.max(px, 0), span);
     // In viewBox pixels the low end of yard y is the BOTTOM, and the low end of
@@ -220,7 +225,8 @@ function buildCameraGeometry(transform, siblings, yardFt) {
     cameras.push({
       id: sibling.id,
       label: sibling.label || sibling.id,
-      atFt: sibling.viewerAtFt,
+      atFt,
+      declared,
       orientation: alongY ? 'horizontal' : 'vertical',
       // The axis the drag moves along — the other one is fixed by the line.
       axis: alongY ? 'y' : 'x',
@@ -421,7 +427,9 @@ export function renderSetupOverlay(
   // Cameras after the guides so the band tints the grid rather than the reverse.
   geometry.cameras.forEach((camera) => {
     const emphasised = camera.id === highlightId;
-    if (camera.culled.width > 0 && camera.culled.height > 0) {
+    // No band until a camera is real: an undeclared one culls nothing, and
+    // tinting the yard behind it would claim otherwise.
+    if (camera.declared && camera.culled.width > 0 && camera.culled.height > 0) {
       group.appendChild(
         createSvgElement('rect', {
           x: camera.culled.x,
@@ -494,7 +502,9 @@ export function renderSetupOverlay(
       'paint-order': 'stroke fill',
       'data-setup-camera-label': camera.id,
     });
-    text.textContent = `${camera.label} camera · ${round(camera.atFt)} ft`;
+    text.textContent = camera.declared
+      ? `${camera.label} camera · ${round(camera.atFt)} ft`
+      : `${camera.label} camera · not set`;
     group.appendChild(text);
   });
 

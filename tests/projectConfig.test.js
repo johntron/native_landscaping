@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  defaultViewerAt,
   isValidProjectId,
   normalizeProjectConfig,
   normalizeProjectIndex,
@@ -417,23 +418,16 @@ test("an elevation's camera position round-trips, and only an elevation has one"
   assert.deepEqual(normalizeProjectConfig(serialized, 'backyard').views, config.views);
 });
 
-test('an absent or unparseable camera stands half a margin outside the yard', () => {
-  // Every elevation gets a real position, because a camera you can drag on the
-  // plan has to exist before it can be dragged. The default is where a person
-  // stands to photograph their yard, and it culls nothing — so a project that
-  // never mentioned a camera draws exactly what it drew before.
+test('an absent or unparseable camera position is simply absent', () => {
+  // Absent means cull nothing, which is the permissive default a project that
+  // never mentioned a camera relies on. Filling it in was tried: a default half
+  // a margin outside the yard culls no PLANT, because plants are clamped to the
+  // yard — but it culls FEATURES, which are not, and example-frontyard's west
+  // elevation lost a bed to a camera it had never declared.
   const withoutIt = normalizeProjectConfig(makeViewsConfig(), 'backyard');
-  const east = withoutIt.views[1]; // looks along x, standing at the high end
-  assert.equal(east.viewerAtFt, withoutIt.yardFt.width + withoutIt.paddingFt / 2);
-
-  // Defaults stay out of the file, or resizing the yard would bake a stale
-  // camera into a project that never named one.
+  assert.equal('viewerAtFt' in withoutIt.views[1], false);
   const serialized = serializeProjectConfig(withoutIt);
   assert.equal('viewerAtFt' in serialized.views[1], false);
-  assert.equal(
-    normalizeProjectConfig(serialized, 'backyard').views[1].viewerAtFt,
-    east.viewerAtFt
-  );
 
   const garbage = normalizeProjectConfig(
     makeViewsConfig({
@@ -444,31 +438,152 @@ test('an absent or unparseable camera stands half a margin outside the yard', ()
     }),
     'backyard'
   );
-  assert.equal(garbage.views[1].viewerAtFt, east.viewerAtFt);
+  assert.equal('viewerAtFt' in garbage.views[1], false);
 });
 
-test('a south-facing camera stands before the yard, a north-facing one past it', () => {
+test('the camera a drag starts from stands half a margin outside its own edge', () => {
+  // Drawing only — see normalizeViewerAt. The pairing follows farIsHigh, not
+  // the compass name: south and WEST stand at the low end of their depth axis
+  // (south of the yard, west of it), north and EAST past its far side.
+  const layout = { yardFt: { width: 20, depth: 16 }, paddingFt: 3 };
+  assert.equal(defaultViewerAt('south', layout), -1.5);
+  assert.equal(defaultViewerAt('west', layout), -1.5);
+  assert.equal(defaultViewerAt('north', layout), 16 + 1.5);
+  assert.equal(defaultViewerAt('east', layout), 20 + 1.5);
+});
+
+test("an elevation's camera position round-trips, and only an elevation has one", () => {
   const config = normalizeProjectConfig(
-    {
-      name: 'Fixture',
-      yardFt: { width: 20, depth: 16 },
-      paddingFt: 3,
+    makeViewsConfig({
       views: [
-        { id: 'plan', type: 'plan' },
-        { id: 'south', type: 'elevation', viewFrom: 'south' },
-        { id: 'north', type: 'elevation', viewFrom: 'north' },
-        { id: 'east', type: 'elevation', viewFrom: 'east' },
-        { id: 'west', type: 'elevation', viewFrom: 'west' },
+        {
+          id: 'plan',
+          type: 'plan',
+          viewBox: { width: 800, height: 600 },
+          extentFt: { width: 40, height: 30 },
+          // A plan has no depth axis to stand on, so this is not a field it has.
+          viewerAtFt: 12,
+        },
+        {
+          id: 'north',
+          type: 'elevation',
+          viewFrom: 'north',
+          viewBox: { width: 800, height: 600 },
+          extentFt: { width: 40, height: 30 },
+          viewerAtFt: 0,
+        },
       ],
-    },
-    'fixture'
+    }),
+    'backyard'
   );
-  const at = Object.fromEntries(config.views.map((v) => [v.id, v.viewerAtFt]));
-  // The pairing follows farIsHigh, not the compass name: south and WEST stand
-  // at the low end of their depth axis (south of the yard, west of it), north
-  // and EAST past its far side. Half a margin out in every case.
-  assert.deepEqual(at.south, -1.5);
-  assert.deepEqual(at.west, -1.5);
-  assert.deepEqual(at.north, 16 + 1.5);
-  assert.deepEqual(at.east, 20 + 1.5);
+  assert.equal(config.views[0].viewerAtFt, undefined);
+  // Zero is a real position — a truthiness test would drop it.
+  assert.equal(config.views[1].viewerAtFt, 0);
+
+  const serialized = serializeProjectConfig(config);
+  assert.equal('viewerAtFt' in serialized.views[0], false);
+  assert.equal(serialized.views[1].viewerAtFt, 0);
+  assert.deepEqual(normalizeProjectConfig(serialized, 'backyard').views, config.views);
+});
+
+test("an elevation's camera position round-trips, and only an elevation has one", () => {
+  const config = normalizeProjectConfig(
+    makeViewsConfig({
+      views: [
+        {
+          id: 'plan',
+          type: 'plan',
+          viewBox: { width: 800, height: 600 },
+          extentFt: { width: 40, height: 30 },
+          // A plan has no depth axis to stand on, so this is not a field it has.
+          viewerAtFt: 12,
+        },
+        {
+          id: 'north',
+          type: 'elevation',
+          viewFrom: 'north',
+          viewBox: { width: 800, height: 600 },
+          extentFt: { width: 40, height: 30 },
+          viewerAtFt: 0,
+        },
+      ],
+    }),
+    'backyard'
+  );
+  assert.equal(config.views[0].viewerAtFt, undefined);
+  // Zero is a real position — a truthiness test would drop it.
+  assert.equal(config.views[1].viewerAtFt, 0);
+
+  const serialized = serializeProjectConfig(config);
+  assert.equal('viewerAtFt' in serialized.views[0], false);
+  assert.equal(serialized.views[1].viewerAtFt, 0);
+  assert.deepEqual(normalizeProjectConfig(serialized, 'backyard').views, config.views);
+});
+
+test('an absent or unparseable camera position is simply absent', () => {
+  // Absent means cull nothing, which is the permissive default a project that
+  // never mentioned a camera relies on. Filling it in was tried: a default half
+  // a margin outside the yard culls no PLANT, because plants are clamped to the
+  // yard — but it culls FEATURES, which are not, and example-frontyard's west
+  // elevation lost a bed to a camera it had never declared.
+  const withoutIt = normalizeProjectConfig(makeViewsConfig(), 'backyard');
+  assert.equal('viewerAtFt' in withoutIt.views[1], false);
+  const serialized = serializeProjectConfig(withoutIt);
+  assert.equal('viewerAtFt' in serialized.views[1], false);
+
+  const garbage = normalizeProjectConfig(
+    makeViewsConfig({
+      views: [
+        ...makeViewsConfig().views.slice(0, 1),
+        { ...makeViewsConfig().views[1], viewerAtFt: 'over there' },
+      ],
+    }),
+    'backyard'
+  );
+  assert.equal('viewerAtFt' in garbage.views[1], false);
+});
+
+test('the camera a drag starts from stands half a margin outside its own edge', () => {
+  // Drawing only — see normalizeViewerAt. The pairing follows farIsHigh, not
+  // the compass name: south and WEST stand at the low end of their depth axis
+  // (south of the yard, west of it), north and EAST past its far side.
+  const layout = { yardFt: { width: 20, depth: 16 }, paddingFt: 3 };
+  assert.equal(defaultViewerAt('south', layout), -1.5);
+  assert.equal(defaultViewerAt('west', layout), -1.5);
+  assert.equal(defaultViewerAt('north', layout), 16 + 1.5);
+  assert.equal(defaultViewerAt('east', layout), 20 + 1.5);
+});
+
+test("an elevation's camera position round-trips, and only an elevation has one", () => {
+  const config = normalizeProjectConfig(
+    makeViewsConfig({
+      views: [
+        {
+          id: 'plan',
+          type: 'plan',
+          viewBox: { width: 800, height: 600 },
+          extentFt: { width: 40, height: 30 },
+          // A plan has no depth axis to stand on, so this is not a field it has.
+          viewerAtFt: 12,
+        },
+        {
+          id: 'north',
+          type: 'elevation',
+          viewFrom: 'north',
+          viewBox: { width: 800, height: 600 },
+          extentFt: { width: 40, height: 30 },
+          viewerAtFt: 0,
+        },
+      ],
+    }),
+    'backyard'
+  );
+  assert.equal(config.views[0].viewerAtFt, undefined);
+  // Zero is a real position — a truthiness test would drop it.
+  assert.equal(config.views[1].viewerAtFt, 0);
+
+  const serialized = serializeProjectConfig(config);
+  assert.equal('viewerAtFt' in serialized.views[0], false);
+  assert.equal(serialized.views[1].viewerAtFt, 0);
+  assert.deepEqual(normalizeProjectConfig(serialized, 'backyard').views, config.views);
 });

@@ -221,6 +221,15 @@ direction arrow, and the band of yard behind it are ONE object: they were two
 marks for a while, a bar on the yard edge and a dashed line elsewhere, which is
 the same fact drawn twice in two places that could disagree.
 
+An elevation that declares no camera is still drawn one, half a margin outside
+the edge it is taken from, so there is something to pick up — but marked *not
+set* and with no band behind it, because absent still means cull nothing. The
+default is deliberately a DRAWING concern (`defaultViewerAt`, used by the
+overlay) and never written into the view: a camera outside the yard culls no
+plant, since plants are clamped to the yard, but it culls features, which are
+not. Writing it in cost example-frontyard's `west` elevation a bed it had drawn
+the day before. The first drag is what commits a real position.
+
 #### When the yard no longer contains the design
 
 A view can no longer miss the yard, but the yard is a number a person can type
@@ -240,6 +249,14 @@ two actions are two *intents*, not two transforms, and the panel says so:
   spacing between plants, which is most of what a planting plan is.
 - **Move inside the boundary** is the "that ground is gone" correction, and
   touches only what is stranded. Available per plant as well as in bulk.
+
+Scaling is about the yard's corner, so it can only pull in what overshoots the
+far side; a plant off the south or west edge sits at a negative coordinate and
+shrinking pushes it further out. That case says so rather than leaving a button
+that appears to do nothing. And a scale saves the features it moved, unlike
+every other feature edit: the layout is written the moment it changes, so
+leaving them for a separate *Save features* would land a reload in exactly the
+half-scaled state the action exists to prevent.
 
 #### Placing the photograph
 

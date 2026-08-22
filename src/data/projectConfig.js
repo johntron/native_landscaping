@@ -347,7 +347,7 @@ function normalizeView(raw, index, projectId, layout) {
     ...deriveViewGeometry(type, viewFrom, layout),
     background,
     ...normalizePhoto(raw, background),
-    ...normalizeViewerAt(type, raw.viewerAtFt, viewFrom, layout),
+    ...normalizeViewerAt(type, raw.viewerAtFt),
   };
 
   // One derivation of pxPerFt for the whole app: build the transform the
@@ -407,26 +407,36 @@ function defaultLabels(type, viewFrom) {
  * the view taken from the other side, which is exactly backwards: from there
  * the wall is behind the camera.
  *
- * **Absent defaults to half the margin outside the edge the view is taken
- * from**, which is where a person stands to photograph their yard, and which
- * culls nothing — so a project that never mentioned a camera draws exactly what
- * it drew before. Giving every elevation a real position rather than leaving
- * some at infinity is what makes the camera a thing you can pick up and drag on
- * the plan; a control that half the views do not have is not a control.
+ * **Absent means cull nothing**, and that is deliberate: the permissive default
+ * leaves a project that never mentioned a camera drawing exactly what it drew
+ * before. This is the opposite of `normalizeFeatures`, which refuses a missing
+ * height rather than defaulting it — there a default HIDES a shape, here a
+ * default would hide one.
  *
- * Zero is a real position, so a declared value is tested for finiteness, never
- * truthiness.
+ * It is tempting to fill this in so every elevation has a camera to drag on the
+ * plan, and that was tried: `defaultViewerAt` puts one half a margin outside
+ * the yard, which culls no PLANT because plants are clamped to the yard. It
+ * culls features, which are not — example-frontyard's `west` elevation lost a
+ * bed the moment it acquired a camera it had never declared. So the default is
+ * a drawing concern and lives in the overlay, which shows an undeclared camera
+ * at that spot without the band behind it; the first drag is what commits one.
+ *
+ * Zero is a real position, so the test is finiteness, never truthiness.
  */
-function normalizeViewerAt(type, raw, viewFrom, layout) {
-  if (type !== 'elevation') return {};
-  if (raw !== undefined && raw !== null && raw !== '') {
-    const feet = Number(raw);
-    if (Number.isFinite(feet)) return { viewerAtFt: feet };
-  }
-  return { viewerAtFt: defaultViewerAt(viewFrom, layout) };
+function normalizeViewerAt(type, raw) {
+  if (type !== 'elevation' || raw === undefined || raw === null || raw === '') return {};
+  const feet = Number(raw);
+  return Number.isFinite(feet) ? { viewerAtFt: feet } : {};
 }
 
-/** Half a margin outside the yard edge this elevation is taken from. */
+/**
+ * Where an elevation's camera is SHOWN when it declares none: half a margin
+ * outside the yard edge it is taken from, which is where a person stands to
+ * photograph their yard.
+ *
+ * Presentation, not model. Writing it into the view would change what the
+ * drawing culls; see normalizeViewerAt.
+ */
 export function defaultViewerAt(viewFrom, layout) {
   const { yardFt, paddingFt } = layout;
   const back = paddingFt / 2;
@@ -477,15 +487,7 @@ export function serializeProjectConfig(config) {
           extentFt: { ...view.photoFt.extentFt },
         };
       }
-      // Always present now, so the default is omitted the way a default label
-      // is — otherwise resizing the yard would bake a stale camera into a file
-      // that never mentioned one.
-      if (
-        view.type === 'elevation' &&
-        view.viewerAtFt !== defaultViewerAt(view.viewFrom, config)
-      ) {
-        out.viewerAtFt = view.viewerAtFt;
-      }
+      if (view.viewerAtFt !== undefined) out.viewerAtFt = view.viewerAtFt;
       return out;
     }),
   };
