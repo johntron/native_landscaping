@@ -165,6 +165,7 @@ test('a plan draws each elevation camera as a line, with the culled yard behind 
   // 40 x 30 ft at 20 px/ft, starting 4 ft before the yard's zero. Yard y grows
   // UP the drawing, so y = 20 ft is 480 px above the bottom: viewBox y = 120.
   const cameras = buildOverlayGeometry(PLAN, {
+    yardFt: YARD,
     views: [
       elevation('north', { id: 'north', viewerAtFt: 20 }),
       elevation('south', { id: 'south', viewerAtFt: 20 }),
@@ -191,6 +192,7 @@ test('a plan draws each elevation camera as a line, with the culled yard behind 
 
 test('east and west run down the drawing and mirror about their number', () => {
   const cameras = buildOverlayGeometry(PLAN, {
+    yardFt: YARD,
     views: [
       elevation('east', { id: 'east', viewerAtFt: 10 }),
       elevation('west', { id: 'west', viewerAtFt: 10 }),
@@ -209,6 +211,7 @@ test('east and west run down the drawing and mirror about their number', () => {
 
 test('a camera outside the plan clamps its band to the drawing', () => {
   const [beyond] = buildOverlayGeometry(PLAN, {
+    yardFt: YARD,
     views: [elevation('north', { id: 'north', viewerAtFt: 90 })],
   }).cameras;
   // Standing 60 ft past the far edge hides nothing inside the plan, and the
@@ -216,8 +219,18 @@ test('a camera outside the plan clamps its band to the drawing', () => {
   assert.deepEqual(beyond.culled, { x: 0, y: 0, width: 800, height: 0 });
 });
 
-test('only an elevation that names a camera draws one', () => {
-  assert.deepEqual(buildOverlayGeometry(PLAN, { views: [elevation('north')] }).cameras, []);
+test('an elevation that names no camera still gets one, but it culls nothing', () => {
+  // Something has to be there to pick up, or half the views have no control at
+  // all. But absent means cull nothing, and writing the default into the view
+  // would silently cull features — see normalizeViewerAt.
+  const [ghost] = buildOverlayGeometry(PLAN, {
+    yardFt: YARD,
+    paddingFt: 4,
+    views: [elevation('north')],
+  }).cameras;
+  assert.equal(ghost.declared, false);
+  // North stands past the yard's far side, half a margin out.
+  assert.equal(ghost.atFt, YARD.depth + 2);
   assert.deepEqual(buildOverlayGeometry(PLAN, [PLAN]).cameras, []);
   assert.deepEqual(buildOverlayGeometry(PLAN).cameras, []);
   // An elevation has no place to draw one: its depth axis runs into the page,
