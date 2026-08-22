@@ -866,6 +866,17 @@ select {
   align-items: center;
 }
 
+/*
+ * Setup draws the photograph inside the SVG, not as this element's background.
+ * A background is clipped to its box, so the part of a picture reaching outside
+ * the view — most of it, while it is being positioned — would be the part you
+ * could not see. !important because configureViews sets the background inline,
+ * from the project config, and an inline style outranks a rule.
+ */
+.views[data-setup-focus] .view-panel.is-setup-focus .view {
+  background-image: none !important;
+}
+
 /* Setup draws the yard, not the planting: both are off by default and switched
    on from the panel. Hidden in CSS rather than skipped in the renderer, so the
    drawing the toggles reveal is the same one every other mode renders. */

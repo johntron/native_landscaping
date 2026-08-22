@@ -197,12 +197,16 @@ test.describe('setup mode', () => {
     await northSouth.press('Enter');
     await expect(eastWest).toHaveValue('30'); // one axis never rewrites the other
 
+    // Read outside Setup, which widens the SHOWN view's window to leave room
+    // for positioning its photo.
+    await page.locator('[data-mode="view"]').click();
     // 30 x 10 ft plus 2 ft of margin all round, at 27 px/ft.
     await expect(page.locator('#topSvg')).toHaveAttribute('viewBox', '0 0 918 378');
     // A view from the south looks along the yard's 30 ft width; one from the
     // east looks along its 10 ft depth. Both are derived, so both changed.
     await expect(page.locator('#southSvg')).toHaveAttribute('viewBox', /^0 0 918 /);
     await expect(page.locator('#eastSvg')).toHaveAttribute('viewBox', /^0 0 378 /);
+    await page.locator('[data-mode="setup"]').click();
 
     // Resolution rescales the drawing without changing the yard it covers.
     const resolution = page
@@ -210,7 +214,9 @@ test.describe('setup mode', () => {
       .locator('input');
     await resolution.fill('40');
     await resolution.press('Enter');
+    await page.locator('[data-mode="view"]').click();
     await expect(page.locator('#topSvg')).toHaveAttribute('viewBox', '0 0 1360 560');
+    await page.locator('[data-mode="setup"]').click();
     await expect(eastWest).toHaveValue('30');
 
     const name = page.locator('.setup-panel__field', { hasText: 'Name' }).locator('input');
@@ -253,9 +259,11 @@ test.describe('setup overlay', () => {
         const svg = document.getElementById('topSvg');
         const rect = svg.getBoundingClientRect();
         const box = svg.viewBox.baseVal;
+        // Setup widens the window and starts it at a negative origin, so the
+        // offset counts as much as the scale.
         return {
-          x: rect.left + (px * rect.width) / box.width,
-          y: rect.top + (py * rect.height) / box.height,
+          x: rect.left + ((px - box.x) * rect.width) / box.width,
+          y: rect.top + ((py - box.y) * rect.height) / box.height,
         };
       },
       [x, y]
@@ -352,6 +360,119 @@ test.describe('setup overlay', () => {
         seen[i - 1]
       );
     }
+  });
+
+  /** The photo's own rectangle in the drawing, as Setup renders it. */
+  const photoRect = (page) =>
+    page.locator('#topSvg image[data-setup-photo]').evaluate((node) => ({
+      x: Number(node.getAttribute('x')),
+      y: Number(node.getAttribute('y')),
+      width: Number(node.getAttribute('width')),
+      height: Number(node.getAttribute('height')),
+    }));
+
+  test('setup widens the drawing so the whole photo can be reached', async ({ page }) => {
+    await openProject(page, 'backyard');
+    const svg = page.locator('#topSvg');
+    const narrow = await svg.getAttribute('viewBox');
+
+    await page.locator('[data-mode="setup"]').click();
+    const [x, y, w, h] = (await svg.getAttribute('viewBox')).split(' ').map(Number);
+    // Same units and origin, a larger window: a photograph is routinely bigger
+    // than the yard it covers, and one you can only see the middle of cannot be
+    // positioned.
+    expect(x).toBeLessThan(0);
+    expect(y).toBeLessThan(0);
+    expect(w).toBeGreaterThan(Number(narrow.split(' ')[2]));
+    // And what falls outside the view — cropped everywhere else — is dimmed.
+    await expect(page.locator('#topSvg [data-setup-crop]')).toHaveCount(1);
+
+    await page.locator('[data-mode="view"]').click();
+    expect(await svg.getAttribute('viewBox')).toBe(narrow);
+  });
+
+  test('dragging the photo moves it and leaves the drawing where it was', async ({ page }) => {
+    await openProject(page, 'backyard');
+    await page.locator('[data-mode="setup"]').click();
+
+    const before = await photoRect(page);
+    const groundBefore = await page.locator('#topSvg rect[data-setup-guide="yard"]').getAttribute('x');
+    const start = await planPoint(page, before.x + before.width / 2, before.y + before.height / 2);
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(start.x + 60, start.y - 40, { steps: 8 });
+    await page.mouse.up();
+
+    const after = await photoRect(page);
+    expect(after.x).toBeGreaterThan(before.x);
+    expect(after.y).toBeLessThan(before.y);
+    // Moved, never rescaled — and the yard it is being lined up with did not budge.
+    expect(after.width).toBeCloseTo(before.width, 6);
+    expect(after.height).toBeCloseTo(before.height, 6);
+    expect(await page.locator('#topSvg rect[data-setup-guide="yard"]').getAttribute('x')).toBe(
+      groundBefore
+    );
+  });
+
+  test('a corner keeps the photo\'s own proportions, whichever way it is pulled', async ({
+    page,
+  }) => {
+    await openProject(page, 'backyard');
+    await page.locator('[data-mode="setup"]').click();
+
+    const before = await photoRect(page);
+    const aspect = before.width / before.height;
+    // Pull the bottom-right corner out, further on one axis than the other:
+    // honouring both independently is what stretching IS.
+    const grip = await planPoint(page, before.x + before.width, before.y + before.height);
+    await page.mouse.move(grip.x, grip.y);
+    await page.mouse.down();
+    await page.mouse.move(grip.x + 120, grip.y + 20, { steps: 8 });
+    await page.mouse.up();
+
+    const after = await photoRect(page);
+    expect(after.width).toBeGreaterThan(before.width);
+    expect(after.width / after.height).toBeCloseTo(aspect, 3);
+    // The opposite corner is pinned, so growth is away from it. Within a pixel:
+    // a placement is stored to a hundredth of a foot, which at 27 px/ft is a
+    // quarter of one.
+    expect(Math.abs(after.x - before.x)).toBeLessThan(1);
+    expect(Math.abs(after.y - before.y)).toBeLessThan(1);
+  });
+
+  test('the photo can be centred again, and the placement reaches the other views', async ({
+    page,
+  }) => {
+    await openProject(page, 'backyard');
+    await page.locator('[data-mode="setup"]').click();
+
+    const before = await photoRect(page);
+    const start = await planPoint(page, before.x + before.width / 2, before.y + before.height / 2);
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(start.x + 90, start.y, { steps: 6 });
+    await page.mouse.up();
+    expect((await photoRect(page)).x).toBeGreaterThan(before.x);
+
+    // Elsewhere the same placement is a CSS background, cropped to the view.
+    await page.locator('[data-mode="view"]').click();
+    const moved = await page
+      .locator('[data-view-panel="plan"] .view')
+      .evaluate((el) => el.style.backgroundPosition);
+    expect(moved).not.toBe('');
+
+    await page.locator('[data-mode="setup"]').click();
+    await page.getByRole('button', { name: 'Centre the photo in the view' }).click();
+    const centred = await photoRect(page);
+    // Centred means centred: equal margins on each axis inside the view.
+    const box = await page.locator('#topSvg').evaluate((node) => ({
+      w: node.viewBox.baseVal.width,
+      h: node.viewBox.baseVal.height,
+      x: node.viewBox.baseVal.x,
+      y: node.viewBox.baseVal.y,
+    }));
+    const viewW = box.w + 2 * box.x;
+    expect(centred.x).toBeCloseTo(viewW - (centred.x + centred.width), 3);
   });
 
   test('plants and features are hidden in setup until asked for', async ({ page }) => {

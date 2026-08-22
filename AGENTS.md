@@ -266,16 +266,42 @@ through the view's transform into the pixels the panel and the PNG export both
 need. Absent means "fills the panel", painted `background-size: contain` so an
 uncalibrated image is shown whole rather than distorted.
 
-**There is currently no UI for setting it.** Dragging the photo and scaling it
-from a measured length both lived in Setup and were taken out: both wrote
-`photoFt` starting from the PANEL's rectangle when a photo had no placement yet,
-and the panel is the yard's shape, not the picture's — so the first gesture on
-any photo stretched it, 4% on backyard's 800×600 and 39% on a 16:9 upload. The
-ruler went with them rather than surviving alone: under a declared yard it no
-longer solves a view's extent, so all it had left to scale was the photo, by the
-same arithmetic. Placements already in a file still render. What the replacement
-needs is the image's intrinsic aspect, which nothing currently loads — see
-nl-0di.
+Two gestures set it, on the drawing in Setup mode:
+
+- **drag the photo** to slide it (`resolvePhotoDrag`);
+- **pull a corner** to resize it (`resolvePhotoResize`), about the corner
+  diagonally opposite, at one scale for both axes.
+
+Corners only, and one scale only. A photograph has a true shape and the drawing
+is the yard, so nothing here is allowed to stretch it — an edge handle would
+have to. Three things make that hold:
+
+- **The intrinsic aspect is loaded.** A gesture on a photo with no placement yet
+  starts from `containPhotoFt`, the rectangle CSS is *already* drawing it at,
+  which needs the image's own proportions. `app.js` keeps a `photoAspects` map
+  keyed by path (content-hashed by the upload endpoint, so a cached aspect
+  cannot belong to another image) and re-renders when a load lands. Starting
+  from the PANEL's rectangle instead — the yard's shape, for want of that
+  number — is what made the first attempt stretch every picture it touched
+  (nl-0di), 4% on backyard and 39% on a 16:9 upload.
+- **Both gestures work in feet**, through `xToAxis`/`yToHeight`, so a mirrored
+  elevation needs no special case: "min" is the low axis value whether that is
+  drawn on the left or the right, and a corner handle is named by the corner of
+  the photo *in feet* that it is. Naming them by pixel position put "min y" at
+  the top of a plan, where yard y is highest, so pulling one corner pinned the
+  wrong opposite.
+- **Resizing takes one scale factor**, from whichever axis the pointer moved
+  further on relative to the current size.
+
+**Setup widens the drawing's window** (`workingBox`, `viewBoxAttribute`) by 30%
+of its larger dimension on every side — same units, same origin, just a larger
+view of the same coordinates, so nothing else has to change. A photo is
+routinely bigger than the yard it covers, and one you can only see the middle of
+cannot be positioned. Two consequences: the setup controller reads the SVG's own
+`viewBox` rather than the view's declared one, and the photo is drawn as an
+`<image>` in the overlay rather than as the panel's CSS background, which would
+be clipped to its element. Everything outside the view's own rectangle is dimmed
+— that is exactly what the other modes crop away.
 
 *Upload photo* puts a background on the selected view without touching the
 filesystem: the browser decodes the picked file, scales it to at most 2400 px on

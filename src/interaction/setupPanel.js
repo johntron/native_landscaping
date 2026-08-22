@@ -180,6 +180,41 @@ export function createSetupPanel({
     );
     grid.appendChild(uploadField(view));
     wrap.appendChild(grid);
+    wrap.appendChild(buildPhoto(view, patch));
+    return wrap;
+  }
+
+  /**
+   * Positioning the photograph.
+   *
+   * Two gestures on the drawing and one button here, because there is nothing
+   * to type: where a photo sits against the yard is something you see or you do
+   * not. The drawing widens in Setup so the parts reaching outside the view are
+   * visible while they are being moved.
+   */
+  function buildPhoto(view, patch) {
+    const wrap = el('div', 'setup-panel__section setup-panel__photo');
+    wrap.appendChild(el('h3', 'setup-panel__heading', 'Place the photo'));
+    if (!view.background) {
+      wrap.appendChild(
+        el('p', 'setup-panel__hint', 'Upload a photo above, and it can be positioned here.')
+      );
+      return wrap;
+    }
+    wrap.appendChild(
+      el(
+        'p',
+        'setup-panel__hint',
+        'Drag the photo to line it up with the orange yard outline; pull a corner ' +
+          'to resize it. It keeps its own proportions, and whatever reaches past ' +
+          'the view is simply cropped everywhere else.'
+      )
+    );
+    const reset = button('Centre the photo in the view', 'button pill-button', () =>
+      patch({ photoFt: null })
+    );
+    reset.disabled = !view.photoFt;
+    wrap.appendChild(reset);
     return wrap;
   }
 

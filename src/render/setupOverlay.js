@@ -1,6 +1,7 @@
 import { createViewTransform } from './viewTransform.js';
 import { resolveElevationOrientation } from './elevationOrientation.js';
 import { defaultViewerAt } from '../data/projectConfig.js';
+import { photoRectFt, resolvePhotoPlacement } from './photoPlacement.js';
 import { createSvgElement } from './svgUtils.js';
 
 /**
@@ -84,7 +85,7 @@ function yardSpanAlong(view, yardFt) {
  *             readout: { text: string, x: number, y: number } }}
  */
 export function buildOverlayGeometry(view, context = {}) {
-  const { yardFt = null, paddingFt = 0, views = [] } = context;
+  const { yardFt = null, paddingFt = 0, views = [], photoAspect = 0 } = context;
   const transform = createViewTransform(view);
   const { viewBox, extentFt, originFt, pxPerFt, type } = transform;
   const axes = axesFor(transform);
@@ -145,6 +146,11 @@ export function buildOverlayGeometry(view, context = {}) {
     gridLines,
     guides,
     cameras: buildCameraGeometry(transform, views, yardFt, paddingFt),
+    photo: buildPhotoGeometry(view, transform, photoAspect),
+    // Setup draws the photo itself, so it needs room around the view to show a
+    // picture that reaches past it. Same units and origin as the view's own
+    // box — only the window is wider — so every coordinate below stays valid.
+    working: workingBox(transform),
     readout: {
       text:
         type === 'elevation'
@@ -312,6 +318,227 @@ export function pickCamera(geometry, point, radius) {
  * currently loads; see nl-0di.
  */
 
+/**
+ * How much room Setup leaves around the view for the photograph.
+ *
+ * A picture is routinely bigger than the yard it covers, and positioning one
+ * you can only see the middle of is guesswork. The viewBox is widened rather
+ * than the drawing rescaled: same units, same origin, just a larger window, so
+ * every coordinate the guides and the gestures use is unchanged.
+ */
+const WORKING_MARGIN = 0.3;
+
+export function workingBox(transform) {
+  const { viewBox } = transform;
+  const inset = Math.max(viewBox.width, viewBox.height) * WORKING_MARGIN;
+  return {
+    x: -inset,
+    y: -inset,
+    width: viewBox.width + inset * 2,
+    height: viewBox.height + inset * 2,
+  };
+}
+
+/** How much yard the widened setup window covers, for sizing the panel. */
+export function workingExtentFt(view) {
+  const transform = createViewTransform(view);
+  const box = workingBox(transform);
+  return { width: box.width / transform.pxPerFt, height: box.height / transform.pxPerFt };
+}
+
+/** The `viewBox` attribute for a setup drawing, or for an ordinary one. */
+export function viewBoxAttribute(view, { working = false } = {}) {
+  const transform = createViewTransform(view);
+  if (!working) return `0 0 ${transform.viewBox.width} ${transform.viewBox.height}`;
+  const box = workingBox(transform);
+  return `${box.x} ${box.y} ${box.width} ${box.height}`;
+}
+
+/**
+ * The photograph: where it lands, and the corners that resize it.
+ *
+ * Corners only. An edge handle would have to either stretch the picture or
+ * silently move the opposite edge, and a photograph has one true shape — so
+ * every grip scales it uniformly about the corner diagonally opposite.
+ */
+function buildPhotoGeometry(view, transform, aspect) {
+  if (!view?.background) return null;
+  const ft = photoRectFt(view, aspect);
+  // An unplaced photo has no rectangle until its intrinsic aspect is known,
+  // and that arrives from an image load a frame or two later.
+  if (!ft) return null;
+  const rect = rectFromFt(transform, ft);
+  if (!rect) return null;
+
+  const axes = axesFor(transform);
+  const handles = [];
+  ['min', 'max'].forEach((cornerX) => {
+    ['min', 'max'].forEach((cornerY) => {
+      // Named by which corner of the photo IN FEET it is, and placed by mapping
+      // that corner through the view. Naming them by pixel position instead put
+      // "min-y" at the top of a plan, where yard y is at its highest — so
+      // pulling the bottom-right corner pinned the wrong opposite and the photo
+      // jumped.
+      const feet = {
+        x: ft.originFt.x + (cornerX === 'max' ? ft.extentFt.width : 0),
+        y: ft.originFt.y + (cornerY === 'max' ? ft.extentFt.height : 0),
+      };
+      handles.push({
+        id: `${cornerX}-${cornerY}`,
+        cornerX,
+        cornerY,
+        x: axes.toX(feet.x),
+        y: axes.toY(feet.y),
+      });
+    });
+  });
+  return { rect, handles, placed: Boolean(view.photoFt) };
+}
+
+/** A feet rectangle as drawing pixels, through the view's own mapping. */
+function rectFromFt(transform, ft) {
+  if (!ft) return null;
+  const axes = axesFor(transform);
+  const a = { x: axes.toX(ft.originFt.x), y: axes.toY(ft.originFt.y) };
+  const b = {
+    x: axes.toX(ft.originFt.x + ft.extentFt.width),
+    y: axes.toY(ft.originFt.y + ft.extentFt.height),
+  };
+  const width = Math.abs(b.x - a.x);
+  const height = Math.abs(b.y - a.y);
+  if (!(width > 0) || !(height > 0)) return null;
+  return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width, height };
+}
+
+/** The photo handle nearest a point, within `radius` viewBox pixels. */
+export function pickPhotoHandle(geometry, point, radius) {
+  let best = null;
+  (geometry?.photo?.handles || []).forEach((handle) => {
+    const dx = point.x - handle.x;
+    const dy = point.y - handle.y;
+    const distSq = dx * dx + dy * dy;
+    if (distSq <= radius * radius && (!best || distSq < best.distSq)) best = { handle, distSq };
+  });
+  return best ? best.handle : null;
+}
+
+/** Whether a point is over the photograph itself, which is what a drag moves. */
+export function isOverPhoto(geometry, point) {
+  const rect = geometry?.photo?.rect;
+  if (!rect) return false;
+  return (
+    point.x >= rect.x &&
+    point.x <= rect.x + rect.width &&
+    point.y >= rect.y &&
+    point.y <= rect.y + rect.height
+  );
+}
+
+/**
+ * Slide the photograph by a drag, in the view's own coordinates.
+ *
+ * The delta is taken in FEET through the axis inverses rather than in pixels,
+ * which is what makes one implementation right for a mirrored elevation: on a
+ * north or west view a rightward drag is a *decreasing* axis value, and
+ * `xToAxis` already knows that. Same for the vertical, where drawing y grows
+ * down and yard height grows up.
+ *
+ * @returns {{ photoFt: { originFt: object, extentFt: object } } | null}
+ */
+export function resolvePhotoDrag(view, from, to, aspect) {
+  if (!view?.background || !from || !to) return null;
+  let transform;
+  try {
+    transform = createViewTransform(view);
+  } catch {
+    return null;
+  }
+  const photo = photoRectFt(view, aspect);
+  if (!photo) return null;
+
+  const axes = axesFor(transform);
+  const dx = axes.fromX(to.x) - axes.fromX(from.x);
+  const dy = axes.fromY(to.y) - axes.fromY(from.y);
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) return null;
+  return {
+    photoFt: {
+      originFt: { x: round(photo.originFt.x + dx), y: round(photo.originFt.y + dy) },
+      extentFt: photo.extentFt,
+    },
+  };
+}
+
+/**
+ * Resize the photograph from a corner, keeping its own proportions.
+ *
+ * The opposite corner is pinned and the pointer sets the scale — but only one
+ * number of scale, taken from whichever axis the pointer moved further on
+ * relative to the current size. Honouring both axes independently is what
+ * stretching IS, and a photograph has one true shape; the drawing is the yard,
+ * and the yard is not what the author is correcting here.
+ *
+ * @returns {{ photoFt: { originFt: object, extentFt: object } } | null}
+ */
+export function resolvePhotoResize(view, handleId, point, aspect) {
+  if (!view?.background || !point) return null;
+  let transform;
+  try {
+    transform = createViewTransform(view);
+  } catch {
+    return null;
+  }
+  const photo = photoRectFt(view, aspect);
+  if (!photo) return null;
+  const [cornerX, cornerY] = String(handleId).split('-');
+  if (!cornerX || !cornerY) return null;
+
+  const axes = axesFor(transform);
+  const far = {
+    x: photo.originFt.x + photo.extentFt.width,
+    y: photo.originFt.y + photo.extentFt.height,
+  };
+  // The pinned corner is the one diagonally opposite the grip.
+  const anchor = {
+    x: cornerX === 'min' ? far.x : photo.originFt.x,
+    y: cornerY === 'min' ? far.y : photo.originFt.y,
+  };
+  const pointer = { x: axes.fromX(point.x), y: axes.fromY(point.y) };
+  if (!Number.isFinite(pointer.x) || !Number.isFinite(pointer.y)) return null;
+
+  const wanted = {
+    width: Math.abs(pointer.x - anchor.x),
+    height: Math.abs(pointer.y - anchor.y),
+  };
+  const scale = Math.max(
+    wanted.width / photo.extentFt.width,
+    wanted.height / photo.extentFt.height
+  );
+  const extentFt = {
+    width: photo.extentFt.width * scale,
+    height: photo.extentFt.height * scale,
+  };
+  if (!(extentFt.width >= MIN_PHOTO_FT) || !(extentFt.height >= MIN_PHOTO_FT)) return null;
+
+  // Grow away from the pinned corner, whichever side of it that is. In FEET
+  // again, so a mirrored view needs no special case: "min" is the low axis
+  // value whether that is drawn on the left or the right.
+  return {
+    photoFt: {
+      originFt: {
+        x: round(cornerX === 'min' ? anchor.x - extentFt.width : anchor.x),
+        y: round(cornerY === 'min' ? anchor.y - extentFt.height : anchor.y),
+      },
+      extentFt: { width: round(extentFt.width), height: round(extentFt.height) },
+    },
+  };
+}
+
+/** Smaller than this and the photo is a dot with four handles on it. */
+const MIN_PHOTO_FT = 0.5;
+
+/** Corner grip size, in viewBox pixels. */
+const PHOTO_HANDLE_PX = 14;
+
 /** Remove any overlay previously drawn into this SVG. */
 export function clearSetupOverlay(svg) {
   if (!svg) return;
@@ -331,16 +558,26 @@ export function clearSetupOverlay(svg) {
  *
  * @param {SVGElement} svg
  * @param {object} view a normalized view
- * @param {{ interactive?: boolean, yardFt?: object, views?: Array<object>, highlightId?: string }} [options]
+ * @param {{ interactive?: boolean, yardFt?: object, paddingFt?: number,
+ *           views?: Array<object>, highlightId?: string, photoAspect?: number,
+ *           photoUrl?: string }} [options]
  */
 export function renderSetupOverlay(
   svg,
   view,
-  { interactive = true, yardFt = null, views = [], highlightId = '' } = {}
+  {
+    interactive = true,
+    yardFt = null,
+    paddingFt = 0,
+    views = [],
+    highlightId = '',
+    photoAspect = 0,
+    photoUrl = '',
+  } = {}
 ) {
   if (!svg || !view) return null;
   clearSetupOverlay(svg);
-  const geometry = buildOverlayGeometry(view, { yardFt, views });
+  const geometry = buildOverlayGeometry(view, { yardFt, paddingFt, views, photoAspect });
   const group = createSvgElement('g', {
     [OVERLAY_GROUP_ATTR]: geometry.transform.id,
     'pointer-events': 'none',
@@ -349,6 +586,62 @@ export function renderSetupOverlay(
     // photo, never mistaken for the one being edited.
     opacity: interactive ? 1 : 0.55,
   });
+
+  // The photograph, drawn by the overlay rather than left to the panel's CSS
+  // background. Two reasons, and both are the point of Setup: a background is
+  // clipped to its element, so the part of a picture reaching outside the view
+  // — usually most of it, while being positioned — would be invisible; and an
+  // element in the drawing shares the drawing's coordinates, so what is grabbed
+  // and what is drawn cannot drift apart.
+  if (geometry.photo && photoUrl) {
+    group.appendChild(
+      createSvgElement('image', {
+        href: photoUrl,
+        x: geometry.photo.rect.x,
+        y: geometry.photo.rect.y,
+        width: geometry.photo.rect.width,
+        height: geometry.photo.rect.height,
+        // The rectangle already has the image's proportions, so `none` is the
+        // honest instruction: any fitting here would be a second opinion about
+        // a shape that is not in question.
+        preserveAspectRatio: 'none',
+        'data-setup-photo': '',
+      })
+    );
+  }
+
+  // Everything outside the view's own rectangle, dimmed. Setup deliberately
+  // shows more than the view does, so that a photo can be moved by its edges —
+  // and without this there is nothing to say which part of it survives. What is
+  // dimmed here is exactly what every other mode crops away.
+  if (interactive) {
+    const box = geometry.working;
+    const inner = geometry.transform.viewBox;
+    group.appendChild(
+      createSvgElement('path', {
+        d:
+          `M${box.x},${box.y}h${box.width}v${box.height}h${-box.width}z` +
+          `M0,0h${inner.width}v${inner.height}h${-inner.width}z`,
+        'fill-rule': 'evenodd',
+        fill: '#f2f0eb',
+        'fill-opacity': 0.72,
+        'data-setup-crop': '',
+      })
+    );
+    group.appendChild(
+      createSvgElement('rect', {
+        x: 0,
+        y: 0,
+        width: inner.width,
+        height: inner.height,
+        fill: 'none',
+        stroke: '#1b1b1b',
+        'stroke-width': 1.5,
+        'stroke-opacity': 0.35,
+        'data-setup-crop-edge': '',
+      })
+    );
+  }
 
   geometry.gridLines.forEach((line) => {
     group.appendChild(
@@ -507,6 +800,39 @@ export function renderSetupOverlay(
       : `${camera.label} camera · not set`;
     group.appendChild(text);
   });
+
+  // Handles last, over everything: they are the only thing here that is aimed
+  // at rather than read.
+  if (interactive && geometry.photo) {
+    const { rect, handles } = geometry.photo;
+    group.appendChild(
+      createSvgElement('rect', {
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+        fill: 'none',
+        stroke: '#c1121f',
+        'stroke-width': 1.5,
+        'stroke-opacity': 0.8,
+        'data-setup-photo-edge': '',
+      })
+    );
+    handles.forEach((handle) => {
+      group.appendChild(
+        createSvgElement('rect', {
+          x: handle.x - PHOTO_HANDLE_PX / 2,
+          y: handle.y - PHOTO_HANDLE_PX / 2,
+          width: PHOTO_HANDLE_PX,
+          height: PHOTO_HANDLE_PX,
+          fill: '#fff',
+          stroke: '#c1121f',
+          'stroke-width': 2.5,
+          'data-setup-photo-handle': handle.id,
+        })
+      );
+    });
+  }
 
   const label = createSvgElement('text', {
     x: geometry.readout.x,

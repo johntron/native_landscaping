@@ -53,6 +53,7 @@ import { buildTooltipLines } from './render/tooltip.js';
 import { createLayoutHistory } from './history/layoutHistory.js';
 import { captureViewToPng } from './export/viewCapture.js';
 import { resolvePhotoPlacement } from './render/photoPlacement.js';
+import { viewBoxAttribute, workingExtentFt } from './render/setupOverlay.js';
 import { resolveYardBounds } from './render/yardBounds.js';
 import { resolvePageScale } from './render/pageScale.js';
 
@@ -436,9 +437,13 @@ async function init() {
     // Setup shows one view, so it is the only one that has to fit — sizing to
     // the tallest of four would leave the one on screen small for no reason.
     const focused = viewsContainer.hasAttribute('data-setup-focus');
-    const shown = focused
-      ? project.views.filter((view) => view.id === setupPanel.getSelectedId())
-      : project.views;
+    // Sized to the widened window, which is what the focused panel shows.
+    // Guarded rather than computed up front: applyPageScale runs once during
+    // init, before setupPanel exists.
+    const selected = focused
+      ? project.views.find((view) => view.id === setupPanel.getSelectedId())
+      : null;
+    const shown = selected ? [{ extentFt: workingExtentFt(selected) }] : project.views;
     const pxPerFt = resolvePageScale({
       views: shown.length ? shown : project.views,
       availableWidthPx: viewsContainer.clientWidth,
@@ -488,6 +493,38 @@ async function init() {
   // One per panel, but only the selected view's is ever unlocked: two panels
   // accepting a camera drag at once would be two answers to "which view is
   // being set up".
+  /**
+   * Every background's intrinsic proportions, by path.
+   *
+   * A placement is a rectangle of yard, and it has to have the picture's own
+   * shape or the picture is stretched into it — so a gesture on an unplaced
+   * photo needs the aspect before it can start from the rectangle CSS is
+   * already drawing. Nothing else in the app has ever needed it, so nothing
+   * loaded it, and the first attempt at photo positioning started from the
+   * PANEL's shape instead and distorted every picture it touched (nl-0di).
+   *
+   * Keyed by path, which the upload endpoint content-hashes, so a cached aspect
+   * can never belong to a different image than the one being drawn.
+   */
+  const photoAspects = new Map();
+
+  function photoAspectFor(view) {
+    const path = view?.background;
+    if (!path) return 0;
+    if (photoAspects.has(path)) return photoAspects.get(path);
+    photoAspects.set(path, 0); // in flight; one load per path
+    const image = new Image();
+    image.onload = () => {
+      const aspect = image.naturalWidth / image.naturalHeight;
+      if (!(aspect > 0)) return;
+      photoAspects.set(path, aspect);
+      // It arrives a frame or two after the drawing that wanted it.
+      syncSetupOverlay();
+    };
+    image.src = new URL(projectAssetPath(project.id, path), document.baseURI).toString();
+    return 0;
+  }
+
   const buildSetupControllers = () =>
     viewPanels.map(({ view, svg }) =>
       createSetupController({
@@ -495,10 +532,16 @@ async function init() {
         getView: () => liveView(view.id),
         getViews: () => project.views,
         getLayout: () => ({ yardFt: project.yardFt, paddingFt: project.paddingFt }),
-        // A camera is dragged on the PLAN and belongs to an elevation, so the
-        // patch names its own view rather than the one under the pointer.
-        onChange: ({ id, viewerAtFt }) =>
-          applyViewEdit({ views: patchView(project.views, id, { viewerAtFt }) }),
+        getPhotoAspect: () => photoAspectFor(liveView(view.id)),
+        // A camera is dragged on the PLAN and belongs to an elevation, so its
+        // patch names its own view rather than the one under the pointer; a
+        // photo patch belongs to the view being drawn in.
+        onChange: (patch) =>
+          applyViewEdit({
+            views: patch.id
+              ? patchView(project.views, patch.id, { viewerAtFt: patch.viewerAtFt })
+              : patchView(project.views, view.id, patch),
+          }),
       })
     );
   let setupControllers = buildSetupControllers();
@@ -688,13 +731,6 @@ async function init() {
   function applyMode(mode) {
     const next = MODES.includes(mode) ? mode : 'view';
     appState.mode = next;
-    /**
-   * Plant dragging belongs to Edit mode alone — in Setup mode the pointer
-   * belongs to the setup controller, so the plant controllers stay locked.
-   */
-  function applyMode(mode) {
-    const next = MODES.includes(mode) ? mode : 'view';
-    appState.mode = next;
     modeButtons.forEach((button) => {
       const isActive = button.dataset.mode === next;
       button.classList.toggle('is-active', isActive);
@@ -713,92 +749,6 @@ async function init() {
     persistMode(next);
   }
 
-  function syncSetupOverlay() {
-    const inSetup = appState.mode === 'setup';
-    const selectedId = inSetup ? setupPanel.getSelectedId() : '';
-    const show = inSetup ? setupPanel.getShow() : { plants: true, features: true };
-
-    // Setup shows ONE view at a time. Every panel used to draw its guides so the
-    // foot grid could be compared across views, which mattered when each view
-    // carried its own rectangle and had to be aligned by eye. The yard is
-    // declared now, so there is nothing left to align — and the whole page's
-    // width spent on one drawing is worth far more than four small ones.
-    if (viewsContainer) {
-      // Setup's focused panel and a maximized one are two answers to "which
-      // panel is showing", and they can name different views. Setup wins while
-      // it is on; refreshMaximizedView puts the other back on the way out.
-      if (inSetup) viewsContainer.removeAttribute('data-maximized');
-      else refreshMaximizedView();
-      viewsContainer.toggleAttribute('data-setup-focus', inSetup);
-      viewsContainer.toggleAttribute('data-hide-plants', inSetup && !show.plants);
-      viewsContainer.toggleAttribute('data-hide-features', inSetup && !show.features);
-    }
-
-    viewPanels.forEach(({ view, svg, panel }, index) => {
-      const isSelected = view.id === selectedId;
-      panel.classList.toggle('is-setup-focus', inSetup && isSelected);
-      setupControllers[index]?.setLocked?.(!isSelected);
-      // Only the shown view is drawn. Guides on a hidden panel are work nobody
-      // sees, and they used to be the neighbours' cross-view reference — which
-      // a declared yard has made unnecessary.
-      if (!inSetup || !isSelected) {
-        clearSetupOverlay(svg);
-        return;
-      }
-      renderSetupOverlay(svg, view, {
-        interactive: isSelected,
-        yardFt: project.yardFt,
-        paddingFt: project.paddingFt,
-        // A plan draws every elevation's camera, so it needs the whole list;
-        // the selected one is emphasised so the list and the drawing agree
-        // about which view is being set up.
-        views: project.views,
-        highlightId: selectedId,
-      });
-    });
-    // The focused panel has the page to itself, so it is scaled to fill it.
-    applyPageScale();
-  }
-
-  /**
-   * The feature handles belong to the plan alone, and only in Features mode.
-   * Rendering clears each SVG, so this runs after every render rather than once.
-   */
-  function syncFeatureOverlay() {
-    const editing = appState.mode === 'features';
-    viewPanels.forEach(({ view, svg }, index) => {
-      const active = editing && view.type === 'plan';
-      featureControllers[index]?.setLocked?.(!active);
-      if (!active) {
-        clearFeatureOverlay(svg);
-        return;
-      }
-      renderFeatureOverlay(
-        svg,
-        appState.features,
-        featurePanel.getSelectedId(),
-        createViewTransform(liveView(view.id) || view)
-      );
-    });
-  }
-
-  modeButtons.forEach((button) => {
-      const isActive = button.dataset.mode === next;
-      button.classList.toggle('is-active', isActive);
-      button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-    });
-    if (editRow) editRow.hidden = next !== 'edit';
-    if (setupRow) setupRow.hidden = next !== 'setup';
-    if (featureRow) featureRow.hidden = next !== 'features';
-    viewToolbar?.classList.toggle('is-setup', next === 'setup' || next === 'features');
-    // Three pointer consumers share each SVG, so exactly one mode may unlock
-    // one of them. Deciding it in one place is what keeps them from fighting
-    // over svg.style.cursor the way two controllers on one element do.
-    dragControllers.forEach((controller) => controller?.setLocked?.(next !== 'edit'));
-    syncSetupOverlay();
-    syncFeatureOverlay();
-    persistMode(next);
-  }
 
   /**
    * Move the plants a resized yard has left outside it.
@@ -932,11 +882,29 @@ async function init() {
       viewsContainer.toggleAttribute('data-hide-features', inSetup && !show.features);
     }
 
-    viewPanels.forEach(({ view, svg, panel }, index) => {
+    viewPanels.forEach(({ view, svg, panel, container }, index) => {
       const isSelected = view.id === selectedId;
-      panel.classList.toggle('is-setup-focus', inSetup && isSelected);
+      const focused = inSetup && isSelected;
+      panel.classList.toggle('is-setup-focus', focused);
       setupControllers[index]?.setLocked?.(!isSelected);
-      if (!inSetup) {
+      // Setup widens the drawing's window so a photo reaching past the view is
+      // visible while it is being positioned; same units and origin, larger box.
+      svg.setAttribute('viewBox', viewBoxAttribute(view, { working: focused }));
+      // The panel is sized to whichever window it is showing, so the widened
+      // one is not letterboxed inside a panel shaped for the narrow one.
+      if (container?.style) {
+        const extentFt = focused ? workingExtentFt(view) : view.extentFt;
+        container.style.setProperty('--extent-w', String(extentFt.width));
+        container.style.setProperty('--extent-h', String(extentFt.height));
+        container.style.setProperty(
+          '--view-aspect-ratio',
+          `${extentFt.width} / ${extentFt.height}`
+        );
+      }
+      // Only the shown view is drawn. Guides on a hidden panel are work nobody
+      // sees, and they used to be the neighbours' cross-view reference — which
+      // a declared yard has made unnecessary.
+      if (!focused) {
         clearSetupOverlay(svg);
         return;
       }
@@ -944,6 +912,12 @@ async function init() {
         interactive: isSelected,
         yardFt: project.yardFt,
         paddingFt: project.paddingFt,
+        photoAspect: photoAspectFor(view),
+        // Setup draws the photo itself rather than leaving it to the panel's
+        // CSS background, which is clipped to its element.
+        photoUrl: view.background
+          ? new URL(projectAssetPath(project.id, view.background), document.baseURI).toString()
+          : '',
         // A plan draws every elevation's camera, so it needs the whole list;
         // the selected one is emphasised so the list and the drawing agree
         // about which view is being set up.

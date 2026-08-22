@@ -7,9 +7,15 @@ import { createViewTransform } from './viewTransform.js';
  * every project that shares a yard and it cannot be bent to suit a photograph.
  * The photograph therefore has to be placed: `photoFt` says which rectangle of
  * yard the image covers, in the view's own coordinates — axis feet across, and
- * yard feet (plan) or height feet (elevation) up. Drag the photo to set its
- * origin, measure a known length to set its extent, and the drawing stays put
- * while the picture moves under it.
+ * yard feet (plan) or height feet (elevation) up. Drag it to set the origin,
+ * pull a corner to set the extent, and the drawing stays put while the picture
+ * moves under it.
+ *
+ * **A placement always has the image's own proportions.** Every rectangle here
+ * is either derived from the intrinsic aspect or scaled uniformly from one that
+ * was, so a photo cannot end up stretched — which is exactly what happened when
+ * the first gesture on an unplaced photo started from the PANEL's rectangle,
+ * the yard's shape rather than the picture's.
  *
  * This is the same arithmetic the old detail-callout crop did, pointed the
  * other way. It used to answer "which patch of this photo does that view
@@ -120,4 +126,54 @@ function percent(fraction) {
 /** Trim float noise so the inline style stays readable and stable. */
 function round(value) {
   return Math.round(value * 1e6) / 1e6;
+}
+
+/**
+ * Where an unplaced photo is already drawn: the `contain` rectangle CSS paints
+ * it at, expressed in the view's feet.
+ *
+ * This is the honest starting point for a first gesture. Starting from the
+ * panel instead — which is what the earlier version did for want of the
+ * intrinsic aspect — snapped the picture from letterboxed to stretched the
+ * instant it was touched.
+ *
+ * @param {object} view a normalized view
+ * @param {number} aspect the image's intrinsic width / height
+ * @returns {{ originFt: {x: number, y: number}, extentFt: {width: number, height: number} }|null}
+ */
+export function containPhotoFt(view, aspect) {
+  if (!(aspect > 0)) return null;
+  let transform;
+  try {
+    transform = createViewTransform(view);
+  } catch {
+    return null;
+  }
+  const { extentFt } = transform;
+  // Feet, not pixels: the two axes share one pxPerFt, so an aspect in pixels is
+  // the same number in feet and the fit can be solved without leaving feet.
+  const panelAspect = extentFt.width / extentFt.height;
+  const width = aspect >= panelAspect ? extentFt.width : extentFt.height * aspect;
+  const height = aspect >= panelAspect ? extentFt.width / aspect : extentFt.height;
+  return {
+    originFt: {
+      x: transform.originFt.x + (extentFt.width - width) / 2,
+      y: transform.originFt.y + (extentFt.height - height) / 2,
+    },
+    extentFt: { width, height },
+  };
+}
+
+/**
+ * The placement a gesture starts from: whatever the view declares, or the
+ * rectangle the photo is currently drawn at.
+ */
+export function photoRectFt(view, aspect) {
+  if (view?.photoFt) {
+    return {
+      originFt: { ...view.photoFt.originFt },
+      extentFt: { ...view.photoFt.extentFt },
+    };
+  }
+  return containPhotoFt(view, aspect);
 }
