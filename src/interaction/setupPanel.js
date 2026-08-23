@@ -215,6 +215,11 @@ export function createSetupPanel({
     );
     reset.disabled = !view.photoFt;
     wrap.appendChild(reset);
+    wrap.appendChild(
+      checkboxField('Hide photo outside Setup', Boolean(view.photoHidden), false, (value) =>
+        patch({ photoHidden: value })
+      )
+    );
     return wrap;
   }
 
