@@ -123,3 +123,26 @@ test('filterToRegion keeps list species, separates non-natives, reports gaps', (
   // On the list, but USDA has no characteristics record for it.
   assert.deepEqual(unmatched, ['aquilegia canadensis']);
 });
+
+test('filterToRegion keeps the nominate record over unlisted varieties', () => {
+  const csv = [
+    'id,common_name,botanical_name,usda_native_status',
+    'a,sugarberry,Celtis laevigata,L48:N',
+    'b,netleaf hackberry,Celtis laevigata var. reticulata,L48:N',
+    'c,eastern redbud,Cercis canadensis,L48:N',
+    'd,Texas redbud,Cercis canadensis var. texensis,L48:N',
+    'e,fragrant sumac,Rhus aromatica var. serotina,L48:N',
+  ].join('\n');
+  const { native } = filterToRegion(csv, [
+    'Celtis laevigata',                 // bare binomial: the western var. must not ride along
+    'Cercis canadensis',
+    'Cercis canadensis var. texensis',  // named outright: keep it as well as the nominate
+    'Rhus aromatica',                   // USDA has no nominate record — keep what exists
+  ]);
+  assert.deepEqual(native.map((r) => r[2]).sort(), [
+    'Celtis laevigata',
+    'Cercis canadensis',
+    'Cercis canadensis var. texensis',
+    'Rhus aromatica var. serotina',
+  ]);
+});
