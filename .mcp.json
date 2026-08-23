@@ -4,6 +4,11 @@
       "type": "stdio",
       "command": "codegraph",
       "args": ["serve", "--mcp"]
+    },
+    "usda-plants": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["tools/usda-plants/mcpServer.js"]
     }
   }
 }
