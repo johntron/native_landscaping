@@ -280,6 +280,38 @@ test('a custom label and a placed photo survive the round trip', () => {
   assert.deepEqual(serialized.yardFt, { width: 20, depth: 16 });
 });
 
+test('photoHidden survives the round trip, and is absent by default', () => {
+  const config = normalizeProjectConfig(
+    {
+      name: 'Fixture',
+      yardFt: { width: 20, depth: 16 },
+      views: [
+        {
+          id: 'plan',
+          type: 'plan',
+          background: 'img/plan.webp',
+          photoHidden: true,
+        },
+      ],
+    },
+    'backyard'
+  );
+  assert.equal(config.views[0].photoHidden, true);
+  const serialized = serializeProjectConfig(config);
+  assert.equal(serialized.views[0].photoHidden, true);
+
+  const shown = normalizeProjectConfig(
+    {
+      name: 'Fixture',
+      yardFt: { width: 20, depth: 16 },
+      views: [{ id: 'plan', type: 'plan', background: 'img/plan.webp' }],
+    },
+    'backyard'
+  );
+  assert.equal(shown.views[0].photoHidden, undefined);
+  assert.equal('photoHidden' in serializeProjectConfig(shown).views[0], false);
+});
+
 test('views[] validation rejects the ways a view can be unusable', () => {
   const bad = (views, pattern) =>
     assert.throws(() => normalizeProjectConfig(makeViewsConfig({ views }), 'backyard'), pattern);

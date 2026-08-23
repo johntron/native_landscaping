@@ -65,8 +65,11 @@ export function configureViews({ container, template, project }) {
       viewEl.style.setProperty('--extent-w', String(view.extentFt.width));
       viewEl.style.setProperty('--extent-h', String(view.extentFt.height));
       // A view may have no background yet — setting url('projects/x/null')
-      // would render a broken tile rather than an empty panel.
-      const background = resolvePhotoPlacement(view);
+      // would render a broken tile rather than an empty panel. A photo the
+      // user has hidden (see photoHidden) is treated the same way here: this
+      // is the panel CSS every mode but Setup draws from, and Setup paints
+      // the photo itself in the SVG regardless, so hiding it here is enough.
+      const background = view.photoHidden ? { path: null, rect: null } : resolvePhotoPlacement(view);
       if (background.path) {
         viewEl.style.backgroundImage = `url('${cssUrl(projectAssetPath(project.id, background.path))}')`;
       } else {

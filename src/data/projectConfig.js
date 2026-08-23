@@ -347,6 +347,7 @@ function normalizeView(raw, index, projectId, layout) {
     ...deriveViewGeometry(type, viewFrom, layout),
     background,
     ...normalizePhoto(raw, background),
+    ...(background && raw.photoHidden ? { photoHidden: true } : {}),
     ...normalizeViewerAt(type, raw.viewerAtFt),
   };
 
@@ -487,6 +488,7 @@ export function serializeProjectConfig(config) {
           extentFt: { ...view.photoFt.extentFt },
         };
       }
+      if (view.photoHidden) out.photoHidden = true;
       if (view.viewerAtFt !== undefined) out.viewerAtFt = view.viewerAtFt;
       return out;
     }),
