@@ -43,6 +43,7 @@ export function renderElevationView(svg, plantStates, view, options = {}) {
   const normalizedHoveredId = String(hoveredPlantId || '');
   const highlightTargets = [];
   const targetMarkers = [];
+  appendGroundFills(svg, view, viewBox, groundY);
   // Features and plants are sorted as ONE list: that interleave is what lets a
   // fence hide the shrub standing behind it.
   const drawOrder = orderElevationItems({ plantStates, features, transform });
@@ -636,6 +637,37 @@ function buildClipId(suffix) {
     .replace(/[^a-zA-Z0-9_-]/g, '_')
     .slice(0, 60);
   return `plant-clip-${safe}`;
+}
+
+/**
+ * Sky above the ground line, ground fill below it — the band a view declares
+ * neither of renders exactly as before: nothing is appended.
+ */
+function appendGroundFills(svg, view, viewBox, groundY) {
+  if (view.skyColor) {
+    svg.appendChild(
+      createSvgElement('rect', {
+        x: 0,
+        y: 0,
+        width: viewBox.width,
+        height: groundY,
+        fill: view.skyColor,
+        'pointer-events': 'none',
+      })
+    );
+  }
+  if (view.groundColor) {
+    svg.appendChild(
+      createSvgElement('rect', {
+        x: 0,
+        y: groundY,
+        width: viewBox.width,
+        height: viewBox.height - groundY,
+        fill: view.groundColor,
+        'pointer-events': 'none',
+      })
+    );
+  }
 }
 
 function appendElevationHighlight(svg, { cx, groundY, width, height }) {

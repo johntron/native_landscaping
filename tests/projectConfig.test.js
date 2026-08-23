@@ -312,6 +312,57 @@ test('photoHidden survives the round trip, and is absent by default', () => {
   assert.equal('photoHidden' in serializeProjectConfig(shown).views[0], false);
 });
 
+test('skyColor/groundColor survive the round trip, and a view that declares neither has none', () => {
+  const config = normalizeProjectConfig(
+    {
+      name: 'Fixture',
+      yardFt: { width: 20, depth: 16 },
+      views: [
+        {
+          id: 'south',
+          type: 'elevation',
+          viewFrom: 'south',
+          skyColor: '#BFE3FF',
+          groundColor: 'saddlebrown',
+        },
+      ],
+    },
+    'backyard'
+  );
+  assert.equal(config.views[0].skyColor, '#bfe3ff');
+  assert.equal(config.views[0].groundColor, 'saddlebrown');
+  const serialized = serializeProjectConfig(config);
+  assert.equal(serialized.views[0].skyColor, '#bfe3ff');
+  assert.equal(serialized.views[0].groundColor, 'saddlebrown');
+
+  const neither = normalizeProjectConfig(
+    {
+      name: 'Fixture',
+      yardFt: { width: 20, depth: 16 },
+      views: [{ id: 'south', type: 'elevation', viewFrom: 'south' }],
+    },
+    'backyard'
+  );
+  assert.equal(neither.views[0].skyColor, undefined);
+  assert.equal(neither.views[0].groundColor, undefined);
+  const serializedNeither = serializeProjectConfig(neither);
+  assert.equal('skyColor' in serializedNeither.views[0], false);
+  assert.equal('groundColor' in serializedNeither.views[0], false);
+
+  assert.throws(
+    () =>
+      normalizeProjectConfig(
+        {
+          name: 'Fixture',
+          yardFt: { width: 20, depth: 16 },
+          views: [{ id: 'south', type: 'elevation', viewFrom: 'south', skyColor: 'not a colour!' }],
+        },
+        'backyard'
+      ),
+    /skyColor/
+  );
+});
+
 test('views[] validation rejects the ways a view can be unusable', () => {
   const bad = (views, pattern) =>
     assert.throws(() => normalizeProjectConfig(makeViewsConfig({ views }), 'backyard'), pattern);

@@ -121,3 +121,28 @@ test('mirrored elevations flip which side of the drawing a plant lands on', () =
   assert.ok(eastView < 400, `expected a low-y plant near the left edge when viewed from the east, got ${eastView}`);
   assert.ok(westView > 400, `expected a low-y plant near the right edge when viewed from the west, got ${westView}`);
 });
+
+test('a view with no sky/ground colour draws no fill rects; a view that declares them does', () => {
+  const doc = resetDocument();
+
+  const plain = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  renderElevationView(plain, [], elevationView('south'));
+  assert.equal(plain.querySelectorAll('rect').length, 0);
+
+  const filled = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  const view = { ...elevationView('south'), skyColor: '#bfe3ff', groundColor: 'saddlebrown' };
+  renderElevationView(filled, [], view);
+  const rects = filled.querySelectorAll('rect');
+  assert.equal(rects.length, 2);
+
+  const sky = rects[0];
+  const ground = rects[1];
+  assert.equal(sky.getAttribute('fill'), '#bfe3ff');
+  assert.equal(Number(sky.getAttribute('y')), 0);
+  // bottomOffsetPx defaults to 100, so groundY sits 100px above the bottom edge.
+  assert.equal(Number(sky.getAttribute('height')), 500);
+
+  assert.equal(ground.getAttribute('fill'), 'saddlebrown');
+  assert.equal(Number(ground.getAttribute('y')), 500);
+  assert.equal(Number(ground.getAttribute('height')), 100);
+});

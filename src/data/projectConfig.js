@@ -23,6 +23,9 @@ export const PROJECT_INDEX_PATH = `${PROJECTS_DIR}/index.json`;
  */
 const PROJECT_ID_PATTERN = /^[a-z0-9][a-z0-9_-]*$/;
 
+/** Same shape featureConfig.js validates style colours against. */
+const COLOR_PATTERN = /^(#([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})|[a-z]+)$/;
+
 export function isValidProjectId(id) {
   return typeof id === 'string' && id.length <= 64 && PROJECT_ID_PATTERN.test(id);
 }
@@ -349,6 +352,8 @@ function normalizeView(raw, index, projectId, layout) {
     ...normalizePhoto(raw, background),
     ...(background && raw.photoHidden ? { photoHidden: true } : {}),
     ...normalizeViewerAt(type, raw.viewerAtFt),
+    ...normalizeOptionalColor(raw.skyColor, projectId, id, 'skyColor'),
+    ...normalizeOptionalColor(raw.groundColor, projectId, id, 'groundColor'),
   };
 
   // One derivation of pxPerFt for the whole app: build the transform the
@@ -453,6 +458,22 @@ export function defaultViewerAt(viewFrom, layout) {
   return (orientation.depthKey === 'y' ? yardFt.depth : yardFt.width) + back;
 }
 
+/**
+ * A view's sky/ground fill, or nothing — a view that never declares one renders
+ * exactly as it does today. Same colour grammar as a feature's style: hex or a
+ * CSS colour name.
+ */
+function normalizeOptionalColor(value, projectId, viewId, key) {
+  if (value === undefined || value === null || value === '') return {};
+  const color = String(value).trim().toLowerCase();
+  if (!COLOR_PATTERN.test(color)) {
+    throw new Error(
+      `Project "${projectId}" view "${viewId}" ${key} "${value}" is not a hex colour, a colour name, or none`
+    );
+  }
+  return { [key]: color };
+}
+
 function normalizePoint(raw) {
   return { x: normalizeNumber(raw?.x, 0), y: normalizeNumber(raw?.y, 0) };
 }
@@ -490,6 +511,8 @@ export function serializeProjectConfig(config) {
       }
       if (view.photoHidden) out.photoHidden = true;
       if (view.viewerAtFt !== undefined) out.viewerAtFt = view.viewerAtFt;
+      if (view.skyColor) out.skyColor = view.skyColor;
+      if (view.groundColor) out.groundColor = view.groundColor;
       return out;
     }),
   };
