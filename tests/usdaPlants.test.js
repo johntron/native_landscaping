@@ -4,6 +4,7 @@ import { parseSeasonPhrase, parseSeasonRange } from '../tools/usda-plants/season
 import { colorNameToHex } from '../tools/usda-plants/colorNames.js';
 import { mapPlantToIntermediateRow } from '../tools/usda-plants/mapCharacteristics.js';
 import { rowsToCsv } from '../tools/usda-plants/csvWriter.js';
+import { filterToRegion } from '../tools/usda-plants/regionFilter.js';
 
 test('parseSeasonPhrase converts contiguous season names to a month range', () => {
   assert.equal(parseSeasonPhrase('Spring and Summer'), '3-8');
@@ -97,4 +98,28 @@ test('mapPlantToIntermediateRow keeps the infraspecific epithet in botanical_nam
 test('rowsToCsv escapes commas and quotes', () => {
   const csv = rowsToCsv(['a', 'b'], [{ a: 'has,comma', b: 'has "quote"' }]);
   assert.equal(csv, 'a,b\n"has,comma","has ""quote"""\n');
+});
+
+test('filterToRegion keeps list species, separates non-natives, reports gaps', () => {
+  const csv = [
+    'id,common_name,botanical_name,usda_native_status',
+    'a,fragrant sumac,Rhus aromatica var. serotina,L48:N',
+    'b,Japanese privet,Ligustrum japonicum,L48:I',
+    'c,desertbroom,Baccharis sarothroides,L48:N',
+  ].join('\n');
+  // "Rhus aromatica" matches the var. serotina record — a regional list gives
+  // the bare binomial, USDA carries the infraspecific taxon.
+  const { native, introduced, unmatched } = filterToRegion(csv, [
+    'Rhus aromatica',
+    'Ligustrum japonicum',
+    'Aquilegia canadensis',
+  ]);
+  assert.deepEqual(native.map((r) => r[2]), ['Rhus aromatica var. serotina']);
+  // On the regional list but introduced — the DFW list's "invasives to remove"
+  // rows arrive this way and must not reach a planting recommendation.
+  assert.deepEqual(introduced.map((r) => r[2]), ['Ligustrum japonicum']);
+  // Off the list entirely: alkaline-clay-tolerant, but Sonoran, not Blackland.
+  assert.equal(native.some((r) => r[2] === 'Baccharis sarothroides'), false);
+  // On the list, but USDA has no characteristics record for it.
+  assert.deepEqual(unmatched, ['aquilegia canadensis']);
 });

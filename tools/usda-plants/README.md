@@ -103,6 +103,52 @@ Colors are converted from USDA's category words (e.g. "Yellow", "Brown") to
 an approximate hex swatch via a fixed lookup table (`colorNames.js`) —
 treat these as a starting point, not ground truth.
 
+## Narrowing a fetch to one region
+
+A statewide fetch is far too big to hand to the app — Texas yields 903 species
+with characteristics. Narrowing it needs a source USDA does not have:
+
+- Native status is **regional** (`L48`, `AK`, `HI`, `PR`, `VI`, `CAN`) — never
+  state or county.
+- `POST /api/plants-search-results` and its `/download` sibling both return a
+  server-side SQL timeout for a county payload.
+- There is **no distribution endpoint** in the API (all 42 paths checked);
+  `PlantsDistributionResults` on a profile comes back `null`.
+- `/api/NoxiousInvasiveSearch/GetInvasiveByState?state=Texas` returns zero rows,
+  so USDA cannot flag Texas invasives either. Per-plant
+  `GET /api/PlantInvasiveStatus/{id}` does work, reporting other states' listings.
+
+Filtering on soil, pH, and drought instead **does not work** and fails quietly:
+the Blackland Prairie is alkaline clay, but so is much of West Texas, so
+desertbroom (Sonoran) and desert ceanothus (Trans-Pecos) pass a filter built to
+select for Dallas.
+
+So bring the geography from a regional planting list and match by name:
+
+```bash
+node tools/usda-plants/regionFilter.js texas-usda-plants.csv names.txt --out=dfw.csv
+```
+
+Sources for `names.txt` (one botanical name per line):
+
+- **NPSOT plant lists by ecoregion** —
+  <https://www.npsot.org/our-work/class-schedule/plant-lists-by-ecoregion/>.
+  The "North Central Texas Area" PDF covers Dallas/Fort Worth/Denton and is
+  curated for landscaping. Extract with `pdftotext -layout`.
+- **Lady Bird Johnson Wildflower Center**, Texas Blackland Prairies collection
+  (`er32`) — <https://www.wildflower.org/collections/collection.php?collection=er32>.
+  2,372 species, the full floristic list for the ecoregion. Note the page does
+  not render its results for a plain `curl`.
+
+Two things the filter reports, both worth reading:
+
+- Species on the list that USDA has **no characteristics record** for. USDA
+  covers only ~2,200 species nationwide, so this is large — 97 of ~160 for the
+  DFW list. Those need their attributes sourced by hand.
+- Species on the list that are **not native to the L48**. Regional lists often
+  carry an "invasives to remove" section in the same table; the filter holds
+  those back rather than passing them into a planting recommendation.
+
 ## Merging into plants.csv
 
 This tool never writes `plants.csv` directly. Once the intermediate CSV is
