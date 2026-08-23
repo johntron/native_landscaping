@@ -75,10 +75,16 @@ function toSlug(commonName, scientificName) {
     .slice(0, 60);
 }
 
+// USDA's swagger documents Shade Tolerance as Intolerant/Intermediate/Tolerant,
+// but the live API returns Low/Medium/High for the same field — accept both, or
+// every fetched row lands with a blank sun_pref.
 const SHADE_TOLERANCE_TO_SUN_PREF = {
   intolerant: "full-sun",
   intermediate: "part-sun",
   tolerant: "shade",
+  low: "full-sun",
+  medium: "part-sun",
+  high: "shade",
 };
 
 const WATER_LEVEL = { low: "low", medium: "medium", high: "high" };
