@@ -56,8 +56,8 @@ test('mapPlantToIntermediateRow derives plants.csv fields from USDA data', () =>
 
   assert.equal(row.id, 'balsam-fir');
   assert.equal(row.common_name, 'balsam fir');
-  // plants.csv matches species by bare binomial; the author citation stays
-  // in the usda_* reference column.
+  // plants.csv matches species by the author-free name; the full citation
+  // stays in the usda_* reference column.
   assert.equal(row.botanical_name, 'Abies balsamea');
   assert.equal(row.usda_scientific_name_full, 'Abies balsamea (L.) Mill.');
   assert.equal(row.growth_shape, 'tree');
@@ -74,6 +74,24 @@ test('mapPlantToIntermediateRow derives plants.csv fields from USDA data', () =>
   assert.equal(row.fruit_load, 'moderate');
   assert.equal(row.usda_symbol, 'ABBA');
   assert.equal(row.usda_native_status, 'L48:N');
+});
+
+test('mapPlantToIntermediateRow keeps the infraspecific epithet in botanical_name', () => {
+  // Without the rank + second epithet, a variety and its parent species share
+  // one botanical_name, and getSpeciesKey (which ignores species_epithet when a
+  // botanical name is present) cannot tell the two catalog rows apart.
+  const row = mapPlantToIntermediateRow(
+    {
+      Symbol: 'ACMIO',
+      ScientificName: '<i>Achillea millefolium</i> L. var. <i>occidentalis</i> DC.',
+      CommonName: 'western yarrow',
+      GrowthHabits: ['Forb/herb'],
+      NativeStatuses: [],
+    },
+    [],
+  );
+  assert.equal(row.botanical_name, 'Achillea millefolium var. occidentalis');
+  assert.equal(row.usda_scientific_name_full, 'Achillea millefolium L. var. occidentalis DC.');
 });
 
 test('rowsToCsv escapes commas and quotes', () => {

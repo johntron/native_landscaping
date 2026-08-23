@@ -67,14 +67,22 @@ function stripHtml(s) {
   return s ? s.replace(/<[^>]+>/g, "").trim() : s;
 }
 
-// USDA italicizes the binomial/trinomial and leaves the taxonomic author
-// outside the tag: "<i>Callicarpa americana</i> L.". plants.csv's
-// botanical_name is the bare binomial — planting_layout.csv rows match
-// species by it — so keep only the italic part. The full citation is
-// preserved in usda_scientific_name_full.
+// USDA italicizes each name part and leaves the taxonomic author outside the
+// tag: "<i>Callicarpa americana</i> L.", or for an infraspecific taxon
+// "<i>Achillea millefolium</i> L. var. <i>occidentalis</i> DC.". plants.csv's
+// botanical_name is the name without authors — planting_layout.csv rows match
+// species by it, and src/utils/speciesKey.js keys off it alone (species_epithet
+// is never consulted once a botanical name is present) — so it has to carry
+// the infraspecific epithet too, or a variety and its parent species collide
+// on one key. The full citation is preserved in usda_scientific_name_full.
 function binomialOf(scientificNameHtml) {
-  const italic = scientificNameHtml?.match(/<i>(.*?)<\/i>/);
-  return italic ? stripHtml(italic[1]) : stripHtml(scientificNameHtml);
+  if (!scientificNameHtml) return stripHtml(scientificNameHtml);
+  const parts = [...scientificNameHtml.matchAll(/(?:\b(var\.|subsp\.|ssp\.|f\.)\s*)?<i>(.*?)<\/i>/g)];
+  if (!parts.length) return stripHtml(scientificNameHtml);
+  return parts
+    .map(([, rank, name]) => (rank ? `${rank} ${stripHtml(name)}` : stripHtml(name)))
+    .join(" ")
+    .trim();
 }
 
 function toSlug(commonName, scientificName) {
