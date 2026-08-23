@@ -136,9 +136,20 @@ Sources for `names.txt` (one botanical name per line):
   The "North Central Texas Area" PDF covers Dallas/Fort Worth/Denton and is
   curated for landscaping. Extract with `pdftotext -layout`.
 - **Lady Bird Johnson Wildflower Center**, Texas Blackland Prairies collection
-  (`er32`) — <https://www.wildflower.org/collections/collection.php?collection=er32>.
-  2,372 species, the full floristic list for the ecoregion. Note the page does
-  not render its results for a plain `curl`.
+  (`er32`) — <https://www.wildflower.org/collections/printable.php?collection=er32>.
+  ~2,340 species, the full floristic list for the ecoregion, natives only. The
+  page does not render its results for a plain `curl`; save the *printable*
+  view from a browser instead. Names sit in `<i>` tags in one plain table, so
+  `grep -ao '<i>[^<]*</i>'` gets the list — use `-a`, since a saved `.mht` is
+  binary to grep and `-o` silently prints nothing without it.
+
+The two kinds of list answer different questions and are best used together: an
+ecoregion flora says what actually grows here, a landscaping list says what is
+worth planting. Intersecting the DFW landscaping list with the Blackland flora
+found 4 of 59 recommendations that are not Blackland natives at all — common
+sotol (Chihuahuan Desert), Texas mountain laurel (Edwards Plateau), purple
+coneflower and American wisteria (eastern US). All are legitimate garden plants
+locally; none is a local native.
 
 Extraction from a PDF list is the weak link: the NPSOT table packs two species
 into one row behind `1.` / `2.` prefixes, and a column-anchored regex silently
