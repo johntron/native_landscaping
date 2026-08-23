@@ -67,6 +67,16 @@ function stripHtml(s) {
   return s ? s.replace(/<[^>]+>/g, "").trim() : s;
 }
 
+// USDA italicizes the binomial/trinomial and leaves the taxonomic author
+// outside the tag: "<i>Callicarpa americana</i> L.". plants.csv's
+// botanical_name is the bare binomial — planting_layout.csv rows match
+// species by it — so keep only the italic part. The full citation is
+// preserved in usda_scientific_name_full.
+function binomialOf(scientificNameHtml) {
+  const italic = scientificNameHtml?.match(/<i>(.*?)<\/i>/);
+  return italic ? stripHtml(italic[1]) : stripHtml(scientificNameHtml);
+}
+
 function toSlug(commonName, scientificName) {
   const base = (commonName || scientificName || "").toLowerCase();
   return base
@@ -124,14 +134,15 @@ function soilPref({ coarse, medium, fine }) {
 export function mapPlantToIntermediateRow(profile, characteristics) {
   const c = characteristicMap(characteristics);
   const scientificName = stripHtml(profile.ScientificName);
+  const binomial = binomialOf(profile.ScientificName);
   const commonName = profile.CommonName || null;
   const growthHabit = (profile.GrowthHabits || [])[0] || null;
   const shadeTolerance = c.get("Shade Tolerance");
 
   const row = {
-    id: toSlug(commonName, scientificName),
+    id: toSlug(commonName, binomial),
     common_name: commonName,
-    botanical_name: scientificName,
+    botanical_name: binomial,
     growth_shape: growthHabit ? GROWTH_HABIT_TO_SHAPE[growthHabit.toLowerCase()] || null : null,
     growing_season_months: parseSeasonPhrase(c.get("Active Growth Period")),
     flowering_season_months: parseSeasonPhrase(c.get("Bloom Period")),
