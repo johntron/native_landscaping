@@ -56,7 +56,10 @@ test('mapPlantToIntermediateRow derives plants.csv fields from USDA data', () =>
 
   assert.equal(row.id, 'balsam-fir');
   assert.equal(row.common_name, 'balsam fir');
-  assert.equal(row.botanical_name, 'Abies balsamea (L.) Mill.');
+  // plants.csv matches species by bare binomial; the author citation stays
+  // in the usda_* reference column.
+  assert.equal(row.botanical_name, 'Abies balsamea');
+  assert.equal(row.usda_scientific_name_full, 'Abies balsamea (L.) Mill.');
   assert.equal(row.growth_shape, 'tree');
   assert.equal(row.growing_season_months, '3-8');
   assert.equal(row.flowering_season_months, '7');
