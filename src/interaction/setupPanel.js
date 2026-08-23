@@ -172,6 +172,16 @@ export function createSetupPanel({
           (value) => patch({ viewerAtFt: value })
         )
       );
+      grid.appendChild(
+        textField('Sky colour', view.skyColor || '', (value) =>
+          patch({ skyColor: value.trim() || null })
+        )
+      );
+      grid.appendChild(
+        textField('Ground colour', view.groundColor || '', (value) =>
+          patch({ groundColor: value.trim() || null })
+        )
+      );
     }
     grid.appendChild(
       textField('Background image', view.background || '', (value) =>
@@ -499,6 +509,14 @@ function applyPatch(view, changes) {
     // the default, so it has to be reachable by clearing the field.
     if (changes.viewerAtFt === null) delete next.viewerAtFt;
     else next.viewerAtFt = changes.viewerAtFt;
+  }
+  if ('skyColor' in changes) {
+    if (changes.skyColor) next.skyColor = changes.skyColor;
+    else delete next.skyColor;
+  }
+  if ('groundColor' in changes) {
+    if (changes.groundColor) next.groundColor = changes.groundColor;
+    else delete next.groundColor;
   }
   return next;
 }
