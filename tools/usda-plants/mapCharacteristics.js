@@ -94,15 +94,22 @@ function toSlug(commonName, scientificName) {
 }
 
 // USDA's swagger documents Shade Tolerance as Intolerant/Intermediate/Tolerant,
-// but the live API returns Low/Medium/High for the same field — accept both, or
-// every fetched row lands with a blank sun_pref.
+// but the live API returns Low/Medium/High — and those are NOT the same scale
+// running the same direction. Checked against 15 species whose light needs are
+// not in dispute, the live values behave as a *light requirement*: little
+// bluestem, sideoats grama, Indiangrass, big bluestem, switchgrass and Indian
+// blanket (all obligate full sun) come back "High", while Carex blanda, inland
+// sea oats, hophornbeam and southern sugar maple (all shade) come back "Low".
+// Reading Low as "shade-intolerant" gets 0 of 15 right; reading it as "low light
+// requirement" gets 14. So low maps to shade and high to full sun — the reverse
+// of the documented enum, which is kept below for the values it does use.
 const SHADE_TOLERANCE_TO_SUN_PREF = {
   intolerant: "full-sun",
   intermediate: "part-sun",
   tolerant: "shade",
-  low: "full-sun",
+  low: "shade",
   medium: "part-sun",
-  high: "shade",
+  high: "full-sun",
 };
 
 const WATER_LEVEL = { low: "low", medium: "medium", high: "high" };
