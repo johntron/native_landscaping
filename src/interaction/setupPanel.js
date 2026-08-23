@@ -490,6 +490,10 @@ function applyPatch(view, changes) {
     if (next.type === 'plan') delete next.viewFrom;
   }
   if ('viewFrom' in changes) next.viewFrom = changes.viewFrom;
+  if ('photoHidden' in changes) {
+    if (changes.photoHidden) next.photoHidden = true;
+    else delete next.photoHidden;
+  }
   if ('viewerAtFt' in changes) {
     // Blank is a real answer — "this view has no camera position" — and it is
     // the default, so it has to be reachable by clearing the field.
