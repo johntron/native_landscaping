@@ -109,6 +109,7 @@ async function init() {
   const viewToolbar = document.querySelector('.view-toolbar');
   const settingsToggleBtn = document.getElementById('settingsToggleBtn');
   const settingsDrawer = document.getElementById('settingsDrawer');
+  const viewControlsRow = document.querySelector('.view-toolbar__row--controls');
   const exportBundleButton = document.getElementById('exportBundleBtn');
   const managePlantsButton = document.getElementById('managePlantsBtn');
   const labelToggle = document.getElementById('labelToggle');
@@ -740,6 +741,16 @@ async function init() {
     if (setupRow) setupRow.hidden = next !== 'setup';
     if (featureRow) featureRow.hidden = next !== 'features';
     viewToolbar?.classList.toggle('is-setup', next === 'setup' || next === 'features');
+    // The legend, season, and layer controls describe how a finished planting
+    // is drawn — noise while framing views or tracing yard geometry, where
+    // nothing they touch is even on screen.
+    const browsing = next === 'view' || next === 'edit';
+    if (viewControlsRow) viewControlsRow.hidden = !browsing;
+    if (settingsToggleBtn) settingsToggleBtn.hidden = !browsing;
+    if (!browsing && settingsDrawer && !settingsDrawer.hidden) {
+      settingsDrawer.hidden = true;
+      settingsToggleBtn?.setAttribute('aria-expanded', 'false');
+    }
     // Three pointer consumers share each SVG, so exactly one mode may unlock
     // one of them. Deciding it in one place is what keeps them from fighting
     // over svg.style.cursor the way two controllers on one element do.
