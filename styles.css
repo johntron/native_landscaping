@@ -82,6 +82,11 @@ h1 {
   gap: 1rem;
 }
 
+/* A class-level display beats the UA rule for [hidden], same as .edit-row. */
+.view-toolbar__row[hidden] {
+  display: none;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
