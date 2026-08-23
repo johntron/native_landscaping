@@ -146,3 +146,26 @@ test('filterToRegion keeps the nominate record over unlisted varieties', () => {
     'Rhus aromatica var. serotina',
   ]);
 });
+
+test('Shade Tolerance Low/Medium/High reads as light requirement, not shade tolerance', () => {
+  // The live API's Low/Medium/High run opposite to the documented
+  // Intolerant/Intermediate/Tolerant enum: little bluestem, an obligate full-sun
+  // prairie grass, comes back "High"; Carex blanda, a woodland sedge, "Low".
+  const profile = {
+    Symbol: 'SCSC',
+    ScientificName: '<i>Schizachyrium scoparium</i> (Michx.) Nash',
+    CommonName: 'little bluestem',
+    GrowthHabits: ['Graminoid'],
+    NativeStatuses: [],
+  };
+  const sun = (value) =>
+    mapPlantToIntermediateRow(profile, [
+      { PlantCharacteristicName: 'Shade Tolerance', PlantCharacteristicValue: value },
+    ]).sun_pref;
+  assert.equal(sun('High'), 'full-sun');
+  assert.equal(sun('Low'), 'shade');
+  assert.equal(sun('Medium'), 'part-sun');
+  // The documented enum still maps by its own plain meaning.
+  assert.equal(sun('Intolerant'), 'full-sun');
+  assert.equal(sun('Tolerant'), 'shade');
+});
