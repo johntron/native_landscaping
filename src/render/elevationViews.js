@@ -1,4 +1,4 @@
-import { PLANT_BLEND_OPACITY } from '../constants.js';
+import { PLANT_BLEND_OPACITY, DEFAULT_SKY_COLOR, DEFAULT_GROUND_COLOR } from '../constants.js';
 import { orderElevationItems } from './elevationOrder.js';
 import { buildFeatureGroup } from './featureViews.js';
 import { createViewTransform } from './viewTransform.js';
@@ -640,30 +640,38 @@ function buildClipId(suffix) {
 }
 
 /**
- * Sky above the ground line, ground fill below it — the band a view declares
- * neither of renders exactly as before: nothing is appended.
+ * Sky above the ground line, ground fill below it.
+ *
+ * A view with a visible photo gets no fallback fill — it would paint over the
+ * photo, which sits below this SVG. Only once a photo is hidden (nl-avt.7)
+ * does a view otherwise go blank there, so that is the one case a default
+ * kicks in; an explicit skyColor/groundColor always wins.
  */
 function appendGroundFills(svg, view, viewBox, groundY) {
-  if (view.skyColor) {
+  const photoVisible = Boolean(view.background) && !view.photoHidden;
+  const sky = view.skyColor || (!photoVisible ? DEFAULT_SKY_COLOR : null);
+  const ground = view.groundColor || (!photoVisible ? DEFAULT_GROUND_COLOR : null);
+
+  if (sky) {
     svg.appendChild(
       createSvgElement('rect', {
         x: 0,
         y: 0,
         width: viewBox.width,
         height: groundY,
-        fill: view.skyColor,
+        fill: sky,
         'pointer-events': 'none',
       })
     );
   }
-  if (view.groundColor) {
+  if (ground) {
     svg.appendChild(
       createSvgElement('rect', {
         x: 0,
         y: groundY,
         width: viewBox.width,
         height: viewBox.height - groundY,
-        fill: view.groundColor,
+        fill: ground,
         'pointer-events': 'none',
       })
     );

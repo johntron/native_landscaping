@@ -14,7 +14,7 @@ function elevationView(viewFrom, { bottomOffsetPx = 100, leftOffsetPx = 0 } = {}
     extentFt: { width: 800 / PX_PER_FT, height: 600 / PX_PER_FT },
   };
 }
-import { PLANT_BLEND_OPACITY } from '../src/constants.js';
+import { PLANT_BLEND_OPACITY, DEFAULT_SKY_COLOR, DEFAULT_GROUND_COLOR } from '../src/constants.js';
 import { resetDocument } from './helpers/fakeDom.js';
 
 const evergreenState = {
@@ -122,17 +122,12 @@ test('mirrored elevations flip which side of the drawing a plant lands on', () =
   assert.ok(westView > 400, `expected a low-y plant near the right edge when viewed from the west, got ${westView}`);
 });
 
-test('a view with no sky/ground colour draws no fill rects; a view that declares them does', () => {
+test('explicit sky/ground colours always win over the defaults', () => {
   const doc = resetDocument();
-
-  const plain = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  renderElevationView(plain, [], elevationView('south'));
-  assert.equal(plain.querySelectorAll('rect').length, 0);
-
-  const filled = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
   const view = { ...elevationView('south'), skyColor: '#bfe3ff', groundColor: 'saddlebrown' };
-  renderElevationView(filled, [], view);
-  const rects = filled.querySelectorAll('rect');
+  renderElevationView(svg, [], view);
+  const rects = svg.querySelectorAll('rect');
   assert.equal(rects.length, 2);
 
   const sky = rects[0];
@@ -145,4 +140,33 @@ test('a view with no sky/ground colour draws no fill rects; a view that declares
   assert.equal(ground.getAttribute('fill'), 'saddlebrown');
   assert.equal(Number(ground.getAttribute('y')), 500);
   assert.equal(Number(ground.getAttribute('height')), 100);
+});
+
+test('a view with a visible photo gets no fallback fill; one with no photo, or a hidden one, does', () => {
+  const doc = resetDocument();
+
+  // A visible photo would be painted over by any fallback fill, so none applies.
+  const withPhoto = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  renderElevationView(withPhoto, [], { ...elevationView('south'), background: 'img/south.webp' });
+  assert.equal(withPhoto.querySelectorAll('rect').length, 0);
+
+  // No photo at all: the view would otherwise be blank, so the defaults kick in.
+  const noPhoto = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  renderElevationView(noPhoto, [], elevationView('south'));
+  const noPhotoRects = noPhoto.querySelectorAll('rect');
+  assert.equal(noPhotoRects.length, 2);
+  assert.equal(noPhotoRects[0].getAttribute('fill'), DEFAULT_SKY_COLOR);
+  assert.equal(noPhotoRects[1].getAttribute('fill'), DEFAULT_GROUND_COLOR);
+
+  // A hidden photo is the same situation as no photo, presentation-wise.
+  const hiddenPhoto = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  renderElevationView(hiddenPhoto, [], {
+    ...elevationView('south'),
+    background: 'img/south.webp',
+    photoHidden: true,
+  });
+  const hiddenRects = hiddenPhoto.querySelectorAll('rect');
+  assert.equal(hiddenRects.length, 2);
+  assert.equal(hiddenRects[0].getAttribute('fill'), DEFAULT_SKY_COLOR);
+  assert.equal(hiddenRects[1].getAttribute('fill'), DEFAULT_GROUND_COLOR);
 });

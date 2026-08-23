@@ -15,6 +15,15 @@ export const MONTH_NAMES = [
 
 export const DORMANT_FOLIAGE_COLOR = '#a38c61';
 export const INCHES_PER_FOOT = 12;
+
+/**
+ * Fallback sky/ground fill for an elevation whose photo is hidden and which
+ * declares no colour of its own — otherwise that view is blank above and
+ * below the ground line. Never applied over a visible photo; see
+ * appendGroundFills in elevationViews.js.
+ */
+export const DEFAULT_SKY_COLOR = '#cfe8fb';
+export const DEFAULT_GROUND_COLOR = '#b7a179';
 export const GLOBAL_SEED = 0x9e3779b1; // stable default seed for reproducible randomness
 
 export const DEFAULT_PIXELS_PER_INCH = 2.25; // legacy project.json only; never a render input
