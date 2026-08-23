@@ -18,12 +18,12 @@
       "background": "img/plan-130d05047b7d.webp",
       "photoFt": {
         "originFt": {
-          "x": -4.41765801856779,
-          "y": -12.06050392396396
+          "x": -13.02,
+          "y": -7.81
         },
         "extentFt": {
-          "width": 17.388621692953237,
-          "height": 50.427002909564386
+          "width": 29.96,
+          "height": 29.85
         }
       }
     },
@@ -34,12 +34,12 @@
       "background": "img/north-c2bd4c04b539.webp",
       "photoFt": {
         "originFt": {
-          "x": -2.317651858733953,
-          "y": 2.6057769641185686
+          "x": -3.63,
+          "y": -2.52
         },
         "extentFt": {
-          "width": 10,
-          "height": 14
+          "width": 11.51,
+          "height": 6.5
         }
       },
       "viewerAtFt": 14
@@ -52,15 +52,15 @@
       "background": "img/west-2f2cbd505c49.webp",
       "photoFt": {
         "originFt": {
-          "x": -1.4552974759704522,
-          "y": 1.4489860649635262
+          "x": -0.8,
+          "y": -1.84
         },
         "extentFt": {
-          "width": 29,
-          "height": 14
+          "width": 14.63,
+          "height": 7.07
         }
       },
-      "viewerAtFt": 8.13
+      "viewerAtFt": 7.95
     },
     {
       "id": "view",
@@ -69,15 +69,15 @@
       "background": "img/view-635426f71bf6.webp",
       "photoFt": {
         "originFt": {
-          "x": 4.1718646160564195,
-          "y": 1.6328074773908767
+          "x": -1.74,
+          "y": -1.25
         },
         "extentFt": {
-          "width": 10,
-          "height": 14
+          "width": 9.18,
+          "height": 5.18
         }
       },
-      "viewerAtFt": -1
+      "viewerAtFt": -1.21
     }
   ]
 }
