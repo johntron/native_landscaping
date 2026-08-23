@@ -140,6 +140,18 @@ Sources for `names.txt` (one botanical name per line):
   2,372 species, the full floristic list for the ecoregion. Note the page does
   not render its results for a plain `curl`.
 
+Extraction from a PDF list is the weak link: the NPSOT table packs two species
+into one row behind `1.` / `2.` prefixes, and a column-anchored regex silently
+drops the second — that alone cost Shumard oak, live oak, eastern redcedar and
+four more. Probe any extraction against a species you know belongs (is it in the
+names file? is it in the intermediate CSV?) before trusting the count.
+
+Genus+species matching also drags in every USDA infraspecific record under a
+binomial, and the extras skew western — "Celtis laevigata" pulls in var.
+*reticulata*, the netleaf hackberry of West Texas. The filter keeps the nominate
+record plus any variety the list names outright, and falls back to whatever
+exists when USDA has no nominate record.
+
 Two things the filter reports, both worth reading:
 
 - Species on the list that USDA has **no characteristics record** for. USDA

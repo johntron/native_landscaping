@@ -54,7 +54,30 @@ export function filterToRegion(csvText, names) {
   const rows = lines.slice(1).map(parseCsvLine);
 
   const wanted = new Set(names.map(genusSpecies).filter(Boolean));
-  const onList = rows.filter((r) => wanted.has(genusSpecies(r[col.botanical_name])));
+  // Full names the list spells out, including infraspecific ones ("Cercis
+  // canadensis var. texensis"). A list that bothers to name the variety means
+  // that variety.
+  const namedInFull = new Set(names.map((n) => (n || "").trim().toLowerCase()).filter(Boolean));
+  const matches = rows.filter((r) => wanted.has(genusSpecies(r[col.botanical_name])));
+
+  // Genus+species matching pulls in every USDA infraspecific record under a
+  // binomial, and the extra ones skew western: a list saying "Celtis laevigata"
+  // (sugarberry) also drags in var. reticulata, the netleaf hackberry of West
+  // Texas. Keep the nominate record, plus any variety the list named outright;
+  // fall back to whatever exists when USDA has no nominate record at all
+  // (Rhus aromatica is only ever var. serotina here).
+  const byBinomial = new Map();
+  for (const r of matches) {
+    const key = genusSpecies(r[col.botanical_name]);
+    if (!byBinomial.has(key)) byBinomial.set(key, []);
+    byBinomial.get(key).push(r);
+  }
+  const onList = [];
+  for (const [key, group] of byBinomial) {
+    const full = (r) => (r[col.botanical_name] || "").trim().toLowerCase();
+    const kept = group.filter((r) => full(r) === key || namedInFull.has(full(r)));
+    onList.push(...(kept.length ? kept : group));
+  }
 
   // A regional planting list is not only a list of things to plant — the DFW
   // one carries an "invasives to remove" section in the same table. Nativity
