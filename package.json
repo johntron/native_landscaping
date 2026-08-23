@@ -6,10 +6,13 @@
   "scripts": {
     "test": "node tests/run-tests.cjs",
     "serve": "node server.js",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "usda-plants:mcp": "node tools/usda-plants/mcpServer.js"
   },
   "dependencies": {
-    "jszip": "^3.10.1"
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "jszip": "^3.10.1",
+    "zod": "^4.4.3"
   },
   "keywords": [],
   "author": "",
