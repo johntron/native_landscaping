@@ -2,9 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { STATUSES, analyzeEcology, buildEcologyContext } from '../src/analysis/ecology.js';
+import { RULES, STATUSES, analyzeEcology, buildEcologyContext } from '../src/analysis/ecology.js';
 import { describeMonths, monthName } from '../src/analysis/months.js';
-import { parseSpeciesCsv, createPlantFromSpecies } from '../src/data/plantParser.js';
+import { parseSpeciesCsv, createPlantFromSpecies, buildPlantsFromCsv } from '../src/data/plantParser.js';
+import { buildHostGeneraIndex } from '../src/analysis/hostGenera.js';
 
 const CATALOG = parseSpeciesCsv(
   readFileSync(fileURLToPath(new URL('../plants.csv', import.meta.url)), 'utf8')
@@ -60,7 +61,7 @@ test('describeMonths names runs the way a season is written, wrapping the year e
 test('every result carries one of exactly four statuses', () => {
   const allowed = new Set(Object.values(STATUSES));
   const results = analyzeEcology(buildEcologyContext({ plants: place('Salvia farinacea'), species: CATALOG }));
-  assert.equal(results.length, 3);
+  assert.equal(results.length, RULES.length);
   results.forEach((result) => {
     assert.ok(allowed.has(result.status), `${result.id} returned "${result.status}"`);
     assert.ok(result.title && result.summary, `${result.id} needs a title and summary`);
@@ -165,4 +166,135 @@ test('layers are counted by species, so a big drift of one plant fills one layer
   const many = Array.from({ length: 19 }, (_, i) => ({ ...drift[0], id: `d${i}` }));
   const result = run(many)['vertical-layers'];
   assert.ok(result.findings.some((f) => /ground layer: 1 species/.test(f)));
+});
+
+const HOST_GENERA = buildHostGeneraIndex(
+  readFileSync(fileURLToPath(new URL('../ecology/host-genera.csv', import.meta.url)), 'utf8'),
+  { ecoregion: '9' }
+);
+
+/** The context rules 4/10 and 5 need: an ecoregion and a loaded genus table. */
+function runWithGenera(plants, extra = {}) {
+  return run(plants, { hostGenera: HOST_GENERA, ecoregion: '9', ...extra });
+}
+
+test('keystone genera: Packera resolves through synonym_of and counts', () => {
+  // NWF files ragwort under Senecio; the catalog and both layouts use Packera
+  // obovata. Without synonym resolution the frontyard's ragwort is invisible here.
+  const result = runWithGenera(place('Packera obovata'))['keystone-genera'];
+  assert.match(result.findings[0], /Packera \(22 specialist bees — listed as Senecio\)/);
+  assert.notEqual(result.status, STATUSES.GAP, 'a keystone genus IS planted');
+});
+
+test('keystone genera: a design with none reports a gap, and says so as a gap to close', () => {
+  const result = runWithGenera(place('Passiflora incarnata', 'Calyptocarpus vialis'))['keystone-genera'];
+  assert.equal(result.status, STATUSES.GAP);
+  assert.match(result.summary, /keystone genus for ecoregion 9/);
+  assert.ok(result.suggestions.length, 'names catalog species that would close it');
+  assert.ok(
+    result.suggestions.every((s) => /keystone genus/.test(s)),
+    'every suggestion says which genus it brings'
+  );
+});
+
+test('keystone genera measures footprint area, not head-count', () => {
+  // One wide keystone plant against many narrow non-keystone ones: a head-count
+  // would call this a rounding error, an area ratio would not.
+  const wide = { ...synthetic('Helianthus test'), width: 10, height: 3 };
+  const narrow = { ...synthetic('Passiflora test'), width: 1, height: 1 };
+  const plants = [
+    createPlantFromSpecies(wide, { id: 'w', x: 0, y: 0 }),
+    ...Array.from({ length: 5 }, (_, i) => createPlantFromSpecies(narrow, { id: `n${i}`, x: i, y: 1 })),
+  ];
+  const result = run(plants, {
+    hostGenera: HOST_GENERA,
+    ecoregion: '9',
+    species: CATALOG.concat([wide, narrow]),
+  })['keystone-genera'];
+  // pi*25 of 314 keystone vs 5 * pi*0.25 — about 95%.
+  assert.match(result.findings[1], /9[0-9]% of the planted footprint/);
+  assert.equal(result.status, STATUSES.OK);
+});
+
+test('keystone genera excludes plants with no declared width from BOTH sides', () => {
+  // createPlantFromSpecies defaults width to 1, which is harmless for a perennial
+  // and badly wrong for a tree. Counting one would move the ratio, not just blur it.
+  const noWidth = { ...synthetic('Quercus test'), width: null };
+  const sized = { ...synthetic('Passiflora test'), width: 4 };
+  const plants = [
+    createPlantFromSpecies(noWidth, { id: 'q', x: 0, y: 0 }),
+    createPlantFromSpecies(sized, { id: 's', x: 1, y: 0 }),
+  ];
+  const result = run(plants, {
+    hostGenera: HOST_GENERA,
+    ecoregion: '9',
+    species: CATALOG.concat([noWidth, sized]),
+  })['keystone-genera'];
+  assert.ok(result.findings.some((f) => /1 plant declares no width/.test(f)));
+  assert.match(result.findings[1], /0% of the planted footprint \(0 of 12.6 sq ft\)/);
+});
+
+test('a project with no ecoregion reports not-declared on the genus rules', () => {
+  const results = run(place('Packera obovata'));
+  assert.equal(results['keystone-genera'].status, STATUSES.NOT_DECLARED);
+  assert.equal(results['larval-hosts'].status, STATUSES.NOT_DECLARED);
+  assert.match(results['keystone-genera'].summary, /declares no ecoregion/);
+});
+
+test('a failed host-genera load degrades the genus rules, it does not break them', () => {
+  const results = run(place('Packera obovata'), { ecoregion: '9' });
+  assert.equal(results['keystone-genera'].status, STATUSES.NOT_DECLARED);
+  assert.match(results['keystone-genera'].summary, /did not load/);
+  // The rules that need no table keep working.
+  assert.notEqual(results['bloom-succession'].status, STATUSES.NOT_DECLARED);
+});
+
+test('larval hosts is not derived from keystone membership', () => {
+  // Antelope-horns is a monarch host and Asclepias is on NEITHER NWF top-30 list.
+  // Deriving rule 5 from the keystone columns would score this design as hostless.
+  const results = runWithGenera(place('Asclepias asperula'));
+  assert.equal(results['keystone-genera'].status, STATUSES.GAP, 'not a keystone genus');
+  assert.notEqual(results['larval-hosts'].status, STATUSES.GAP, 'but it is a larval host');
+  assert.ok(results['larval-hosts'].findings.some((f) => /Asclepias hosts monarch/.test(f)));
+});
+
+test('larval hosts: none planted is a gap with named replacements', () => {
+  const result = runWithGenera(place('Salvia farinacea'))['larval-hosts'];
+  assert.equal(result.status, STATUSES.GAP);
+  assert.ok(result.suggestions.length);
+  assert.ok(result.suggestions.every((s) => /host to/.test(s)));
+});
+
+test('larval hosts: one genus is partial, two or more is ok', () => {
+  const one = runWithGenera(place('Asclepias asperula'))['larval-hosts'];
+  assert.equal(one.status, STATUSES.PARTIAL);
+  assert.match(one.summary, /rests on one genus/);
+
+  const several = runWithGenera(place('Asclepias asperula', 'Passiflora incarnata'))['larval-hosts'];
+  assert.equal(several.status, STATUSES.OK);
+  assert.deepEqual(several.suggestions, [], 'nothing to suggest once the bar is cleared');
+});
+
+test('both shipped projects analyse without throwing, and report what the data says', () => {
+  ['example-frontyard', 'backyard'].forEach((id) => {
+    const layout = readFileSync(
+      fileURLToPath(new URL(`../projects/${id}/planting_layout.csv`, import.meta.url)),
+      'utf8'
+    );
+    const plants = buildPlantsFromCsv(
+      readFileSync(fileURLToPath(new URL('../plants.csv', import.meta.url)), 'utf8'),
+      layout
+    );
+    const results = run(plants, { hostGenera: HOST_GENERA, ecoregion: '9' });
+    // A weak keystone score is a TRUE finding, not a bug, and the reason is
+    // structural: only six of the catalog's 42 genera are keystone in ecoregion 9
+    // and NONE are woody, so no amount of replanting from this catalog closes it.
+    // Every project must say so, whatever its area ratio works out to — the
+    // frontyard's 37% is real, and it still has no oak.
+    assert.ok(
+      results['keystone-genera'].findings.some((f) => /Quercus \(253 caterpillar species\)/.test(f)),
+      `${id} must name the keystone genera the catalog cannot supply`
+    );
+    assert.notEqual(results['larval-hosts'].status, STATUSES.NOT_DECLARED, id);
+  });
 });
