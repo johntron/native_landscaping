@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import {
   defaultViewerAt,
   isValidProjectId,
@@ -669,4 +671,76 @@ test("an elevation's camera position round-trips, and only an elevation has one"
   assert.equal('viewerAtFt' in serialized.views[0], false);
   assert.equal(serialized.views[1].viewerAtFt, 0);
   assert.deepEqual(normalizeProjectConfig(serialized, 'backyard').views, config.views);
+});
+
+test('ecoregion and site survive the normalize -> serialize round trip', () => {
+  // serializeProjectConfig whitelists fields, so a field added to the normalizer
+  // alone lives in memory and vanishes the first time Setup mode saves — the
+  // user's declaration gone with no error. This is the assertion that catches it.
+  const raw = {
+    name: 'Yard',
+    yardFt: { width: 20, depth: 30 },
+    ecoregion: '9',
+    site: { sun: 'part-sun', water: 'medium', soil: 'clay' },
+    views: [{ id: 'plan', type: 'plan' }],
+  };
+  const config = normalizeProjectConfig(raw, 'yard');
+  assert.equal(config.ecoregion, '9');
+  assert.deepEqual(config.site, { sun: 'part-sun', water: 'medium', soil: 'clay' });
+
+  const serialized = serializeProjectConfig(config);
+  assert.equal(serialized.ecoregion, '9');
+  assert.deepEqual(serialized.site, { sun: 'part-sun', water: 'medium', soil: 'clay' });
+  // And a second pass is stable, which is what an edit-save-edit cycle does.
+  assert.deepEqual(serializeProjectConfig(normalizeProjectConfig(serialized, 'yard')), serialized);
+});
+
+test('a project with neither ecoregion nor site still loads, and writes neither back', () => {
+  const config = normalizeProjectConfig(
+    { name: 'Yard', yardFt: { width: 20, depth: 30 }, views: [{ id: 'plan', type: 'plan' }] },
+    'yard'
+  );
+  assert.equal(config.ecoregion, undefined);
+  assert.equal(config.site, undefined);
+  const serialized = serializeProjectConfig(config);
+  assert.equal('ecoregion' in serialized, false);
+  assert.equal('site' in serialized, false);
+});
+
+test('a partial site declares only what it knows', () => {
+  const config = normalizeProjectConfig(
+    {
+      yardFt: { width: 20, depth: 30 },
+      site: { soil: 'CLAY-LOAM', sun: '' },
+      views: [{ id: 'plan', type: 'plan' }],
+    },
+    'yard'
+  );
+  assert.deepEqual(config.site, { soil: 'clay-loam' }, 'case-folded, blanks dropped');
+});
+
+test('an unknown site value is a hand-edit mistake and fails loudly', () => {
+  assert.throws(
+    () =>
+      normalizeProjectConfig(
+        {
+          yardFt: { width: 20, depth: 30 },
+          site: { sun: 'dappled' },
+          views: [{ id: 'plan', type: 'plan' }],
+        },
+        'yard'
+      ),
+    /site\.sun "dappled"/
+  );
+});
+
+test('both shipped projects declare an ecoregion and a site', () => {
+  ['example-frontyard', 'backyard'].forEach((id) => {
+    const raw = JSON.parse(
+      readFileSync(fileURLToPath(new URL(`../projects/${id}/project.json`, import.meta.url)), 'utf8')
+    );
+    const config = normalizeProjectConfig(raw, id);
+    assert.equal(config.ecoregion, '9', `${id} ecoregion`);
+    assert.ok(config.site?.sun && config.site?.water && config.site?.soil, `${id} site`);
+  });
 });
