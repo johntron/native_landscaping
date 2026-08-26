@@ -37,6 +37,7 @@ export const SCRATCH_PROJECTS = [
   'features-derived',
   'yard-conflict',
   'frontyard-save',
+  'ecology-check',
 ];
 
 /**
@@ -157,7 +158,18 @@ const FRONTYARD_SAVE_VIEWS = {
 };
 
 /** Files the app is served from; symlinked so the specs test the real source. */
-const LINKED = ['index.html', 'styles.css', 'favicon.svg', 'src', 'plants.csv', 'node_modules'];
+// `ecology` carries host-genera.csv. Without it the scratch root 404s that
+// fetch and the three genus-dependent checks silently report "not declared" —
+// a spec asserting on them would fail for the wrong reason.
+const LINKED = [
+  'index.html',
+  'styles.css',
+  'favicon.svg',
+  'src',
+  'plants.csv',
+  'ecology',
+  'node_modules',
+];
 
 export function buildScratchPublicDir() {
   // Playwright loads the config once per worker as well as in the main process.

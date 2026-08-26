@@ -33,6 +33,9 @@ import { createSetupController } from './interaction/setupController.js';
 import { createFeaturePanel } from './interaction/featurePanel.js';
 import { normalizeFeatures } from './data/featureConfig.js';
 import { createFeatureController } from './interaction/featureController.js';
+import { analyzeEcology, buildEcologyContext } from './analysis/ecology.js';
+import { buildHostGeneraIndex, emptyHostGeneraIndex } from './analysis/hostGenera.js';
+import { renderEcologyPanel } from './render/ecologyPanel.js';
 import {
   clearFeatureOverlay,
   createFeatureShape,
@@ -73,6 +76,12 @@ const appState = {
   // of every project that has never drawn one. See src/data/featureConfig.js.
   features: [],
   species: [], // the shared plants.csv catalog, for placing plants not yet in the layout
+  // The genus-keyed ecology table, filtered to this project's ecoregion. Starts
+  // empty and STAYS empty if ecology/host-genera.csv fails to load, which makes
+  // the three genus-dependent rules report "not declared" instead of taking the
+  // app down — the analysis is advisory and must never be why a yard stops
+  // rendering.
+  hostGenera: emptyHostGeneraIndex(),
   month: new Date().getMonth() + 1,
   zoom: DEFAULT_ZOOM,
   mode: 'view',
@@ -309,6 +318,28 @@ async function init() {
   };
 
   /**
+   * Re-grade the design. Rides refreshSpeciesTable rather than render() for the
+   * same reason the table does: render() fires on every month-slider input
+   * event, and rebuilding this DOM mid-drag would collapse a row the reader had
+   * just opened. What changes the grade is what is planted, and that is exactly
+   * when refreshSpeciesTable runs.
+   */
+  const refreshEcologyPanel = () => {
+    const container = document.getElementById('ecologyCheck');
+    if (!container) return;
+    const results = analyzeEcology(
+      buildEcologyContext({
+        plants: appState.plants,
+        species: appState.species,
+        hostGenera: appState.hostGenera,
+        site: appState.project?.site,
+        ecoregion: appState.project?.ecoregion,
+      })
+    );
+    renderEcologyPanel(results, container);
+  };
+
+  /**
    * Rebuild the species legend from the current plants. Adding, removing, or
    * undoing changes which species are placed, and the table is built from the
    * layout rather than from the catalog. Deliberately not called from render():
@@ -327,7 +358,9 @@ async function init() {
       onHoverStart: (speciesKey, rowEl) => setHighlightedSpecies(speciesKey, rowEl),
       onHoverEnd: (_speciesKey, rowEl) => clearHighlightedSpecies(rowEl),
     });
+    refreshEcologyPanel();
   };
+
 
   const setTargetedPlant = (plantId) => {
     const normalized = plantId ? String(plantId) : '';
@@ -1167,10 +1200,20 @@ async function init() {
   }
 
   try {
-    const [speciesCsv, layoutCsv] = await Promise.all([
+    const [speciesCsv, layoutCsv, hostGeneraCsv] = await Promise.all([
       fetchCsv(new URL('plants.csv', document.baseURI)),
       fetchCsv(new URL(projectLayoutPath(project.id), document.baseURI)),
+      // A missing or unreadable table costs three of the six checks, not the
+      // app: caught here so it can never join the failure path above, which
+      // stops the yard rendering at all.
+      fetchCsv(new URL('ecology/host-genera.csv', document.baseURI)).catch((err) => {
+        console.warn('Ecology host-genera table unavailable; genus checks will report as not declared', err);
+        return '';
+      }),
     ]);
+    if (hostGeneraCsv) {
+      appState.hostGenera = buildHostGeneraIndex(hostGeneraCsv, { ecoregion: project.ecoregion });
+    }
     loadedSpeciesCsv = speciesCsv;
     appState.species = parseSpeciesCsv(speciesCsv);
     const initialPlants = buildPlantsFromCsv(speciesCsv, layoutCsv);
