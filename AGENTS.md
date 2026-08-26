@@ -120,8 +120,10 @@ in its own `planting_layout.csv`.
 
 ```
 plants.csv                       shared species catalog (all projects)
+ecology/host-genera.csv          keystone/larval-host genera per ecoregion (all projects)
 projects/index.json              { defaultProject, projects: [{ id, name }] }
 projects/<slug>/project.json     the yard in feet, plus views[]: labels, photos
+                                 (and optional ecoregion + site, for the ecology check)
 projects/<slug>/planting_layout.csv
 projects/<slug>/features.json    yard features in feet; optional, absent means none
 projects/<slug>/img/…            that project's background images
@@ -609,6 +611,127 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
 
 ---
 
+## Ecological Analysis
+
+The app grades a planting against ecological rules and reports **per dimension with
+no composite score** — a 0–100 roll-up would need weights nobody can justify, so
+each dimension reports for itself and the reader decides what to fix first. Six
+dimensions ship: bloom succession (6), fall/winter bird food (7), vertical layers
+(11), keystone genera (4/10), larval hosts (5), and site match (8).
+
+```
+ecology/host-genera.csv          one genus-keyed table, shared by rules 4, 5, 10
+src/analysis/ecology.js          the registry; analyzeEcology(ctx) -> one result per rule
+src/analysis/hostGenera.js       parse + index the table, resolving synonym_of
+src/analysis/months.js           month-set helpers ("Oct-Feb", not "Oct, Nov, Dec, …")
+src/analysis/rules/*.js          one file per rule: { id, title, evaluate(ctx) }
+src/render/ecologyPanel.js       the panel above the species table — presentation only
+```
+
+**`src/analysis/` is pure.** No DOM, no fetch, no judgement made outside it. Every
+threshold and verdict lives in a rule module; `ecologyPanel.js` renders what it is
+handed and must not invent a status of its own.
+
+**`status` is a closed set of four** — `ok` (nothing to do), `partial` (works, has a
+hole), `gap` (the dimension is essentially unmet), `not-declared` (the input this
+rule needs is absent). The panel maps exactly four chips, so a fifth value would
+render as an unstyled blank rather than fail loudly. `analyzeEcology` normalizes
+anything else to `not-declared`, and a rule that **throws** becomes a
+`not-declared` row naming the failure: the analysis is advisory and must never be
+the reason a yard stops rendering.
+
+`ctx` is built once by `buildEcologyContext` — `{ plants, species, placedSpecies,
+unplacedSpecies, placedGenera, hostGenera, site, ecoregion }`. `plants` are the
+objects `createPlantFromSpecies` already minted; **the analysis never builds its own
+plant shape**, or the two paths drift and a rule grades a plant the renderer would
+draw differently. Rules count by *species*, not by plant: a drift of nineteen asters
+is one answer to "what blooms in October", not nineteen. Rule 11 reuses
+`classifyPlantLayer` rather than re-bucketing by height, for the same reason.
+
+### `ecology/host-genera.csv`
+
+Rules 4, 5, and 10 all reduce to "what does this genus do for insects", so they
+share **one checked-in table** rather than three. Per-species columns on
+`plants.csv` were rejected: 48 rows of hand-researched booleans is expensive and
+invites invention.
+
+Columns: `genus, ecoregion, lep_host_species, bee_specialist_species, larval_hosts,
+synonym_of, source`.
+
+- The keystone counts are the NWF *Keystone Native Plants* top-30 lists for **EPA
+  Level I ecoregion 9, Great Plains** — where Dallas and the Blackland Prairie sit —
+  transcribed verbatim from
+  <https://www.nwf.org/-/media/Documents/PDFs/Garden-for-Wildlife/Keystone-Plants/NWF-GFW-keystone-plant-list-ecoregion-9-great-plains.pdf>.
+  Extract with `pdftotext -layout` and **check twice**: the two-column layout drops
+  `Alnus` (164) from a line-wise read of the caterpillar column, and wrapped rows put
+  the count on the following line. `Salix`, `Solidago`, and `Helianthus` appear on
+  both lists and are ONE row with both columns filled.
+- `larval_hosts` covers documented relationships the keystone lists miss —
+  `Asclepias`→monarch, `Passiflora`→gulf fritillary. **Rule 5 reads this column, not
+  the keystone counts**: `Asclepias` is on neither top-30 list, so deriving rule 5
+  from keystone membership would report a monarch garden as hostless.
+- `synonym_of` is load-bearing. NWF files ragwort under `Senecio`; the catalog and
+  both layouts use `Packera obovata`. Without the mapping the frontyard's ragwort is
+  silently missed.
+- `ecoregion` is a column, so **a second region is a data change, not a code change**.
+- **Every row carries a `source`, and a genus with nothing sourced stays blank rather
+  than guessed** — see "Don't invent fake plant data" above.
+
+### `project.json`: `ecoregion` and `site`
+
+```json
+"ecoregion": "9",
+"site": { "sun": "part-sun", "water": "medium", "soil": "clay" }
+```
+
+Both optional, and a partial `site` is allowed: what is undeclared is reported as
+undeclared, never guessed. Vocabularies are `SITE_VOCABULARY` in
+`src/data/projectConfig.js`. **`serializeProjectConfig` whitelists fields** — a field
+added only to the normalizer survives in memory and vanishes the first time Setup
+mode saves, with no error, so both halves must be touched and
+`tests/projectConfig.test.js` asserts the round trip.
+
+### `sun_pref` and `water_pref` are REQUIREMENTS, not tolerances
+
+Commit `ed9d75c` fixed exactly this inversion once already. `full-sun` means *needs a
+lot of light* (little bluestem, Indiangrass); `shade` means *needs little* (Carex
+blanda, inland sea oats). So rule 8's comparison is **asymmetric, not a distance**:
+
+| direction | failure |
+|---|---|
+| wants more light than the site gives | weak bloom, stems flopping — real at one step, hard at two |
+| wants less light than the site gives | scorch — mild at one step, real at two |
+| wants more water than the site gives | droughts out |
+| wants less water than the site gives | rots |
+
+Soil is set membership, not a scale. Both directions on both scales are covered in
+`tests/ecology.test.js`; keep them covered.
+
+### Two results that look like bugs and are not
+
+- **Keystone genera read weak, and cannot be fixed from the catalog.** Only six of
+  the catalog's 42 genera are keystone in ecoregion 9 — `Helianthus`, `Solidago`,
+  `Symphyotrichum`, `Verbesina`, `Vernonia`, and `Packera` (via `Senecio`) — and
+  **none are woody**. `Quercus` alone hosts 253 caterpillar species and the catalog
+  carries no oak. The rule names the missing heavy hitters as a gap to close, not as
+  an error.
+- **Rule 4/10 measures footprint AREA**, `π(width/2)²`, not head-count: rule 10 is
+  about how the yard's ground is spent. `createPlantFromSpecies` defaults `width` to
+  1, so a species with a blank `width_ft` would silently contribute 1 ft² — harmless
+  for a perennial, badly wrong for a tree. Such plants are excluded from **both**
+  sides of the ratio and the finding says how many.
+
+### Why FQA was rejected
+
+Floristic Quality Assessment grades how intact a **remnant's existing flora** is —
+the wrong instrument for a design. Its FQI metric rewards species richness, which
+directly contradicts the drift and concentration rules; and no verified North Central
+Texas C-value list is in hand, so implementing it would mean inventing plant data.
+Don't re-propose it.
+
+
+---
+
 ## Code Layout Highlights
 
 - `src/app.js` – application entry point; wires up DOM, loads CSVs, drives rendering loop and drag/export controls.
@@ -629,6 +752,9 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
 - `src/data/plantParser.js` – merges species/layout CSVs, normalizes month specs, aliases, and seasonal palettes.
 - `src/data/layoutExporter.js` – converts in-memory plants back to CSV with consistent precision/escaping.
 - `src/render/*` – view configuration, SVG helpers, tooltip builder, plan view and elevation renderers.
+- `src/analysis/ecology.js` – the ecological rules registry; pure, no DOM. See **Ecological Analysis**.
+- `src/analysis/hostGenera.js` – the genus-keyed keystone/larval-host table and its synonym resolution.
+- `src/render/ecologyPanel.js` – the per-dimension check above the species table; presentation only.
 - `src/state/seasonalState.js` – pure logic for foliage/bloom state per month.
 - `src/interaction/dragController.js` – pointer events + hit-testing for moving plants in plan view.
 - `styles.css` – responsive layout, control styling, and background assignments.
