@@ -5,6 +5,7 @@ import birdFood from './rules/birdFood.js';
 import verticalLayers from './rules/verticalLayers.js';
 import keystoneGenera from './rules/keystoneGenera.js';
 import larvalHosts from './rules/larvalHosts.js';
+import siteMatch from './rules/siteMatch.js';
 
 /**
  * Grade a planting design against ecological rules, **per dimension with no
@@ -30,7 +31,7 @@ export const STATUSES = Object.freeze({
 const STATUS_VALUES = new Set(Object.values(STATUSES));
 
 /** Registry order is display order. */
-export const RULES = [bloomSuccession, birdFood, verticalLayers, keystoneGenera, larvalHosts];
+export const RULES = [bloomSuccession, birdFood, verticalLayers, keystoneGenera, larvalHosts, siteMatch];
 
 /**
  * Build the single context every rule reads.

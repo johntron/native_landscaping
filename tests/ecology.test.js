@@ -298,3 +298,86 @@ test('both shipped projects analyse without throwing, and report what the data s
     assert.notEqual(results['larval-hosts'].status, STATUSES.NOT_DECLARED, id);
   });
 });
+
+/**
+ * Rule 8's comparator is ASYMMETRIC and the direction has been inverted once
+ * already (commit ed9d75c). Both directions are covered on both scales.
+ */
+function siteResult(plant, site) {
+  return run([plant], { site, hostGenera: HOST_GENERA, ecoregion: '9' })['site-match'];
+}
+
+function planted(overrides) {
+  return createPlantFromSpecies({ ...synthetic('Testus testus'), ...overrides }, { id: 't', x: 0, y: 0 });
+}
+
+test('site match: a plant needing MORE light than the site gives is a real failure', () => {
+  // full-sun is a high light REQUIREMENT (little bluestem, Indiangrass), not a
+  // tolerance — see ed9d75c. One step off is real, two is hard.
+  const oneStep = siteResult(planted({ sunPref: 'full-sun' }), { sun: 'part-sun' });
+  assert.equal(oneStep.status, STATUSES.PARTIAL);
+  assert.match(oneStep.findings[0], /too little light/);
+
+  const twoSteps = siteResult(planted({ sunPref: 'full-sun' }), { sun: 'shade' });
+  assert.equal(twoSteps.status, STATUSES.GAP);
+  assert.match(twoSteps.findings[0], /too little light/);
+});
+
+test('site match: a plant needing LESS light than the site gives is the other failure', () => {
+  // A part-sun plant in a full-sun yard is usually fine; a shade sedge is not.
+  const oneStep = siteResult(planted({ sunPref: 'part-sun' }), { sun: 'full-sun' });
+  assert.equal(oneStep.status, STATUSES.PARTIAL);
+  assert.match(oneStep.findings[0], /usually fine/);
+  assert.doesNotMatch(oneStep.findings[0], /too little light/, 'not the same finding as the other direction');
+
+  const twoSteps = siteResult(planted({ sunPref: 'shade' }), { sun: 'full-sun' });
+  assert.equal(twoSteps.status, STATUSES.GAP);
+  assert.match(twoSteps.findings[0], /scorched/);
+});
+
+test('site match: both water directions are findings, and they are different findings', () => {
+  const tooDry = siteResult(planted({ waterPref: 'high' }), { water: 'low' });
+  assert.equal(tooDry.status, STATUSES.GAP, 'two steps is hard');
+  assert.match(tooDry.findings[0], /drought out/);
+
+  const tooWet = siteResult(planted({ waterPref: 'low' }), { water: 'high' });
+  assert.equal(tooWet.status, STATUSES.GAP);
+  assert.match(tooWet.findings[0], /expect rot/);
+  assert.doesNotMatch(tooWet.findings[0], /drought/, 'rot and drought are not the same advice');
+
+  const mildlyDry = siteResult(planted({ waterPref: 'medium' }), { water: 'low' });
+  assert.equal(mildlyDry.status, STATUSES.PARTIAL);
+  assert.match(mildlyDry.findings[0], /drought out/);
+});
+
+test('site match: soil is set membership, and accepts the single value plants.csv uses', () => {
+  assert.equal(siteResult(planted({ soilPref: 'clay' }), { soil: 'clay' }).status, STATUSES.OK);
+  const wrong = siteResult(planted({ soilPref: 'sandy' }), { soil: 'clay' });
+  assert.equal(wrong.status, STATUSES.PARTIAL);
+  assert.match(wrong.findings[0], /wants sandy soil, and this site is clay/);
+  // A multi-valued cell would be a set, not a scale.
+  assert.equal(siteResult(planted({ soilPref: 'sandy, clay' }), { soil: 'clay' }).status, STATUSES.OK);
+});
+
+test('site match: an undeclared axis is skipped, not guessed', () => {
+  const result = siteResult(planted({ sunPref: 'shade', waterPref: 'high', soilPref: 'sandy' }), {
+    soil: 'sandy',
+  });
+  assert.equal(result.status, STATUSES.OK, 'sun and water were never declared, so never checked');
+  assert.ok(result.findings.some((f) => /declares no sun or water/.test(f)));
+});
+
+test('site match: a project with no site block reports not-declared rather than throwing', () => {
+  const result = run(place('Salvia farinacea'), { hostGenera: HOST_GENERA, ecoregion: '9' })['site-match'];
+  assert.equal(result.status, STATUSES.NOT_DECLARED);
+  assert.match(result.findings[0], /Add a "site" block/);
+});
+
+test('site match: a blank preference on the plant is not a mismatch', () => {
+  const result = siteResult(planted({ sunPref: '', waterPref: '', soilPref: '' }), {
+    sun: 'shade',
+    water: 'low',
+    soil: 'clay',
+  });
+  assert.equal(result.status, STATUSES.OK);
+});
