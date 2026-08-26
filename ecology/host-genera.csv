@@ -1,0 +1,67 @@
+genus,ecoregion,lep_host_species,bee_specialist_species,larval_hosts,synonym_of,source
+Quercus,9,253,,,,nwf-ecoregion-9
+Prunus,9,222,,,,nwf-ecoregion-9
+Salix,9,214,20,,,nwf-ecoregion-9
+Betula,9,189,,,,nwf-ecoregion-9
+Populus,9,180,,,,nwf-ecoregion-9
+Alnus,9,164,,,,nwf-ecoregion-9
+Malus,9,162,,,,nwf-ecoregion-9
+Carya,9,153,,,,nwf-ecoregion-9
+Vaccinium,9,146,,,,nwf-ecoregion-9
+Acer,9,145,,,,nwf-ecoregion-9
+Pinus,9,145,,,,nwf-ecoregion-9
+Ulmus,9,109,,,,nwf-ecoregion-9
+Larix,9,99,,,,nwf-ecoregion-9
+Castanea,9,98,,,,nwf-ecoregion-9
+Tsuga,9,92,,,,nwf-ecoregion-9
+Tilia,9,91,,,,nwf-ecoregion-9
+Crataegus,9,90,,,,nwf-ecoregion-9
+Juglans,9,89,,,,nwf-ecoregion-9
+Rubus,9,88,,,,nwf-ecoregion-9
+Fraxinus,9,86,,,,nwf-ecoregion-9
+Abies,9,85,,,,nwf-ecoregion-9
+Corylus,9,76,,,,nwf-ecoregion-9
+Picea,9,75,,,,nwf-ecoregion-9
+Rosa,9,75,,,,nwf-ecoregion-9
+Pseudotsuga,9,74,,,,nwf-ecoregion-9
+Solidago,9,71,56,,,nwf-ecoregion-9
+Amelanchier,9,69,,,,nwf-ecoregion-9
+Cornus,9,65,,,,nwf-ecoregion-9
+Vitis,9,60,,,,nwf-ecoregion-9
+Helianthus,9,58,89,,,nwf-ecoregion-9
+Grindelia,9,,68,,,nwf-ecoregion-9 (printed "Gridelia" in the PDF; corrected here)
+Chrysothamnus,9,,52,,,nwf-ecoregion-9
+Gutierrezia,9,,50,,,nwf-ecoregion-9
+Heterotheca,9,,50,,,nwf-ecoregion-9
+Symphyotrichum,9,,43,,,nwf-ecoregion-9
+Ericameria,9,,41,,,nwf-ecoregion-9
+Verbesina,9,,34,,,nwf-ecoregion-9
+Rudbeckia,9,,32,,,nwf-ecoregion-9
+Cirsium,9,,30,,,nwf-ecoregion-9
+Erigeron,9,,30,,,nwf-ecoregion-9
+Machaeranthera,9,,28,,,nwf-ecoregion-9
+Coreopsis,9,,27,,,nwf-ecoregion-9
+Baileya,9,,25,,,nwf-ecoregion-9
+Senecio,9,,22,,,nwf-ecoregion-9
+Gaillardia,9,,18,,,nwf-ecoregion-9
+Bidens,9,,16,,,nwf-ecoregion-9
+Isocoma,9,,16,,,nwf-ecoregion-9
+Baccharis,9,,14,,,nwf-ecoregion-9
+Ratibida,9,,14,,,nwf-ecoregion-9
+Astragalus,9,,13,,,nwf-ecoregion-9
+Chrysopsis,9,,13,,,nwf-ecoregion-9
+Dalea,9,,12,,,nwf-ecoregion-9
+Heliomeris,9,,12,,,nwf-ecoregion-9
+Vernonia,9,,12,,,nwf-ecoregion-9
+Heliopsis,9,,11,,,nwf-ecoregion-9
+Oenothera,9,,11,,,nwf-ecoregion-9
+Helenium,9,,10,,,nwf-ecoregion-9
+Packera,9,,,,Senecio,"Packera obovata was segregated from Senecio obovatus; NWF lists the genus as Senecio"
+Asclepias,9,,,monarch (Danaus plexippus),,"Wikipedia, Danaus plexippus — larvae feed obligately on Asclepias"
+Passiflora,9,,,gulf fritillary (Agraulis vanillae),,"Wikipedia, Agraulis vanillae — host plants are members of the genus Passiflora"
+Cercis,9,,,Henry's elfin (Callophrys henrici),,"Wikipedia, Callophrys henrici — inland populations use redbud (Cercis canadensis)"
+Ilex,9,,,Henry's elfin (Callophrys henrici),,"Wikipedia, Callophrys henrici — Atlantic-coast populations use hollies (Ilex)"
+Schizachyrium,9,,,"cobweb, dusted, crossline, Dakota, Ottoe, Leonard's and swarthy skippers; common wood nymph",,"The Xerces Society (2016), Gardening for Butterflies, Timber Press (via Wikipedia, Schizachyrium scoparium)"
+Sorghastrum,9,,,pepper-and-salt skipper (Amblyscirtes hegon),,"The Xerces Society (2016), Gardening for Butterflies, Timber Press (via Wikipedia, Sorghastrum nutans)"
+Bouteloua,9,,,veined ctenucha (Ctenucha venosa),,"Soule, J.A. (2012), Butterfly Gardening in Southern Arizona (via Wikipedia, Bouteloua curtipendula)"
+Malvaviscus,9,,,Turk's-cap white-skipper (Heliopetes macaira),,"Butterflies and Moths of North America (via Wikipedia, Malvaviscus arboreus)"
