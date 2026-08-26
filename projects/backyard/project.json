@@ -10,6 +10,12 @@
     "below": 2
   },
   "pxPerFt": 27,
+  "ecoregion": "9",
+  "site": {
+    "sun": "part-sun",
+    "water": "medium",
+    "soil": "clay"
+  },
   "views": [
     {
       "id": "plan",

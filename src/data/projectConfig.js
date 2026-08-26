@@ -26,6 +26,19 @@ const PROJECT_ID_PATTERN = /^[a-z0-9][a-z0-9_-]*$/;
 /** Same shape featureConfig.js validates style colours against. */
 const COLOR_PATTERN = /^(#([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})|[a-z]+)$/;
 
+/**
+ * What the ecology analysis needs to know about the ground, and the closed
+ * vocabularies the catalog already uses. `high` water is here even though no
+ * plants.csv row uses it yet: the scale is a property of the world, not of the
+ * current 48 rows, and rule 8 has to be able to say "this plant wants more water
+ * than the site gives" in both directions.
+ */
+export const SITE_VOCABULARY = Object.freeze({
+  sun: Object.freeze(['shade', 'part-sun', 'full-sun']),
+  water: Object.freeze(['low', 'medium', 'high']),
+  soil: Object.freeze(['clay', 'clay-loam', 'loamy', 'sandy']),
+});
+
 export function isValidProjectId(id) {
   return typeof id === 'string' && id.length <= 64 && PROJECT_ID_PATTERN.test(id);
 }
@@ -136,8 +149,46 @@ export function normalizeProjectConfig(raw, id) {
     id,
     name: String(raw.name || id),
     ...layout,
+    ...normalizeEcoregion(raw.ecoregion),
+    ...normalizeSite(raw.site, id),
     views,
   };
+}
+
+/**
+ * The EPA Level I ecoregion the yard sits in — Dallas and the Blackland Prairie
+ * are 9, Great Plains. Optional: a project that never declares one gets
+ * "not declared" on the keystone-genus rules rather than an error, because the
+ * keystone lists are per ecoregion and guessing one would grade the design
+ * against the wrong continent.
+ */
+function normalizeEcoregion(raw) {
+  const value = String(raw ?? '').trim();
+  return value ? { ecoregion: value } : {};
+}
+
+/**
+ * What the ground actually offers, as opposed to what each plant asks for.
+ *
+ * Also optional, and partial is allowed: a project that declares soil but not
+ * sun gets soil checked and sun reported as undeclared. An unknown value is a
+ * hand-edit mistake worth failing on — silently dropping it would grade the
+ * design against a site condition the file does not describe.
+ */
+function normalizeSite(raw, projectId) {
+  if (!raw || typeof raw !== 'object') return {};
+  const site = {};
+  Object.keys(SITE_VOCABULARY).forEach((key) => {
+    const value = String(raw[key] ?? '').trim().toLowerCase();
+    if (!value) return;
+    if (!SITE_VOCABULARY[key].includes(value)) {
+      throw new Error(
+        `Project "${projectId}" site.${key} "${raw[key]}" is not one of ${SITE_VOCABULARY[key].join(', ')}`
+      );
+    }
+    site[key] = value;
+  });
+  return Object.keys(site).length ? { site } : {};
 }
 
 /**
@@ -494,6 +545,11 @@ export function serializeProjectConfig(config) {
     paddingFt: config.paddingFt,
     elevationFt: { ...config.elevationFt },
     pxPerFt: config.pxPerFt,
+    // serializeProjectConfig WHITELISTS fields, so anything added to the
+    // normalizer and not here survives in memory and vanishes the first time
+    // Setup mode saves — the user's declaration gone with no error.
+    ...(config.ecoregion ? { ecoregion: config.ecoregion } : {}),
+    ...(config.site ? { site: { ...config.site } } : {}),
     views: config.views.map((view) => {
       const defaults = defaultLabels(view.type, view.viewFrom);
       const out = { id: view.id, type: view.type };
