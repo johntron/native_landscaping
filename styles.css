@@ -761,6 +761,170 @@ select {
   color: #3b3f43;
 }
 
+/*
+ * Ecology check — one row per dimension, deliberately with no overall score.
+ * The four chip colours are the four statuses src/analysis/ecology.js emits;
+ * there is no fifth, and a rule returning one would show as an unstyled chip.
+ */
+.ecology-check {
+  margin: 0.5rem 0 0.75rem;
+  background-color: #fdfcf9;
+  border: 1px solid #d6d3cb;
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+
+.ecology-check__header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0.75rem;
+  background-color: #f2f0eb;
+  border-bottom: 1px solid #e5e1d8;
+}
+
+.ecology-check__toggle {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 700;
+  color: #2f2f2f;
+  cursor: pointer;
+}
+
+.ecology-check__toggle::before {
+  content: "\25be";
+  display: inline-block;
+  margin-right: 0.35rem;
+  transition: transform 0.15s ease;
+}
+
+.ecology-check__toggle[aria-expanded="false"]::before {
+  transform: rotate(-90deg);
+}
+
+.ecology-check__tally {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.ecology-chip {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.ecology-chip--ok {
+  background-color: #e4f0e0;
+  border-color: #a9c9a0;
+  color: #2f5427;
+}
+
+.ecology-chip--partial {
+  background-color: #fdf1dc;
+  border-color: #e2c284;
+  color: #6b4a12;
+}
+
+.ecology-chip--gap {
+  background-color: #fbe3de;
+  border-color: #dfa79c;
+  color: #7a2e1e;
+}
+
+.ecology-chip--not-declared {
+  background-color: #ebe9e4;
+  border-color: #cdc9c0;
+  color: #55524c;
+}
+
+.ecology-check__row {
+  border-bottom: 1px solid #e5e1d8;
+}
+
+.ecology-check__row:last-child {
+  border-bottom: none;
+}
+
+.ecology-check__row:nth-child(even) {
+  background-color: #f7f5ef;
+}
+
+.ecology-check__row-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  padding: 0.55rem 0.75rem;
+}
+
+.ecology-check__title {
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.ecology-check__summary {
+  flex: 1 1 16rem;
+  font-size: 0.9rem;
+  color: #4b4f54;
+}
+
+.ecology-check__details-btn {
+  margin-left: auto;
+  border: 1px solid #d6d3cb;
+  border-radius: 4px;
+  background-color: #fdfcf9;
+  padding: 0.15rem 0.5rem;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.ecology-check__detail {
+  display: none;
+  padding: 0 0.75rem 0.7rem 0.75rem;
+}
+
+.ecology-check__row.is-expanded .ecology-check__detail {
+  display: block;
+}
+
+.ecology-check__list + .ecology-check__list {
+  margin-top: 0.5rem;
+}
+
+.ecology-check__list-heading {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6b6862;
+}
+
+.ecology-check__list ul {
+  margin: 0.2rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.88rem;
+  color: #3b3f43;
+}
+
+.ecology-check__list li {
+  margin: 0.15rem 0;
+}
+
+.ecology-check__list--suggestions li {
+  color: #2f5427;
+}
+
 .species-table {
   margin: 0.5rem 0 1rem;
   overflow-x: auto;
