@@ -123,10 +123,17 @@ const YARD_CONFLICT = {
  * views, and photographs placed rather than fitted — because that is what a
  * Setup-mode Save was found to flatten (nl-jqd). Copied here rather than tested
  * in place: the real project is live data the running app writes to.
+ *
+ * It declares an ecoregion and a site for the same reason it declares photo
+ * placements: both are optional fields that two separate whitelists (the client
+ * serializer and the server's own re-serialization) could drop on save, and this
+ * project is where a Save is put under the microscope.
  */
 const FRONTYARD_SAVE_VIEWS = {
   id: 'frontyard-save',
   name: 'frontyard-save',
+  ecoregion: '9',
+  site: { sun: 'part-sun', water: 'medium', soil: 'clay' },
   yardFt: { width: 10, depth: 30 },
   paddingFt: 2,
   elevationFt: { above: 12, below: 2 },

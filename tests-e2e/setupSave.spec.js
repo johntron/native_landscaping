@@ -116,3 +116,34 @@ test('dragging a camera moves that elevation and saves it alone', async ({ page 
   // Photographs are a different concern and stayed exactly where they were.
   expect(await placements()).toEqual(before.placements);
 });
+
+test('a save keeps the ecoregion and site declarations', async ({ page }) => {
+  // Same class of loss as the photo placements above, one field over: the
+  // client serializer whitelists, and so does the server, which re-normalizes
+  // and re-serializes the posted body before writing (server.js:97). Two
+  // whitelists means two places a declaration can quietly die on save, and the
+  // symptom — the ecology check going "not declared" — looks like a rule bug.
+  const declared = async () => {
+    const cfg = JSON.parse(
+      await readFile(path.join(SCRATCH_DIR, 'projects', PROJECT, 'project.json'), 'utf8')
+    );
+    return { ecoregion: cfg.ecoregion ?? null, site: cfg.site ?? null };
+  };
+
+  const before = await declared();
+  expect(before.ecoregion).toBe('9');
+  expect(before.site).toEqual({ sun: 'part-sun', water: 'medium', soil: 'clay' });
+
+  await openScratchProject(page, PROJECT);
+  await page.locator('[data-mode="setup"]').click();
+  await saveViews(page);
+  expect(await declared()).toEqual(before);
+
+  // And a save that actually changes something still carries them. This resizes
+  // the yard, so the test runs LAST in this serial file — the camera spec above
+  // asserts on positions that a resize would move.
+  await yardField(page, 'East–west (ft)').fill('16');
+  await yardField(page, 'East–west (ft)').blur();
+  await saveViews(page);
+  expect(await declared()).toEqual(before);
+});

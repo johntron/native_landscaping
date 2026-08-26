@@ -7,6 +7,8 @@ function makeConfig() {
   return normalizeProjectConfig(
     {
       name: 'Backyard',
+      ecoregion: '9',
+      site: { sun: 'part-sun', water: 'medium', soil: 'clay' },
       views: [
         {
           id: 'plan',
@@ -44,6 +46,12 @@ test('persistProjectConfig posts the serialized config to the project endpoint',
   assert.equal('viewBox' in body.views[0], false);
   // The yard the old per-view rectangle described is carried up to the project.
   assert.deepEqual(body.yardFt, { width: 40, depth: 30 });
+  // The site declaration is in the posted body, not just in memory. Both
+  // serializeProjectConfig and the server's own re-serialization whitelist
+  // fields, so a declaration can die at either end and the only symptom is the
+  // ecology check quietly reporting "not declared".
+  assert.equal(body.ecoregion, '9');
+  assert.deepEqual(body.site, { sun: 'part-sun', water: 'medium', soil: 'clay' });
   assert.deepEqual(status, [{ msg: 'Views saved', state: 'success' }]);
   assert.deepEqual(result, { config: { id: 'backyard' } });
 });
