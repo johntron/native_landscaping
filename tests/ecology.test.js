@@ -186,6 +186,71 @@ test('keystone genera: Packera resolves through synonym_of and counts', () => {
   assert.notEqual(result.status, STATUSES.GAP, 'a keystone genus IS planted');
 });
 
+test('keystone genera: a bee-only genus never reads as a fully met dimension', () => {
+  // Packera earns its place entirely through Senecio's pollen-specialist-bee
+  // count. Nothing there hosts a caterpillar, which is the half that carries
+  // birds — so however much ground it holds, this cannot be "ok".
+  const result = runWithGenera(place('Packera obovata'))['keystone-genera'];
+  assert.equal(result.status, STATUSES.PARTIAL);
+  assert.match(result.summary, /specialist bees only/);
+
+  // A lep-host genus at the same share DOES clear the bar.
+  const withLep = runWithGenera(place('Helianthus maximiliani'))['keystone-genera'];
+  assert.equal(withLep.status, STATUSES.OK);
+});
+
+test('keystone genera says whose numbers those are, every time it shows them', () => {
+  // The most misread number on the panel: an ecoregion-wide GENUS count is not a
+  // property of the planted species and is not a headcount this yard delivers.
+  const result = runWithGenera(place('Packera obovata'))['keystone-genera'];
+  assert.ok(
+    result.findings.some((f) => /for the GENUS across the whole of ecoregion 9/.test(f)),
+    'the caveat rides along with the counts'
+  );
+  const none = runWithGenera(place('Salvia farinacea'))['keystone-genera'];
+  assert.ok(
+    !none.findings.some((f) => /for the GENUS/.test(f)),
+    'and is not shown when there are no counts to misread'
+  );
+});
+
+test('a month the catalog cannot fill is reported, not counted against the design', () => {
+  // December is the real case: NCTX natives are dormant and NOTHING in the
+  // catalog blooms then, so demanding it teaches the reader to ignore the panel.
+  // November is the opposite — five catalog species reach it, so it stays a gap.
+  const catalogBloom = new Set(CATALOG.flatMap((entry) => entry.floweringMonths));
+  assert.equal(catalogBloom.has(12), false, 'nothing in the catalog blooms in December');
+  assert.equal(catalogBloom.has(11), true, 'five species reach November');
+
+  const allYear = createPlantFromSpecies(
+    { ...synthetic('Aaa aaa'), growingMonths: ALL_MONTHS, floweringMonths: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] },
+    { id: 'a', x: 0, y: 0 }
+  );
+  const result = run([allYear])['bloom-succession'];
+  // Nov is closable and drives the status; Dec is not and only gets a note.
+  assert.equal(result.status, STATUSES.GAP);
+  assert.ok(result.findings.some((f) => /Nothing blooms in Nov/.test(f)));
+  assert.ok(
+    result.findings.some((f) => /Nothing in the catalog blooms in Dec/.test(f) && /not counted/.test(f))
+  );
+  assert.ok(
+    result.findings.some((f) => /winter FRUIT is the check that matters/.test(f)),
+    'and points at the check that does matter in those months'
+  );
+});
+
+test('the same split makes bloom and fruit disagree about December, correctly', () => {
+  // One helper, two fields: nothing blooms in December so bloom lets it go,
+  // while yaupon fruits straight through it so an empty December stays a gap.
+  const summerFruiter = run(place('Passiflora incarnata'));
+  assert.equal(summerFruiter['bird-food'].status, STATUSES.GAP);
+  assert.ok(
+    summerFruiter['bird-food'].findings.some(
+      (f) => /No fruit at all in/.test(f) && /gap worth closing/.test(f)
+    )
+  );
+});
+
 test('keystone genera: a design with none reports a gap, and says so as a gap to close', () => {
   const result = runWithGenera(place('Passiflora incarnata', 'Calyptocarpus vialis'))['keystone-genera'];
   assert.equal(result.status, STATUSES.GAP);
@@ -350,12 +415,28 @@ test('site match: both water directions are findings, and they are different fin
   assert.match(mildlyDry.findings[0], /drought out/);
 });
 
-test('site match: soil is set membership, and accepts the single value plants.csv uses', () => {
+test('site match: a soil mismatch is a caution and does NOT drive the status', () => {
+  // soil_pref holds one PREFERRED soil and the catalog records no tolerance, so
+  // a mismatch is an unknown, not a known failure. Scoring it like a failure is
+  // what made this check punitive; the caution is reported and set aside.
   assert.equal(siteResult(planted({ soilPref: 'clay' }), { soil: 'clay' }).status, STATUSES.OK);
-  const wrong = siteResult(planted({ soilPref: 'sandy' }), { soil: 'clay' });
-  assert.equal(wrong.status, STATUSES.PARTIAL);
-  assert.match(wrong.findings[0], /wants sandy soil, and this site is clay/);
-  // A multi-valued cell would be a set, not a scale.
+
+  const off = siteResult(planted({ soilPref: 'sandy' }), { soil: 'clay' });
+  assert.equal(off.status, STATUSES.OK, 'reported, not counted against the design');
+  assert.ok(off.findings.some((f) => /not counted against the design/.test(f)));
+  assert.ok(
+    off.findings.some((f) => /prefers sandy soil on a clay site/.test(f) && /shorter-lived/.test(f)),
+    'the copy says what to expect, not just that it is wrong'
+  );
+
+  // A real light or water failure still lands, alongside the soil caution.
+  const both = siteResult(planted({ soilPref: 'sandy', sunPref: 'shade' }), {
+    soil: 'clay',
+    sun: 'full-sun',
+  });
+  assert.equal(both.status, STATUSES.GAP, 'the sun failure still decides the status');
+
+  // A multi-valued cell is a set, not a scale — the draft regional CSVs write "sandy,loamy".
   assert.equal(siteResult(planted({ soilPref: 'sandy, clay' }), { soil: 'clay' }).status, STATUSES.OK);
 });
 

@@ -1,6 +1,6 @@
 import { STATUSES } from '../ecology.js';
 import { describeMonths } from '../months.js';
-import { countSpeciesPerMonth, suggestCover } from './bloomSuccession.js';
+import { countSpeciesPerMonth, splitByCatalogCover, suggestCover } from './bloomSuccession.js';
 
 /**
  * Rule 7 — berry and seed food carrying birds through fall and winter.
@@ -33,7 +33,12 @@ export default {
     const fruiting = ctx.placedSpecies.filter((entry) => hasFruit(entry));
     const perMonth = countSpeciesPerMonth(fruiting, 'fruitMonths');
     const loadPerMonth = weightPerMonth(fruiting);
-    const bare = CRITICAL_MONTHS.filter((month) => !perMonth.get(month));
+    const allBare = CRITICAL_MONTHS.filter((month) => !perMonth.get(month));
+    // Same split the bloom rule uses, and the reason the two rules disagree
+    // about winter without either one hardcoding a season: nothing in the
+    // catalog blooms in December, so bloom lets it go, while yaupon and
+    // beautyberry fruit straight through it, so an empty December is a real gap.
+    const { closable: bare, unavailable } = splitByCatalogCover(ctx, 'fruitMonths', allBare);
     const thin = CRITICAL_MONTHS.filter(
       (month) => perMonth.get(month) && loadPerMonth.get(month) < 2
     );
@@ -48,7 +53,16 @@ export default {
         )}.`
       );
     }
-    if (bare.length) findings.push(`No fruit at all in ${describeMonths(bare)}.`);
+    if (bare.length) {
+      findings.push(
+        `No fruit at all in ${describeMonths(bare)} — the catalog carries species that fruit then, so this is a gap worth closing.`
+      );
+    }
+    if (unavailable.length) {
+      findings.push(
+        `Nothing in the catalog fruits in ${describeMonths(unavailable)}, so those months are not counted against the design.`
+      );
+    }
     if (thin.length) {
       findings.push(
         `${describeMonths(thin)} carries only a sparse crop — enough to see, not enough to feed on.`

@@ -25,6 +25,15 @@ import { SITE_VOCABULARY } from '../../data/projectConfig.js';
  * on a high-water site rots. Different failures, different sentences.
  *
  * Soil is set membership, not a scale — clay is not "more" than sandy.
+ *
+ * **Soil mismatches are CAUTIONS, not failures, and deliberately do not drive
+ * the status.** `soil_pref` holds one PREFERRED soil; the catalog records no
+ * tolerance at all. Most North Central Texas natives grow across a range, so a
+ * plant that prefers sandy on a clay site is very often fine — just shorter-lived,
+ * or wanting sharper drainage. Reporting that at the same weight as a real
+ * failure made this check punitive and taught the reader to ignore it. Until the
+ * catalog carries tolerance (USDA's soil_coarse/medium/fine triple would give it;
+ * see the data-collection epic), an unknown is reported as an unknown.
  */
 
 const SUN = SITE_VOCABULARY.sun; // shade < part-sun < full-sun
@@ -50,17 +59,23 @@ export default {
     }
 
     const problems = [];
+    const cautions = [];
     ctx.placedSpecies.forEach((plant) => {
       const name = `${plant.commonName} (${plant.botanicalName})`;
-      problems.push(
-        ...[checkSun(plant, ctx.site.sun), checkWater(plant, ctx.site.water), checkSoil(plant, ctx.site.soil)]
-          .filter(Boolean)
-          .map((problem) => ({ ...problem, text: `${name} ${problem.text}` }))
-      );
+      [checkSun(plant, ctx.site.sun), checkWater(plant, ctx.site.water), checkSoil(plant, ctx.site.soil)]
+        .filter(Boolean)
+        .map((problem) => ({ ...problem, text: `${name} ${problem.text}` }))
+        .forEach((problem) => (problem.severity === 'caution' ? cautions : problems).push(problem));
     });
 
     const undeclared = Object.keys(SITE_VOCABULARY).filter((key) => !ctx.site[key]);
     const findings = problems.map((problem) => problem.text);
+    if (cautions.length) {
+      findings.push(
+        `Worth watching, but not counted against the design — the catalog records a preferred soil and no tolerance, so these are unknowns rather than known mismatches:`
+      );
+      findings.push(...cautions.map((caution) => `  ${caution.text}`));
+    }
     if (undeclared.length) {
       findings.push(
         `The site declares no ${undeclared.join(' or ')}, so that was not checked.`
@@ -68,7 +83,7 @@ export default {
     }
     if (!problems.length) {
       findings.unshift(
-        `All ${ctx.placedSpecies.length} planted species want the conditions this site has (${describeSite(ctx.site)}).`
+        `No planted species is mismatched to the light or water this site offers (${describeSite(ctx.site)}).`
       );
     }
 
@@ -140,8 +155,8 @@ function checkSoil(plant, siteSoil) {
     .filter(Boolean);
   if (!accepted.length || accepted.includes(siteSoil)) return null;
   return {
-    severity: 'real',
-    text: `wants ${accepted.join(' or ')} soil, and this site is ${siteSoil}.`,
+    severity: 'caution',
+    text: `prefers ${accepted.join(' or ')} soil on a ${siteSoil} site — many natives take a wider range than the catalog records, so expect a smaller or shorter-lived plant rather than a failure, and give it sharper drainage if you can.`,
   };
 }
 
