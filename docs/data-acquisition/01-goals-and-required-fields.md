@@ -121,10 +121,10 @@ columns — `Symbol, Country, State, State FIP, County, County FIP`. **There is 
 nativity flag anywhere in it.** It records *presence*, not *native-ness*.
 
 So the epic's own worked example does not resolve: **desert willow appears in Dallas
-County exactly as Mexican plum does.** Desert willow is a West Texas species that is
-widely *planted* in DFW landscapes, and USDA records the occurrence without saying it is
-adventive. Filtering on county presence alone would keep both — the precise failure the
-epic set out to fix.
+County exactly as Mexican plum does**, and nothing in the response distinguishes them.
+Whatever the reason for the occurrence, the data cannot separate native from introduced.
+Filtering on county presence alone would keep both — the precise failure the epic set out
+to fix.
 
 This is the distinction the epic already flagged BONAP as having ("distinguishes native
 from ADVENTIVE per county — a distinction USDA blurs"). That flag was right, and it is
@@ -215,12 +215,30 @@ food from a month range, and persistence is the direct signal.
 **Verdict: AVAILABLE, unbudgeted.** Widening the existing mapper is cheaper than any new
 source and should rank ahead of new-source work in **nl-41o.7**.
 
-### 3.6 Local insect associations — unchanged, still the hardest
+### 3.6 Local insect associations — now MEASURED as unavailable
 
-**BELIEF, carried over unmodified.** NWF keystone data is genus × ecoregion. Nothing
-measured this session changes that.
+Swagger lists `/api/PlantPollinator/{plantId}`, which would be a *species*-level insect
+signal — exactly what NWF's genus × ecoregion data cannot give, and the fix for the
+attribution problem `keystoneGenera.js` has to disclaim. It had to be tested rather than
+assumed empty from one oak.
 
-One thing *is* now different: with county presence available (§3.1), a **county-restricted
+**MEASURED: it returns `[]` for every species tried**, including the strongest possible
+positive controls — both milkweeds and a passionflower:
+
+| Species | Id | `/api/PlantPollinator/{id}` |
+|---|---|---|
+| *Asclepias asperula* | 43487 | `[]` |
+| *Asclepias viridis* | 43632 | `[]` |
+| *Passiflora incarnata* | 69379 | `[]` |
+| *Salix nigra* | 68068 | `[]` |
+| *Quercus shumardii* | 70468 | `[]` |
+
+If milkweed has no pollinator record, nothing does. **Verdict: the endpoint exists and is
+unpopulated.** §3.6 moves from BELIEF to MEASURED, and NWF's genus × ecoregion table
+remains the only source. The plan should stop treating a species-level insect signal as
+something a probe might still turn up.
+
+What *is* now different: with county presence available (§3.1), a **county-restricted
 keystone count** becomes computable for the first time — intersect a genus's species list
 with those present in Dallas County, rather than importing an ecoregion-wide number.
 That does not fix the attribution problem (the count is still per genus, and per §3.2 the
@@ -228,20 +246,116 @@ species set is presence not nativity), but it narrows it from "anywhere in the G
 Plains" to "recorded in this county", which is a real improvement over what
 `keystoneGenera.js` currently has to disclaim.
 
-### 3.7 Summary
+### 3.6b Vertebrate forage — a real table nobody had counted on
 
-| Field | Verdict | Source | Evidence |
-|---|---|---|---|
-| County presence | **Available** | USDA distribution CSV | MEASURED |
-| County nativity | **Not available** | BONAP only candidate; licensing unresolved | MEASURED (absence) |
-| Soil tolerance | **Available, already collected** | USDA soil triple | MEASURED |
-| Light tolerance breadth | **Not available** | — single ordinal only | MEASURED |
-| Water tolerance breadth | **Derivable** | USDA drought + moisture, as a pair | MEASURED |
-| Mature width | **Not available** | needs books (nl-41o.3) | MEASURED |
-| Commercial availability | **Available** (national) | USDA `Commercial Availability` | MEASURED |
-| Toxicity / spread / lifespan / persistence | **Available, unbudgeted** | USDA, unmapped | MEASURED |
-| Local insect associations | **Not available** | NWF is genus × ecoregion | BELIEF |
-| Regional bloom/fruit timing | Unverified | LBJ NPIN candidate | BELIEF |
+`/api/PlantWildlife/{id}` is populated, unlike its pollinator sibling. **MEASURED** across
+13 species:
+
+| Sample | Hit rate |
+|---|---|
+| Woody fruiting species (*Ilex vomitoria*, *Callicarpa americana*, *Juniperus virginiana*, *Celtis laevigata*, *Rhus glabra*, *Morus rubra*) | **6 / 6** |
+| *Prunus mexicana*, *Quercus stellata* | 0 / 2 |
+| Herbaceous / other (*Asclepias* ×2, *Salix nigra*, *Quercus shumardii*) | 0 / 4 |
+| *Passiflora incarnata* | 1 / 1 |
+
+Shape: `{Food: [{Source, LargeMammals, SmallMammals, WaterBirds, TerrestrialBirds}], Cover, Sources}`,
+values on a `Minor / Low / Moderate` scale.
+
+This bears directly on **rule 7**, which currently infers bird food from a month range and
+`fruit_load`. `TerrestrialBirds` is a *documented forage value* — a stronger signal than
+crop size, and independent of it.
+
+**Two structural gifts, worth more than the field itself:**
+
+1. **Every record carries a `Source`** (`Miller`, `Martin`, `Yarrow`) with a bibliographic
+   entry in `Sources`. This is the claim-with-provenance shape **nl-41o.4** is designing,
+   arriving pre-formed from a real source.
+2. ***Callicarpa americana* returns two sources that disagree** — `Martin` says
+   `LargeMammals: Minor`, `Miller` says `Moderate`, on the same field for the same species.
+   **nl-41o.5 now has a live conflict to design against instead of a hypothetical one**, and
+   it is the instructive kind: neither source is wrong, and no precedence rule derived from
+   "which source is better" resolves it.
+
+**Verdict: available, sparse, and skewed to woody species.** Useful as corroboration for
+rule 7, not as a primary field. A broader fill-rate sniff belongs to nl-41o.9.
+
+### 3.6c Synonyms — the identity problem has a source
+
+**MEASURED.** `/api/PlantSynonyms/{id}` returns, for *Packera obovata* (38436):
+
+```
+[{"Id":38437,"Symbol":"SEOB2","ScientificName":"<i>Senecio obovatus</i> Muhl. ex Willd.", ...}]
+```
+
+That is **exactly** the mapping `ecology/host-genera.csv` carries by hand in its
+`synonym_of` column — the load-bearing one, without which the frontyard's ragwort is
+silently missed by rules 4 and 5. USDA supplies it programmatically.
+
+*Quercus shumardii* and *Ilex vomitoria* return `[]`, so the endpoint is selective rather
+than empty — it answers when a synonym exists.
+
+**Verdict: available.** Significant for **nl-41o.4**: the synonym half of the identity
+problem has an authoritative machine-readable source, and only cultivars (§ field 17,
+`'Nana'`, `'Undaunted'`) remain unaddressed — no botanical database indexes those.
+
+### 3.7 Summary — one row per required field
+
+Numbered to match §2, so the AC's "verdict per field" is answerable field by field.
+
+| # | Field | Verdict | Source | Evidence |
+|---|---|---|---|---|
+| 1 | `growing_season_months` | **Available** | USDA `Active Growth Period` — coarse (season words, e.g. "Spring and Summer"), 100% filled | MEASURED |
+| 2 | `flowering_season_months` | **Available, coarse** | USDA `Bloom Period` ("Early Spring"), 99% filled. Month-precision needs a regional source | MEASURED / BELIEF for regional |
+| 3 | `fruit_season_months` | **Available, coarse** | USDA `Fruit/Seed Period Begin`/`End`, 98–99% filled | MEASURED |
+| 4 | `fruit_load` | **Available** | USDA `Fruit/Seed Abundance`, already mapped; 97% filled | MEASURED |
+| 5 | `height_ft` | **Available** | USDA `Height, Mature (feet)`, 98% filled. `Height at 20 Years` also present — arguably the more useful number for R11 | MEASURED |
+| 6 | `growth_shape` | **Available, weak** | USDA Growth Habit is coarse (Tree/Shrub/Forb/…); the mapper's own comment flags it as best-effort needing correction | MEASURED |
+| 7 | `width_ft` | **Not available** | None of USDA's 81 characteristics. Needs books (nl-41o.3) | MEASURED |
+| 8 | genus | **Available** | Parsed from `botanical_name`; USDA `ScientificNameComponents` corroborates | MEASURED |
+| 9 | `sun_pref` | **Available** | USDA `Shade Tolerance`, 100% filled — but see the inversion caution in §3.3 | MEASURED |
+| 10 | `water_pref` | **Available** | USDA `Moisture Use` (99%) / `Drought Tolerance` (100%) | MEASURED |
+| 11 | `soil_pref` | **Available, already collected** | USDA soil triple, 100% filled, already collapsed to an accepted set | MEASURED |
+| 12 | Tolerance breadth — soil | **Available** | The triple is a genuine accepted-set | MEASURED |
+| 12 | Tolerance breadth — light | **Not available** | One ordinal, an optimum, not a range | MEASURED |
+| 12 | Tolerance breadth — water | **Derivable** | Drought + Moisture as a *pair*; the mapper currently discards the bracket | MEASURED |
+| 13 | County presence | **Available** | USDA distribution CSV (§3.1) | MEASURED |
+| 14 | County nativity | **Not available** | BONAP only candidate; blocker is licensing | MEASURED (absence) |
+| 15 | Keystone counts | **Available, genus × ecoregion only** | NWF lists, already in `host-genera.csv`. Species-level ruled out — §3.6 | MEASURED |
+| 16 | `larval_hosts` | **Not available programmatically** | Hand-curated in `host-genera.csv`; `/api/PlantPollinator` is empty | MEASURED |
+| 17 | `synonym_of` | **Available** | `/api/PlantSynonyms/{id}` (§3.6c). Cultivars remain unaddressed | MEASURED |
+| 18 | Commercial availability | **Available** (national) | USDA `Commercial Availability` | MEASURED |
+| — | Toxicity / spread / lifespan / persistence | **Available, unbudgeted** | USDA, unmapped (§3.5) | MEASURED |
+| — | Vertebrate forage value | **Available, sparse** | `/api/PlantWildlife/{id}` (§3.6b) | MEASURED |
+
+**Only three required fields have no source: county nativity, mature width, and
+species-level insect associations.** The third is settled — it does not exist and the plan
+should stop looking. The first two have identified routes (BONAP; the book corpus), and
+both routes are licensing- or effort-bound rather than blocked.
+
+### 3.8 Which rules are ever fully computable
+
+The bead asks what this audit "determines about which ecology rules are ever fully
+computable and which stay partial forever". With §3.7 complete, that is answerable:
+
+| Rule | Verdict | Binding constraint |
+|---|---|---|
+| **R6 bloom succession** | **Fully computable** | Needs only month fields, all sourced. Month-precision wants a regional source; USDA's season words are coarse but workable |
+| **R7 bird food** | **Fully computable, and improvable** | Month + load both sourced. `Fruit/Seed Persistence` and `PlantWildlife.TerrestrialBirds` would strengthen it beyond what it does today |
+| **R11 vertical layers** | **Fully computable** | Height sourced. `growth_shape` is weak from USDA and wants correction, but is not blocked |
+| **R5 larval hosts** | **Partial, permanently** | Depends on hand-curated `larval_hosts`. No source publishes it per species (§3.6); it grows only by manual research |
+| **R4/R10 keystone genera** | **Partial, permanently — but improvable once** | Counts are irreducibly genus × ecoregion. County presence allows a *county-restricted* count, which narrows the disclaimer without removing it. Also needs `width_ft` (§3.4) before the area ratio means anything |
+| **R8 site match** | **Partial, permanently on light; fixable on soil and water** | Soil tolerance is already collected — the a93ed52 stopgap can be lifted now. Water breadth is derivable. **Light breadth does not exist at any source**, so the light comparison stays a point check forever |
+| R9 drifts, R12 spacing (deferred) | **Blocked on one field** | Both need mature width, which only the book corpus can supply — making nl-41o.3 the bead that un-defers them |
+
+Two conclusions the downstream beads should read directly:
+
+- **Three of six shipped rules are fully computable today or nearly so.** The data gap is
+  narrower than the epic assumed, because §3.1 and §3.3 moved two fields from "missing" to
+  "already in hand".
+- **Two dimensions stay partial no matter how much is collected** — R5 and R4/R10, both
+  for the same reason: insect association data does not exist at species granularity. That
+  is a permanent property of the domain, not a backlog item. nl-41o.6 should report it as
+  such rather than as incomplete coverage, or the metrics will show a gap that never closes.
 
 ---
 
@@ -332,6 +446,13 @@ Ordered by how much a wrong assumption would cost:
    candidate for §3.4's gap that is not a book.
 4. **The other 55 characteristics.** §3.5 sampled one species. Confirm the useful ones
    are populated broadly, not just for a well-studied oak.
+5. **`/api/PlantWildlife` fill rate.** §3.6b measured 13 species and found a strong skew
+   to woody fruiting ones (6/6, vs 0/4 herbaceous). Establish whether it is worth wiring
+   into rule 7 or too sparse to bother.
+6. **`/api/characteristicSearchResults` and `/…Download`.** The bulk endpoint known to
+   time out is `plants-search-results`; these are a *different* bulk path that may not
+   share the fault. If either works, it replaces per-species fetching wholesale. Cheap to
+   check and high upside.
 
 ---
 
