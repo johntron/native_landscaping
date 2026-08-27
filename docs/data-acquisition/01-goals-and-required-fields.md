@@ -161,10 +161,12 @@ Three things follow:
    stopgap can be lifted for any species carried in that CSV, without new collection.
    `plants.csv` by contrast holds a single value (`clay` 28, `loamy` 13, `sandy` 5) —
    so the gap is a *migration*, not an acquisition.
-2. **Light breadth is not available.** `sun_pref` in that CSV is a 1:1 re-reading of the
-   single `Shade Tolerance` ordinal — the value counts match exactly (226/127/115), which
-   is what a pure mapping looks like. USDA publishes no light *range*. Rule 8's light
-   check therefore stays a point comparison whatever we collect from USDA.
+2. **Light breadth is not available *from USDA*.** `sun_pref` in that CSV is a 1:1
+   re-reading of the single `Shade Tolerance` ordinal — the value counts match exactly
+   (226/127/115), which is what a pure mapping looks like. USDA publishes no light *range*.
+   **CORRECTED by nl-41o.2:** LBJ NPIN *does* publish a light set — *Ilex vomitoria* returns
+   `Sun, Part Shade, Shade`. So this is an access question, not a permanent gap. See
+   [02 §3](02-source-inventory.md).
 3. **Water breadth is derivable but only as a pair.** `Drought Tolerance` and
    `Moisture Use` together bracket a range; neither alone is one. `mapCharacteristics.js`
    currently collapses them with `Moisture Use || Drought Tolerance`, discarding the
@@ -234,9 +236,15 @@ positive controls — both milkweeds and a passionflower:
 | *Quercus shumardii* | 70468 | `[]` |
 
 If milkweed has no pollinator record, nothing does. **Verdict: the endpoint exists and is
-unpopulated.** §3.6 moves from BELIEF to MEASURED, and NWF's genus × ecoregion table
-remains the only source. The plan should stop treating a species-level insect signal as
-something a probe might still turn up.
+unpopulated.** §3.6 moves from BELIEF to MEASURED, and no *API* publishes species-level
+insect associations.
+
+> **CORRECTED by nl-41o.2 — this was stated too broadly.** No API publishes it, which is
+> what was measured. But LBJ NPIN *curates* it per species as prose: *Ilex vomitoria* →
+> "Larval Host: Henrys Elfin butterfly", *Chilopsis linearis* → "White-winged moth".
+> Unstructured, coverage unknown, but real — and the same kind of curated claim
+> `host-genera.csv` already carries. See [02 §3](02-source-inventory.md). NWF remains the
+> only source for keystone *counts*, which is a different field.
 
 What *is* now different: with county presence available (§3.1), a **county-restricted
 keystone count** becomes computable for the first time — intersect a genus's species list
@@ -344,7 +352,7 @@ computable and which stay partial forever". With §3.7 complete, that is answera
 | **R11 vertical layers** | **Fully computable** | Height sourced. `growth_shape` is weak from USDA and wants correction, but is not blocked |
 | **R5 larval hosts** | **Partial, permanently** | Depends on hand-curated `larval_hosts`. No source publishes it per species (§3.6); it grows only by manual research |
 | **R4/R10 keystone genera** | **Partial, permanently — but improvable once** | Counts are irreducibly genus × ecoregion. County presence allows a *county-restricted* count, which narrows the disclaimer without removing it. Also needs `width_ft` (§3.4) before the area ratio means anything |
-| **R8 site match** | **Partial, permanently on light; fixable on soil and water** | Soil tolerance is already collected — the a93ed52 stopgap can be lifted now. Water breadth is derivable. **Light breadth does not exist at any source**, so the light comparison stays a point check forever |
+| **R8 site match** | **Fixable on all three — soil now, water derivable, light subject to access** | Soil tolerance is already collected — the a93ed52 stopgap can be lifted now. Water breadth is derivable from the USDA pair. Light breadth is absent from USDA but **published by NPIN as a set**, so the constraint is whether NPIN is reachable at volume, not whether the data exists (corrected by nl-41o.2) |
 | R9 drifts, R12 spacing (deferred) | **Blocked on one field** | Both need mature width, which only the book corpus can supply — making nl-41o.3 the bead that un-defers them |
 
 Two conclusions the downstream beads should read directly:
@@ -352,10 +360,14 @@ Two conclusions the downstream beads should read directly:
 - **Three of six shipped rules are fully computable today or nearly so.** The data gap is
   narrower than the epic assumed, because §3.1 and §3.3 moved two fields from "missing" to
   "already in hand".
-- **Two dimensions stay partial no matter how much is collected** — R5 and R4/R10, both
-  for the same reason: insect association data does not exist at species granularity. That
-  is a permanent property of the domain, not a backlog item. nl-41o.6 should report it as
-  such rather than as incomplete coverage, or the metrics will show a gap that never closes.
+- **R4/R10 stays partial no matter how much is collected.** Keystone counts are
+  irreducibly genus x ecoregion; no source improves on that. A permanent property of the
+  domain, not a backlog item — nl-41o.6 should report it as such, or the metrics will show
+  a gap that never closes.
+- **R5 is partial but NOT permanently so** (corrected by nl-41o.2). No API publishes
+  species-level larval hosts, but NPIN curates them in prose, so R5 can grow beyond
+  hand-research if that text is extractable at volume. Its ceiling is an access and
+  extraction question, not a source gap.
 
 ---
 
@@ -379,8 +391,11 @@ so the bar is: does a source publish it, and does a rule consume it?
 
 **OUT — for now, with reasons:**
 
-- **Deer resistance.** No authoritative source; every list is anecdotal and they
-  contradict each other. Sourcing it would mean inventing data.
+- ~~**Deer resistance.** No authoritative source; every list is anecdotal and they
+  contradict each other. Sourcing it would mean inventing data.~~
+  **REVERSED by nl-41o.2:** NPIN publishes `Deer Resistant: Moderate` as a structured
+  field. The "no source" reasoning was wrong. Whether it earns a column is now a value
+  judgement — reopened for nl-41o.7.
 - **Allergen load.** Sources exist (OPALS) but are proprietary, and no rule consumes it.
 - **Bloom colour and floral structure for specialist bees.** Genuinely valuable and
   genuinely hard — the useful form is a bee-to-floral-trait mapping this project does not
