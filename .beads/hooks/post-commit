@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+# --- BEGIN GIT LFS INTEGRATION ---
+# git-lfs wants a post-commit hook and beads did not create one. If beads later
+# adds its own block here, keep it above this section.
+command -v git-lfs >/dev/null 2>&1 || {
+  echo >&2 "\nThis repository is configured for Git LFS but 'git-lfs' was not found on your path. If you no longer wish to use Git LFS, remove this hook by deleting the 'post-commit' file in the hooks directory (set by 'core.hookspath'; usually '.git/hooks').\n"
+  exit 2
+}
+git lfs post-commit "$@"
+# --- END GIT LFS INTEGRATION ---

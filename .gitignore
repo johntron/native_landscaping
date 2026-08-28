@@ -14,3 +14,9 @@ layout-history.json
 
 # CodeGraph index (derived, machine-local; rebuild with `codegraph init .`)
 .codegraph/
+
+# The NCTX flora PDFs. Free to download from BRIT/Austin College, NOT free to
+# redistribute — and this repo is public. Keep them local; the extracted *.txt
+# beside them is what every measurement reads.
+# See docs/data-acquisition/corpus/NOTICE.md.
+docs/data-acquisition/corpus/*.pdf
