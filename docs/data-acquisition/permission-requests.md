@@ -30,9 +30,10 @@ blocked on it.
 >
 > Hello,
 >
-> I'm working on a small non-commercial personal project — a web tool for designing a
-> native-plant landscape for my own yard in Dallas. There's no revenue involved. The code
-> and its data files are public on GitHub.
+> I'm working on a personal project — a web tool for designing a native-plant landscape for
+> my own yard in Dallas. It's currently closed-source and non-commercial, though I may open
+> the code up publicly or explore commercial use down the road, and I'd rather flag that now
+> than have you assume otherwise.
 >
 > I'd like to ask about the online PDFs of *Shinners & Mahler's Illustrated Flora of North
 > Central Texas*, which BRIT and Austin College make freely available at
@@ -50,7 +51,11 @@ blocked on it.
 > 1. Is that use acceptable to BRIT?
 > 2. If so, how would you prefer the flora be cited?
 >
-> I'm glad to share what I build, and equally glad to drop this if the answer is no.
+> I'm glad to share what I build, and equally glad to drop this if the answer is no. If it'd
+> help to see it, the tool itself is running at <https://native-landscaping.johntron.com> —
+> it's not public, but I've allowed sign-in for any @brit.org address. Visit the link, enter
+> your @brit.org email, and Cloudflare will send you a one-time code to log in with; no
+> account or password needed.
 >
 > Thank you for putting the flora online — for someone trying to tell a local native from a
 > naturalized escape, it is far and away the most useful regional resource I've found.
@@ -61,6 +66,18 @@ blocked on it.
 ---
 
 ## 2. LBJ Wildflower Center — NPIN
+
+**Response received 2026-08-28**, from Emma via the contact form: **commercial use is
+blocked by UT Austin guidance** (NPIN is a UT Austin unit); **non-commercial/personal use
+is fine, with citation**. Suggested citation form: *"Courtesy of Lady Bird Johnson
+Wildflower Center."*
+
+**Consequence for this project:** the emails deliberately flagged that this project might
+go commercial or open source later (see the drafts below). LBJ's answer means that if this
+project ever charges for access or otherwise becomes commercial, NPIN-derived fields
+(light requirement, bloom time, deer resistance, larval hosts, commercial availability)
+would need to be re-cleared or dropped at that point — the yes given here does not carry
+forward to a commercial version. Worth remembering before any future monetization decision.
 
 **Why it matters:** NPIN publishes month-precision bloom, **light requirement as a set**
 (the only source that does), deer resistance, species-level larval hosts, and commercial
@@ -79,9 +96,10 @@ it shows the block was respected rather than circumvented.
 >
 > Hello,
 >
-> I'm building a small non-commercial personal tool for designing a native-plant garden in
-> my own yard in Dallas. There's no revenue involved, and the code and data are public on
-> GitHub.
+> I'm building a personal tool for designing a native-plant garden in my own yard in Dallas.
+> It's currently closed-source and non-commercial, though I may open the code up publicly or
+> explore commercial use down the road, and I'd rather flag that now than have you assume
+> otherwise.
 >
 > I'd like to use a handful of fields from NPIN species pages — light requirement, bloom
 > time, water use, soil description, commercial availability, and larval host — for roughly
@@ -101,6 +119,10 @@ it shows the block was respected rather than circumvented.
 > 3. Is there a bulk export, data file, or API I should be using instead of fetching pages?
 >
 > I'm happy to attribute NPIN however you prefer, and happy to drop it if the answer is no.
+> If it'd help to see the tool itself, it's running at
+> <https://native-landscaping.johntron.com> — it's not public, but I've allowed sign-in for
+> any @wildflower.org address. Visit the link, enter your @wildflower.org email, and
+> Cloudflare will send you a one-time code to log in with; no account or password needed.
 >
 > Thanks for maintaining the database — the light-requirement and larval-host fields in
 > particular are things I haven't found published anywhere else.
