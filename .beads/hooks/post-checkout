@@ -31,3 +31,15 @@ if command -v bd >/dev/null 2>&1; then
   if [ $_bd_exit -ne 0 ]; then exit $_bd_exit; fi
 fi
 # --- END BEADS INTEGRATION v1.1.0 ---
+
+# --- BEGIN GIT LFS INTEGRATION ---
+# Appended OUTSIDE the beads markers above so `bd` can regenerate its own block
+# without clobbering this, and so this does not confuse beads' marker parsing.
+# Installed by hand because `git lfs install` refuses to merge with an existing
+# hook and `--force` would have deleted the beads integration.
+command -v git-lfs >/dev/null 2>&1 || {
+  echo >&2 "\nThis repository is configured for Git LFS but 'git-lfs' was not found on your path. If you no longer wish to use Git LFS, remove this hook by deleting the 'post-checkout' file in the hooks directory (set by 'core.hookspath'; usually '.git/hooks').\n"
+  exit 2
+}
+git lfs post-checkout "$@"
+# --- END GIT LFS INTEGRATION ---
