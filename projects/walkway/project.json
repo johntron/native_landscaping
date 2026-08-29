@@ -2,19 +2,42 @@
   "id": "walkway",
   "name": "Walkway",
   "yardFt": {
-    "width": 10,
-    "depth": 20
+    "width": 50,
+    "depth": 50
   },
   "paddingFt": 2,
   "elevationFt": {
-    "above": 8,
+    "above": 12,
     "below": 2
   },
   "pxPerFt": 20,
   "views": [
     {
       "id": "plan",
-      "type": "plan"
+      "type": "plan",
+      "background": "img/plan-99d8c73d6a42.webp",
+      "photoFt": {
+        "originFt": {
+          "x": -1.96,
+          "y": -0.11
+        },
+        "extentFt": {
+          "width": 54,
+          "height": 54
+        }
+      }
+    },
+    {
+      "id": "view",
+      "type": "elevation",
+      "viewFrom": "east",
+      "viewerAtFt": 51
+    },
+    {
+      "id": "view-2",
+      "type": "elevation",
+      "viewFrom": "west",
+      "viewerAtFt": -1
     }
   ]
 }
