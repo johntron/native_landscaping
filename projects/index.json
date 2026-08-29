@@ -2,6 +2,7 @@
   "defaultProject": "backyard",
   "projects": [
     { "id": "backyard", "name": "Backyard" },
-    { "id": "example-frontyard", "name": "Example front yard" }
+    { "id": "example-frontyard", "name": "Example front yard" },
+    { "id": "walkway", "name": "Walkway" }
   ]
 }
