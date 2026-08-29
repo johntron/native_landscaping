@@ -6,6 +6,9 @@ import { buildLayoutCsv } from './src/data/layoutExporter.js';
 import {
   normalizeProjectConfig,
   serializeProjectConfig,
+  normalizeProjectIndex,
+  isValidProjectId,
+  PROJECT_INDEX_PATH,
 } from './src/data/projectConfig.js';
 import { normalizeFeatures, serializeFeatures } from './src/data/featureConfig.js';
 import { projectIdFromUrl, resolveProjectPaths } from './src/data/projectPaths.js';
@@ -96,9 +99,60 @@ const server = http.createServer(async (req, res) => {
       // names a different project must not be able to write to it.
       const config = normalizeProjectConfig({ ...body, id: undefined }, projectId);
       await writeJsonAtomic(configFile, serializeProjectConfig(config));
+      // The project picker gets its label from index.json, not project.json,
+      // so a name edited here would otherwise sit unread until someone
+      // hand-edits the index too.
+      const index = await syncProjectIndexName(projectId, config.name);
       console.log(`Project config saved for '${projectId}' (${config.views.length} views)`);
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ config: serializeProjectConfig(config) }));
+      res.end(JSON.stringify({ config: serializeProjectConfig(config), index }));
+    } catch (err) {
+      console.error(err);
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  if (pathname === '/api/projects' && req.method === 'POST') {
+    try {
+      const body = await collectPayload(req, { requirePlants: false });
+      const id = String(body.id || '').trim();
+      const name = String(body.name || '').trim() || id;
+      if (!isValidProjectId(id)) {
+        throw new Error(
+          'Project id must start with a lowercase letter or digit, and contain only ' +
+            'lowercase letters, digits, "-", or "_"'
+        );
+      }
+
+      const indexFile = path.join(PUBLIC_DIR, PROJECT_INDEX_PATH);
+      const index = normalizeProjectIndex(JSON.parse(await fs.readFile(indexFile, 'utf-8')));
+      const { projectDir, configFile, layoutFile } = resolveProjectPaths(id, PUBLIC_DIR);
+      // Indexed and on-disk are checked separately: a directory can exist
+      // without ever having been indexed, if an earlier create died between
+      // the two writes below.
+      if (index.projects.some((p) => p.id === id) || (await pathExists(projectDir))) {
+        throw new Error(`Project "${id}" already exists`);
+      }
+
+      // No yardFt/views geometry supplied: normalizeProjectConfig fills in
+      // the same defaults a hand-created project.json with just a plan view
+      // would get, so a fresh project starts exactly where Setup mode's
+      // fields already expect the yard to be before anyone has typed a
+      // number.
+      const config = normalizeProjectConfig({ name, views: [{ id: 'plan', type: 'plan' }] }, id);
+
+      await fs.mkdir(projectDir, { recursive: true });
+      await writeJsonAtomic(configFile, serializeProjectConfig(config));
+      await writeLayoutFile(layoutFile, []);
+
+      index.projects.push({ id, name: config.name });
+      await writeJsonAtomic(indexFile, index);
+
+      console.log(`Project '${id}' created`);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ index, config: serializeProjectConfig(config) }));
     } catch (err) {
       console.error(err);
       res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -251,6 +305,36 @@ function makeEntry(plants, description, id) {
     description: description || 'Manual layout update',
     plants,
   };
+}
+
+async function pathExists(target) {
+  try {
+    await fs.access(target);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Keep projects/index.json's label for a project in step with project.json's
+ * own `name` after a Setup-mode save. Best effort: the config write already
+ * succeeded, and a stale picker label is recoverable (save again, or fix the
+ * index by hand) in a way a failed config save is not.
+ */
+async function syncProjectIndexName(projectId, name) {
+  const indexFile = path.join(PUBLIC_DIR, PROJECT_INDEX_PATH);
+  try {
+    const index = normalizeProjectIndex(JSON.parse(await fs.readFile(indexFile, 'utf-8')));
+    const entry = index.projects.find((p) => p.id === projectId);
+    if (!entry || entry.name === name) return index;
+    entry.name = name;
+    await writeJsonAtomic(indexFile, index);
+    return index;
+  } catch (err) {
+    console.warn(`Could not sync project index name for '${projectId}':`, err.message);
+    return null;
+  }
 }
 
 /**

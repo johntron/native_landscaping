@@ -3,6 +3,7 @@ import {
   resolveElevationOrientation,
 } from '../render/elevationOrientation.js';
 import { SITE_VOCABULARY } from '../data/projectConfig.js';
+import { resolveEcoregionInput, KNOWN_ECOREGIONS } from '../data/ecoregionInput.js';
 
 /**
  * The Setup-mode control panel: the yard, a list of the project's views, and a
@@ -269,6 +270,13 @@ export function createSetupPanel({
    */
   function buildYard() {
     const wrap = el('div', 'setup-panel__section setup-panel__yard');
+    wrap.appendChild(el('h3', 'setup-panel__heading', 'Project'));
+    wrap.appendChild(
+      textField('Name', state.project.name || '', (value) => {
+        const trimmed = value.trim();
+        if (trimmed) commit({ name: trimmed });
+      })
+    );
     wrap.appendChild(el('h3', 'setup-panel__heading', 'The yard'));
     const { yardFt, paddingFt, elevationFt, pxPerFt } = state.project;
 
@@ -331,12 +339,7 @@ export function createSetupPanel({
     const { ecoregion, site } = state.project;
 
     const grid = el('div', 'setup-panel__grid');
-    grid.appendChild(
-      textField('EPA Level I ecoregion', ecoregion || '', (value) => {
-        const trimmed = value.trim();
-        commit({ ecoregion: trimmed || null });
-      })
-    );
+    grid.appendChild(ecoregionField(ecoregion));
     ['sun', 'water', 'soil'].forEach((key) => {
       grid.appendChild(
         selectField(
@@ -353,11 +356,51 @@ export function createSetupPanel({
         'p',
         'setup-panel__hint',
         'The ecoregion (e.g. "9" for the Blackland Prairie / Great Plains) picks which ' +
-          'keystone-genus lists this planting is graded against. Sun, water, and soil ' +
-          'describe the site itself, which each planted species is checked against — ' +
-          'leave any of them blank to skip that check.'
+          'keystone-genus lists this planting is graded against. A more detailed code like ' +
+          '"32a" is translated where this project can source the mapping; a ZIP code cannot ' +
+          'be, and is left as a pointer to look the ecoregion up rather than a guess. Sun, ' +
+          'water, and soil describe the site itself, which each planted species is checked ' +
+          'against — leave any of them blank to skip that check.'
       )
     );
+    return wrap;
+  }
+
+  /**
+   * The ecoregion field is free text — a second Level I ecoregion is a data
+   * change to `ecology/host-genera.csv`, not a code change, so this cannot be
+   * a closed dropdown. But a person is far likelier to know a ZIP code or a
+   * finer EPA code than "9", so `resolveEcoregionInput` translates the couple
+   * of cases this project can source (see ecoregionInput.js) and otherwise
+   * says plainly why a value will not match. The datalist is a hint, not a
+   * restriction: the known codes suggest themselves, typing past them still
+   * works.
+   */
+  function ecoregionField(ecoregion) {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = ecoregion || '';
+    input.placeholder = 'e.g. 9';
+    input.setAttribute('list', 'setup-panel-known-ecoregions');
+    input.addEventListener('change', (event) => {
+      const { value, note } = resolveEcoregionInput(event.target.value);
+      if (note) {
+        state.status = { message: note, state: 'info' };
+      }
+      commit({ ecoregion: value });
+    });
+
+    const datalist = document.createElement('datalist');
+    datalist.id = 'setup-panel-known-ecoregions';
+    Object.entries(KNOWN_ECOREGIONS).forEach(([code, name]) => {
+      const option = document.createElement('option');
+      option.value = code;
+      option.label = name;
+      datalist.appendChild(option);
+    });
+
+    const wrap = field('EPA Level I ecoregion', input);
+    wrap.appendChild(datalist);
     return wrap;
   }
 

@@ -19,8 +19,21 @@
         <div class="project-picker">
           <label for="projectSelect">Project</label>
           <select id="projectSelect" disabled></select>
+          <button type="button" id="newProjectBtn" class="button pill-button">+ New project</button>
           <span class="project-picker__note" id="projectNotice" hidden></span>
         </div>
+        <form class="project-picker__create" id="newProjectForm" hidden>
+          <input
+            type="text"
+            id="newProjectName"
+            class="project-picker__create-input"
+            placeholder="New project name"
+            autocomplete="off"
+          />
+          <button type="submit" class="button pill-button">Create</button>
+          <button type="button" id="newProjectCancelBtn" class="button pill-button">Cancel</button>
+          <span class="project-picker__create-status" id="newProjectStatus"></span>
+        </form>
       </div>
     </header>
     <div class="page">
