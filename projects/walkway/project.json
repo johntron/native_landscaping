@@ -5,12 +5,18 @@
     "width": 50,
     "depth": 50
   },
-  "paddingFt": 2,
+  "paddingFt": 4,
   "elevationFt": {
     "above": 12,
     "below": 2
   },
   "pxPerFt": 20,
+  "ecoregion": "9",
+  "site": {
+    "sun": "part-sun",
+    "water": "low",
+    "soil": "clay"
+  },
   "views": [
     {
       "id": "plan",
@@ -31,13 +37,13 @@
       "id": "view",
       "type": "elevation",
       "viewFrom": "east",
-      "viewerAtFt": 51
+      "viewerAtFt": 26
     },
     {
       "id": "view-2",
       "type": "elevation",
       "viewFrom": "west",
-      "viewerAtFt": -1
+      "viewerAtFt": 26
     }
   ]
 }

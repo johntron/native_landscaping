@@ -111,6 +111,11 @@ async function init() {
   const viewPanelTemplate = document.getElementById('viewPanelTemplate');
   const projectSelect = document.getElementById('projectSelect');
   const projectNotice = document.getElementById('projectNotice');
+  const newProjectBtn = document.getElementById('newProjectBtn');
+  const newProjectForm = document.getElementById('newProjectForm');
+  const newProjectName = document.getElementById('newProjectName');
+  const newProjectCancelBtn = document.getElementById('newProjectCancelBtn');
+  const newProjectStatus = document.getElementById('newProjectStatus');
   const modeButtons = Array.from(document.querySelectorAll('[data-mode]'));
   const editRow = document.getElementById('editRow');
   const setupRow = document.getElementById('setupRow');
@@ -163,6 +168,13 @@ async function init() {
   }
 
   initProjectPicker(projectSelect, projectIndex, project.id);
+  initNewProjectForm({
+    button: newProjectBtn,
+    form: newProjectForm,
+    nameInput: newProjectName,
+    cancelButton: newProjectCancelBtn,
+    status: newProjectStatus,
+  });
   // Panels are cloned per view, so nothing below may cache a panel-specific
   // element across a rebuild — go through viewPanels instead.
   let viewPanels = configureViews({
@@ -1089,6 +1101,11 @@ async function init() {
     }
     Object.assign(project, validated);
     appState.project = project;
+    document.title = `${project.name} Visualization`;
+    const projectTitle = document.getElementById('projectTitle');
+    if (projectTitle) projectTitle.textContent = `${project.name} Visualization`;
+    const activeOption = projectSelect?.querySelector(`option[value="${project.id}"]`);
+    if (activeOption) activeOption.textContent = project.name;
     rebuildViews();
     setupPanel.render(project);
     return true;
@@ -1392,6 +1409,72 @@ function initProjectPicker(selectEl, projectIndex, activeId) {
     url.searchParams.set(PROJECT_QUERY_PARAM, nextId);
     window.location.assign(url.toString());
   });
+}
+
+/**
+ * "+ New project": a name, a server-derived slug, and a reload onto it —
+ * the same navigation `initProjectPicker` uses to switch, so a freshly
+ * created project boots exactly like any other rather than needing its own
+ * in-place initialization path.
+ */
+function initNewProjectForm({ button, form, nameInput, cancelButton, status }) {
+  if (!button || !form || !nameInput) return;
+
+  const setStatus = (message, state) => {
+    if (!status) return;
+    status.textContent = message || '';
+    if (state) status.dataset.state = state;
+    else delete status.dataset.state;
+  };
+
+  const close = () => {
+    form.hidden = true;
+    nameInput.value = '';
+    setStatus('');
+  };
+
+  button.addEventListener('click', () => {
+    form.hidden = !form.hidden;
+    if (!form.hidden) nameInput.focus();
+  });
+  cancelButton?.addEventListener('click', close);
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const name = nameInput.value.trim();
+    const id = slugifyProjectName(name);
+    if (!id) {
+      setStatus('Enter a name first.', 'error');
+      return;
+    }
+    setStatus('Creating…');
+    try {
+      const response = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, name }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || `Request failed (${response.status})`);
+      }
+      const url = new URL(window.location.href);
+      url.searchParams.set(PROJECT_QUERY_PARAM, id);
+      window.location.assign(url.toString());
+    } catch (err) {
+      setStatus(err.message, 'error');
+    }
+  });
+}
+
+/** A project id is a path segment — see PROJECT_ID_PATTERN in projectConfig.js. */
+function slugifyProjectName(name) {
+  return String(name || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+/, '')
+    .replace(/-+$/, '');
 }
 
 /**

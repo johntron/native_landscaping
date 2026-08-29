@@ -1153,6 +1153,37 @@ select {
   color: #9a4a2f;
 }
 
+.project-picker__create {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.project-picker__create[hidden] {
+  display: none;
+}
+
+.project-picker__create-input {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid #d6d3cb;
+  border-radius: 6px;
+  background-color: #fff;
+  font-size: 0.88rem;
+  color: #1f2a35;
+  min-width: 12rem;
+}
+
+.project-picker__create-status {
+  font-size: 0.8rem;
+  color: #6b6559;
+}
+
+.project-picker__create-status[data-state='error'] {
+  color: #a8332b;
+}
+
 /* Individual view containers share common styles. */
 .view {
   position: relative;
@@ -1761,11 +1792,14 @@ select {
   gap: 0.6rem;
 }
 
-/* Save is the one control the panel exists to reach, and inside a fixed-height
-   scroller it would otherwise sit a few hundred pixels below the fold. Pin it
-   to the bottom edge of the scroller — opaque, so the fields scroll under it
-   rather than through it. */
-#featureRow .feature-panel__footer {
+/* Save is the one control the panel exists to reach, and it would otherwise
+   sit a few hundred pixels below the fold — the setup form grew past one
+   screen the moment it gained an ecoregion/site section, and "no save
+   button" is what that looks like from all the way at the top. Pin it to the
+   bottom of the viewport — opaque, so the fields scroll under it rather than
+   through it. */
+#featureRow .feature-panel__footer,
+#setupRow .setup-panel__footer {
   position: sticky;
   bottom: 0;
   z-index: 1;
