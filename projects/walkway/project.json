@@ -1,0 +1,20 @@
+{
+  "id": "walkway",
+  "name": "Walkway",
+  "yardFt": {
+    "width": 10,
+    "depth": 20
+  },
+  "paddingFt": 2,
+  "elevationFt": {
+    "above": 8,
+    "below": 2
+  },
+  "pxPerFt": 20,
+  "views": [
+    {
+      "id": "plan",
+      "type": "plan"
+    }
+  ]
+}
