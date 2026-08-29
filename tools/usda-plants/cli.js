@@ -7,8 +7,11 @@
 //   node tools/usda-plants/cli.js search-by-name "Abies concolor" "yaupon holly"
 //   node tools/usda-plants/cli.js download "Dallas County, Texas" --out plants-dallas.csv
 //   node tools/usda-plants/cli.js download-names names.txt --out plants.csv
+//   node tools/usda-plants/cli.js probe "Quercus shumardii"   # or a numeric plant id
 //
-// Flags: --delay-ms=1000 (min gap between USDA requests), --out=<path>
+// Flags: --delay-ms=1000 (min gap between USDA requests), --out=<path>,
+// --cache-path=<path> (probe only, default data/probe-cache.db),
+// --force=true (probe only, bypass the cache)
 
 import { writeFile, readFile } from "node:fs/promises";
 import { UsdaClient } from "./usdaClient.js";
@@ -16,6 +19,8 @@ import { searchByLocationCriteria, searchByNames } from "./search.js";
 import { fetchPlantDetails } from "./fetchDetails.js";
 import { rowsToCsv } from "./csvWriter.js";
 import { INTERMEDIATE_CSV_COLUMNS } from "./mapCharacteristics.js";
+import { probeUsda } from "./probe.js";
+import { openProbeCache } from "./probeCache.js";
 
 function parseFlags(argv) {
   const flags = {};
@@ -83,8 +88,25 @@ async function main() {
     return;
   }
 
+  if (command === "probe") {
+    const cache = flags["cache-path"] ? openProbeCache(flags["cache-path"]) : openProbeCache();
+    let plantId = Number(positional[0]);
+    if (!Number.isInteger(plantId)) {
+      const matches = await searchByNames(client, [positional[0]]);
+      if (!matches[0]?.match) {
+        console.error(`Could not resolve "${positional[0]}" to a USDA plant id.`);
+        process.exitCode = 1;
+        return;
+      }
+      plantId = matches[0].match.Id;
+    }
+    const result = await probeUsda(client, cache, plantId, { force: flags.force === "true" });
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
   console.error(
-    "Usage: cli.js <search-by-location|search-by-name|download|download-names> ... [--out=path] [--delay-ms=1000]",
+    "Usage: cli.js <search-by-location|search-by-name|download|download-names|probe> ... [--out=path] [--delay-ms=1000]",
   );
   process.exitCode = 1;
 }

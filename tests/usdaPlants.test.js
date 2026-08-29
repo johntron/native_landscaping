@@ -1,10 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { parseSeasonPhrase, parseSeasonRange } from '../tools/usda-plants/seasonMonths.js';
 import { colorNameToHex } from '../tools/usda-plants/colorNames.js';
 import { mapPlantToIntermediateRow } from '../tools/usda-plants/mapCharacteristics.js';
 import { rowsToCsv } from '../tools/usda-plants/csvWriter.js';
 import { filterToRegion } from '../tools/usda-plants/regionFilter.js';
+import { USDA_TARGET_FIELDS, sniffFields, probeUsda } from '../tools/usda-plants/probe.js';
+import { openProbeCache, getCached, setCached, cached } from '../tools/usda-plants/probeCache.js';
 
 test('parseSeasonPhrase converts contiguous season names to a month range', () => {
   assert.equal(parseSeasonPhrase('Spring and Summer'), '3-8');
@@ -168,4 +173,133 @@ test('Shade Tolerance Low/Medium/High reads as light requirement, not shade tole
   // The documented enum still maps by its own plain meaning.
   assert.equal(sun('Intolerant'), 'full-sun');
   assert.equal(sun('Tolerant'), 'shade');
+});
+
+// nl-41o.9: the source probe's field sniff and its response cache.
+
+test('sniffFields reports population from RAW USDA shapes, not a normalized view', () => {
+  const profile = { NativeStatuses: [{ Region: 'L48', Status: 'N' }] };
+  const characteristics = [
+    { PlantCharacteristicName: 'Commercial Availability', PlantCharacteristicValue: 'Routinely Available' },
+    { PlantCharacteristicName: 'Shade Tolerance', PlantCharacteristicValue: 'High' },
+  ];
+  const results = sniffFields(USDA_TARGET_FIELDS, profile, characteristics);
+  const byKey = Object.fromEntries(results.map((r) => [r.key, r]));
+
+  // Populated, but flagged: NativeStatuses is regional, never county — the
+  // sniff must not silently upgrade "some value present" to "county nativity".
+  assert.equal(byKey.county_nativity.populated, true);
+  assert.equal(byKey.county_nativity.value, 'L48:N');
+  assert.match(byKey.county_nativity.note, /REGIONAL/);
+
+  // A field with no matching characteristic name anywhere in the response
+  // reads as genuinely absent, not as a parse failure.
+  assert.equal(byKey.mature_width.populated, false);
+  assert.equal(byKey.mature_width.value, null);
+
+  assert.equal(byKey.commercial_availability.populated, true);
+  assert.equal(byKey.commercial_availability.value, 'Routinely Available');
+
+  // A field not present in this response's characteristics list at all.
+  assert.equal(byKey.soil_tolerance_coarse.populated, false);
+});
+
+test('sniffFields treats an empty NativeStatuses array as unpopulated', () => {
+  const results = sniffFields(USDA_TARGET_FIELDS, { NativeStatuses: [] }, []);
+  const nativity = results.find((r) => r.key === 'county_nativity');
+  assert.equal(nativity.populated, false);
+  assert.equal(nativity.value, null);
+});
+
+test('mature_width sniff scans this response\'s own keys rather than asserting absence blind', () => {
+  // No width-shaped key anywhere: the diagnostic must say what it actually
+  // checked, not just assert absence from three guessed names.
+  const noMatch = sniffFields(
+    USDA_TARGET_FIELDS,
+    {},
+    [{ PlantCharacteristicName: 'Shade Tolerance', PlantCharacteristicValue: 'High' }],
+  ).find((r) => r.key === 'mature_width');
+  assert.equal(noMatch.populated, false);
+  assert.match(noMatch.diagnostic, /scanned 1 characteristic key/);
+
+  // A key the exact-match list doesn't know about, but the regex catches —
+  // this must NOT be auto-adopted as the value (measured live: "Seed Spread
+  // Rate" and "Vegetative Spread Rate" both match /spread/ on a real probed
+  // species and are propagation-rate fields, not width). It's a pointer for
+  // a human to check, surfaced only in the diagnostic.
+  const nearMiss = sniffFields(
+    USDA_TARGET_FIELDS,
+    {},
+    [{ PlantCharacteristicName: 'Canopy Spread (feet)', PlantCharacteristicValue: '12' }],
+  ).find((r) => r.key === 'mature_width');
+  assert.equal(nearMiss.populated, false);
+  assert.equal(nearMiss.value, null);
+  assert.match(nearMiss.diagnostic, /Canopy Spread \(feet\)/);
+  assert.match(nearMiss.diagnostic, /NOT auto-adopted/);
+
+  // The exact canonical key.
+  const exact = sniffFields(
+    USDA_TARGET_FIELDS,
+    {},
+    [{ PlantCharacteristicName: 'Width, Mature (feet)', PlantCharacteristicValue: '15' }],
+  ).find((r) => r.key === 'mature_width');
+  assert.equal(exact.populated, true);
+  assert.equal(exact.value, '15');
+});
+
+test('probe cache: a miss fetches and caches, a hit does not re-fetch', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'probe-cache-test-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const db = openProbeCache(join(dir, 'cache.db'));
+
+  let fetchCount = 0;
+  const fetcher = () => {
+    fetchCount++;
+    return { hello: 'world' };
+  };
+
+  const first = await cached(db, 'usda', 'PlantProfile', 12345, fetcher);
+  assert.equal(first.cached, false);
+  assert.deepEqual(first.raw, { hello: 'world' });
+  assert.equal(fetchCount, 1);
+
+  const second = await cached(db, 'usda', 'PlantProfile', 12345, fetcher);
+  assert.equal(second.cached, true);
+  assert.deepEqual(second.raw, { hello: 'world' });
+  assert.equal(fetchCount, 1, 'a cache hit must not call the fetcher again');
+
+  const third = await cached(db, 'usda', 'PlantProfile', 12345, fetcher, { force: true });
+  assert.equal(third.cached, false);
+  assert.equal(fetchCount, 2, 'force must bypass the cache read');
+});
+
+test('probeUsda surfaces characteristicsCount so a zero-record taxon is distinguishable from a real gap', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'probe-cache-test-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const db = openProbeCache(join(dir, 'cache.db'));
+  const fakeClient = {
+    getProfile: async () => ({ Symbol: 'SYOB', NativeStatuses: [] }),
+    getCharacteristics: async () => [],
+  };
+
+  const result = await probeUsda(fakeClient, db, 40799);
+  assert.equal(result.characteristicsCount, 0);
+  // Every target field reads populated:false here — characteristicsCount is
+  // what tells this apart from a species that has a record but genuinely
+  // lacks these fields.
+  assert.equal(result.fieldSniff.every((f) => !f.populated), true);
+});
+
+test('probe cache keys are scoped by (source, endpoint, key)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'probe-cache-test-'));
+  const db = openProbeCache(join(dir, 'cache.db'));
+  setCached(db, 'usda', 'PlantProfile', 1, { a: 1 });
+  setCached(db, 'usda', 'PlantCharacteristics', 1, { a: 2 });
+  setCached(db, 'npin', 'PlantProfile', 1, { a: 3 });
+
+  assert.deepEqual(getCached(db, 'usda', 'PlantProfile', 1).raw, { a: 1 });
+  assert.deepEqual(getCached(db, 'usda', 'PlantCharacteristics', 1).raw, { a: 2 });
+  assert.deepEqual(getCached(db, 'npin', 'PlantProfile', 1).raw, { a: 3 });
+  assert.equal(getCached(db, 'usda', 'PlantProfile', 999), null);
+  rmSync(dir, { recursive: true, force: true });
 });
