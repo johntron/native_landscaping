@@ -18,6 +18,25 @@ export function classifyPlantLayer(plant) {
   return 'groundcover';
 }
 
+/**
+ * Same buckets as classifyPlantLayer, but returns null instead of a fabricated
+ * height/shape when neither is genuinely declared — for the ecology rule
+ * (verticalLayers), which must not silently grade a plant on a guessed size.
+ * classifyPlantLayer itself stays defaulting, because the renderer needs a
+ * bucket for every plant regardless of whether its size is known (see nl-c58).
+ */
+export function classifyDeclaredLayer(species) {
+  const shape = (species?.growthShape || species?.growth_shape || '').toLowerCase();
+  if (shape === 'creeping') return 'groundcover';
+  if (shape === 'tree') return 'trees';
+  if (shape === 'vertical' || shape === 'vase' || shape === 'arch') return 'sculptural';
+  const height = Number(species?.height ?? species?.height_ft);
+  if (!(height > 0)) return null;
+  if (height >= 4) return 'sculptural';
+  if (height >= 1.25) return 'accents';
+  return 'groundcover';
+}
+
 export function clampHiddenLayerCount(count) {
   if (!Number.isFinite(count)) return 0;
   if (count < 0) return 0;

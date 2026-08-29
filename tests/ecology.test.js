@@ -148,6 +148,16 @@ test('bird food ignores a species whose fruit load is none', () => {
   assert.equal(result.status, STATUSES.GAP);
 });
 
+test('bird food excludes a fruiting species with no declared crop size, rather than assuming sparse (nl-c58)', () => {
+  const entry = { ...synthetic('Ilex undeclaredload'), fruitMonths: [10, 11, 12], fruitLoad: '' };
+  const plant = createPlantFromSpecies(entry, { id: 'u', x: 0, y: 0 });
+  const result = run([plant])['bird-food'];
+  assert.ok(
+    result.findings.some((f) => /1 fruiting species declares no crop size/.test(f)),
+    'a blank fruit_load must be reported as unknown, not silently treated as sparse'
+  );
+});
+
 test('vertical layers reports empty strata and suggests fillers for them', () => {
   const groundOnly = run(place('Calyptocarpus vialis'))['vertical-layers'];
   assert.equal(groundOnly.status, STATUSES.GAP);
@@ -159,6 +169,35 @@ test('vertical layers reports empty strata and suggests fillers for them', () =>
   )['vertical-layers'];
   assert.equal(layered.status, STATUSES.OK);
   assert.deepEqual(layered.suggestions, [], 'nothing to suggest when every layer is filled');
+});
+
+test('vertical layers excludes a species with no declared height or shape, rather than bucketing it as groundcover (nl-c58)', () => {
+  const declared = { ...synthetic('Species undeclared'), growthShape: '', height: null };
+  const plant = createPlantFromSpecies(declared, { id: 'u', x: 0, y: 0 });
+  const result = run([plant], { species: [declared] })['vertical-layers'];
+  assert.ok(
+    result.findings.some((f) => /1 species declares no height or shape/.test(f)),
+    'a blank height/shape must be excluded and reported, not defaulted to a 1 ft groundcover'
+  );
+});
+
+test('vertical layers reports not-declared, not four empty layers, when nothing placed can be classified (nl-c58)', () => {
+  const declared = { ...synthetic('Species wholly undeclared'), growthShape: '', height: null };
+  const plant = createPlantFromSpecies(declared, { id: 'u', x: 0, y: 0 });
+  const result = run([plant], { species: [declared] })['vertical-layers'];
+  assert.equal(result.status, STATUSES.NOT_DECLARED);
+  assert.doesNotMatch(result.summary, /empty/, 'must not describe this as an empty yard');
+});
+
+test('vertical layers excludes a species with no entry in ctx.species at all, rather than falling back to its fabricated plant size (nl-c58)', () => {
+  // A plant whose botanicalKey is absent from ctx.species (a data mismatch,
+  // not a blank field) must not fall back to the plant object's own
+  // createPlantFromSpecies-fabricated height (?? 1) — that reintroduces the
+  // exact bug this rule exists to avoid.
+  const declared = { ...synthetic('Species not in catalog'), botanicalKey: 'not-in-catalog' };
+  const plant = createPlantFromSpecies({ ...declared, botanicalKey: 'different-key' }, { id: 'u', x: 0, y: 0 });
+  const result = run([plant], { species: [] })['vertical-layers'];
+  assert.equal(result.status, STATUSES.NOT_DECLARED);
 });
 
 test('layers are counted by species, so a big drift of one plant fills one layer only', () => {
@@ -461,4 +500,41 @@ test('site match: a blank preference on the plant is not a mismatch', () => {
     soil: 'clay',
   });
   assert.equal(result.status, STATUSES.OK);
+});
+
+test('site match: a blank preference on the plant is reported, not silently skipped (nl-c58)', () => {
+  // Before nl-c58, this read exactly like a perfectly matched design: no finding,
+  // no caution, nothing. The site declares all three axes; the plant declares none.
+  const result = siteResult(planted({ sunPref: '', waterPref: '', soilPref: '' }), {
+    sun: 'shade',
+    water: 'low',
+    soil: 'clay',
+  });
+  assert.ok(result.findings.some((f) => /1 planted species declares no sun preference/.test(f)));
+  assert.ok(result.findings.some((f) => /1 planted species declares no water preference/.test(f)));
+  assert.ok(result.findings.some((f) => /1 planted species declares no soil preference/.test(f)));
+});
+
+test('site match: the summary does not claim a match when nothing was actually checked (nl-c58)', () => {
+  // Before this fix the summary read "Every planted species matches the
+  // declared site" here -- true of zero checked axes, and indistinguishable
+  // in the collapsed panel from a design that was actually verified.
+  const result = siteResult(planted({ sunPref: '', waterPref: '', soilPref: '' }), {
+    sun: 'shade',
+    water: 'low',
+    soil: 'clay',
+  });
+  assert.doesNotMatch(result.summary, /Every planted species matches/);
+  assert.match(result.summary, /could not be fully checked/);
+});
+
+test('site match: only the axes the plant leaves blank are reported as undeclared', () => {
+  const result = siteResult(planted({ sunPref: 'shade', waterPref: '', soilPref: 'clay' }), {
+    sun: 'shade',
+    water: 'low',
+    soil: 'clay',
+  });
+  assert.ok(result.findings.some((f) => /1 planted species declares no water preference/.test(f)));
+  assert.ok(!result.findings.some((f) => /declares no sun preference/.test(f)));
+  assert.ok(!result.findings.some((f) => /declares no soil preference/.test(f)));
 });

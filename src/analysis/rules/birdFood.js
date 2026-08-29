@@ -32,7 +32,7 @@ export default {
 
     const fruiting = ctx.placedSpecies.filter((entry) => hasFruit(entry));
     const perMonth = countSpeciesPerMonth(fruiting, 'fruitMonths');
-    const loadPerMonth = weightPerMonth(fruiting);
+    const { weights: loadPerMonth, undeclaredLoad } = weightPerMonth(fruiting);
     const allBare = CRITICAL_MONTHS.filter((month) => !perMonth.get(month));
     // Same split the bloom rule uses, and the reason the two rules disagree
     // about winter without either one hardcoding a season: nothing in the
@@ -68,6 +68,13 @@ export default {
         `${describeMonths(thin)} carries only a sparse crop — enough to see, not enough to feed on.`
       );
     }
+    if (undeclaredLoad) {
+      findings.push(
+        `${undeclaredLoad} fruiting species declare${undeclaredLoad === 1 ? 's' : ''} no crop size, so ${
+          undeclaredLoad === 1 ? 'it is' : 'they are'
+        } excluded from the "thin" assessment rather than assumed sparse.`
+      );
+    }
 
     const status = bare.length >= CRITICAL_MONTHS.length
       ? STATUSES.GAP
@@ -100,15 +107,26 @@ function hasFruit(entry) {
   return (entry?.fruitMonths || []).length > 0 && entry.fruitLoad !== 'none';
 }
 
-/** Best crop available in each month, so one heavy fruiter reads as more than one sparse one. */
+/**
+ * Best crop available in each month, so one heavy fruiter reads as more than
+ * one sparse one. A species with no declared fruit_load is excluded from the
+ * weight computation rather than defaulted to 'sparse' (nl-c58) — it still
+ * counts toward month coverage via countSpeciesPerMonth, just not toward
+ * "thin".
+ */
 function weightPerMonth(entries) {
   const weights = new Map();
+  let undeclaredLoad = 0;
   entries.forEach((entry) => {
-    const weight = LOAD_WEIGHT[entry.fruitLoad] ?? 1;
+    const weight = LOAD_WEIGHT[entry.fruitLoad];
+    if (weight === undefined) {
+      undeclaredLoad += 1;
+      return;
+    }
     new Set(entry.fruitMonths || []).forEach((month) => {
       const m = Number(month);
       weights.set(m, Math.max(weights.get(m) || 0, weight));
     });
   });
-  return weights;
+  return { weights, undeclaredLoad };
 }
