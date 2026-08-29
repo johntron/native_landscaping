@@ -33,6 +33,15 @@ Point your MCP client at that command over stdio. Tools exposed:
   Rate-limited fetch + CSV write.
 - **`usda_download_plant_list`** — `{ criteria, outputPath }`. Convenience:
   search-by-location then fetch-details in one call.
+- **`usda_probe`** — `{ plantId: 70468 }`. Source probe for nl-41o.9/nl-41o.1/nl-41o.2's
+  investigation, not for collection: returns USDA's RAW profile and characteristics for one
+  species (unnormalized — the point is seeing exactly what the source said) plus a report on
+  which of a target-field list (county nativity, soil/light/water tolerance, mature width,
+  commercial availability) actually came back populated. Cached in `data/probe-cache.db`
+  (gitignored); pass `force: true` to bypass the cache and re-check a source. Never writes
+  `plants.csv` or any claim store.
+- **`usda_probe_target_fields`** — no input. Lists the current sniff targets with their
+  caveats (e.g. why a populated `NativeStatuses` value is still not county nativity).
 
 Typical flow: `usda_search_by_location` (or `usda_search_by_name`) to get
 candidate `.Id`s, review them, then `usda_fetch_details` on the ones you
@@ -46,10 +55,36 @@ node tools/usda-plants/cli.js search-by-location "Dallas County, Texas"
 node tools/usda-plants/cli.js search-by-name "Ilex vomitoria" "Abies concolor"
 node tools/usda-plants/cli.js download "Dallas County, Texas" --out=plants-dallas.csv
 node tools/usda-plants/cli.js download-names names.txt --out=plants.csv   # one name per line
+node tools/usda-plants/cli.js probe "Quercus shumardii"                   # or a numeric plant id
 ```
 
 Flags: `--out=<path>` (default `usda-plants-intermediate.csv`),
-`--delay-ms=1000` (min gap between USDA requests).
+`--delay-ms=1000` (min gap between USDA requests), `--cache-path=<path>`
+(probe only, default `data/probe-cache.db`), `--force=true` (probe only,
+bypass the cache).
+
+## Source probe (nl-41o.9)
+
+`usda_probe` / `cli.js probe` is the introspection tool the plant-data-acquisition
+epic ([docs/data-acquisition](../../docs/data-acquisition/)) uses to *measure*
+what a source publishes instead of trusting its documentation — the Alnus
+case (nl-jsm.1, cited in
+[03-document-corpus.md §6](../../docs/data-acquisition/03-document-corpus.md))
+is the precedent: a clean-looking extraction silently dropped a row, and only
+a second, raw look caught it. It returns USDA's RAW `PlantProfile` and `PlantCharacteristics`
+responses untouched, plus a sniff report over
+[`probe.js`](probe.js)'s `USDA_TARGET_FIELDS` list — fields already known
+missing or in doubt (county nativity, soil/light/water tolerance breadth,
+mature width, commercial availability). Responses are cached by
+`(source, endpoint, id)` in a small SQLite file at `data/probe-cache.db`
+(gitignored, rebuildable, `node:sqlite`, no dependency) so re-probing the
+same species across sittings doesn't re-fetch or re-hammer USDA's server.
+
+This is deliberately the **one implementation bead** in an otherwise
+analysis-only epic — it extends this server rather than sitting beside it,
+per the epic's "two servers with overlapping vocabulary is the bad outcome"
+rule. It never writes `plants.csv` or any claim store; collection is a later
+epic (nl-41o.4's data model, not yet built).
 
 ## Known limitation: location search is unreliable
 

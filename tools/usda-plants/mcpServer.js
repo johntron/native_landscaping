@@ -17,8 +17,18 @@ import { searchByLocationCriteria, searchByNames } from "./search.js";
 import { fetchPlantDetails } from "./fetchDetails.js";
 import { rowsToCsv } from "./csvWriter.js";
 import { INTERMEDIATE_CSV_COLUMNS } from "./mapCharacteristics.js";
+import { probeUsda, USDA_TARGET_FIELDS } from "./probe.js";
+import { openProbeCache } from "./probeCache.js";
 
 const client = new UsdaClient({ requestDelayMs: 1000 });
+
+// Opened lazily, on the first usda_probe call — not every MCP server start
+// should create data/ and a SQLite file on disk, only ones that actually probe.
+let probeCache = null;
+function getProbeCache() {
+  if (!probeCache) probeCache = openProbeCache();
+  return probeCache;
+}
 
 const server = new McpServer({ name: "usda-plants", version: "1.0.0" });
 
@@ -137,6 +147,49 @@ server.registerTool(
       errors,
     });
   },
+);
+
+server.registerTool(
+  "usda_probe",
+  {
+    title: "Probe USDA for one species' raw data, unnormalized",
+    description:
+      "For nl-41o.9/nl-41o.1/nl-41o.2's investigation, not for collection: fetches a USDA " +
+      "plant's RAW profile and characteristics (no normalization, no plants.csv mapping — " +
+      "the point is seeing exactly what the source said, so a parse bug stays distinguishable " +
+      "from a real source gap) and reports which of a target-field list (county nativity, " +
+      "soil/light/water tolerance, mature width, commercial availability) it actually " +
+      "populated for this species. Responses are cached in data/probe-cache.db, so repeated " +
+      "probes of the same species don't re-fetch — pass force:true to bypass the cache and " +
+      "re-check whether a source has changed. Read-only: never writes plants.csv or any " +
+      "claim store.",
+    inputSchema: {
+      plantId: z.number().int().describe("USDA internal plant id, from usda_search_by_name"),
+      force: z.boolean().optional().describe("Bypass the cache and re-fetch"),
+    },
+  },
+  async ({ plantId, force }) => {
+    try {
+      const result = await probeUsda(client, getProbeCache(), plantId, { force: !!force });
+      return textResult(result);
+    } catch (err) {
+      return { ...textResult(`Error: ${err.message}`), isError: true };
+    }
+  },
+);
+
+server.registerTool(
+  "usda_probe_target_fields",
+  {
+    title: "List the fields usda_probe sniffs for",
+    description:
+      "Returns the current target-field list usda_probe checks population against, with the " +
+      "reasoning/caveats for each (e.g. why a populated NativeStatuses value is still not " +
+      "county nativity). Call this before reading a lot of usda_probe results, since the list " +
+      "grows as nl-41o.1's required-fields audit names new fields to check.",
+    inputSchema: {},
+  },
+  async () => textResult(USDA_TARGET_FIELDS.map(({ key, label, note }) => ({ key, label, note }))),
 );
 
 const transport = new StdioServerTransport();
