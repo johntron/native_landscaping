@@ -60,9 +60,28 @@ export default {
 
     const problems = [];
     const cautions = [];
+    // A plant that declares no preference on an axis the site DOES declare must
+    // not read as a silent match — that is the failure this rule exists to
+    // avoid (see nl-c58). Counted per axis and reported, the same way rule 4/10
+    // excludes and reports plants with no declared width rather than guessing.
+    const plantUndeclared = { sun: 0, water: 0, soil: 0 };
+    const plantsNotFullyChecked = new Set();
     ctx.placedSpecies.forEach((plant) => {
       const name = `${plant.commonName} (${plant.botanicalName})`;
-      [checkSun(plant, ctx.site.sun), checkWater(plant, ctx.site.water), checkSoil(plant, ctx.site.soil)]
+      const checked = [];
+      if (ctx.site.sun && !declaresAxis(plant.sunPref)) {
+        plantUndeclared.sun += 1;
+        plantsNotFullyChecked.add(name);
+      } else checked.push(checkSun(plant, ctx.site.sun));
+      if (ctx.site.water && !declaresAxis(plant.waterPref)) {
+        plantUndeclared.water += 1;
+        plantsNotFullyChecked.add(name);
+      } else checked.push(checkWater(plant, ctx.site.water));
+      if (ctx.site.soil && !declaresAxis(plant.soilPref)) {
+        plantUndeclared.soil += 1;
+        plantsNotFullyChecked.add(name);
+      } else checked.push(checkSoil(plant, ctx.site.soil));
+      checked
         .filter(Boolean)
         .map((problem) => ({ ...problem, text: `${name} ${problem.text}` }))
         .forEach((problem) => (problem.severity === 'caution' ? cautions : problems).push(problem));
@@ -81,6 +100,15 @@ export default {
         `The site declares no ${undeclared.join(' or ')}, so that was not checked.`
       );
     }
+    Object.entries(plantUndeclared)
+      .filter(([, count]) => count > 0)
+      .forEach(([axis, count]) => {
+        findings.push(
+          `${count} planted species declare${count === 1 ? 's' : ''} no ${axis} preference and ${
+            count === 1 ? 'was' : 'were'
+          } not checked against this site's ${axis}.`
+        );
+      });
     if (!problems.length) {
       findings.unshift(
         `No planted species is mismatched to the light or water this site offers (${describeSite(ctx.site)}).`
@@ -89,15 +117,28 @@ export default {
 
     const hard = problems.filter((problem) => problem.severity === 'hard');
     const status = hard.length ? STATUSES.GAP : problems.length ? STATUSES.PARTIAL : STATUSES.OK;
+    // "Every planted species matches" is a claim about axes that were actually
+    // checked. If some plants declare no preference on an axis the site does
+    // declare, that claim is false even when zero problems were found — this
+    // exact overclaim is what nl-c58 named as the worst case, because it was the
+    // headline the panel shows without expanding details.
     const summary = hard.length
       ? `${hard.length} planted species ${hard.length === 1 ? 'is' : 'are'} badly mismatched to this site.`
       : problems.length
         ? `${problems.length} planted species ${problems.length === 1 ? 'sits' : 'sit'} slightly off what this site offers.`
-        : `Every planted species matches the declared site (${describeSite(ctx.site)}).`;
+        : plantsNotFullyChecked.size
+          ? `No known mismatch, but ${plantsNotFullyChecked.size} planted species ${
+              plantsNotFullyChecked.size === 1 ? 'declares' : 'declare'
+            } no preference on one or more axes and could not be fully checked — see details.`
+          : `Every planted species matches the declared site (${describeSite(ctx.site)}).`;
 
     return { status, summary, findings, suggestions: [] };
   },
 };
+
+function declaresAxis(value) {
+  return Boolean(String(value || '').trim());
+}
 
 /** Positive: the plant wants MORE than the site gives. Negative: less. */
 function step(scale, want, have) {

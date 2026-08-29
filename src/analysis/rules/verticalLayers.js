@@ -1,5 +1,5 @@
 import { STATUSES } from '../ecology.js';
-import { PLANT_LAYERS, classifyPlantLayer } from '../../state/layers.js';
+import { PLANT_LAYERS, classifyPlantLayer, classifyDeclaredLayer } from '../../state/layers.js';
 
 /**
  * Rule 11 — a planting with structure at several heights shelters and feeds far
@@ -30,9 +30,28 @@ export default {
 
     // Counted by species, so one layer does not look full because a single
     // species was repeated across the bed nineteen times.
+    //
+    // entry.layer is precomputed at plant-creation time from a height that
+    // defaults undeclared height to 1 ft (a rendering necessity — the drawing
+    // needs a size for every plant). Grading on that fabricated bucket is
+    // exactly nl-c58's failure mode, so this rule re-derives the layer from
+    // the raw catalog row via classifyDeclaredLayer, which returns null rather
+    // than guessing when neither shape nor height is genuinely declared.
+    const speciesByKey = new Map(ctx.species.map((s) => [s.botanicalKey, s]));
     const speciesPerLayer = new Map(PLANT_LAYERS.map((layer) => [layer, 0]));
+    let undeclaredCount = 0;
     ctx.placedSpecies.forEach((entry) => {
-      const layer = entry.layer || classifyPlantLayer(entry);
+      // No fallback to `entry` itself on a lookup miss: `entry` is the plant
+      // object, whose height/width are already fabricated defaults
+      // (createPlantFromSpecies). Falling back to it would silently
+      // reintroduce nl-c58 for any plant whose species row isn't in ctx.species.
+      // classifyDeclaredLayer handles `undefined` correctly on its own.
+      const declared = speciesByKey.get(entry.botanicalKey);
+      const layer = classifyDeclaredLayer(declared);
+      if (!layer) {
+        undeclaredCount += 1;
+        return;
+      }
       if (speciesPerLayer.has(layer)) speciesPerLayer.set(layer, speciesPerLayer.get(layer) + 1);
     });
 
@@ -43,6 +62,25 @@ export default {
           speciesPerLayer.get(layer) ? '' : ' — nothing occupies this layer'
         }`
     );
+    if (undeclaredCount) {
+      findings.push(
+        `${undeclaredCount} species declare${undeclaredCount === 1 ? 's' : ''} no height or shape, so ${
+          undeclaredCount === 1 ? 'it is' : 'they are'
+        } left out of the layer counts entirely rather than bucketed on a guess.`
+      );
+    }
+
+    // If nothing placed could be classified, "4 layers empty" would describe an
+    // empty yard — not the truth, which is that something is planted and this
+    // rule simply has no size/shape data to bucket any of it. That is
+    // not-declared, the same input-absent case every other rule uses it for.
+    if (undeclaredCount && undeclaredCount === ctx.placedSpecies.length) {
+      return {
+        status: STATUSES.NOT_DECLARED,
+        summary: 'No planted species declares a height or growth shape, so layers could not be checked.',
+        findings,
+      };
+    }
 
     const status = empty.length >= 2 ? STATUSES.GAP : empty.length ? STATUSES.PARTIAL : STATUSES.OK;
     const summary = empty.length
