@@ -2,6 +2,7 @@ import {
   VIEW_FROM_DIRECTIONS,
   resolveElevationOrientation,
 } from '../render/elevationOrientation.js';
+import { SITE_VOCABULARY } from '../data/projectConfig.js';
 
 /**
  * The Setup-mode control panel: the yard, a list of the project's views, and a
@@ -312,8 +313,58 @@ export function createSetupPanel({
           'yard wants a proportionally larger margin.'
       )
     );
+    wrap.appendChild(buildEcology());
     wrap.appendChild(buildShowToggles());
     return wrap;
+  }
+
+  /**
+   * What the ecology rules need and this project may not have said yet: the
+   * EPA Level I ecoregion the keystone-genus lists are keyed by, and the site
+   * conditions each planted species gets checked against. Both optional — a
+   * project that never declares them gets "not declared" on those rules rather
+   * than a guess graded against the wrong ground.
+   */
+  function buildEcology() {
+    const wrap = el('div', 'setup-panel__ecology');
+    wrap.appendChild(el('h3', 'setup-panel__heading', 'Ecoregion & site'));
+    const { ecoregion, site } = state.project;
+
+    const grid = el('div', 'setup-panel__grid');
+    grid.appendChild(
+      textField('EPA Level I ecoregion', ecoregion || '', (value) => {
+        const trimmed = value.trim();
+        commit({ ecoregion: trimmed || null });
+      })
+    );
+    ['sun', 'water', 'soil'].forEach((key) => {
+      grid.appendChild(
+        selectField(
+          siteFieldLabel(key),
+          site?.[key] || '',
+          ['', ...SITE_VOCABULARY[key]],
+          (value) => commit({ site: { ...site, [key]: value || null } })
+        )
+      );
+    });
+    wrap.appendChild(grid);
+    wrap.appendChild(
+      el(
+        'p',
+        'setup-panel__hint',
+        'The ecoregion (e.g. "9" for the Blackland Prairie / Great Plains) picks which ' +
+          'keystone-genus lists this planting is graded against. Sun, water, and soil ' +
+          'describe the site itself, which each planted species is checked against — ' +
+          'leave any of them blank to skip that check.'
+      )
+    );
+    return wrap;
+  }
+
+  function siteFieldLabel(key) {
+    if (key === 'sun') return 'Sun';
+    if (key === 'water') return 'Water';
+    return 'Soil';
   }
 
   /**

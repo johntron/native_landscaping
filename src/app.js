@@ -1069,17 +1069,20 @@ async function init() {
    * Round-tripping through serialize + normalize means a rejected edit leaves
    * the drawing on the last good state instead of throwing mid-render.
    *
-   * @param {object} candidate a project-shaped patch: the yard, the views, or both
+   * @param {object} candidate the full next project — setupPanel's commit()
+   * always spreads its own state.project under the patch before calling this,
+   * so candidate already carries everything, including any optional field the
+   * edit cleared. Merging it back onto `serializeProjectConfig(project)` would
+   * undo exactly that: an optional field's serializer omits it once cleared
+   * (falsy), and the old value would resurface from the base object instead of
+   * staying gone.
    * @returns {boolean} whether the edit was applied — a caller that reports its
    * own success afterwards must not paper over the rejection message set here.
    */
   function applyViewEdit(candidate) {
     let validated;
     try {
-      validated = normalizeProjectConfig(
-        { ...serializeProjectConfig(project), ...serializeCandidate(candidate) },
-        project.id
-      );
+      validated = normalizeProjectConfig(serializeCandidate(candidate), project.id);
     } catch (err) {
       setupPanel.setStatus(err.message, 'error');
       return false;
