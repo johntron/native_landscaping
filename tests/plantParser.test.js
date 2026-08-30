@@ -6,6 +6,7 @@ import {
   LayoutDataError,
   parsePlantLayoutCsv,
   parseSpeciesCsv,
+  rehydratePlants,
 } from '../src/data/plantParser.js';
 import { buildLayoutCsv } from '../src/data/layoutExporter.js';
 
@@ -178,4 +179,45 @@ test('a plant built from the catalog round-trips through the layout CSV', () => 
     { ...reloaded[0], x: Number(reloaded[0].x.toFixed(3)), y: Number(reloaded[0].y.toFixed(3)) },
     { ...added, x: 12.5, y: 7.25 }
   );
+});
+
+/**
+ * Layout history and the server's saved history entries store full plant
+ * objects, attributes included, as the simplest thing to snapshot for
+ * undo/redo. Restoring one after the catalog has since been corrected must
+ * not silently un-correct it — rehydratePlants is what re-derives attributes
+ * from the current catalog every time a plant list comes out of history.
+ */
+test('rehydratePlants replaces stale attributes with what the catalog says now', () => {
+  const oldSpeciesCsv = `${speciesHeader}\n`
+    + 'c,Autumn sage,Salvia greggii,3-11,3-11,,,,,red,3,3,mound';
+  const oldSpecies = parseSpeciesCsv(oldSpeciesCsv);
+  const staleSnapshot = [createPlantFromSpecies(oldSpecies[0], { id: 'sage-1', x: 5, y: 5 })];
+  assert.equal(staleSnapshot[0].width, 3);
+  assert.equal(staleSnapshot[0].growthShape, 'mound');
+
+  // The catalog has since been corrected: wider, and reclassified as a vase shape.
+  const newSpeciesCsv = `${speciesHeader}\n`
+    + 'c,Autumn sage,Salvia greggii,3-11,3-11,,,,,red,5,3,vase';
+  const newSpecies = parseSpeciesCsv(newSpeciesCsv);
+
+  const fresh = rehydratePlants(staleSnapshot, newSpecies);
+
+  assert.equal(fresh[0].width, 5);
+  assert.equal(fresh[0].growthShape, 'vase');
+  // Identity and position survive untouched.
+  assert.equal(fresh[0].id, 'sage-1');
+  assert.equal(fresh[0].x, 5);
+  assert.equal(fresh[0].y, 5);
+});
+
+test('rehydratePlants leaves a plant alone if its species left the catalog', () => {
+  const speciesCsv = `${speciesHeader}\n`
+    + 'c,Autumn sage,Salvia greggii,3-11,3-11,,,,,red,3,3,mound';
+  const species = parseSpeciesCsv(speciesCsv);
+  const snapshot = [createPlantFromSpecies(species[0], { id: 'sage-1', x: 5, y: 5 })];
+
+  const stillThere = rehydratePlants(snapshot, []);
+
+  assert.deepStrictEqual(stillThere, snapshot);
 });

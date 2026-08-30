@@ -13,6 +13,7 @@ import {
   buildPlantsFromCsv,
   createPlantFromSpecies,
   parseSpeciesCsv,
+  rehydratePlants,
   LayoutDataError,
 } from './data/plantParser.js';
 import { buildLayoutCsv } from './data/layoutExporter.js';
@@ -265,7 +266,10 @@ async function init() {
 
   const applyHistoryPlants = (plants) => {
     if (!Array.isArray(plants)) return;
-    appState.plants = plants;
+    // Same reasoning as the boot-time restore: a history entry's attributes are a
+    // snapshot from whenever it was recorded, not necessarily what the catalog says
+    // now. Undo/redo move POSITIONS through history; attributes stay live.
+    appState.plants = rehydratePlants(plants, appState.species);
     render();
     // Undoing an add or a remove changes which species are placed.
     refreshSpeciesTable();
@@ -1255,7 +1259,11 @@ async function init() {
       initialCursor: historyCursor,
     });
     const currentPlants = layoutHistoryInstance.getCurrentPlants();
-    appState.plants = currentPlants.length ? currentPlants : initialPlants;
+    // A history entry snapshots full plant objects, attributes included, so a
+    // restored entry would otherwise un-correct any catalog fix made since it was
+    // recorded — see rehydratePlants. Positions and identity come from history;
+    // attributes always come fresh from the catalog just parsed above.
+    appState.plants = rehydratePlants(currentPlants.length ? currentPlants : initialPlants, appState.species);
     updateHistoryControls();
     // The layout arrives after the panel is first built, and whether the yard
     // still contains it is the panel's loudest section — so it is rebuilt here
