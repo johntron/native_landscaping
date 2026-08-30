@@ -105,6 +105,25 @@ function assertUniqueIds(placements) {
   });
 }
 
+/** {byEpithet, byBotanical} lookup maps, shared by every placement-to-species join below. */
+function indexSpeciesForLookup(species) {
+  const byEpithet = new Map();
+  const byBotanical = new Map();
+  species.forEach((entry) => {
+    if (entry.speciesEpithet) byEpithet.set(entry.speciesEpithet, entry);
+    if (entry.botanicalKey) byBotanical.set(entry.botanicalKey, entry);
+  });
+  return { byEpithet, byBotanical };
+}
+
+function lookupSpeciesEntry({ byEpithet, byBotanical }, { botanicalKey, speciesEpithet }) {
+  return (
+    (botanicalKey ? byBotanical.get(botanicalKey) : null) ||
+    (speciesEpithet ? byEpithet.get(speciesEpithet) : null) ||
+    null
+  );
+}
+
 /**
  * Merge species data with per-plant layout rows into renderable plant instances.
  * @param {string} speciesCsvText
@@ -113,13 +132,7 @@ function assertUniqueIds(placements) {
 export function buildPlantsFromCsv(speciesCsvText, layoutCsvText) {
   const species = parseSpeciesCsv(speciesCsvText);
   const layout = parsePlantLayoutCsv(layoutCsvText);
-
-  const speciesByEpithet = new Map();
-  const speciesByBotanical = new Map();
-  species.forEach((entry) => {
-    if (entry.speciesEpithet) speciesByEpithet.set(entry.speciesEpithet, entry);
-    if (entry.botanicalKey) speciesByBotanical.set(entry.botanicalKey, entry);
-  });
+  const index = indexSpeciesForLookup(species);
 
   return layout.map((placement, idx) => {
     const botanicalKey = placement.botanicalKey || (placement.speciesEpithet ? null : '');
@@ -127,9 +140,7 @@ export function buildPlantsFromCsv(speciesCsvText, layoutCsvText) {
       throw new LayoutDataError(`Layout row ${placement.id} is missing botanical_name`);
     }
 
-    const speciesEntry =
-      (botanicalKey ? speciesByBotanical.get(botanicalKey) : null) ||
-      (placement.speciesEpithet ? speciesByEpithet.get(placement.speciesEpithet) : null);
+    const speciesEntry = lookupSpeciesEntry(index, { botanicalKey, speciesEpithet: placement.speciesEpithet });
 
     if (!speciesEntry) {
       const missing = botanicalKey || placement.speciesEpithet || 'unknown';
@@ -142,6 +153,48 @@ export function buildPlantsFromCsv(speciesCsvText, layoutCsvText) {
       y: placement.y,
       botanicalKey: placement.botanicalKey,
       speciesEpithet: placement.speciesEpithet,
+    });
+  });
+}
+
+/**
+ * Re-derive a plant list's ATTRIBUTES from the current species catalog, keeping only
+ * each plant's identity and position (id, botanical key/epithet, x, y).
+ *
+ * Layout history and the server's saved history entries hold full plant objects —
+ * attributes included — because that is the simplest thing to snapshot for undo/redo.
+ * But `plants.csv` is supposed to be the single source of truth for species
+ * attributes (see AGENTS.md), and a history entry is a snapshot from whenever it was
+ * recorded: restoring one verbatim after the catalog has since been corrected quietly
+ * un-corrects it, and a plant placed months ago never picks up a catalog fix at all
+ * until something else moves it. History should only ever answer "where were things",
+ * never "what did the catalog say" — so every plant list this app is about to show
+ * (on boot, and after undo/redo) goes through here first.
+ *
+ * A plant whose species has since been removed from the catalog is left exactly as
+ * it was in the snapshot rather than dropped — better a stale plant than a vanished
+ * one, and its old attributes are the only ones left to draw it with.
+ *
+ * @param {Array<object>} plants plant objects (from history, possibly stale)
+ * @param {Array<object>} species fresh rows from parseSpeciesCsv
+ */
+export function rehydratePlants(plants, species) {
+  if (!Array.isArray(plants) || !plants.length) return plants || [];
+  const index = indexSpeciesForLookup(species);
+
+  return plants.map((plant) => {
+    const speciesEntry = lookupSpeciesEntry(index, {
+      botanicalKey: plant.botanicalKey || normalizeBotanicalName(plant.botanicalName),
+      speciesEpithet: plant.speciesEpithet,
+    });
+    if (!speciesEntry) return plant;
+
+    return createPlantFromSpecies(speciesEntry, {
+      id: plant.id,
+      x: plant.x,
+      y: plant.y,
+      botanicalKey: plant.botanicalKey,
+      speciesEpithet: plant.speciesEpithet,
     });
   });
 }
