@@ -39,6 +39,16 @@ export const ZOOM_LIMITS = {
   step: 0.1,
 };
 export const PLANT_BLEND_OPACITY = 0.72;
+
+/**
+ * A low-climber (growth_shape 'low-climber') this close to a wall (fences are
+ * modeled as walls — see featureConfig.js) is assumed to be climbing it.
+ * CLIMB_WIDTH_FT is how narrow it draws while contained by a support tall
+ * enough for its mature height; shared by the plan (topView.js) and elevation
+ * (elevationViews.js) renderers so both read the same support the same way.
+ */
+export const CLIMB_PROXIMITY_FT = 2;
+export const CLIMB_WIDTH_FT = 1.5;
 export const SOUTH_ELEVATION_BOTTOM_OFFSET_PX = 100;
 export const SOUTH_ELEVATION_LEFT_OFFSET_PX = 0;
 export const EAST_ELEVATION_BOTTOM_OFFSET_PX = 100;

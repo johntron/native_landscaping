@@ -170,3 +170,78 @@ test('a view with a visible photo gets no fallback fill; one with no photo, or a
   assert.equal(hiddenRects[0].getAttribute('fill'), DEFAULT_SKY_COLOR);
   assert.equal(hiddenRects[1].getAttribute('fill'), DEFAULT_GROUND_COLOR);
 });
+
+const CLIMBER_FEATURE_STYLE = { fill: '#e6e1d8', stroke: '#c9c3b8', strokeWidthFt: 0.1 };
+
+function lowClimberElevationPlant(id, x, height = 12, width = 5) {
+  return {
+    id,
+    commonName: 'Test Vine',
+    botanicalName: 'Clematis pitcheri',
+    growthShape: 'low-climber',
+    width,
+    height,
+    x,
+    y: 5,
+  };
+}
+
+/** The outline points, in order, from the canopy path's Q-command control points. */
+function outlinePointsFromCanopyPath(svg) {
+  const d = svg.querySelectorAll(`path[fill-opacity="${PLANT_BLEND_OPACITY}"]`)[0]?.getAttribute('d') || '';
+  const points = [];
+  const re = /Q\s+(-?[\d.]+)\s+(-?[\d.]+)/g;
+  let match = re.exec(d);
+  while (match) {
+    points.push({ x: Number(match[1]), y: Number(match[2]) });
+    match = re.exec(d);
+  }
+  return points;
+}
+
+test('a low-climber that outgrows its wall flares from a narrow base to its full width near the top', () => {
+  const doc = resetDocument();
+  const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  const wall = {
+    id: 'fence',
+    type: 'wall',
+    pathFt: [{ x: 10.2, y: 0 }, { x: 10.2, y: 20 }],
+    heightFt: 6, // shorter than the plant's 12 ft height — it tops the fence
+    style: CLIMBER_FEATURE_STYLE,
+  };
+  const plantStates = [{ plant: lowClimberElevationPlant('vine', 10), state: evergreenState }];
+
+  renderElevationView(svg, plantStates, elevationView('south'), { features: [wall] });
+
+  const points = outlinePointsFromCanopyPath(svg);
+  assert.ok(points.length >= 8, 'cascade outline has its full point set');
+  // Outline order is: base(narrow), waist(narrow), shoulder(wide) — for both sides.
+  const [, waistLeft, shoulderLeft, , , shoulderRight, waistRight] = points;
+  const waistWidth = waistRight.x - waistLeft.x;
+  const shoulderWidth = shoulderRight.x - shoulderLeft.x;
+  assert.ok(
+    shoulderWidth > waistWidth * 1.5,
+    `canopy flares wider near the top than at the waist (waist ${waistWidth}, shoulder ${shoulderWidth})`
+  );
+});
+
+test('a low-climber contained by its wall stays narrow, no flare', () => {
+  const doc = resetDocument();
+  const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  const wall = {
+    id: 'fence',
+    type: 'wall',
+    pathFt: [{ x: 10.2, y: 0 }, { x: 10.2, y: 20 }],
+    heightFt: 14, // taller than the plant's 12 ft height
+    style: CLIMBER_FEATURE_STYLE,
+  };
+  const plantStates = [{ plant: lowClimberElevationPlant('vine', 10), state: evergreenState }];
+
+  renderElevationView(svg, plantStates, elevationView('south'), { features: [wall] });
+
+  const shade = svg.querySelectorAll('ellipse')[0];
+  assert.ok(shade, 'canopy shade ellipse is rendered');
+  // shade rx is adjustedWidth * 0.38; the narrow climbing cap is 1.5 ft (36 px at 24 px/ft).
+  const adjustedWidthPx = Number(shade.getAttribute('rx')) / 0.38;
+  assert.ok(adjustedWidthPx < 40, `canopy stays narrow when the wall contains it (got ${adjustedWidthPx}px)`);
+});

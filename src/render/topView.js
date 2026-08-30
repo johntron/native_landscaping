@@ -1,12 +1,11 @@
-import { PLANT_BLEND_OPACITY } from '../constants.js';
+import { PLANT_BLEND_OPACITY, CLIMB_PROXIMITY_FT, CLIMB_WIDTH_FT } from '../constants.js';
 import { createViewTransform } from './viewTransform.js';
 import { makeRng, seedForPlant } from '../utils/rng.js';
 import { getSpeciesKey } from '../utils/speciesKey.js';
 import { clearSvg, createSvgElement } from './svgUtils.js';
 import { buildFeatureGroup } from './featureViews.js';
 import { buildFlowerCenters } from './inflorescenceStrategies.js';
-import { pointInPolygon, distanceToPath } from './geometry.js';
-import { geometryKeyFor } from '../data/featureConfig.js';
+import { pointInPolygon, nearestFeature } from './geometry.js';
 import { buildPlantLabel } from './labels.js';
 import { buildFruitCenters } from './fruitPlacement.js';
 import { buildSmoothPath } from './pathUtils.js';
@@ -16,34 +15,6 @@ const HIGHLIGHT_OUTLINE_OPACITY = 0.9;
 const TARGET_COLOR = '#1b74d8';
 const TARGET_OUTLINE_OPACITY = 0.95;
 const CLIMB_WARNING_COLOR = '#d64545';
-
-// A low-climber this close to a wall (fences are modeled as walls — see
-// featureConfig.js) is assumed to be climbing it. If the wall is tall enough
-// to contain the vine's mature height, it hugs the support and draws narrow;
-// otherwise it outgrows the support, tops it, and cascades over — keeping its
-// full natural spread rather than narrowing. This close to a box instead (not
-// climbable) it keeps its full width but gets a warning ring, since it will
-// likely just sprawl over the box.
-const CLIMB_PROXIMITY_FT = 2;
-const CLIMB_WIDTH_FT = 1.5;
-
-/** Nearest feature of `type` to a feet-space point, with its feet distance, or null. */
-function nearestFeature(point, features, type) {
-  let best = null;
-  features.forEach((feature) => {
-    if (feature.type !== type) return;
-    const points = feature[geometryKeyFor(feature.type)] || [];
-    if (points.length < 2) return;
-    let distanceFt = 0;
-    if (type === 'box' && !pointInPolygon(point, points)) {
-      distanceFt = distanceToPath(point, [...points, points[0]]);
-    } else if (type !== 'box') {
-      distanceFt = distanceToPath(point, points);
-    }
-    if (!best || distanceFt < best.distanceFt) best = { feature, distanceFt };
-  });
-  return best;
-}
 
 /**
  * Render a plan view using wavy domed foliage silhouettes scaled to plant width.
