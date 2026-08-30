@@ -28,6 +28,21 @@ test('parses species seasonal month ranges and foliage palette', () => {
   assert.equal(plant.botanicalKey, 'malvaviscus arboreus var. drummondii');
 });
 
+test('a species missing width_ft gets a shape-appropriate estimate instead of a flat 1 ft default', () => {
+  const csv = `${speciesHeader}\n`
+    + 'creep,Creeper,Dichondra argentea,,,,,,,,,2,creeping\n'
+    + 'unknownshape,Mystery,Mysterium plantus,,,,,,,,,4,exotic-shape';
+  const species = parseSpeciesCsv(csv);
+
+  const creeper = createPlantFromSpecies(species[0], { id: 'p1', x: 0, y: 0 });
+  // creeping ratio is 7.5 — a groundcover spreads far wider than it stands tall.
+  assert.equal(creeper.width, 15);
+
+  const unknownShape = createPlantFromSpecies(species[1], { id: 'p2', x: 0, y: 0 });
+  // no ratio declared for this shape falls back to 1:1 with height.
+  assert.equal(unknownShape.width, 4);
+});
+
 test('builds plants by matching layout botanical_name to species dimensions and structure', () => {
   const speciesCsv = `${speciesHeader}\n`
     + 'b,Lyme grass,Elymus arenarius,11-2,4-5,,,,,white,2,2,groundcover\n'

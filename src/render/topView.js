@@ -5,7 +5,8 @@ import { getSpeciesKey } from '../utils/speciesKey.js';
 import { clearSvg, createSvgElement } from './svgUtils.js';
 import { buildFeatureGroup } from './featureViews.js';
 import { buildFlowerCenters } from './inflorescenceStrategies.js';
-import { pointInPolygon } from './geometry.js';
+import { pointInPolygon, distanceToPath } from './geometry.js';
+import { geometryKeyFor } from '../data/featureConfig.js';
 import { buildPlantLabel } from './labels.js';
 import { buildFruitCenters } from './fruitPlacement.js';
 import { buildSmoothPath } from './pathUtils.js';
@@ -14,6 +15,31 @@ const HIGHLIGHT_COLOR = '#ef7d1a';
 const HIGHLIGHT_OUTLINE_OPACITY = 0.9;
 const TARGET_COLOR = '#1b74d8';
 const TARGET_OUTLINE_OPACITY = 0.95;
+const CLIMB_WARNING_COLOR = '#d64545';
+
+// A low-climber this close to a wall (fences are modeled as walls — see
+// featureConfig.js) is assumed to be climbing it, and draws narrow rather than
+// sprawling. This close to a box instead (not climbable) it keeps its full
+// width but gets a warning ring, since it will likely just sprawl over the box.
+const CLIMB_PROXIMITY_FT = 2;
+const CLIMB_WIDTH_FT = 1.5;
+
+/** Feet-space distance from a point to the nearest feature of `type`, or Infinity. */
+function nearestFeatureDistanceFt(point, features, type) {
+  let best = Infinity;
+  features.forEach((feature) => {
+    if (feature.type !== type) return;
+    const points = feature[geometryKeyFor(feature.type)] || [];
+    if (points.length < 2) return;
+    if (type === 'box' && pointInPolygon(point, points)) {
+      best = 0;
+      return;
+    }
+    const path = type === 'box' ? [...points, points[0]] : points;
+    best = Math.min(best, distanceToPath(point, path));
+  });
+  return best;
+}
 
 /**
  * Render a plan view using wavy domed foliage silhouettes scaled to plant width.
@@ -42,6 +68,7 @@ export function renderTopView(svg, plantStates, view, options = {}) {
   const toPixels = transform.toPx;
   const highlightTargets = [];
   const targetMarkers = [];
+  const climbWarnings = [];
 
   // A plan has no depth to sort on, so features go underneath the plants in the
   // order they were authored — the authoring order IS the z-order.
@@ -58,7 +85,19 @@ export function renderTopView(svg, plantStates, view, options = {}) {
       'data-species-key': speciesKey,
     });
     const { x: cx, y: cy } = transform.planToViewBox(plant);
-    const radius = toPixels(plant.width) / 2;
+    let effectiveWidth = plant.width;
+    let isBoxWarning = false;
+    if (plant.growthShape === 'low-climber') {
+      const point = { x: plant.x, y: plant.y };
+      const wallDistFt = nearestFeatureDistanceFt(point, features, 'wall');
+      if (wallDistFt <= CLIMB_PROXIMITY_FT) {
+        effectiveWidth = Math.min(plant.width, CLIMB_WIDTH_FT);
+      } else {
+        const boxDistFt = nearestFeatureDistanceFt(point, features, 'box');
+        isBoxWarning = boxDistFt <= CLIMB_PROXIMITY_FT;
+      }
+    }
+    const radius = toPixels(effectiveWidth) / 2;
     const canopySeed = seedForPlant(plant.id);
     const canopyPoints = buildWavyCirclePoints(cx, cy, radius, makeRng(canopySeed));
     const rng = makeRng(canopySeed);
@@ -152,10 +191,14 @@ export function renderTopView(svg, plantStates, view, options = {}) {
     if (isTargeted || isHovered) {
       targetMarkers.push({ cx, cy, radius });
     }
+    if (isBoxWarning) {
+      climbWarnings.push({ cx, cy, radius });
+    }
   });
 
   highlightTargets.forEach((target) => appendHighlightRing(svg, target));
   targetMarkers.forEach((target) => appendTargetRing(svg, target));
+  climbWarnings.forEach((target) => appendClimbWarningRing(svg, target));
 }
 
 function renderFoliageDome(group, { cx, cy, radius, color, rng, outlinePoints }) {
@@ -307,6 +350,22 @@ function appendHighlightRing(svg, { cx, cy, radius }) {
   });
   svg.appendChild(outer);
   svg.appendChild(center);
+}
+
+/** A low-climber sitting next to a box, with no climbable wall in reach — it will likely just sprawl over it. */
+function appendClimbWarningRing(svg, { cx, cy, radius }) {
+  const outer = createSvgElement('circle', {
+    cx,
+    cy,
+    r: radius * 1.08 + 5,
+    fill: 'none',
+    stroke: CLIMB_WARNING_COLOR,
+    'stroke-width': Math.max(radius * 0.1, 2.5),
+    'stroke-dasharray': '4 4',
+    'stroke-opacity': 0.9,
+    'pointer-events': 'none',
+  });
+  svg.appendChild(outer);
 }
 
 function appendTargetRing(svg, { cx, cy, radius }) {

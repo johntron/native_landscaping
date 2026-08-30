@@ -1,5 +1,5 @@
 import { createSvgElement } from './svgUtils.js';
-import { pointInPolygon } from './geometry.js';
+import { pointInPolygon, distanceToPath } from './geometry.js';
 import { geometryKeyFor } from '../data/featureConfig.js';
 import { projectFeatureToPlan } from './featureProjection.js';
 
@@ -249,22 +249,4 @@ function featurePoints(feature) {
 function vertexIndex(handleId) {
   const match = /^vertex:(\d+)$/.exec(String(handleId || ''));
   return match ? Number(match[1]) : null;
-}
-
-/** Shortest distance from a point to any segment of an open path. */
-function distanceToPath(point, points) {
-  let best = Infinity;
-  for (let i = 1; i < points.length; i += 1) {
-    best = Math.min(best, distanceToSegment(point, points[i - 1], points[i]));
-  }
-  return best;
-}
-
-function distanceToSegment(point, a, b) {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const lengthSq = dx * dx + dy * dy;
-  if (!lengthSq) return Math.hypot(point.x - a.x, point.y - a.y);
-  const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSq));
-  return Math.hypot(point.x - (a.x + t * dx), point.y - (a.y + t * dy));
 }
