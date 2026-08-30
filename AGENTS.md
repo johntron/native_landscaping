@@ -228,9 +228,10 @@ the edge it is taken from, so there is something to pick up — but marked *not
 set* and with no band behind it, because absent still means cull nothing. The
 default is deliberately a DRAWING concern (`defaultViewerAt`, used by the
 overlay) and never written into the view: a camera outside the yard culls no
-plant, since plants are clamped to the yard, but it culls features, which are
-not. Writing it in cost example-frontyard's `west` elevation a bed it had drawn
-the day before. The first drag is what commits a real position.
+plant — a plant is never culled by any camera, only features are — but it
+culls features, which are. Writing it in cost example-frontyard's `west`
+elevation a bed it had drawn the day before. The first drag is what commits a
+real position.
 
 #### When the yard no longer contains the design
 
@@ -423,17 +424,21 @@ not draws exactly what it drew before — the opposite default from
 hides a shape. Zero is a real position, so every test is on finiteness, never
 truthiness.
 
-Two rules follow from it, and they are deliberately asymmetric:
+One rule follows from it, and a plant is deliberately exempt:
 
 - **A feature entirely behind the camera is culled** from that elevation
   (`isBehindViewer` in `src/render/elevationOrder.js`). The test is on
   `depthFt.far`, the edge least behind the camera — not on `depthFt.near`, which
   is what the sort reads — so a fence the camera stands in the middle of keeps
   the behaviour it already had rather than half-vanishing.
-- **A plant is never culled.** That would defeat the point of the shared yard,
-  so `resolveYardBounds` narrows the depth axis to the observer instead: a plant
-  cannot be dragged behind any camera in the first place, and the narrowing shows
-  up in Setup mode's "Shared yard" readout rather than as a plant disappearing.
+- **A plant is never culled, and never bounded by a camera either.**
+  `resolveYardBounds` used to narrow the depth axis to the nearest observer so a
+  plant could never be dragged behind one, but a plant was never culled to begin
+  with — the narrowing bought nothing but a smaller buildable area, and two
+  cameras facing each other (as on the Walkway project) could squeeze it to a
+  sliver. A plant is bounded by the declared yard alone; going past a camera
+  only changes how it sorts in that one elevation's depth order (`elevationOrder.js`),
+  never whether it is drawn.
 
 **The cull is drawn on the PLAN, in Setup mode** — a dashed line at each
 elevation's `viewerAtFt` with the yard behind it tinted, labelled on the side
