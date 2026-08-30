@@ -1,4 +1,10 @@
-import { PLANT_BLEND_OPACITY, DEFAULT_SKY_COLOR, DEFAULT_GROUND_COLOR } from '../constants.js';
+import {
+  PLANT_BLEND_OPACITY,
+  DEFAULT_SKY_COLOR,
+  DEFAULT_GROUND_COLOR,
+  CLIMB_PROXIMITY_FT,
+  CLIMB_WIDTH_FT,
+} from '../constants.js';
 import { orderElevationItems } from './elevationOrder.js';
 import { buildFeatureGroup } from './featureViews.js';
 import { createViewTransform } from './viewTransform.js';
@@ -6,7 +12,7 @@ import { getSpeciesKey } from '../utils/speciesKey.js';
 import { makeRng, seedForPlant } from '../utils/rng.js';
 import { clearSvg, createSvgElement } from './svgUtils.js';
 import { buildFlowerCenters } from './inflorescenceStrategies.js';
-import { pointInPolygon } from './geometry.js';
+import { pointInPolygon, nearestFeature } from './geometry.js';
 import { buildPlantLabel } from './labels.js';
 import { buildFruitCenters } from './fruitPlacement.js';
 import { buildSmoothPath } from './pathUtils.js';
@@ -66,22 +72,58 @@ export function renderElevationView(svg, plantStates, view, options = {}) {
     const canopySeed = seedForPlant(plant.id);
     const rng = makeRng(canopySeed);
     const cx = transform.axisToX(plant[axisKey]);
-    const width = toPixels(plant.width);
+
+    // A low-climber near a wall tall enough to contain its mature height hugs
+    // it narrowly; one that would outgrow the wall tops it and cascades over,
+    // so it flares from a narrow base to its full spread near the top instead
+    // of narrowing uniformly — see CLIMB_PROXIMITY_FT/CLIMB_WIDTH_FT.
+    let effectiveWidthFt = plant.width;
+    let cascade = null;
+    if ((plant.growthShape || '').toLowerCase() === 'low-climber') {
+      const nearestWall = nearestFeature({ x: plant.x, y: plant.y }, features, 'wall');
+      if (nearestWall && nearestWall.distanceFt <= CLIMB_PROXIMITY_FT) {
+        if (plant.height > nearestWall.feature.heightFt) {
+          cascade = { waistHeightFt: nearestWall.feature.heightFt };
+        } else {
+          effectiveWidthFt = Math.min(plant.width, CLIMB_WIDTH_FT);
+        }
+      }
+    }
+
+    const width = toPixels(effectiveWidthFt);
     const height = toPixels(plant.height);
-    const profileGeometry = resolveProfileGeometry(width, height, plant.growthShape);
+    const profileGeometry = cascade
+      ? {
+          adjustedWidth: toPixels(plant.width),
+          adjustedHeight: height,
+          exponent: 1.05,
+          narrowWidth: toPixels(Math.min(plant.width, CLIMB_WIDTH_FT)),
+          waistHeight: toPixels(cascade.waistHeightFt),
+        }
+      : resolveProfileGeometry(width, height, plant.growthShape);
     const { adjustedWidth, adjustedHeight } = profileGeometry;
     const canopyBounds = resolveCanopyBounds(plant.growthShape, groundY, adjustedHeight);
     const topY = canopyBounds.top;
     const bottomY = canopyBounds.bottom;
-    const outlinePoints = buildProfileOutlinePoints({
-      cx,
-      groundY,
-      width: adjustedWidth,
-      height: adjustedHeight,
-      exponent: profileGeometry.exponent,
-      rng: makeRng(canopySeed),
-      growthShape: plant.growthShape,
-    });
+    const outlinePoints = cascade
+      ? buildClimbingCascadeOutline({
+          cx,
+          groundY,
+          narrowWidth: profileGeometry.narrowWidth,
+          wideWidth: adjustedWidth,
+          waistHeight: profileGeometry.waistHeight,
+          totalHeight: adjustedHeight,
+          rng: makeRng(canopySeed),
+        })
+      : buildProfileOutlinePoints({
+          cx,
+          groundY,
+          width: adjustedWidth,
+          height: adjustedHeight,
+          exponent: profileGeometry.exponent,
+          rng: makeRng(canopySeed),
+          growthShape: plant.growthShape,
+        });
 
     const silhouetteMeta = renderProfileSilhouette({
       width,
@@ -94,6 +136,7 @@ export function renderElevationView(svg, plantStates, view, options = {}) {
       group,
       clipSuffix: `${elevationId}-${plant.id}`,
       geometry: profileGeometry,
+      cascade,
     });
     const profileClipPath = silhouetteMeta?.clipId ? `url(#${silhouetteMeta.clipId})` : null;
 
@@ -228,9 +271,10 @@ function renderProfileSilhouette({
   group,
   clipSuffix,
   geometry,
+  cascade,
 }) {
   const { adjustedWidth, adjustedHeight, exponent } = geometry || resolveProfileGeometry(width, height, growthShape);
-  if ((growthShape || '').toLowerCase() === 'tree') {
+  if (!cascade && (growthShape || '').toLowerCase() === 'tree') {
     renderTreeProfile({
       cx,
       groundY,
@@ -243,15 +287,27 @@ function renderProfileSilhouette({
     });
     return;
   }
-  const d = buildWavyProfilePath({
-    cx,
-    groundY,
-    width: adjustedWidth,
-    height: adjustedHeight,
-    exponent,
-    rng,
-    growthShape,
-  });
+  const d = cascade
+    ? buildSmoothPath(
+        buildClimbingCascadeOutline({
+          cx,
+          groundY,
+          narrowWidth: geometry.narrowWidth,
+          wideWidth: adjustedWidth,
+          waistHeight: geometry.waistHeight,
+          totalHeight: adjustedHeight,
+          rng,
+        })
+      )
+    : buildWavyProfilePath({
+        cx,
+        groundY,
+        width: adjustedWidth,
+        height: adjustedHeight,
+        exponent,
+        rng,
+        growthShape,
+      });
   const clipId = buildClipId(clipSuffix);
 
   const base = createSvgElement('path', { d, fill: color, 'fill-opacity': PLANT_BLEND_OPACITY });
@@ -438,6 +494,32 @@ function buildWavyProfilePath({ cx, groundY, width, height, exponent, rng, growt
     growthShape,
   });
   return buildProfilePathFromTopPoints({ topPoints, startX, cx, groundY, width });
+}
+
+/**
+ * Outline for a low-climber that outgrows its support: narrow stem from the
+ * ground to the wall's height, flaring to the plant's full spread near the
+ * top — the vine cascading over the crown of the fence instead of hugging it
+ * uniformly. Fed straight into buildSmoothPath, same as any other outline.
+ */
+function buildClimbingCascadeOutline({ cx, groundY, narrowWidth, wideWidth, waistHeight, totalHeight, rng }) {
+  const halfNarrow = narrowWidth / 2;
+  const halfWide = wideWidth / 2;
+  const waistY = groundY - waistHeight;
+  const topY = groundY - totalHeight;
+  const capY = topY + (waistY - topY) * 0.15; // shoulders of the flare, just below the crown
+  const jitter = (magnitude) => (rng.next() - 0.5) * magnitude;
+
+  return [
+    { x: cx - halfNarrow + jitter(narrowWidth * 0.15), y: groundY },
+    { x: cx - halfNarrow + jitter(narrowWidth * 0.15), y: waistY + jitter(totalHeight * 0.02) },
+    { x: cx - halfWide + jitter(wideWidth * 0.06), y: capY + jitter(totalHeight * 0.02) },
+    { x: cx - halfWide * 0.35 + jitter(wideWidth * 0.06), y: topY + jitter(totalHeight * 0.015) },
+    { x: cx + halfWide * 0.35 + jitter(wideWidth * 0.06), y: topY + jitter(totalHeight * 0.015) },
+    { x: cx + halfWide + jitter(wideWidth * 0.06), y: capY + jitter(totalHeight * 0.02) },
+    { x: cx + halfNarrow + jitter(narrowWidth * 0.15), y: waistY + jitter(totalHeight * 0.02) },
+    { x: cx + halfNarrow + jitter(narrowWidth * 0.15), y: groundY },
+  ];
 }
 
 function buildWavyEllipsePoints({ cx, cy, rx, ry, rng }) {

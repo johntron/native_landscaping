@@ -1,3 +1,5 @@
+import { geometryKeyFor } from '../data/featureConfig.js';
+
 /**
  * Basic even-odd point-in-polygon test.
  * @param {{ x: number, y: number }} point
@@ -35,4 +37,26 @@ export function distanceToSegment(point, a, b) {
   if (!lengthSq) return Math.hypot(point.x - a.x, point.y - a.y);
   const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSq));
   return Math.hypot(point.x - (a.x + t * dx), point.y - (a.y + t * dy));
+}
+
+/**
+ * Nearest feature of `type` to a feet-space point, with its feet distance, or
+ * null. Shared by topView.js (plan) and elevationViews.js (elevation) so both
+ * views agree on which support a low-climber is next to.
+ */
+export function nearestFeature(point, features, type) {
+  let best = null;
+  features.forEach((feature) => {
+    if (feature.type !== type) return;
+    const points = feature[geometryKeyFor(feature.type)] || [];
+    if (points.length < 2) return;
+    let distanceFt = 0;
+    if (type === 'box' && !pointInPolygon(point, points)) {
+      distanceFt = distanceToPath(point, [...points, points[0]]);
+    } else if (type !== 'box') {
+      distanceFt = distanceToPath(point, points);
+    }
+    if (!best || distanceFt < best.distanceFt) best = { feature, distanceFt };
+  });
+  return best;
 }
