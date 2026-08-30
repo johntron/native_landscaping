@@ -105,13 +105,14 @@ function lowClimberState(id, x, y, width = 5) {
   };
 }
 
-test('a low-climber next to a wall draws a narrower footprint than declared', () => {
+test('a low-climber next to a wall tall enough to contain it draws a narrower footprint', () => {
   const doc = resetDocument();
   const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
   const wall = {
     id: 'fence',
     type: 'wall',
     pathFt: [{ x: 10.2, y: 0 }, { x: 10.2, y: 20 }],
+    heightFt: 12, // taller than the plant's declared 10 ft height
     style: FEATURE_STYLE,
   };
 
@@ -124,6 +125,26 @@ test('a low-climber next to a wall draws a narrower footprint than declared', ()
   const canopyRadiusPx = Number(shade.getAttribute('r')) / 0.72;
   // Full declared width would be 5 ft (75 px radius); climbing caps it at 1.5 ft (22.5 px).
   assert.ok(canopyRadiusPx < 30, `canopy narrows near the wall (got ${canopyRadiusPx}px radius)`);
+});
+
+test('a low-climber that would outgrow the wall keeps its full natural width', () => {
+  const doc = resetDocument();
+  const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  const wall = {
+    id: 'fence',
+    type: 'wall',
+    pathFt: [{ x: 10.2, y: 0 }, { x: 10.2, y: 20 }],
+    heightFt: 6, // shorter than the plant's declared 10 ft height — it tops the fence
+    style: FEATURE_STYLE,
+  };
+
+  renderTopView(svg, [lowClimberState('vine', 10, 5, 5)], PLAN_VIEW, { features: [wall] });
+
+  const shade = svg.querySelectorAll('circle')[0];
+  assert.ok(shade, 'canopy shade circle is rendered');
+  const canopyRadiusPx = Number(shade.getAttribute('r')) / 0.72;
+  // Full declared width is 5 ft (75 px radius) — not narrowed to the 1.5 ft climbing cap.
+  assert.ok(canopyRadiusPx > 70, `canopy keeps full spread when it outgrows the wall (got ${canopyRadiusPx}px radius)`);
 });
 
 test('a low-climber next to only a box gets a warning ring but keeps full width', () => {

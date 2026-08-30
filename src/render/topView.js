@@ -18,25 +18,29 @@ const TARGET_OUTLINE_OPACITY = 0.95;
 const CLIMB_WARNING_COLOR = '#d64545';
 
 // A low-climber this close to a wall (fences are modeled as walls — see
-// featureConfig.js) is assumed to be climbing it, and draws narrow rather than
-// sprawling. This close to a box instead (not climbable) it keeps its full
-// width but gets a warning ring, since it will likely just sprawl over the box.
+// featureConfig.js) is assumed to be climbing it. If the wall is tall enough
+// to contain the vine's mature height, it hugs the support and draws narrow;
+// otherwise it outgrows the support, tops it, and cascades over — keeping its
+// full natural spread rather than narrowing. This close to a box instead (not
+// climbable) it keeps its full width but gets a warning ring, since it will
+// likely just sprawl over the box.
 const CLIMB_PROXIMITY_FT = 2;
 const CLIMB_WIDTH_FT = 1.5;
 
-/** Feet-space distance from a point to the nearest feature of `type`, or Infinity. */
-function nearestFeatureDistanceFt(point, features, type) {
-  let best = Infinity;
+/** Nearest feature of `type` to a feet-space point, with its feet distance, or null. */
+function nearestFeature(point, features, type) {
+  let best = null;
   features.forEach((feature) => {
     if (feature.type !== type) return;
     const points = feature[geometryKeyFor(feature.type)] || [];
     if (points.length < 2) return;
-    if (type === 'box' && pointInPolygon(point, points)) {
-      best = 0;
-      return;
+    let distanceFt = 0;
+    if (type === 'box' && !pointInPolygon(point, points)) {
+      distanceFt = distanceToPath(point, [...points, points[0]]);
+    } else if (type !== 'box') {
+      distanceFt = distanceToPath(point, points);
     }
-    const path = type === 'box' ? [...points, points[0]] : points;
-    best = Math.min(best, distanceToPath(point, path));
+    if (!best || distanceFt < best.distanceFt) best = { feature, distanceFt };
   });
   return best;
 }
@@ -89,12 +93,13 @@ export function renderTopView(svg, plantStates, view, options = {}) {
     let isBoxWarning = false;
     if (plant.growthShape === 'low-climber') {
       const point = { x: plant.x, y: plant.y };
-      const wallDistFt = nearestFeatureDistanceFt(point, features, 'wall');
-      if (wallDistFt <= CLIMB_PROXIMITY_FT) {
-        effectiveWidth = Math.min(plant.width, CLIMB_WIDTH_FT);
+      const nearestWall = nearestFeature(point, features, 'wall');
+      if (nearestWall && nearestWall.distanceFt <= CLIMB_PROXIMITY_FT) {
+        const supportContainsVine = plant.height <= nearestWall.feature.heightFt;
+        effectiveWidth = supportContainsVine ? Math.min(plant.width, CLIMB_WIDTH_FT) : plant.width;
       } else {
-        const boxDistFt = nearestFeatureDistanceFt(point, features, 'box');
-        isBoxWarning = boxDistFt <= CLIMB_PROXIMITY_FT;
+        const nearestBox = nearestFeature(point, features, 'box');
+        isBoxWarning = Boolean(nearestBox && nearestBox.distanceFt <= CLIMB_PROXIMITY_FT);
       }
     }
     const radius = toPixels(effectiveWidth) / 2;
