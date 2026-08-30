@@ -85,3 +85,79 @@ test('renderTopView clears nodes and renders groups along with highlight/target 
     .find((circle) => circle.getAttribute('stroke') === '#1b74d8');
   assert.ok(targetRing, 'target marker is appended for hovered/targeted plants');
 });
+
+const FEATURE_STYLE = { fill: '#e6e1d8', stroke: '#c9c3b8', strokeWidthFt: 0.1 };
+
+function lowClimberState(id, x, y, width = 5) {
+  return {
+    plant: {
+      id,
+      commonName: 'Test Vine',
+      botanicalName: 'Passiflora incarnata',
+      botanicalKey: 'passiflora incarnata',
+      growthShape: 'low-climber',
+      width,
+      height: 10,
+      x,
+      y,
+    },
+    state: sharedState,
+  };
+}
+
+test('a low-climber next to a wall draws a narrower footprint than declared', () => {
+  const doc = resetDocument();
+  const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  const wall = {
+    id: 'fence',
+    type: 'wall',
+    pathFt: [{ x: 10.2, y: 0 }, { x: 10.2, y: 20 }],
+    style: FEATURE_STYLE,
+  };
+
+  renderTopView(svg, [lowClimberState('vine', 10, 5, 5)], PLAN_VIEW, { features: [wall] });
+
+  // renderFoliageDome's shade circle radius is radius * 0.72 — back out the
+  // canopy radius from it rather than parsing the wavy silhouette path.
+  const shade = svg.querySelectorAll('circle')[0];
+  assert.ok(shade, 'canopy shade circle is rendered');
+  const canopyRadiusPx = Number(shade.getAttribute('r')) / 0.72;
+  // Full declared width would be 5 ft (75 px radius); climbing caps it at 1.5 ft (22.5 px).
+  assert.ok(canopyRadiusPx < 30, `canopy narrows near the wall (got ${canopyRadiusPx}px radius)`);
+});
+
+test('a low-climber next to only a box gets a warning ring but keeps full width', () => {
+  const doc = resetDocument();
+  const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  const box = {
+    id: 'ac-unit',
+    type: 'box',
+    footprintFt: [
+      { x: 9, y: 4 },
+      { x: 11, y: 4 },
+      { x: 11, y: 6 },
+      { x: 9, y: 6 },
+    ],
+    heightFt: 3,
+    style: FEATURE_STYLE,
+  };
+
+  renderTopView(svg, [lowClimberState('vine', 10, 3, 5)], PLAN_VIEW, { features: [box] });
+
+  const warningRing = svg
+    .querySelectorAll('circle')
+    .find((circle) => circle.getAttribute('stroke') === '#d64545');
+  assert.ok(warningRing, 'a warning ring is drawn for a climber only near a non-climbable box');
+});
+
+test('a low-climber with no wall or box nearby keeps its declared width and no ring', () => {
+  const doc = resetDocument();
+  const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+
+  renderTopView(svg, [lowClimberState('vine', 10, 5, 5)], PLAN_VIEW, { features: [] });
+
+  const warningRing = svg
+    .querySelectorAll('circle')
+    .find((circle) => circle.getAttribute('stroke') === '#d64545');
+  assert.equal(warningRing, undefined, 'no warning ring without a nearby feature');
+});

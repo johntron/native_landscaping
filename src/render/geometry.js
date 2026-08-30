@@ -18,3 +18,21 @@ export function pointInPolygon(point, polygon) {
   }
   return inside;
 }
+
+/** Shortest distance from a point to any segment of an open path. */
+export function distanceToPath(point, points) {
+  let best = Infinity;
+  for (let i = 1; i < points.length; i += 1) {
+    best = Math.min(best, distanceToSegment(point, points[i - 1], points[i]));
+  }
+  return best;
+}
+
+export function distanceToSegment(point, a, b) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const lengthSq = dx * dx + dy * dy;
+  if (!lengthSq) return Math.hypot(point.x - a.x, point.y - a.y);
+  const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSq));
+  return Math.hypot(point.x - (a.x + t * dx), point.y - (a.y + t * dy));
+}

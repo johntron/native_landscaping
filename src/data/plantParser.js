@@ -23,6 +23,31 @@ const numberFieldAliases = {
 };
 
 /**
+ * Median width/height ratio per growth_shape, computed once from every plants.csv
+ * row that declares both — not recomputed live. Used only when a species declares
+ * height but not width, so a newly added species still gets a shape-appropriate
+ * footprint instead of a flat 1 ft circle. Re-derive by rerunning that computation
+ * against the catalog if the mix of species shifts enough to be worth it.
+ */
+const WIDTH_HEIGHT_RATIO_BY_SHAPE = Object.freeze({
+  'low-climber': 0.25, // tall and narrow — climbs rather than spreads
+  vertical: 0.5,
+  tree: 0.73,
+  grass: 0.59,
+  vase: 1,
+  arch: 1.22,
+  mound: 1.21,
+  creeping: 7.5, // groundcovers spread far wider than they stand tall
+});
+const DEFAULT_WIDTH_HEIGHT_RATIO = 1;
+
+/** Fallback for a species missing width_ft — see WIDTH_HEIGHT_RATIO_BY_SHAPE. */
+function estimateWidthFt(heightFt, growthShape) {
+  const ratio = WIDTH_HEIGHT_RATIO_BY_SHAPE[growthShape] ?? DEFAULT_WIDTH_HEIGHT_RATIO;
+  return Math.round(heightFt * ratio * 10) / 10;
+}
+
+/**
  * Parse species-level data (no coordinates) from CSV.
  * @param {string} csvText
  */
@@ -217,7 +242,7 @@ export function createPlantFromSpecies(speciesEntry, placement = {}) {
     speciesEpithet: speciesEntry.speciesEpithet || placement.speciesEpithet,
     x: placement.x,
     y: placement.y,
-    width: speciesEntry.width ?? 1,
+    width: speciesEntry.width ?? estimateWidthFt(speciesEntry.height ?? 1, speciesEntry.growthShape),
     height: speciesEntry.height ?? 1,
     growthShape: speciesEntry.growthShape,
     growingMonths: speciesEntry.growingMonths,
