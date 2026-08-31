@@ -21,7 +21,14 @@ const VERTEX_RADIUS_PX = 6;
 const SELECTION_COLOR = '#1b74d8';
 
 /** Defaults for a newly drawn shape, in feet — an upper bound, not a promise. */
-const NEW_SHAPE = { sizeFt: 8, wallLengthFt: 12, wallHeightFt: 6, boxHeightFt: 8 };
+const NEW_SHAPE = {
+  sizeFt: 8,
+  wallLengthFt: 12,
+  wallHeightFt: 6,
+  boxHeightFt: 8,
+  trellisLengthFt: 4,
+  trellisHeightFt: 7,
+};
 
 /** How much of the shared yard a new shape may span, so it always fits inside it. */
 const NEW_SHAPE_YARD_FRACTION = 0.4;
@@ -66,14 +73,14 @@ export function pickFeatureHandle(handles, point, radius) {
  * Which feature is under the pointer, topmost first — the reverse of draw
  * order, so clicking overlapping shapes selects the one you can see.
  *
- * A wall has no interior to be inside of, so it is picked by distance to its
- * path instead.
+ * An open-path feature (wall, trellis) has no interior to be inside of, so it
+ * is picked by distance to its path instead.
  */
 export function pickFeatureAt(features, transform, point, radius = 0) {
   for (let i = features.length - 1; i >= 0; i -= 1) {
     const feature = features[i];
     const pixels = projectFeatureToPlan(feature, transform).points;
-    if (feature.type === 'wall') {
+    if (geometryKeyFor(feature.type) === 'pathFt') {
       if (distanceToPath(point, pixels) <= Math.max(radius, VERTEX_RADIUS_PX)) return feature;
     } else if (pointInPolygon(point, pixels)) {
       return feature;
@@ -136,7 +143,7 @@ export function grabOffsetFor(feature, pointFt) {
  * the thing that trips that guard — "reject loudly" is for malformed files, not
  * for the first frame of a new fence.
  *
- * @param {'surface'|'wall'|'box'} type
+ * @param {'surface'|'wall'|'box'|'trellis'} type
  * @param {{ x: number, y: number }} centerFt
  * @param {Array<string>} [existingIds]
  * @param {{ x: {min:number,max:number}, y: {min:number,max:number} }} [boundsFt]
@@ -149,16 +156,18 @@ export function createFeatureShape(type, centerFt, existingIds = [], boundsFt = 
     Math.max(MIN_NEW_SHAPE_FT, Math.min(want, ...spans.map((span) => span * NEW_SHAPE_YARD_FRACTION)));
 
   const half = fit(NEW_SHAPE.sizeFt, spanX, spanY) / 2;
-  if (type === 'wall') {
-    const halfLength = fit(NEW_SHAPE.wallLengthFt, spanX) / 2;
+  if (type === 'wall' || type === 'trellis') {
+    const lengthFt = type === 'trellis' ? NEW_SHAPE.trellisLengthFt : NEW_SHAPE.wallLengthFt;
+    const heightFt = type === 'trellis' ? NEW_SHAPE.trellisHeightFt : NEW_SHAPE.wallHeightFt;
+    const halfLength = fit(lengthFt, spanX) / 2;
     return {
       id,
-      type: 'wall',
+      type,
       pathFt: [
         { x: centerFt.x - halfLength, y: centerFt.y },
         { x: centerFt.x + halfLength, y: centerFt.y },
       ],
-      heightFt: NEW_SHAPE.wallHeightFt,
+      heightFt,
     };
   }
   const footprintFt = [

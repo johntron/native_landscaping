@@ -35,6 +35,16 @@ const FENCE = {
   style: { fill: '#8b6f4e', strokeWidthFt: 0.25 },
 };
 
+const TRELLIS = {
+  id: 'trellis',
+  type: 'trellis',
+  pathFt: [
+    { x: 4, y: 10 },
+    { x: 6, y: 10 },
+  ],
+  heightFt: 7,
+};
+
 const HOUSE = {
   id: 'house',
   type: 'box',
@@ -109,6 +119,15 @@ test('a wall is an extruded path and keeps its authored style over the defaults'
   // The polygon key is never carried on a path primitive; nl-avt.2 projects
   // exactly one of the two.
   assert.equal('footprintFt' in features[0], false);
+});
+
+test('a trellis is an extruded path, like a wall, with its own default style', () => {
+  const { features } = normalizeFeatures({ features: [TRELLIS] }, 'backyard');
+  assert.equal(features[0].type, 'trellis');
+  assert.equal(geometryKeyFor('trellis'), 'pathFt');
+  assert.equal('footprintFt' in features[0], false);
+  assert.equal(features[0].heightFt, 7);
+  assert.notDeepEqual(features[0].style, normalizeFeatures({ features: [FENCE] }, 'b').features[0].style);
 });
 
 test('a box is an extruded polygon that can sit on a step', () => {

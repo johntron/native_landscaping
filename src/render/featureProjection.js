@@ -37,8 +37,9 @@ export function projectFeatureToPlan(feature, transform) {
   return {
     id: feature.id,
     type: feature.type,
-    // A wall is an open path — closing it would fill in the yard behind a fence.
-    closed: feature.type !== 'wall',
+    // A wall or trellis is an open path — closing it would fill in the yard
+    // behind a fence, or paint a lattice as a solid panel.
+    closed: geometryKeyFor(feature.type) === 'footprintFt',
     points,
     strokeWidthPx: transform.toPx(feature.style.strokeWidthFt),
   };

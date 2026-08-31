@@ -146,10 +146,13 @@ test('a new shape arrives usable: real size, real height, unique id', () => {
   assert.equal(wall.pathFt.length, 2);
   const box = createFeatureShape('box', { x: 20, y: 15 });
   assert.ok(box.heightFt > 0);
+  const trellis = createFeatureShape('trellis', { x: 20, y: 15 });
+  assert.ok(trellis.heightFt > 0);
+  assert.equal(trellis.pathFt.length, 2);
 
   // Every one of them survives the normalizer that guards the live model.
-  const normalized = features([surface, wall, box]);
-  assert.deepEqual(normalized.map((f) => f.id), ['surface', 'wall', 'box']);
+  const normalized = features([surface, wall, box, trellis]);
+  assert.deepEqual(normalized.map((f) => f.id), ['surface', 'wall', 'box', 'trellis']);
 
   // Ids do not collide with what is already drawn.
   assert.equal(createFeatureShape('box', { x: 0, y: 0 }, ['box', 'box-2']).id, 'box-3');

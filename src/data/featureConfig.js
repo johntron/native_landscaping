@@ -7,11 +7,14 @@ import { isValidProjectId, projectDirectory } from './projectConfig.js';
  * carries a footprint *and* a height because it has to appear in both a plan and
  * an elevation.
  *
- * Three primitives are enough for a real yard:
+ * Four primitives are enough for a real yard:
  *
  *   surface  flat, zero height — driveway, gravel bed, bed outline. Polygon.
  *   wall     an extruded line — fence, retaining wall, garden edge. Path.
  *   box      an extruded polygon — house, shed, raised planter. Polygon.
+ *   trellis  an extruded line, like a wall, but open lattice rather than a
+ *            solid fence — climbable the same way a wall is, but never hides
+ *            what is behind it and reads visually as thin and open. Path.
  *
  * Styles are authored in feet (`strokeWidthFt`) like everything else, so a
  * feature keeps its weight when a view is rescaled.
@@ -21,7 +24,7 @@ import { isValidProjectId, projectDirectory } from './projectConfig.js';
 export const isValidFeatureId = isValidProjectId;
 
 const POLYGON_TYPES = new Set(['surface', 'box']);
-const FEATURE_TYPES = new Set(['surface', 'wall', 'box']);
+const FEATURE_TYPES = new Set(['surface', 'wall', 'box', 'trellis']);
 
 /** Zero height is what *makes* a surface a surface; it is never authored. */
 const SURFACE_HEIGHT_FT = 0;
@@ -30,6 +33,7 @@ const DEFAULT_STYLES = {
   surface: { fill: '#e8e4dc', stroke: '#cfc8bb', strokeWidthFt: 0.1 },
   wall: { fill: '#d8d2c6', stroke: '#b3aa99', strokeWidthFt: 0.1 },
   box: { fill: '#e6e1d8', stroke: '#c9c3b8', strokeWidthFt: 0.15 },
+  trellis: { fill: '#8b6f4d', stroke: '#6e5638', strokeWidthFt: 0.05 },
 };
 
 /**
@@ -104,7 +108,7 @@ function normalizeFeature(raw, index, projectId) {
   const type = String(raw.type || '').toLowerCase();
   if (!FEATURE_TYPES.has(type)) {
     throw new Error(
-      `Project "${projectId}" feature "${id}" has an unknown type "${raw.type}" (expected surface, wall, or box)`
+      `Project "${projectId}" feature "${id}" has an unknown type "${raw.type}" (expected surface, wall, box, or trellis)`
     );
   }
 

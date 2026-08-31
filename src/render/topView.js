@@ -64,7 +64,7 @@ export function renderTopView(svg, plantStates, view, options = {}) {
     let isBoxWarning = false;
     if (plant.growthShape === 'low-climber') {
       const point = { x: plant.x, y: plant.y };
-      const nearestWall = nearestFeature(point, features, 'wall');
+      const nearestWall = nearestFeature(point, features, ['wall', 'trellis']);
       if (nearestWall && nearestWall.distanceFt <= CLIMB_PROXIMITY_FT) {
         const supportContainsVine = plant.height <= nearestWall.feature.heightFt;
         effectiveWidth = supportContainsVine ? Math.min(plant.width, CLIMB_WIDTH_FT) : plant.width;
