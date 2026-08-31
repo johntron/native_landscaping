@@ -40,20 +40,23 @@ export function distanceToSegment(point, a, b) {
 }
 
 /**
- * Nearest feature of `type` to a feet-space point, with its feet distance, or
- * null. Shared by topView.js (plan) and elevationViews.js (elevation) so both
- * views agree on which support a low-climber is next to.
+ * Nearest feature of `type` (a single type, or an array to match any of) to a
+ * feet-space point, with its feet distance, or null. Shared by topView.js
+ * (plan) and elevationViews.js (elevation) so both views agree on which
+ * support a low-climber is next to.
  */
 export function nearestFeature(point, features, type) {
+  const types = Array.isArray(type) ? type : [type];
   let best = null;
   features.forEach((feature) => {
-    if (feature.type !== type) return;
+    if (!types.includes(feature.type)) return;
     const points = feature[geometryKeyFor(feature.type)] || [];
     if (points.length < 2) return;
+    const isPolygon = geometryKeyFor(feature.type) === 'footprintFt';
     let distanceFt = 0;
-    if (type === 'box' && !pointInPolygon(point, points)) {
+    if (isPolygon && !pointInPolygon(point, points)) {
       distanceFt = distanceToPath(point, [...points, points[0]]);
-    } else if (type !== 'box') {
+    } else if (!isPolygon) {
       distanceFt = distanceToPath(point, points);
     }
     if (!best || distanceFt < best.distanceFt) best = { feature, distanceFt };

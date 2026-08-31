@@ -13,12 +13,13 @@
  * height is a number, and elevations are derived from both.
  */
 
-export const FEATURE_TYPES = ['surface', 'wall', 'box'];
+export const FEATURE_TYPES = ['surface', 'wall', 'box', 'trellis'];
 
 const TYPE_HINTS = {
   surface: 'flat — bed, path, driveway',
   wall: 'extruded line — fence, edging',
   box: 'extruded shape — house, shed',
+  trellis: 'extruded line, open lattice — climbable, unlike a box',
 };
 
 export function createFeaturePanel({ root, onCommit, onSave, onSelect, onAdd }) {

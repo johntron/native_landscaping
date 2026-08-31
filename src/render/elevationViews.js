@@ -80,7 +80,7 @@ export function renderElevationView(svg, plantStates, view, options = {}) {
     let effectiveWidthFt = plant.width;
     let cascade = null;
     if ((plant.growthShape || '').toLowerCase() === 'low-climber') {
-      const nearestWall = nearestFeature({ x: plant.x, y: plant.y }, features, 'wall');
+      const nearestWall = nearestFeature({ x: plant.x, y: plant.y }, features, ['wall', 'trellis']);
       if (nearestWall && nearestWall.distanceFt <= CLIMB_PROXIMITY_FT) {
         if (plant.height > nearestWall.feature.heightFt) {
           cascade = { waistHeightFt: nearestWall.feature.heightFt };

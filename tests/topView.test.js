@@ -127,6 +127,25 @@ test('a low-climber next to a wall tall enough to contain it draws a narrower fo
   assert.ok(canopyRadiusPx < 30, `canopy narrows near the wall (got ${canopyRadiusPx}px radius)`);
 });
 
+test('a low-climber next to a trellis is treated as climbable, just like a wall', () => {
+  const doc = resetDocument();
+  const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  const trellis = {
+    id: 'trellis',
+    type: 'trellis',
+    pathFt: [{ x: 10.2, y: 0 }, { x: 10.2, y: 20 }],
+    heightFt: 12,
+    style: FEATURE_STYLE,
+  };
+
+  renderTopView(svg, [lowClimberState('vine', 10, 5, 5)], PLAN_VIEW, { features: [trellis] });
+
+  const shade = svg.querySelectorAll('circle')[0];
+  assert.ok(shade, 'canopy shade circle is rendered');
+  const canopyRadiusPx = Number(shade.getAttribute('r')) / 0.72;
+  assert.ok(canopyRadiusPx < 30, `canopy narrows near the trellis (got ${canopyRadiusPx}px radius)`);
+});
+
 test('a low-climber that would outgrow the wall keeps its full natural width', () => {
   const doc = resetDocument();
   const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
