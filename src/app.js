@@ -35,7 +35,7 @@ import { createFeaturePanel } from './interaction/featurePanel.js';
 import { normalizeFeatures } from './data/featureConfig.js';
 import { createFeatureController } from './interaction/featureController.js';
 import { analyzeEcology, buildEcologyContext } from './analysis/ecology.js';
-import { buildHostGeneraIndex, emptyHostGeneraIndex } from './analysis/hostGenera.js';
+import { buildHostGeneraIndex, emptyHostGeneraIndex, ecologicalFitNotes } from './analysis/hostGenera.js';
 import {
   buildInteractionsIndex,
   buildNearbyFaunaIndex,
@@ -148,6 +148,8 @@ async function init() {
   const detailSheetLines = document.getElementById('detailSheetLines');
   const detailSheetFauna = document.getElementById('detailSheetFauna');
   const detailSheetFaunaLines = document.getElementById('detailSheetFaunaLines');
+  const detailSheetEcology = document.getElementById('detailSheetEcology');
+  const detailSheetEcologyLines = document.getElementById('detailSheetEcologyLines');
   const detailSheetCloneBtn = document.getElementById('detailSheetCloneBtn');
   const detailSheetRemoveBtn = document.getElementById('detailSheetRemoveBtn');
   const addPlantSelect = document.getElementById('addPlantSelect');
@@ -386,7 +388,7 @@ async function init() {
     if (appState.highlightedSpeciesKey && !stillPlaced) {
       appState.highlightedSpeciesKey = '';
     }
-    renderSpeciesTable(appState.plants, {
+    renderSpeciesTable(appState.plants, appState.hostGenera, {
       onHoverStart: (speciesKey, rowEl) => setHighlightedSpecies(speciesKey, rowEl),
       onHoverEnd: (_speciesKey, rowEl) => clearHighlightedSpecies(rowEl),
     });
@@ -761,6 +763,9 @@ async function init() {
           detailSheetLines.appendChild(li);
         });
     }
+    if (detailSheetEcology && detailSheetEcologyLines) {
+      renderDetailSheetEcology(plant, detailSheetEcology, detailSheetEcologyLines);
+    }
     if (detailSheetFauna && detailSheetFaunaLines) {
       renderDetailSheetFauna(plant, detailSheetFauna, detailSheetFaunaLines);
     }
@@ -770,9 +775,29 @@ async function init() {
   };
 
   /**
-   * A separate section from buildTooltipLines on purpose: that list also
-   * feeds the SVG hover `<title>`, and a match list of up to a dozen animals
-   * would bloat every hover tooltip in the plan view.
+   * Same source data the keystone-genera and larval-hosts rules grade
+   * against (ecologicalFitNotes), so "is this a keystone genus" here can
+   * never disagree with the ecology check below the species table.
+   */
+  const renderDetailSheetEcology = (plant, container, list) => {
+    list.innerHTML = '';
+    const notes = ecologicalFitNotes(getGenus(plant), appState.hostGenera);
+    if (!notes.length) {
+      container.hidden = true;
+      return;
+    }
+    notes.forEach((note) => {
+      const li = document.createElement('li');
+      li.textContent = note;
+      list.appendChild(li);
+    });
+    container.hidden = false;
+  };
+
+  /**
+   * A separate section from buildTooltipLines on purpose: a match list can run
+   * to a dozen-plus animals, which reads as a distinct block of evidence
+   * rather than one more line among the plant's static facts.
    */
   const renderDetailSheetFauna = (plant, container, list) => {
     list.innerHTML = '';
@@ -1660,7 +1685,7 @@ function formatZoomValue(value) {
   return value.toFixed(2);
 }
 
-function renderSpeciesTable(plants, handlers = {}) {
+function renderSpeciesTable(plants, hostGenera, handlers = {}) {
   const { onHoverStart, onHoverEnd } = handlers;
   const container = document.getElementById('speciesTable');
   if (!container) return;
@@ -1689,7 +1714,21 @@ function renderSpeciesTable(plants, handlers = {}) {
   const table = document.createElement('table');
   table.className = 'species-table__table';
   const thead = document.createElement('thead');
-  const headers = ['Label', 'Botanical name', 'Common name', 'Height (ft)', 'Width (ft)', 'Growth form', 'Sun', 'Water', 'Soil', 'Bloom months'];
+  const headers = [
+    'Label',
+    'Botanical name',
+    'Common name',
+    'Height (ft)',
+    'Width (ft)',
+    'Growth form',
+    'Sun',
+    'Water',
+    'Soil',
+    'Bloom months',
+    'Inflorescence',
+    'Fruit',
+    'Ecological fit',
+  ];
   const headerRow = document.createElement('tr');
   headers.forEach((title) => {
     const th = document.createElement('th');
@@ -1723,6 +1762,9 @@ function renderSpeciesTable(plants, handlers = {}) {
             plant.floweringSeasonMonths
         ),
       },
+      { value: formatInflorescenceCell(plant) },
+      { value: formatFruitCell(plant) },
+      buildEcologicalFitCell(plant, hostGenera),
     ];
 
     cells.forEach((cell, idx) => {
@@ -1736,6 +1778,7 @@ function renderSpeciesTable(plants, handlers = {}) {
       }
       td.dataset.label = headers[idx];
       if (cell.className) td.className = cell.className;
+      if (cell.title) td.title = cell.title;
       if (idx > 2) td.classList.add('species-table__extra');
       tr.appendChild(td);
     });
@@ -1765,6 +1808,41 @@ function formatFeet(value) {
   const num = Number(value);
   if (!Number.isFinite(num)) return '';
   return num.toFixed(1);
+}
+
+/** Species-table counterpart of tooltip.js's formatInflorescenceLine, without the current-month state. */
+function formatInflorescenceCell(plant) {
+  const type = plant.inflorescence || plant.inflorescenceType || plant.inflorescence_type;
+  const count = plant.flowerCountHint ?? plant.flower_count_hint;
+  const zone = plant.flowerZone || plant.flower_zone;
+  const pieces = [];
+  if (type) pieces.push(type);
+  if (count) pieces.push(`≈${count}`);
+  if (zone) pieces.push(`${zone} canopy`);
+  return pieces.join(', ');
+}
+
+/** Species-table counterpart of tooltip.js's formatFruitLine, without the current-month state. */
+function formatFruitCell(plant) {
+  const pieces = [];
+  if (plant.fruitColor) pieces.push(plant.fruitColor);
+  if (plant.fruitLoad) pieces.push(`${plant.fruitLoad} load`);
+  return pieces.join(', ');
+}
+
+/**
+ * Same source data the keystone-genera and larval-hosts rules grade against
+ * (see ecologicalFitNotes), shown as a short badge with the full sentence in
+ * the cell's title so a reader can hover for the number without every row
+ * growing to fit "253 caterpillar species — listed as Quercus."
+ */
+function buildEcologicalFitCell(plant, hostGenera) {
+  const notes = ecologicalFitNotes(getGenus(plant), hostGenera);
+  if (!notes.length) return { value: '' };
+  const badges = [];
+  if (notes.some((note) => note.startsWith('Keystone genus'))) badges.push('Keystone');
+  if (notes.some((note) => note.startsWith('Documented larval host'))) badges.push('Larval host');
+  return { value: badges.join(', '), title: notes.join(' ') };
 }
 
 function formatFileSize(bytes) {

@@ -1,5 +1,6 @@
 import { STATUSES } from '../ecology.js';
 import { getGenus } from '../../utils/speciesKey.js';
+import { describeHostGeneraRow } from '../hostGenera.js';
 
 /**
  * Rules 4 and 10 — plant the keystone genera for this ecoregion, and give them
@@ -66,7 +67,7 @@ export default {
     const findings = [];
     findings.push(
       present.length
-        ? `Keystone genera planted: ${present.map(({ genus, row }) => `${genus} (${describeRow(row)})`).join(', ')}.`
+        ? `Keystone genera planted: ${present.map(({ genus, row }) => `${genus} (${describeHostGeneraRow(row)})`).join(', ')}.`
         : `No planted genus is on the ecoregion ${ctx.ecoregion} keystone lists.`
     );
     if (totalArea > 0) {
@@ -162,7 +163,7 @@ function suggest(ctx, keystoneNames, limit = 4) {
     .slice(0, limit)
     .map(
       ({ entry, genus, row }) =>
-        `${entry.commonName} (${entry.botanicalName}) brings the keystone genus ${genus} — ${describeRow(row)}.`
+        `${entry.commonName} (${entry.botanicalName}) brings the keystone genus ${genus} — ${describeHostGeneraRow(row)}.`
     );
 }
 
@@ -185,14 +186,6 @@ function topAbsent(ctx, keystoneNames, limit = 3) {
 /** Caterpillars are the currency birds feed on, so the lep count leads the ranking. */
 function rank(row) {
   return (row.lepHostSpecies ?? 0) * 2 + (row.beeSpecialistSpecies ?? 0);
-}
-
-function describeRow(row) {
-  const parts = [];
-  if (row.lepHostSpecies !== null) parts.push(`${row.lepHostSpecies} caterpillar species`);
-  if (row.beeSpecialistSpecies !== null) parts.push(`${row.beeSpecialistSpecies} specialist bees`);
-  const listed = row.resolvedFrom ? ` — listed as ${row.resolvedFrom}` : '';
-  return `${parts.join(', ')}${listed}`;
 }
 
 function round(value) {

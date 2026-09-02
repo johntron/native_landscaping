@@ -1,16 +1,42 @@
+import { buildPlantLabel } from './labels.js';
+import { formatMonthRange } from '../state/seasonalState.js';
+
+/**
+ * The species table and this list are two views of the same species facts —
+ * label, growth form, and bloom range live here too, not just in the table,
+ * so a reader gets the same information whichever one they open first.
+ */
 export function buildTooltipLines(plant, state) {
   return [
+    formatLabelLine(plant),
     plant.botanicalName,
     plant.commonName,
     `Height: ${formatFeet(plant.height)}ft, Width: ${formatFeet(plant.width)}ft`,
+    formatGrowthShapeLine(plant),
     formatPositionLine(plant),
     `Sun: ${plant.sunPref}`,
     `Water: ${plant.waterPref}`,
     `Soil: ${plant.soilPref}`,
+    formatBloomLine(plant),
     formatInflorescenceLine(plant, state),
     state?.isFlowering ? 'Flowering' : '',
     formatFruitLine(plant, state),
   ];
+}
+
+function formatLabelLine(plant) {
+  const label = buildPlantLabel(plant);
+  return label ? `Label: ${label}` : '';
+}
+
+function formatGrowthShapeLine(plant) {
+  const shape = plant.growthShape || plant.growth_shape;
+  return shape ? `Growth form: ${shape}` : '';
+}
+
+function formatBloomLine(plant) {
+  const range = formatMonthRange(plant.floweringMonths || plant.flowering_season_months);
+  return range ? `Bloom: ${range}` : '';
 }
 
 function formatPositionLine(plant) {
