@@ -1,0 +1,959 @@
+place,animal_species,animal_common,iconic_taxon,nearest_radius_mi,observation_count,fetched_on,source
+home,Acris blanchardi,Blanchard's Cricket Frog,Amphibia,3,3,2026-09-02,api.inaturalist.org species_counts
+home,Acris gryllus,Southern Cricket Frog,Amphibia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Agalychnis callidryas,Red-eyed Tree Frog,Amphibia,8,2,2026-09-02,api.inaturalist.org species_counts
+home,Ambystoma mexicanum,Axolotl,Amphibia,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Ambystoma opacum,Marbled Salamander,Amphibia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Ambystoma texanum,Small-mouthed Salamander,Amphibia,8,2,2026-09-02,api.inaturalist.org species_counts
+home,Anaxyrus americanus,American Toad,Amphibia,15,3,2026-09-02,api.inaturalist.org species_counts
+home,Anaxyrus fowleri,Fowler's Toad,Amphibia,15,2,2026-09-02,api.inaturalist.org species_counts
+home,Anaxyrus punctatus,Red-spotted Toad,Amphibia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Anaxyrus woodhousii,Woodhouse's Toad,Amphibia,3,3,2026-09-02,api.inaturalist.org species_counts
+home,Atelopus zeteki,Panamanian Golden Frog,Amphibia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Centrolenidae,Glass Frogs,Amphibia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Ceratophrys,South American Horned Frogs,Amphibia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Cryptobranchus alleganiensis,Hellbender,Amphibia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Dendrobates auratus,Green-and-black Poison Dart Frog,Amphibia,8,5,2026-09-02,api.inaturalist.org species_counts
+home,Dendrobates leucomelas,Yellow-headed Poison Dart Frog,Amphibia,8,6,2026-09-02,api.inaturalist.org species_counts
+home,Dendrobates tinctorius,Dyeing Poison Dart Frog,Amphibia,8,10,2026-09-02,api.inaturalist.org species_counts
+home,Dryophytes chrysoscelis,Cope's Gray Tree Frog,Amphibia,25,2,2026-09-02,api.inaturalist.org species_counts
+home,Dryophytes cinereus,Green Treefrog,Amphibia,3,5,2026-09-02,api.inaturalist.org species_counts
+home,Dryophytes squirellus,Squirrel Tree Frog,Amphibia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Dryophytes versicolor,Gray Treefrog,Amphibia,8,2,2026-09-02,api.inaturalist.org species_counts
+home,Dyscophus,Tomato Frogs,Amphibia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Eleutherodactylus campi,Rio Grande Chirping Frog,Amphibia,3,7,2026-09-02,api.inaturalist.org species_counts
+home,Eleutherodactylus cystignathoides,Lowland Chirping Frog,Amphibia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Eurycea rathbuni,Texas Blind Salamander,Amphibia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Gastrophryne carolinensis,Eastern Narrow-mouthed Toad,Amphibia,15,9,2026-09-02,api.inaturalist.org species_counts
+home,Gastrophryne olivacea,Western Narrow-mouthed Toad,Amphibia,8,2,2026-09-02,api.inaturalist.org species_counts
+home,Incilius alvarius,Sonoran Desert Toad,Amphibia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Incilius nebulifer,Gulf Coast Toad,Amphibia,1,4,2026-09-02,api.inaturalist.org species_counts
+home,Lithobates berlandieri,Rio Grande Leopard Frog,Amphibia,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Lithobates blairi,Plains Leopard Frog,Amphibia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Lithobates catesbeianus,American Bullfrog,Amphibia,3,5,2026-09-02,api.inaturalist.org species_counts
+home,Lithobates sphenocephalus,Southern Leopard Frog,Amphibia,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Notophthalmus meridionalis,Black-spotted Newt,Amphibia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Oophaga,,Amphibia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Oophaga anchicayensis,Anchicaya Poison Dart Frog,Amphibia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Oophaga andresi,cocorro,Amphibia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Oophaga histrionica,Harlequin Poison Frog,Amphibia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Oophaga lehmanni,Red-banded Poison Frog,Amphibia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Oophaga solanensis,Chocó Poison Dart Frog,Amphibia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Osteopilus septentrionalis,Cuban Tree Frog,Amphibia,8,2,2026-09-02,api.inaturalist.org species_counts
+home,Phyllobates,,Amphibia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Phyllobates terribilis,Golden Poison Dart Frog,Amphibia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Phyllomedusa boliviana,Red-rimmed Monkey Tree Frog,Amphibia,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Pipa pipa,Suriname Toad,Amphibia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Pseudacris clarkii,Spotted Chorus Frog,Amphibia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Pseudacris streckeri,Strecker's Chorus Frog,Amphibia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Ranitomeya fantastica,Red-headed Poison Frog,Amphibia,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Siren nettingi,Western Lesser Siren,Amphibia,15,11,2026-09-02,api.inaturalist.org species_counts
+home,Telmatobius culeus,Titicaca Water Frog,Amphibia,25,2,2026-09-02,api.inaturalist.org species_counts
+home,Accipiter striatus,Sharp-shinned Hawk,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Actitis macularius,Spotted Sandpiper,Aves,8,260,2026-09-02,api.inaturalist.org species_counts
+home,Agelaius phoeniceus,Red-winged Blackbird,Aves,3,5,2026-09-02,api.inaturalist.org species_counts
+home,Aix sponsa,Wood Duck,Aves,3,94,2026-09-02,api.inaturalist.org species_counts
+home,Alopochen aegyptiaca,Egyptian Goose,Aves,8,14,2026-09-02,api.inaturalist.org species_counts
+home,Ammodramus savannarum,Grasshopper Sparrow,Aves,3,16,2026-09-02,api.inaturalist.org species_counts
+home,Ammospiza leconteii,LeConte's Sparrow,Aves,8,13,2026-09-02,api.inaturalist.org species_counts
+home,Anas acuta,Northern Pintail,Aves,8,118,2026-09-02,api.inaturalist.org species_counts
+home,Anas crecca,Green-winged Teal,Aves,8,42,2026-09-02,api.inaturalist.org species_counts
+home,Anas platyrhynchos,Mallard,Aves,3,399,2026-09-02,api.inaturalist.org species_counts
+home,Anas platyrhynchos × Cairina moschata,Mallard × Muscovy Duck,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Anas rubripes,American Black Duck,Aves,8,24,2026-09-02,api.inaturalist.org species_counts
+home,Anhinga anhinga,Anhinga,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Anser albifrons,Greater White-fronted Goose,Aves,25,44,2026-09-02,api.inaturalist.org species_counts
+home,Anser anser,Greylag Goose,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Anser anser × cygnoides,Greylag × Swan Goose,Aves,3,2,2026-09-02,api.inaturalist.org species_counts
+home,Anser caerulescens,Snow Goose,Aves,8,13,2026-09-02,api.inaturalist.org species_counts
+home,Anser cygnoides,Swan Goose,Aves,3,16,2026-09-02,api.inaturalist.org species_counts
+home,Anser rossii,Ross's Goose,Aves,8,12,2026-09-02,api.inaturalist.org species_counts
+home,Anthus rubescens,American Pipit,Aves,25,57,2026-09-02,api.inaturalist.org species_counts
+home,Antrostomus carolinensis,Chuck-will's-widow,Aves,15,25,2026-09-02,api.inaturalist.org species_counts
+home,Antrostomus vociferus,Eastern Whip-poor-will,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Aptenodytes patagonicus,King Penguin,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Aramus guarauna,Limpkin,Aves,8,13,2026-09-02,api.inaturalist.org species_counts
+home,Archilochus alexandri,Black-chinned Hummingbird,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Archilochus colubris,Ruby-throated Hummingbird,Aves,3,4,2026-09-02,api.inaturalist.org species_counts
+home,Ardea alba,Great Egret,Aves,3,76,2026-09-02,api.inaturalist.org species_counts
+home,Ardea herodias,Great Blue Heron,Aves,1,2,2026-09-02,api.inaturalist.org species_counts
+home,Ardea ibis,Western Cattle-Egret,Aves,3,2,2026-09-02,api.inaturalist.org species_counts
+home,Astur cooperii,Cooper's Hawk,Aves,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Aythya affinis,Lesser Scaup,Aves,3,7,2026-09-02,api.inaturalist.org species_counts
+home,Aythya americana,Redhead,Aves,8,19,2026-09-02,api.inaturalist.org species_counts
+home,Aythya collaris,Ring-necked Duck,Aves,3,3,2026-09-02,api.inaturalist.org species_counts
+home,Aythya marila,Greater Scaup,Aves,25,84,2026-09-02,api.inaturalist.org species_counts
+home,Aythya valisineria,Canvasback,Aves,8,11,2026-09-02,api.inaturalist.org species_counts
+home,Baeolophus atricristatus,Black-crested Titmouse,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Baeolophus bicolor,Tufted Titmouse,Aves,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Bombycilla cedrorum,Cedar Waxwing,Aves,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Branta canadensis,Canada Goose,Aves,3,16,2026-09-02,api.inaturalist.org species_counts
+home,Bubo virginianus,Great Horned Owl,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Bucephala albeola,Bufflehead,Aves,8,138,2026-09-02,api.inaturalist.org species_counts
+home,Buteo jamaicensis,Red-tailed Hawk,Aves,3,15,2026-09-02,api.inaturalist.org species_counts
+home,Buteo lineatus,Red-shouldered Hawk,Aves,3,3,2026-09-02,api.inaturalist.org species_counts
+home,Buteo platypterus,Broad-winged Hawk,Aves,15,24,2026-09-02,api.inaturalist.org species_counts
+home,Buteo swainsoni,Swainson's Hawk,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Butorides virescens,Green Heron,Aves,3,28,2026-09-02,api.inaturalist.org species_counts
+home,Cairina moschata,Muscovy Duck,Aves,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Calidris fuscicollis,White-rumped Sandpiper,Aves,8,14,2026-09-02,api.inaturalist.org species_counts
+home,Calidris melanotos,Pectoral Sandpiper,Aves,8,21,2026-09-02,api.inaturalist.org species_counts
+home,Calidris minutilla,Least Sandpiper,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Calidris pusilla,Semipalmated Sandpiper,Aves,8,13,2026-09-02,api.inaturalist.org species_counts
+home,Caracara plancus,Crested Caracara,Aves,25,68,2026-09-02,api.inaturalist.org species_counts
+home,Cardellina canadensis,Canada Warbler,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Cardellina pusilla,Wilson's Warbler,Aves,3,4,2026-09-02,api.inaturalist.org species_counts
+home,Cardinalis cardinalis,Northern Cardinal,Aves,1,4,2026-09-02,api.inaturalist.org species_counts
+home,Cathartes aura,Turkey Vulture,Aves,3,4,2026-09-02,api.inaturalist.org species_counts
+home,Catharus guttatus,Hermit Thrush,Aves,3,5,2026-09-02,api.inaturalist.org species_counts
+home,Catharus ustulatus,Swainson's Thrush,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Certhia americana,Brown Creeper,Aves,3,2,2026-09-02,api.inaturalist.org species_counts
+home,Chaetura pelagica,Chimney Swift,Aves,3,3,2026-09-02,api.inaturalist.org species_counts
+home,Charadrius vociferus,Killdeer,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Chondestes grammacus,Lark Sparrow,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Chordeiles minor,Common Nighthawk,Aves,3,2,2026-09-02,api.inaturalist.org species_counts
+home,Chroicocephalus philadelphia,Bonaparte's Gull,Aves,8,53,2026-09-02,api.inaturalist.org species_counts
+home,Chrysolophus amherstiae × pictus,Lady Amherst's × Golden Pheasant,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Ciconia ciconia,White Stork,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Circus hudsonius,Northern Harrier,Aves,15,35,2026-09-02,api.inaturalist.org species_counts
+home,Cistothorus palustris,Marsh Wren,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Cistothorus stellaris,Sedge Wren,Aves,3,5,2026-09-02,api.inaturalist.org species_counts
+home,Coccyzus americanus,Yellow-billed Cuckoo,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Colaptes auratus,Northern Flicker,Aves,3,2,2026-09-02,api.inaturalist.org species_counts
+home,Colinus virginianus,Northern Bobwhite,Aves,3,2,2026-09-02,api.inaturalist.org species_counts
+home,Columba livia,Rock Pigeon,Aves,1,4,2026-09-02,api.inaturalist.org species_counts
+home,Contopus virens,Eastern Wood-Pewee,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Coragyps atratus,Black Vulture,Aves,3,4,2026-09-02,api.inaturalist.org species_counts
+home,Corthylio calendula,Ruby-crowned Kinglet,Aves,3,4,2026-09-02,api.inaturalist.org species_counts
+home,Corvus brachyrhynchos,American Crow,Aves,3,35,2026-09-02,api.inaturalist.org species_counts
+home,Cyanocitta cristata,Blue Jay,Aves,1,2,2026-09-02,api.inaturalist.org species_counts
+home,Cygnus atratus,Black Swan,Aves,3,3,2026-09-02,api.inaturalist.org species_counts
+home,Cygnus olor,Mute Swan,Aves,8,51,2026-09-02,api.inaturalist.org species_counts
+home,Dendrocygna autumnalis,Black-bellied Whistling-Duck,Aves,8,114,2026-09-02,api.inaturalist.org species_counts
+home,Dryobates pubescens,Downy Woodpecker,Aves,1,4,2026-09-02,api.inaturalist.org species_counts
+home,Dryobates scalaris,Ladder-backed Woodpecker,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Dumetella carolinensis,Gray Catbird,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Egretta caerulea,Little Blue Heron,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Egretta thula,Snowy Egret,Aves,3,45,2026-09-02,api.inaturalist.org species_counts
+home,Egretta tricolor,Tricolored Heron,Aves,8,50,2026-09-02,api.inaturalist.org species_counts
+home,Empidonax flaviventris,Yellow-bellied Flycatcher,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Empidonax minimus,Least Flycatcher,Aves,8,12,2026-09-02,api.inaturalist.org species_counts
+home,Eudocimus albus,White Ibis,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Eudyptula minor,Little Penguin,Aves,8,13,2026-09-02,api.inaturalist.org species_counts
+home,Euphagus carolinus,Rusty Blackbird,Aves,8,13,2026-09-02,api.inaturalist.org species_counts
+home,Euphagus cyanocephalus,Brewer's Blackbird,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Falco columbarius,Merlin,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Falco sparverius,American Kestrel,Aves,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Fulica americana,American Coot,Aves,3,4,2026-09-02,api.inaturalist.org species_counts
+home,Gallinago delicata,Wilson's Snipe,Aves,8,12,2026-09-02,api.inaturalist.org species_counts
+home,Gallus gallus,Red Junglefowl,Aves,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Geococcyx californianus,Greater Roadrunner,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Geothlypis formosa,Kentucky Warbler,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Geothlypis philadelphia,Mourning Warbler,Aves,3,20,2026-09-02,api.inaturalist.org species_counts
+home,Geothlypis trichas,Common Yellowthroat,Aves,3,16,2026-09-02,api.inaturalist.org species_counts
+home,Haemorhous mexicanus,House Finch,Aves,1,2,2026-09-02,api.inaturalist.org species_counts
+home,Haemorhous purpureus,Purple Finch,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Haliaeetus leucocephalus,Bald Eagle,Aves,1,3,2026-09-02,api.inaturalist.org species_counts
+home,Himantopus mexicanus,Black-necked Stilt,Aves,8,19,2026-09-02,api.inaturalist.org species_counts
+home,Hirundo rustica,Barn Swallow,Aves,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Hydrocoloeus minutus,Little Gull,Aves,8,14,2026-09-02,api.inaturalist.org species_counts
+home,Hylocichla mustelina,Wood Thrush,Aves,3,3,2026-09-02,api.inaturalist.org species_counts
+home,Icteria virens,Yellow-breasted Chat,Aves,3,6,2026-09-02,api.inaturalist.org species_counts
+home,Icterus galbula,Baltimore Oriole,Aves,3,4,2026-09-02,api.inaturalist.org species_counts
+home,Icterus spurius,Orchard Oriole,Aves,3,3,2026-09-02,api.inaturalist.org species_counts
+home,Ictinia mississippiensis,Mississippi Kite,Aves,3,12,2026-09-02,api.inaturalist.org species_counts
+home,Junco hyemalis,Dark-eyed Junco,Aves,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Lanius ludovicianus,Loggerhead Shrike,Aves,8,21,2026-09-02,api.inaturalist.org species_counts
+home,Larus delawarensis,Ring-billed Gull,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Larus fuscus,Lesser Black-backed Gull,Aves,8,95,2026-09-02,api.inaturalist.org species_counts
+home,Larus smithsonianus,American Herring Gull,Aves,8,49,2026-09-02,api.inaturalist.org species_counts
+home,Leiothlypis celata,Orange-crowned Warbler,Aves,3,9,2026-09-02,api.inaturalist.org species_counts
+home,Leiothlypis peregrina,Tennessee Warbler,Aves,3,3,2026-09-02,api.inaturalist.org species_counts
+home,Leiothlypis ruficapilla,Nashville Warbler,Aves,3,15,2026-09-02,api.inaturalist.org species_counts
+home,Leucophaeus pipixcan,Franklin's Gull,Aves,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Limnodromus scolopaceus,Long-billed Dowitcher,Aves,25,36,2026-09-02,api.inaturalist.org species_counts
+home,Lophodytes cucullatus,Hooded Merganser,Aves,8,45,2026-09-02,api.inaturalist.org species_counts
+home,Mareca americana,American Wigeon,Aves,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Mareca sibilatrix,Chiloe Wigeon,Aves,8,30,2026-09-02,api.inaturalist.org species_counts
+home,Mareca strepera,Gadwall,Aves,3,6,2026-09-02,api.inaturalist.org species_counts
+home,Megaceryle alcyon,Belted Kingfisher,Aves,8,83,2026-09-02,api.inaturalist.org species_counts
+home,Megascops asio,Eastern Screech-Owl,Aves,1,3,2026-09-02,api.inaturalist.org species_counts
+home,Melanerpes carolinus,Red-bellied Woodpecker,Aves,3,54,2026-09-02,api.inaturalist.org species_counts
+home,Melanerpes erythrocephalus,Red-headed Woodpecker,Aves,25,50,2026-09-02,api.inaturalist.org species_counts
+home,Melopsittacus undulatus,Budgerigar,Aves,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Melospiza georgiana,Swamp Sparrow,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Melospiza lincolnii,Lincoln's Sparrow,Aves,3,49,2026-09-02,api.inaturalist.org species_counts
+home,Melospiza melodia,Song Sparrow,Aves,3,12,2026-09-02,api.inaturalist.org species_counts
+home,Mergus merganser,Common Merganser,Aves,8,13,2026-09-02,api.inaturalist.org species_counts
+home,Mimus polyglottos,Northern Mockingbird,Aves,1,2,2026-09-02,api.inaturalist.org species_counts
+home,Mniotilta varia,Black-and-white Warbler,Aves,3,20,2026-09-02,api.inaturalist.org species_counts
+home,Molothrus ater,Brown-headed Cowbird,Aves,3,8,2026-09-02,api.inaturalist.org species_counts
+home,Mycteria americana,Wood Stork,Aves,15,46,2026-09-02,api.inaturalist.org species_counts
+home,Myiarchus crinitus,Great Crested Flycatcher,Aves,3,2,2026-09-02,api.inaturalist.org species_counts
+home,Myiopsitta monachus,Monk Parakeet,Aves,3,22,2026-09-02,api.inaturalist.org species_counts
+home,Nannopterum auritum,Double-crested Cormorant,Aves,3,6,2026-09-02,api.inaturalist.org species_counts
+home,Nannopterum brasilianum,Neotropic Cormorant,Aves,8,343,2026-09-02,api.inaturalist.org species_counts
+home,Numida meleagris,Helmeted Guineafowl,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Nyctanassa violacea,Yellow-crowned Night Heron,Aves,3,10,2026-09-02,api.inaturalist.org species_counts
+home,Nycticorax nycticorax,Black-crowned Night Heron,Aves,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Oxyura jamaicensis,Ruddy Duck,Aves,8,115,2026-09-02,api.inaturalist.org species_counts
+home,Pandion haliaetus,Osprey,Aves,8,29,2026-09-02,api.inaturalist.org species_counts
+home,Parkesia noveboracensis,Northern Waterthrush,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Parulidae,New World Warblers,Aves,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Passer domesticus,House Sparrow,Aves,1,8,2026-09-02,api.inaturalist.org species_counts
+home,Passerculus sandwichensis,Savannah Sparrow,Aves,8,66,2026-09-02,api.inaturalist.org species_counts
+home,Passerella iliaca,Fox Sparrow,Aves,8,26,2026-09-02,api.inaturalist.org species_counts
+home,Passerina caerulea,Blue Grosbeak,Aves,8,14,2026-09-02,api.inaturalist.org species_counts
+home,Passerina ciris,Painted Bunting,Aves,3,7,2026-09-02,api.inaturalist.org species_counts
+home,Passerina cyanea,Indigo Bunting,Aves,3,15,2026-09-02,api.inaturalist.org species_counts
+home,Pavo cristatus,Indian Peafowl,Aves,8,17,2026-09-02,api.inaturalist.org species_counts
+home,Pelecanus erythrorhynchos,American White Pelican,Aves,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Pelecanus occidentalis,Brown Pelican,Aves,8,12,2026-09-02,api.inaturalist.org species_counts
+home,Petrochelidon pyrrhonota,Cliff Swallow,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Phalaropus tricolor,Wilson's Phalarope,Aves,8,19,2026-09-02,api.inaturalist.org species_counts
+home,Pheucticus ludovicianus,Rose-breasted Grosbeak,Aves,3,4,2026-09-02,api.inaturalist.org species_counts
+home,Phoenicopterus ruber,American Flamingo,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Pipilo erythrophthalmus,Eastern Towhee,Aves,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Pipilo maculatus,Spotted Towhee,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Piranga rubra,Summer Tanager,Aves,3,3,2026-09-02,api.inaturalist.org species_counts
+home,Platalea ajaja,Roseate Spoonbill,Aves,8,34,2026-09-02,api.inaturalist.org species_counts
+home,Plegadis chihi,White-faced Ibis,Aves,8,20,2026-09-02,api.inaturalist.org species_counts
+home,Podiceps nigricollis,Eared Grebe,Aves,8,19,2026-09-02,api.inaturalist.org species_counts
+home,Podilymbus podiceps,Pied-billed Grebe,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Poecile carolinensis,Carolina Chickadee,Aves,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Polioptila caerulea,Blue-gray Gnatcatcher,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Pooecetes gramineus,Vesper Sparrow,Aves,15,20,2026-09-02,api.inaturalist.org species_counts
+home,Porzana carolina,Sora,Aves,3,4,2026-09-02,api.inaturalist.org species_counts
+home,Progne subis,Purple Martin,Aves,3,14,2026-09-02,api.inaturalist.org species_counts
+home,Pulsatrix perspicillata,Spectacled Owl,Aves,8,19,2026-09-02,api.inaturalist.org species_counts
+home,Pyrrhura molinae,Green-cheeked Parakeet,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Quiscalus mexicanus,Great-tailed Grackle,Aves,1,6,2026-09-02,api.inaturalist.org species_counts
+home,Quiscalus quiscula,Common Grackle,Aves,3,2,2026-09-02,api.inaturalist.org species_counts
+home,Rallus limicola,Virginia Rail,Aves,3,3,2026-09-02,api.inaturalist.org species_counts
+home,Recurvirostra americana,American Avocet,Aves,8,30,2026-09-02,api.inaturalist.org species_counts
+home,Regulus satrapa,Golden-crowned Kinglet,Aves,3,2,2026-09-02,api.inaturalist.org species_counts
+home,Rupicola peruvianus,Andean Cock-of-the-rock,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Sayornis phoebe,Eastern Phoebe,Aves,1,2,2026-09-02,api.inaturalist.org species_counts
+home,Scolopax minor,American Woodcock,Aves,3,24,2026-09-02,api.inaturalist.org species_counts
+home,Seiurus aurocapilla,Ovenbird,Aves,3,45,2026-09-02,api.inaturalist.org species_counts
+home,Setophaga aestiva,Northern Yellow Warbler,Aves,3,3,2026-09-02,api.inaturalist.org species_counts
+home,Setophaga caerulescens,Black-throated Blue Warbler,Aves,15,19,2026-09-02,api.inaturalist.org species_counts
+home,Setophaga castanea,Bay-breasted Warbler,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Setophaga coronata,Yellow-rumped Warbler,Aves,3,10,2026-09-02,api.inaturalist.org species_counts
+home,Setophaga fusca,Blackburnian Warbler,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Setophaga magnolia,Magnolia Warbler,Aves,3,3,2026-09-02,api.inaturalist.org species_counts
+home,Setophaga pensylvanica,Chestnut-sided Warbler,Aves,25,56,2026-09-02,api.inaturalist.org species_counts
+home,Setophaga pinus,Pine Warbler,Aves,3,4,2026-09-02,api.inaturalist.org species_counts
+home,Setophaga ruticilla,American Redstart,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Setophaga virens,Black-throated Green Warbler,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Sialia sialis,Eastern Bluebird,Aves,3,3,2026-09-02,api.inaturalist.org species_counts
+home,Sitta canadensis,Red-breasted Nuthatch,Aves,3,2,2026-09-02,api.inaturalist.org species_counts
+home,Sitta carolinensis,White-breasted Nuthatch,Aves,8,11,2026-09-02,api.inaturalist.org species_counts
+home,Spatula clypeata,Northern Shoveler,Aves,3,7,2026-09-02,api.inaturalist.org species_counts
+home,Spatula cyanoptera,Cinnamon Teal,Aves,15,19,2026-09-02,api.inaturalist.org species_counts
+home,Spatula discors,Blue-winged Teal,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Spheniscus demersus,African Penguin,Aves,8,16,2026-09-02,api.inaturalist.org species_counts
+home,Sphyrapicus varius,Yellow-bellied Sapsucker,Aves,1,2,2026-09-02,api.inaturalist.org species_counts
+home,Spinus pinus,Pine Siskin,Aves,3,2,2026-09-02,api.inaturalist.org species_counts
+home,Spinus tristis,American Goldfinch,Aves,3,15,2026-09-02,api.inaturalist.org species_counts
+home,Spiza americana,Dickcissel,Aves,8,23,2026-09-02,api.inaturalist.org species_counts
+home,Spizella pallida,Clay-colored Sparrow,Aves,3,2,2026-09-02,api.inaturalist.org species_counts
+home,Spizella passerina,Chipping Sparrow,Aves,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Spizella pusilla,Field Sparrow,Aves,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Stelgidopteryx serripennis,Northern Rough-winged Swallow,Aves,8,20,2026-09-02,api.inaturalist.org species_counts
+home,Sterna forsteri,Forster's Tern,Aves,8,25,2026-09-02,api.inaturalist.org species_counts
+home,Sternula antillarum,Least Tern,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Streptopelia decaocto,Eurasian Collared-Dove,Aves,8,21,2026-09-02,api.inaturalist.org species_counts
+home,Strix varia,Barred Owl,Aves,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Sturnella magna,Eastern Meadowlark,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Sturnus vulgaris,European Starling,Aves,1,3,2026-09-02,api.inaturalist.org species_counts
+home,Tadorna ferruginea,Ruddy Shelduck,Aves,8,50,2026-09-02,api.inaturalist.org species_counts
+home,Thryomanes bewickii,Bewick's Wren,Aves,3,3,2026-09-02,api.inaturalist.org species_counts
+home,Thryothorus ludovicianus,Carolina Wren,Aves,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Toxostoma rufum,Brown Thrasher,Aves,3,5,2026-09-02,api.inaturalist.org species_counts
+home,Tringa flavipes,Lesser Yellowlegs,Aves,8,33,2026-09-02,api.inaturalist.org species_counts
+home,Tringa melanoleuca,Greater Yellowlegs,Aves,8,60,2026-09-02,api.inaturalist.org species_counts
+home,Tringa semipalmata,Willet,Aves,8,20,2026-09-02,api.inaturalist.org species_counts
+home,Tringa solitaria,Solitary Sandpiper,Aves,8,18,2026-09-02,api.inaturalist.org species_counts
+home,Troglodytes aedon,Northern House Wren,Aves,3,16,2026-09-02,api.inaturalist.org species_counts
+home,Troglodytes hiemalis,Winter Wren,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Turdus migratorius,American Robin,Aves,1,6,2026-09-02,api.inaturalist.org species_counts
+home,Tyrannus forficatus,Scissor-tailed Flycatcher,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Tyrannus tyrannus,Eastern Kingbird,Aves,8,145,2026-09-02,api.inaturalist.org species_counts
+home,Tyrannus verticalis,Western Kingbird,Aves,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Tyto furcata,American Barn Owl,Aves,8,98,2026-09-02,api.inaturalist.org species_counts
+home,Vireo gilvus,Eastern Warbling Vireo,Aves,8,16,2026-09-02,api.inaturalist.org species_counts
+home,Vireo griseus,White-eyed Vireo,Aves,8,23,2026-09-02,api.inaturalist.org species_counts
+home,Vireo olivaceus,Red-eyed Vireo,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Vireo solitarius,Blue-headed Vireo,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Xanthocephalus xanthocephalus,Yellow-headed Blackbird,Aves,8,20,2026-09-02,api.inaturalist.org species_counts
+home,Zenaida asiatica,White-winged Dove,Aves,1,7,2026-09-02,api.inaturalist.org species_counts
+home,Zenaida macroura,Mourning Dove,Aves,1,3,2026-09-02,api.inaturalist.org species_counts
+home,Zonotrichia albicollis,White-throated Sparrow,Aves,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Zonotrichia leucophrys,White-crowned Sparrow,Aves,3,2,2026-09-02,api.inaturalist.org species_counts
+home,Zonotrichia querula,Harris's Sparrow,Aves,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Acanthocephala declivis,Giant leaf-footed bug,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Acanthocephala femorata,Florida Leaf-footed Bug,Insecta,8,43,2026-09-02,api.inaturalist.org species_counts
+home,Acanthocephala terminalis,,Insecta,3,18,2026-09-02,api.inaturalist.org species_counts
+home,Achyra rantalis,Garden Webworm Moth,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Acmaeodera neglecta,,Insecta,25,215,2026-09-02,api.inaturalist.org species_counts
+home,Acrolophus cressoni,Cresson's Grass Tubeworm Moth,Insecta,15,168,2026-09-02,api.inaturalist.org species_counts
+home,Acupalpus testaceus,Tiled Harp Ground Beetle,Insecta,3,28,2026-09-02,api.inaturalist.org species_counts
+home,Aeolus mellillus,Sweet Click Beetle,Insecta,3,37,2026-09-02,api.inaturalist.org species_counts
+home,Agonum punctiforme,Punctiform Harp Ground Beetle,Insecta,3,30,2026-09-02,api.inaturalist.org species_counts
+home,Agromyzidae,Leaf-miner Flies,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Aidemona azteca,Aztec Spur-throated Grasshopper,Insecta,8,80,2026-09-02,api.inaturalist.org species_counts
+home,Allograpta obliqua,Oblique Streaktail,Insecta,3,12,2026-09-02,api.inaturalist.org species_counts
+home,Ammophila pictipennis,,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Amorpha juglandis,Walnut Sphinx,Insecta,1,4,2026-09-02,api.inaturalist.org species_counts
+home,Amphibolips confluenta,Spongy Oak Apple Gall Wasp,Insecta,1,3,2026-09-02,api.inaturalist.org species_counts
+home,Amphibolips quercusjuglans,Acorn Plum Gall Wasp,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Anacampsis fullonella,,Insecta,3,14,2026-09-02,api.inaturalist.org species_counts
+home,Anaea andria,Goatweed Leafwing,Insecta,25,272,2026-09-02,api.inaturalist.org species_counts
+home,Anax junius,Common Green Darner,Insecta,8,78,2026-09-02,api.inaturalist.org species_counts
+home,Anelaphus moestus,,Insecta,3,18,2026-09-02,api.inaturalist.org species_counts
+home,Anicla infecta,Green Cutworm Moth,Insecta,3,24,2026-09-02,api.inaturalist.org species_counts
+home,Antheraea polyphemus,Polyphemus Moth,Insecta,8,54,2026-09-02,api.inaturalist.org species_counts
+home,Anthrenus verbasci,Varied Carpet Beetle,Insecta,3,15,2026-09-02,api.inaturalist.org species_counts
+home,Aphididae,Aphids,Insecta,1,2,2026-09-02,api.inaturalist.org species_counts
+home,Apiomerus spissipes,Plains Bee Assassin,Insecta,25,221,2026-09-02,api.inaturalist.org species_counts
+home,Apis mellifera,Western Honey Bee,Insecta,1,5,2026-09-02,api.inaturalist.org species_counts
+home,Apoda y-inversa,Yellow-collared Slug Moth,Insecta,3,14,2026-09-02,api.inaturalist.org species_counts
+home,Archilestes grandis,Great Spreadwing,Insecta,8,70,2026-09-02,api.inaturalist.org species_counts
+home,Archips argyrospila,Fruit-tree Leafroller Moth,Insecta,3,27,2026-09-02,api.inaturalist.org species_counts
+home,Archytas apicifer,,Insecta,8,52,2026-09-02,api.inaturalist.org species_counts
+home,Argia apicalis,Blue-fronted Dancer,Insecta,8,119,2026-09-02,api.inaturalist.org species_counts
+home,Argia funebris,Springwater Dancer,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Argia immunda,Kiowa Dancer,Insecta,25,284,2026-09-02,api.inaturalist.org species_counts
+home,Argia moesta,Powdered Dancer,Insecta,8,65,2026-09-02,api.inaturalist.org species_counts
+home,Argia sedula,Blue-ringed Dancer,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Argia translata,Dusky Dancer,Insecta,8,68,2026-09-02,api.inaturalist.org species_counts
+home,Arilus cristatus,North American Wheel Bug,Insecta,3,16,2026-09-02,api.inaturalist.org species_counts
+home,Aristotelia roseosuffusella,Pink-washed Aristotelia Moth,Insecta,3,12,2026-09-02,api.inaturalist.org species_counts
+home,Aspidoglossa subangulata,Lesser Tail-light Carabid,Insecta,3,20,2026-09-02,api.inaturalist.org species_counts
+home,Asterocampa celtis,Hackberry Emperor,Insecta,3,23,2026-09-02,api.inaturalist.org species_counts
+home,Asterocampa clyton,Tawny Emperor,Insecta,1,4,2026-09-02,api.inaturalist.org species_counts
+home,Atalopedes huron,Huron Skipper,Insecta,3,17,2026-09-02,api.inaturalist.org species_counts
+home,Atherigona,Shoot Flies,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Atteva aurea,Ailanthus Webworm Moth,Insecta,1,3,2026-09-02,api.inaturalist.org species_counts
+home,Banasa dimidiata,Green Burgundy Stink Bug,Insecta,25,235,2026-09-02,api.inaturalist.org species_counts
+home,Banasa euchlora,Juniper Stink Bug,Insecta,15,139,2026-09-02,api.inaturalist.org species_counts
+home,Battus philenor,Pipevine Swallowtail,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Bembidion impotens,,Insecta,3,19,2026-09-02,api.inaturalist.org species_counts
+home,Bembidion rapidum,,Insecta,3,16,2026-09-02,api.inaturalist.org species_counts
+home,Bicyrtes quadrifasciatus,Four-banded Stink Bug Wasp,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Blastobasis glandulella,Acorn Moth,Insecta,3,29,2026-09-02,api.inaturalist.org species_counts
+home,Bombus pensylvanicus,American Bumble Bee,Insecta,3,33,2026-09-02,api.inaturalist.org species_counts
+home,Brachymyrmex patagonicus,Dark Rover Ant,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Braconidae,Braconid Wasps,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Brochymena quadripustulata,Four-humped Stink Bug,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Bucculatrix coronatella,Crowned Bucculatrix Moth,Insecta,3,15,2026-09-02,api.inaturalist.org species_counts
+home,Burnsius communis,Common Checkered-Skipper,Insecta,3,13,2026-09-02,api.inaturalist.org species_counts
+home,Caenurgina erechtea,Forage Looper Moth,Insecta,3,15,2026-09-02,api.inaturalist.org species_counts
+home,Calosoma,Caterpillar-hunter Beetles,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Calosoma scrutator,Fiery Searcher,Insecta,3,15,2026-09-02,api.inaturalist.org species_counts
+home,Calycopis,,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Camponotus pennsylvanicus,Eastern Black Carpenter Ant,Insecta,15,134,2026-09-02,api.inaturalist.org species_counts
+home,Catocala maestosa,Sad Underwing,Insecta,3,15,2026-09-02,api.inaturalist.org species_counts
+home,Chaetocnema,,Insecta,3,22,2026-09-02,api.inaturalist.org species_counts
+home,Chariessa pilosa,Pilose Checkered Beetle,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Chariesterus antennator,Euphorbia Bug,Insecta,3,12,2026-09-02,api.inaturalist.org species_counts
+home,Chelinidea vittiger,Cactus Coreid Bug,Insecta,3,16,2026-09-02,api.inaturalist.org species_counts
+home,Cheumatopsyche,Little Sister Sedges,Insecta,8,46,2026-09-02,api.inaturalist.org species_counts
+home,Chinavia hilaris,Green Stink Bug,Insecta,3,15,2026-09-02,api.inaturalist.org species_counts
+home,Chironomini,,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Chlosyne lacinia,Bordered Patch,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Chortophaga viridifasciata,Green-striped Grasshopper,Insecta,3,15,2026-09-02,api.inaturalist.org species_counts
+home,Chrysopa,Stink Lacewings,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Chrysopa quadripunctata,Four-spotted Green Lacewing,Insecta,3,13,2026-09-02,api.inaturalist.org species_counts
+home,Chrysoperla rufilabris,Red-lipped Green Lacewing,Insecta,3,25,2026-09-02,api.inaturalist.org species_counts
+home,Cicindela sexguttata,Six-spotted Tiger Beetle,Insecta,25,300,2026-09-02,api.inaturalist.org species_counts
+home,Cisseps fulvicollis,Yellow-collared Scape Moth,Insecta,3,21,2026-09-02,api.inaturalist.org species_counts
+home,Clepsis peritana,Garden Tortrix,Insecta,3,42,2026-09-02,api.inaturalist.org species_counts
+home,Clepsis virescana,Greenish Apple Moth,Insecta,15,171,2026-09-02,api.inaturalist.org species_counts
+home,Clivina dentipes,,Insecta,3,18,2026-09-02,api.inaturalist.org species_counts
+home,Coccinella septempunctata,Seven-spotted Lady Beetle,Insecta,3,26,2026-09-02,api.inaturalist.org species_counts
+home,Colias eurytheme,Orange Sulphur,Insecta,8,174,2026-09-02,api.inaturalist.org species_counts
+home,Condylostylus,,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Condylostylus longicornis,,Insecta,8,46,2026-09-02,api.inaturalist.org species_counts
+home,Conocephalus,Lesser Meadow Katydids,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Conocephalus fasciatus,Slender Meadow Katydid,Insecta,8,42,2026-09-02,api.inaturalist.org species_counts
+home,Copelatus glyphicus,,Insecta,3,16,2026-09-02,api.inaturalist.org species_counts
+home,Costaconvexa centrostrigaria,Bent-lined Carpet,Insecta,3,22,2026-09-02,api.inaturalist.org species_counts
+home,Cotinis nitida,Common Green June Beetle,Insecta,1,2,2026-09-02,api.inaturalist.org species_counts
+home,Crematogaster laeviuscula,Shiny Acrobat Ant,Insecta,1,2,2026-09-02,api.inaturalist.org species_counts
+home,Cryptocephalus leucomelas,Bi-blotched Cryptocephalus,Insecta,3,23,2026-09-02,api.inaturalist.org species_counts
+home,Cuerna costalis,Lateral-lined Sharpshooter,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Cydia caryana,Hickory Shuckworm Moth,Insecta,3,20,2026-09-02,api.inaturalist.org species_counts
+home,Cydia latiferreana,Filbertworm Moth,Insecta,3,20,2026-09-02,api.inaturalist.org species_counts
+home,Danaus gilippus,Queen,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Danaus plexippus,Monarch,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Delphinia picta,Common Picture-winged Fly,Insecta,3,13,2026-09-02,api.inaturalist.org species_counts
+home,Diabrotica undecimpunctata,Spotted Cucumber Beetle,Insecta,1,4,2026-09-02,api.inaturalist.org species_counts
+home,Dianthidium curvatum,Curved Pebble Bee,Insecta,3,17,2026-09-02,api.inaturalist.org species_counts
+home,Diastictis fracturalis,Fractured Western Snout,Insecta,8,45,2026-09-02,api.inaturalist.org species_counts
+home,Dichromorpha viridis,Short-winged Green Grasshopper,Insecta,8,74,2026-09-02,api.inaturalist.org species_counts
+home,Dicromantispa interrupta,Four-spotted Mantisfly,Insecta,3,12,2026-09-02,api.inaturalist.org species_counts
+home,Dicymolomia julianalis,Julia's Dicymolomia Moth,Insecta,3,17,2026-09-02,api.inaturalist.org species_counts
+home,Dikrella maculata,,Insecta,3,13,2026-09-02,api.inaturalist.org species_counts
+home,Dione vanillae,Gulf Fritillary,Insecta,1,3,2026-09-02,api.inaturalist.org species_counts
+home,Diplostethus texanus,,Insecta,3,25,2026-09-02,api.inaturalist.org species_counts
+home,Diplotaxis,,Insecta,3,21,2026-09-02,api.inaturalist.org species_counts
+home,Dipropus simplex,,Insecta,3,14,2026-09-02,api.inaturalist.org species_counts
+home,Druon quercuslanigerum,,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Dythemis velox,Swift Setwing,Insecta,8,89,2026-09-02,api.inaturalist.org species_counts
+home,Ecdytolopha mana,Bicolored Ecdytolopha Moth,Insecta,15,134,2026-09-02,api.inaturalist.org species_counts
+home,Echinargus isola,Reakirt's Blue,Insecta,8,83,2026-09-02,api.inaturalist.org species_counts
+home,Elaphria chalcedonia,Chalcedony Midget,Insecta,3,19,2026-09-02,api.inaturalist.org species_counts
+home,Elophila gyralis,Waterlily Borer Moth,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Elophila obliteralis,Waterlily Leafcutter Moth,Insecta,3,48,2026-09-02,api.inaturalist.org species_counts
+home,Emmelina monodactyla,Morning-glory Plume Moth,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Enallagma basidens,Double-striped Bluet,Insecta,25,244,2026-09-02,api.inaturalist.org species_counts
+home,Enallagma civile,Familiar Bluet,Insecta,3,12,2026-09-02,api.inaturalist.org species_counts
+home,Entylia carinata,Keeled Treehopper,Insecta,3,16,2026-09-02,api.inaturalist.org species_counts
+home,Epargyreus clarus,Silver-spotted Skipper,Insecta,8,87,2026-09-02,api.inaturalist.org species_counts
+home,Ephestiodes gilvescentella,Dusky Raisin Moth,Insecta,3,15,2026-09-02,api.inaturalist.org species_counts
+home,Epiaeschna heros,Swamp Darner,Insecta,1,2,2026-09-02,api.inaturalist.org species_counts
+home,Epimelissodes obliquus,Oblique Longhorn Bee,Insecta,3,15,2026-09-02,api.inaturalist.org species_counts
+home,Eristalis stipator,Yellow-shouldered Drone Fly,Insecta,8,54,2026-09-02,api.inaturalist.org species_counts
+home,Erynnis funeralis,Funereal Duskywing,Insecta,1,2,2026-09-02,api.inaturalist.org species_counts
+home,Erynnis horatius,Horace's Duskywing,Insecta,3,23,2026-09-02,api.inaturalist.org species_counts
+home,Erythemis simplicicollis,Eastern Pondhawk,Insecta,3,11,2026-09-02,api.inaturalist.org species_counts
+home,Estigmene acrea,Salt Marsh Moth,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Euborellia,,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Euchromius ocellea,Belted Grass-veneer,Insecta,3,14,2026-09-02,api.inaturalist.org species_counts
+home,Eulimnichus ater,,Insecta,3,49,2026-09-02,api.inaturalist.org species_counts
+home,Eumarozia malachitana,Sculptured Moth,Insecta,3,13,2026-09-02,api.inaturalist.org species_counts
+home,Eumorpha fasciatus,Banded Sphinx,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Euodynerus foraminatus,Pitted Mason Wasp,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Euodynerus pratensis,,Insecta,3,20,2026-09-02,api.inaturalist.org species_counts
+home,Eupeodes americanus,Long-tailed Aphideater Complex,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Euphoria kernii,Kern's Flower Scarab,Insecta,8,45,2026-09-02,api.inaturalist.org species_counts
+home,Eupithecia miserulata,Common Eupithecia Moth,Insecta,3,34,2026-09-02,api.inaturalist.org species_counts
+home,Euptoieta claudia,Variegated Fritillary,Insecta,8,241,2026-09-02,api.inaturalist.org species_counts
+home,Eurema lisa,Little Yellow,Insecta,8,45,2026-09-02,api.inaturalist.org species_counts
+home,Euschistus servus,Brown Stink Bug,Insecta,8,45,2026-09-02,api.inaturalist.org species_counts
+home,Evania appendigaster,Blue-eyed Ensign Wasp,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Exitianus exitiosus,Gray Lawn Leafhopper,Insecta,3,22,2026-09-02,api.inaturalist.org species_counts
+home,Feltia subterranea,Subterranean Dart,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Galgula partita,Wedgling Moth,Insecta,3,40,2026-09-02,api.inaturalist.org species_counts
+home,Glaphyria sesquistrialis,White-roped Glaphyria Moth,Insecta,8,65,2026-09-02,api.inaturalist.org species_counts
+home,Graphocephala coccinea,Red-banded Leafhopper,Insecta,8,47,2026-09-02,api.inaturalist.org species_counts
+home,Gretchena bolliana,Pecan Bud Moth,Insecta,3,13,2026-09-02,api.inaturalist.org species_counts
+home,Halictus ligatus,Ligated Furrow Bee,Insecta,3,18,2026-09-02,api.inaturalist.org species_counts
+home,Harmonia axyridis,Asian Lady Beetle,Insecta,1,3,2026-09-02,api.inaturalist.org species_counts
+home,Helicoverpa zea,Corn Earworm Moth,Insecta,1,2,2026-09-02,api.inaturalist.org species_counts
+home,Heliozela aesella,,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Hemaris diffinis,Snowberry Clearwing,Insecta,8,61,2026-09-02,api.inaturalist.org species_counts
+home,Heraclides cresphontes,Eastern Giant Swallowtail,Insecta,8,78,2026-09-02,api.inaturalist.org species_counts
+home,Hermetia illucens,Black Soldier Fly,Insecta,8,53,2026-09-02,api.inaturalist.org species_counts
+home,Hetaerina americana,American Rubyspot,Insecta,25,216,2026-09-02,api.inaturalist.org species_counts
+home,Hileithia magualis,Magician Moth,Insecta,8,52,2026-09-02,api.inaturalist.org species_counts
+home,Hippiscus ocelote,Wrinkled Grasshopper,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Hippodamia convergens,Convergent Lady Beetle,Insecta,8,102,2026-09-02,api.inaturalist.org species_counts
+home,Homalodisca vitripennis,Glassy-winged Sharpshooter,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Homoeosoma electella,American Sunflower Moth,Insecta,3,27,2026-09-02,api.inaturalist.org species_counts
+home,Hyalymenus tarsatus,Texas Bow-legged Bug,Insecta,3,21,2026-09-02,api.inaturalist.org species_counts
+home,Hydropsyche,Spotted Sedges,Insecta,3,29,2026-09-02,api.inaturalist.org species_counts
+home,Hylephila phyleus,Fiery Skipper,Insecta,3,35,2026-09-02,api.inaturalist.org species_counts
+home,Hyles lineata,White-lined Sphinx,Insecta,3,38,2026-09-02,api.inaturalist.org species_counts
+home,Hymenia perspectalis,Spotted Beet Webworm Moth,Insecta,3,32,2026-09-02,api.inaturalist.org species_counts
+home,Hypena scabra,Green Cloverworm Moth,Insecta,3,63,2026-09-02,api.inaturalist.org species_counts
+home,Hypercompe scribonia,Giant Leopard Moth,Insecta,3,11,2026-09-02,api.inaturalist.org species_counts
+home,Hyphantria cunea,Fall Webworm Moth,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Hypocritanus fascipennis,Eastern Band-winged Hover Fly,Insecta,8,43,2026-09-02,api.inaturalist.org species_counts
+home,Idia aemula,Common Idia Moth,Insecta,3,33,2026-09-02,api.inaturalist.org species_counts
+home,Idia americalis,American Idia Moth,Insecta,3,14,2026-09-02,api.inaturalist.org species_counts
+home,Iridopsis defectaria,Brown-shaded Gray,Insecta,3,12,2026-09-02,api.inaturalist.org species_counts
+home,Ischnura hastata,Citrine Forktail,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Ischnura posita,Fragile Forktail,Insecta,8,65,2026-09-02,api.inaturalist.org species_counts
+home,Ischnura ramburii,Rambur's Forktail,Insecta,8,104,2026-09-02,api.inaturalist.org species_counts
+home,Jadera haematoloma,Red-shouldered Bug,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Junonia coenia,Common Buckeye,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Kuschelina gibbitarsa,Spot-necked Kuschelina,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Leptoglossus oppositus,,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Leptoglossus phyllopus,Eastern Leaf-footed Bug,Insecta,1,3,2026-09-02,api.inaturalist.org species_counts
+home,Leptostales pannaria,Pannaria Wave,Insecta,3,33,2026-09-02,api.inaturalist.org species_counts
+home,Lerema accius,Clouded Skipper,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Lestes australis,Southern Spreadwing,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Libellula comanche,Comanche Skimmer,Insecta,25,252,2026-09-02,api.inaturalist.org species_counts
+home,Libellula croceipennis,Neon Skimmer,Insecta,8,137,2026-09-02,api.inaturalist.org species_counts
+home,Libellula luctuosa,Widow Skimmer,Insecta,8,47,2026-09-02,api.inaturalist.org species_counts
+home,Libellula vibrans,Great Blue Skimmer,Insecta,8,70,2026-09-02,api.inaturalist.org species_counts
+home,Libytheana carinenta,American Snout,Insecta,8,84,2026-09-02,api.inaturalist.org species_counts
+home,Limenitis archippus,Viceroy,Insecta,15,137,2026-09-02,api.inaturalist.org species_counts
+home,Lineodes integra,Eggplant Leafroller Moth,Insecta,3,22,2026-09-02,api.inaturalist.org species_counts
+home,Liorhyssus hyalinus,Hyaline Grass Bug,Insecta,3,16,2026-09-02,api.inaturalist.org species_counts
+home,Lobocleta ossularia,Drab Brown Wave,Insecta,8,46,2026-09-02,api.inaturalist.org species_counts
+home,Lucilia,Greenbottle Flies,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Lygaeus kalmii,Small Milkweed Bug,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Lygus lineolaris,North American Tarnished Plant Bug,Insecta,25,214,2026-09-02,api.inaturalist.org species_counts
+home,Malacosoma disstria,Forest Tent Caterpillar Moth,Insecta,1,2,2026-09-02,api.inaturalist.org species_counts
+home,Mallophora fautrix,Golden-tailed Beebandit,Insecta,3,13,2026-09-02,api.inaturalist.org species_counts
+home,Manduca sexta,Carolina Sphinx,Insecta,8,46,2026-09-02,api.inaturalist.org species_counts
+home,Marimatha nigrofimbria,Black-bordered Lemon Moth,Insecta,15,148,2026-09-02,api.inaturalist.org species_counts
+home,Megachilinae,,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Megacyllene caryae,Painted Hickory Borer,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Megatibicen resh,Resh Cicada,Insecta,8,57,2026-09-02,api.inaturalist.org species_counts
+home,Melanoplus differentialis,Differential Grasshopper,Insecta,3,19,2026-09-02,api.inaturalist.org species_counts
+home,Melipotis indomita,Indomitable Graphic Moth,Insecta,3,20,2026-09-02,api.inaturalist.org species_counts
+home,Melipotis jucunda,Merry Graphic Moth,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Melissodes bimaculatus,Two-spotted Longhorn Bee,Insecta,1,2,2026-09-02,api.inaturalist.org species_counts
+home,Menecles insertus,Elf Shoe Stink Bug,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Metcalfa pruinosa,Citrus Flatid Planthopper,Insecta,15,149,2026-09-02,api.inaturalist.org species_counts
+home,Microcentrum rhombifolium,Greater Anglewing,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Monocrepidius bellus,Beautiful Wireworm,Insecta,3,29,2026-09-02,api.inaturalist.org species_counts
+home,Myodocha serripes,Long-necked Seed Bug,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Nathalis iole,Dainty Sulphur,Insecta,8,92,2026-09-02,api.inaturalist.org species_counts
+home,Neoconocephalus triops,Broad-tipped Conehead,Insecta,3,15,2026-09-02,api.inaturalist.org species_counts
+home,Neopamera bilobata,,Insecta,3,18,2026-09-02,api.inaturalist.org species_counts
+home,Neotibicen pruinosus,Scissor Grinder,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Neotibicen superbus,Superb Dog-day Cicada,Insecta,1,2,2026-09-02,api.inaturalist.org species_counts
+home,Neotibicen tibicen,Swamp Cicada,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Neoxylocopa,,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Nomophila nearctica,Lucerne Moth,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Norvellina helenae,,Insecta,3,16,2026-09-02,api.inaturalist.org species_counts
+home,Notiobia,,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Notiobia terminata,,Insecta,3,30,2026-09-02,api.inaturalist.org species_counts
+home,Oliaridus aridus,,Insecta,3,14,2026-09-02,api.inaturalist.org species_counts
+home,Olla v-nigrum,Ashy Gray Lady Beetle,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Oncometopia orbona,Broad-headed Sharpshooter,Insecta,8,48,2026-09-02,api.inaturalist.org species_counts
+home,Oncopeltus fasciatus,Large Milkweed Bug,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Ophiderma evelyna,,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Orgyia leucostigma,White-marked Tussock Moth,Insecta,15,148,2026-09-02,api.inaturalist.org species_counts
+home,Oxycopis mimetica,,Insecta,3,15,2026-09-02,api.inaturalist.org species_counts
+home,Pacarina puella,Little mesquite cicada,Insecta,15,158,2026-09-02,api.inaturalist.org species_counts
+home,Pachydiplax longipennis,Blue Dasher,Insecta,3,27,2026-09-02,api.inaturalist.org species_counts
+home,Pachypsylla celtidismamma,Hackberry Nipplegall Psyllid,Insecta,3,14,2026-09-02,api.inaturalist.org species_counts
+home,Pachypsylla venusta,Hackberry Petiole Gall Psyllid,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Paleacrita vernata,Spring Cankerworm Moth,Insecta,15,170,2026-09-02,api.inaturalist.org species_counts
+home,Palpada vinetorum,Northern Plushback,Insecta,8,65,2026-09-02,api.inaturalist.org species_counts
+home,Palpita freemanalis,Freeman's Palpita Moth,Insecta,3,23,2026-09-02,api.inaturalist.org species_counts
+home,Palpita quadristigmalis,Four-spotted Palpita Moth,Insecta,3,15,2026-09-02,api.inaturalist.org species_counts
+home,Pangaeus bilineatus,Two-lined Burrowing Bug,Insecta,8,62,2026-09-02,api.inaturalist.org species_counts
+home,Panopoda carneicosta,Brown Panopoda Moth,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Papilio glaucus,Eastern Tiger Swallowtail,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Papilio polyxenes,Black Swallowtail,Insecta,1,3,2026-09-02,api.inaturalist.org species_counts
+home,Paracymus,,Insecta,3,21,2026-09-02,api.inaturalist.org species_counts
+home,Parapediasia teterrellus,Bluegrass Webworm Moth,Insecta,3,25,2026-09-02,api.inaturalist.org species_counts
+home,Paratachys,,Insecta,3,47,2026-09-02,api.inaturalist.org species_counts
+home,Paraugochloropsis,,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Parthenicus,,Insecta,3,20,2026-09-02,api.inaturalist.org species_counts
+home,Pelidnota punctata,Grapevine Beetle,Insecta,25,233,2026-09-02,api.inaturalist.org species_counts
+home,Pepsis,New World Tarantula-hawk Wasps,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Peridroma saucia,Variegated Cutworm Moth,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Periplaneta americana,American Cockroach,Insecta,1,4,2026-09-02,api.inaturalist.org species_counts
+home,Perithemis tenera,Eastern Amberwing,Insecta,8,205,2026-09-02,api.inaturalist.org species_counts
+home,Petrophila bifascialis,Two-banded Petrophila,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Phanerotoma,,Insecta,3,14,2026-09-02,api.inaturalist.org species_counts
+home,Phlepsiina,,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Phoebis sennae,Cloudless Sulphur,Insecta,15,169,2026-09-02,api.inaturalist.org species_counts
+home,Photinus pyralis,Common Eastern Firefly,Insecta,8,54,2026-09-02,api.inaturalist.org species_counts
+home,Phyciodes phaon,Phaon Crescent,Insecta,8,102,2026-09-02,api.inaturalist.org species_counts
+home,Phyciodes tharos,Pearl Crescent,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Phycitinae,Knot-horn Moths,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Pieris rapae,Small White,Insecta,1,2,2026-09-02,api.inaturalist.org species_counts
+home,Pigritia,,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Plagiognathus albatus,Sycamore plant bug,Insecta,3,16,2026-09-02,api.inaturalist.org species_counts
+home,Plathemis lydia,Common Whitetail,Insecta,8,215,2026-09-02,api.inaturalist.org species_counts
+home,Platynota rostrana,Omnivorous Platynota Moth,Insecta,3,27,2026-09-02,api.inaturalist.org species_counts
+home,Plectrodera,,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Pleuroprucha insulsaria,Common Tan Wave,Insecta,3,49,2026-09-02,api.inaturalist.org species_counts
+home,Plochionus timidus,,Insecta,3,16,2026-09-02,api.inaturalist.org species_counts
+home,Plusiinae,Plusiine Looper Moths,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Plusiodonta compressipalpis,Moonseed Moth,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Plutella xylostella,Diamondback Moth,Insecta,3,12,2026-09-02,api.inaturalist.org species_counts
+home,Pococera asperatella,Maple Webworm Moth,Insecta,3,18,2026-09-02,api.inaturalist.org species_counts
+home,Podisus maculiventris,Spined Soldier Bug,Insecta,3,15,2026-09-02,api.inaturalist.org species_counts
+home,Poecilanthrax lucifer,,Insecta,8,62,2026-09-02,api.inaturalist.org species_counts
+home,Poecilocapsus lineatus,Four-lined Plant Bug,Insecta,3,15,2026-09-02,api.inaturalist.org species_counts
+home,Polana quadrinotata,,Insecta,3,22,2026-09-02,api.inaturalist.org species_counts
+home,Polistes annularis,Ringed Paper Wasp,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Polistes apachus,Apache Paper Wasp,Insecta,25,356,2026-09-02,api.inaturalist.org species_counts
+home,Polistes carolina,Fine-backed Red Paper Wasp,Insecta,3,12,2026-09-02,api.inaturalist.org species_counts
+home,Polistes dorsalis,Hunter's Little Paper Wasp,Insecta,8,53,2026-09-02,api.inaturalist.org species_counts
+home,Polistes exclamans,Guinea Paper Wasp,Insecta,1,3,2026-09-02,api.inaturalist.org species_counts
+home,Polistes metricus,Metric Paper Wasp,Insecta,8,52,2026-09-02,api.inaturalist.org species_counts
+home,Polycentropodidae,Tube Maker Caddisflies,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Polygonia interrogationis,Question Mark,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Polystepha pilulae,Oak Leaf Gall Midge,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Ponana citrina,,Insecta,3,17,2026-09-02,api.inaturalist.org species_counts
+home,Pontia protodice,Checkered White,Insecta,3,16,2026-09-02,api.inaturalist.org species_counts
+home,Potamyia flava,Yellow Net-spinning Caddisfly,Insecta,3,16,2026-09-02,api.inaturalist.org species_counts
+home,Prionoxystus robiniae,Carpenterworm Moth,Insecta,3,12,2026-09-02,api.inaturalist.org species_counts
+home,Promachus hinei,Maroon-legged Lion Fly,Insecta,8,58,2026-09-02,api.inaturalist.org species_counts
+home,Proxys punctulatus,Black Stink Bug,Insecta,3,11,2026-09-02,api.inaturalist.org species_counts
+home,Pseudaletia unipuncta,Armyworm Moth,Insecta,3,17,2026-09-02,api.inaturalist.org species_counts
+home,Pseudatomoscelis seriatus,Cotton Fleahopper,Insecta,3,12,2026-09-02,api.inaturalist.org species_counts
+home,Psyllobora renifer,Kidney-spotted Fairy Lady Beetle,Insecta,3,19,2026-09-02,api.inaturalist.org species_counts
+home,Psyllobora vigintimaculata,Twenty-spotted Lady Beetle,Insecta,1,2,2026-09-02,api.inaturalist.org species_counts
+home,Pyralis farinalis,Meal moth,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Pyrausta inornatalis,Inornate Pyrausta Moth,Insecta,8,48,2026-09-02,api.inaturalist.org species_counts
+home,Pyrausta laticlavia,Southern Purple Mint Moth,Insecta,15,125,2026-09-02,api.inaturalist.org species_counts
+home,Rachiplusia ou,Gray Looper Moth,Insecta,3,21,2026-09-02,api.inaturalist.org species_counts
+home,Rhinacloa forticornis,Western Plant Bug,Insecta,3,12,2026-09-02,api.inaturalist.org species_counts
+home,Sarcophagidae,Flesh Flies and Satellite Flies,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Sceliphron caementarium,Yellow-legged Mud-dauber Wasp,Insecta,3,13,2026-09-02,api.inaturalist.org species_counts
+home,Schistocerca americana,American Bird Grasshopper,Insecta,8,60,2026-09-02,api.inaturalist.org species_counts
+home,Schistocerca obscura,Obscure Bird Grasshopper,Insecta,3,26,2026-09-02,api.inaturalist.org species_counts
+home,Sciota celtidella,Hackberry Leafroller Moth,Insecta,3,13,2026-09-02,api.inaturalist.org species_counts
+home,Sciota rubrisparsella,Red-splashed Leafroller Moth,Insecta,3,16,2026-09-02,api.inaturalist.org species_counts
+home,Scudderia furcata,Fork-tailed Bush Katydid,Insecta,3,31,2026-09-02,api.inaturalist.org species_counts
+home,Scymnus louisianae,,Insecta,3,15,2026-09-02,api.inaturalist.org species_counts
+home,Scythris trivinctella,Banded Scythris Moth,Insecta,3,13,2026-09-02,api.inaturalist.org species_counts
+home,Sehirus cinctus,White-margined Burrowing Bug,Insecta,8,58,2026-09-02,api.inaturalist.org species_counts
+home,Semiardistomis viridis,Green Semipoint-mouth Beetle,Insecta,3,21,2026-09-02,api.inaturalist.org species_counts
+home,Sitona californius,,Insecta,3,15,2026-09-02,api.inaturalist.org species_counts
+home,Solenopsis invicta,Red Imported Fire Ant,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Sparganothoides lentiginosana,Lentiginos Moth,Insecta,15,184,2026-09-02,api.inaturalist.org species_counts
+home,Sphecius speciosus,Eastern Cicada-killer Wasp,Insecta,1,2,2026-09-02,api.inaturalist.org species_counts
+home,Sphex habenus,Golden-reined Digger Wasp,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Spilosoma virginica,Virginian Tiger Moth,Insecta,8,108,2026-09-02,api.inaturalist.org species_counts
+home,Spodoptera frugiperda,Fall Armyworm Moth,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Spodoptera ornithogalli,Yellow-striped Armyworm Moth,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Spoladea recurvalis,Hawaiian Beet Webworm Moth,Insecta,15,150,2026-09-02,api.inaturalist.org species_counts
+home,Stagmomantis carolina,Carolina Mantis,Insecta,3,19,2026-09-02,api.inaturalist.org species_counts
+home,Stegasta bosqueella,Red-necked Peanutworm Moth,Insecta,3,12,2026-09-02,api.inaturalist.org species_counts
+home,Stenelmis,,Insecta,3,15,2026-09-02,api.inaturalist.org species_counts
+home,Stenolophus dissimilis,,Insecta,3,32,2026-09-02,api.inaturalist.org species_counts
+home,Stenolophus ochropezus,,Insecta,3,20,2026-09-02,api.inaturalist.org species_counts
+home,Stilbus apicalis,Apical Shining Flower Beetle,Insecta,3,14,2026-09-02,api.inaturalist.org species_counts
+home,Strymon melinus,Gray Hairstreak,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Sympetrum corruptum,Variegated Meadowhawk,Insecta,8,56,2026-09-02,api.inaturalist.org species_counts
+home,Synchlora frondaria,Southern Emerald,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Syritta flaviventris,Peg-legged Compost Fly,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Tarache aprica,Exposed Bird Dropping Moth,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Taygete attributella,Triangle-marked Twirler Moth,Insecta,3,21,2026-09-02,api.inaturalist.org species_counts
+home,Tetramorium bicarinatum,Bicolored Pennant Ant,Insecta,3,17,2026-09-02,api.inaturalist.org species_counts
+home,Texananus,,Insecta,8,56,2026-09-02,api.inaturalist.org species_counts
+home,Thyanta custator,Red-shouldered Stink Bug,Insecta,15,188,2026-09-02,api.inaturalist.org species_counts
+home,Tipula,Common Crane Flies,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Toxomerus marginatus,Margined Calligrapher,Insecta,1,2,2026-09-02,api.inaturalist.org species_counts
+home,Tramea onusta,Red Saddlebags,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Triepeolus lunatus,Lunate Longhorn-cuckoo Bee,Insecta,3,20,2026-09-02,api.inaturalist.org species_counts
+home,Trogoxylon parallelipipedum,Velvety Powder-post Beetle,Insecta,3,20,2026-09-02,api.inaturalist.org species_counts
+home,Tropidosteptes quercicola,Oak Catkin Mirid,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Typhaea stercorea,Hairy Fungus Beetle,Insecta,3,21,2026-09-02,api.inaturalist.org species_counts
+home,Udea rubigalis,Celery Leaftier Moth,Insecta,3,37,2026-09-02,api.inaturalist.org species_counts
+home,Ululodes macleayanus,Macleay's Owlfly,Insecta,15,144,2026-09-02,api.inaturalist.org species_counts
+home,Uresiphita reversalis,Genista Broom Moth,Insecta,3,20,2026-09-02,api.inaturalist.org species_counts
+home,Urola nivalis,Snowy Urola Moth,Insecta,8,46,2026-09-02,api.inaturalist.org species_counts
+home,Vacusus confinis,,Insecta,3,16,2026-09-02,api.inaturalist.org species_counts
+home,Vacusus vicinus,Common Anthicid,Insecta,3,51,2026-09-02,api.inaturalist.org species_counts
+home,Validiblatta fuliginosa,Smokybrown Cockroach,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Vanessa atalanta,Red Admiral,Insecta,3,46,2026-09-02,api.inaturalist.org species_counts
+home,Vanessa cardui,Painted Lady,Insecta,8,156,2026-09-02,api.inaturalist.org species_counts
+home,Vanessa virginiensis,American Lady,Insecta,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Vespula squamosa,Southern Yellowjacket,Insecta,8,46,2026-09-02,api.inaturalist.org species_counts
+home,Xylobiops basilaris,Red-shouldered Bostrichid,Insecta,3,17,2026-09-02,api.inaturalist.org species_counts
+home,Xylocopa micans,Southern Carpenter Bee,Insecta,3,19,2026-09-02,api.inaturalist.org species_counts
+home,Xylocopa tabaniformis,Horse-fly Carpenter Bee,Insecta,15,145,2026-09-02,api.inaturalist.org species_counts
+home,Xylocopa virginica,Eastern Carpenter Bee,Insecta,3,23,2026-09-02,api.inaturalist.org species_counts
+home,Zale lunata,Lunate Zale Moth,Insecta,1,3,2026-09-02,api.inaturalist.org species_counts
+home,Zelus longipes,Milkweed Assassin Bug,Insecta,3,20,2026-09-02,api.inaturalist.org species_counts
+home,Zelus luridus,Pale Green Assassin Bug,Insecta,25,215,2026-09-02,api.inaturalist.org species_counts
+home,Zelus renardii,Leafhopper Assassin Bug,Insecta,1,6,2026-09-02,api.inaturalist.org species_counts
+home,Acinonyx jubatus,Cheetah,Mammalia,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Addax nasomaculatus,Addax,Mammalia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Aepyceros melampus,Impala,Mammalia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Ammotragus,Barbary sheep,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Ammotragus lervia,Aoudad,Mammalia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Antilope cervicapra,Blackbuck,Mammalia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Atelerix,African Hedgehogs,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Ateles,Spider Monkeys,Mammalia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Bassariscus astutus,Ringtail,Mammalia,8,2,2026-09-02,api.inaturalist.org species_counts
+home,Bos bison,American Bison,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Bos taurus,Domestic Cattle,Mammalia,8,4,2026-09-02,api.inaturalist.org species_counts
+home,Bradypus variegatus,Brown-throated Three-toed Sloth,Mammalia,8,10,2026-09-02,api.inaturalist.org species_counts
+home,Bubalus bubalis,Domestic Water Buffalo,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Camelus bactrianus,Domestic Bactrian Camel,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Canis familiaris,Domestic Dog,Mammalia,1,3,2026-09-02,api.inaturalist.org species_counts
+home,Canis latrans,Coyote,Mammalia,1,2,2026-09-02,api.inaturalist.org species_counts
+home,Capra hircus,Domestic Goat,Mammalia,8,6,2026-09-02,api.inaturalist.org species_counts
+home,Carollia perspicillata,Seba's Short-tailed Bat,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Castor canadensis,American Beaver,Mammalia,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Cavia porcellus,Domestic Guinea Pig,Mammalia,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Cebuella pygmaea,Western Pygmy Marmoset,Mammalia,15,3,2026-09-02,api.inaturalist.org species_counts
+home,Cebus capucinus,Colombian White-throated Capuchin,Mammalia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Cervus canadensis,Wapiti,Mammalia,25,2,2026-09-02,api.inaturalist.org species_counts
+home,Cervus elaphus,Red Deer,Mammalia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Chinchilla,Chinchillas,Mammalia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Chiropotes chiropotes,Red-backed Bearded Saki,Mammalia,8,3,2026-09-02,api.inaturalist.org species_counts
+home,Choloepus didactylus,Linnaeus's Two-toed Sloth,Mammalia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Choloepus hoffmanni,Hoffmann's Two-toed Sloth,Mammalia,8,5,2026-09-02,api.inaturalist.org species_counts
+home,Cryptotis parvus,North American Least Shrew,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Dama dama,European Fallow Deer,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Dasypus mexicanus,Mexican Long-nosed Armadillo,Mammalia,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Dendrolagus matschiei,Huon Tree Kangaroo,Mammalia,15,2,2026-09-02,api.inaturalist.org species_counts
+home,Desmodus rotundus,Common Vampire Bat,Mammalia,8,3,2026-09-02,api.inaturalist.org species_counts
+home,Didelphis virginiana,Virginia Opossum,Mammalia,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Dolichotis patagonum,Patagonian Mara,Mammalia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Elephas maximus,Asian Elephant,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Eptesicus fuscus,Big Brown Bat,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Equus asinus,Donkey,Mammalia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Equus asinus × quagga,Donkey × Plains Zebra,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Equus caballus,Domestic Horse,Mammalia,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Erethizon dorsatum,North American Porcupine,Mammalia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Eulemur collaris,Collared Brown Lemur,Mammalia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Felis catus,Domestic Cat,Mammalia,1,2,2026-09-02,api.inaturalist.org species_counts
+home,Geomys bursarius,Plains Pocket Gopher,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Giraffa camelopardalis,Northern Giraffe,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Glaucomys volans,Southern Flying Squirrel,Mammalia,3,7,2026-09-02,api.inaturalist.org species_counts
+home,Gorilla gorilla,Western Gorilla,Mammalia,8,2,2026-09-02,api.inaturalist.org species_counts
+home,Herpailurus yagouaroundi,Jaguarundi,Mammalia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Heterocephalus glaber,Naked Molerat,Mammalia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Hippopotamus amphibius,Common Hippopotamus,Mammalia,8,2,2026-09-02,api.inaturalist.org species_counts
+home,Hippotragus niger,Sable Antelope,Mammalia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Homo sapiens,Human,Mammalia,1,2,2026-09-02,api.inaturalist.org species_counts
+home,Hydrochoerus hydrochaeris,Capybara,Mammalia,15,5,2026-09-02,api.inaturalist.org species_counts
+home,Lama,Llamas and Guanacos,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Lama glama,Llama,Mammalia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Lama pacos,Alpaca,Mammalia,15,7,2026-09-02,api.inaturalist.org species_counts
+home,Lasionycteris noctivagans,Silver-haired Bat,Mammalia,3,2,2026-09-02,api.inaturalist.org species_counts
+home,Lasiurus borealis,Eastern Red Bat,Mammalia,3,7,2026-09-02,api.inaturalist.org species_counts
+home,Lasiurus cinereus,Northern Hoary Bat,Mammalia,8,2,2026-09-02,api.inaturalist.org species_counts
+home,Lasiurus seminolus,Seminole Bat,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Lemur catta,Ring-tailed Lemur,Mammalia,15,2,2026-09-02,api.inaturalist.org species_counts
+home,Leontopithecus chrysomelas,Golden-headed Lion Tamarin,Mammalia,25,4,2026-09-02,api.inaturalist.org species_counts
+home,Leopardus pardalis,Ocelot,Mammalia,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Lepus californicus,Black-tailed Jackrabbit,Mammalia,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Lontra canadensis,North American River Otter,Mammalia,3,2,2026-09-02,api.inaturalist.org species_counts
+home,Loxodonta africana,African Savanna Elephant,Mammalia,15,7,2026-09-02,api.inaturalist.org species_counts
+home,Lutra cinerea,Asian Small-clawed Otter,Mammalia,15,2,2026-09-02,api.inaturalist.org species_counts
+home,Lycaon pictus,African Wild Dog,Mammalia,25,2,2026-09-02,api.inaturalist.org species_counts
+home,Lynx rufus,Bobcat,Mammalia,3,6,2026-09-02,api.inaturalist.org species_counts
+home,Mammuthus columbi,Columbian Mammoth,Mammalia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Mandrillus sphinx,Mandrill,Mammalia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Marmota monax,Groundhog,Mammalia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Mephitis mephitis,Striped Skunk,Mammalia,8,6,2026-09-02,api.inaturalist.org species_counts
+home,Mesocricetus auratus,Golden Hamster,Mammalia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Microtus pinetorum,Woodland Vole,Mammalia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Mirounga angustirostris,Northern Elephant Seal,Mammalia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Mus musculus,House Mouse,Mammalia,3,3,2026-09-02,api.inaturalist.org species_counts
+home,Myocastor coypus,Coypu,Mammalia,3,5,2026-09-02,api.inaturalist.org species_counts
+home,Myotis lucifugus,Little Brown Bat,Mammalia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Myotis velifer,Cave Myotis,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Myrmecophaga tridactyla,Giant Anteater,Mammalia,8,2,2026-09-02,api.inaturalist.org species_counts
+home,Neofelis,Clouded Leopards,Mammalia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Neofelis nebulosa,Mainland Clouded Leopard,Mammalia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Neogale vison,American Mink,Mammalia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Neotoma floridana,Eastern Woodrat,Mammalia,8,2,2026-09-02,api.inaturalist.org species_counts
+home,Nomascus leucogenys,Northern White-cheeked Gibbon,Mammalia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Nycticeius humeralis,Evening Bat,Mammalia,3,5,2026-09-02,api.inaturalist.org species_counts
+home,Odocoileus virginianus,White-tailed Deer,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Okapia johnstoni,Okapi,Mammalia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Ondatrini,Muskrats,Mammalia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Oreotragus oreotragus,Klipspringer,Mammalia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Oryctolagus cuniculus,European Rabbit,Mammalia,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Osphranter rufus,Red Kangaroo,Mammalia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Otospermophilus variegatus,Rock Squirrel,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Ovis aries,Domestic Sheep,Mammalia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Ovis canadensis,Bighorn Sheep,Mammalia,15,2,2026-09-02,api.inaturalist.org species_counts
+home,Pan troglodytes,Chimpanzee,Mammalia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Panthera leo,Lion,Mammalia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Panthera tigris,Tiger,Mammalia,25,3,2026-09-02,api.inaturalist.org species_counts
+home,Perognathus flavescens,Plains Pocket Mouse,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Peromyscus leucopus,White-footed Mouse,Mammalia,15,2,2026-09-02,api.inaturalist.org species_counts
+home,Phacochoerus africanus,Common Warthog,Mammalia,15,4,2026-09-02,api.inaturalist.org species_counts
+home,Phascolarctos cinereus,Koala,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Philander quica,Southeastern Four-eyed Opossum,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Philantomba monticola,Blue Duiker,Mammalia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Phodopus roborovskii,Desert Hamster,Mammalia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Phodopus sungorus,Dzhungarian Hamster,Mammalia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Pithecia pithecia,White-faced Saki,Mammalia,8,4,2026-09-02,api.inaturalist.org species_counts
+home,Pongo abelii,Sumatran Orangutan,Mammalia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Procavia capensis,Rock Hyrax,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Procyon lotor,Common Raccoon,Mammalia,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Pseudois nayaur,Bharal,Mammalia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Pteronura brasiliensis,Giant Otter,Mammalia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Pudu puda,Southern Pudú,Mammalia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Puma concolor,Mountain Lion,Mammalia,25,3,2026-09-02,api.inaturalist.org species_counts
+home,Rattus norvegicus,Brown Rat,Mammalia,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Rattus rattus,Black Rat,Mammalia,3,6,2026-09-02,api.inaturalist.org species_counts
+home,Rhinocerotidae,Rhinoceroses,Mammalia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Saguinus bicolor,Brazilian Bare-faced Tamarin,Mammalia,15,3,2026-09-02,api.inaturalist.org species_counts
+home,Saguinus imperator,Black-chinned Emperor Tamarin,Mammalia,8,2,2026-09-02,api.inaturalist.org species_counts
+home,Saguinus oedipus,Cotton-headed Tamarin,Mammalia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Saguinus subgrisescens,Bearded Emperor Tamarin,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Scalopus aquaticus,Eastern Mole,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Sciurus aestuans,Guianan Squirrel,Mammalia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Sciurus carolinensis,Eastern Gray Squirrel,Mammalia,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Sciurus niger,Eastern Fox Squirrel,Mammalia,1,7,2026-09-02,api.inaturalist.org species_counts
+home,Sigmodon hispidus,Hispid Cotton Rat,Mammalia,8,11,2026-09-02,api.inaturalist.org species_counts
+home,Suricata suricatta,Meerkat,Mammalia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Sus scrofa,Wild Boar,Mammalia,8,7,2026-09-02,api.inaturalist.org species_counts
+home,Sylvilagus aquaticus,Swamp Rabbit,Mammalia,15,23,2026-09-02,api.inaturalist.org species_counts
+home,Sylvilagus audubonii,Desert Cottontail,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Sylvilagus cunicularius,Mexican Cottontail,Mammalia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Sylvilagus floridanus,Eastern Cottontail,Mammalia,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Tadarida brasiliensis,Mexican Free-tailed Bat,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Tragelaphus angasii,Nyala,Mammalia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Tragelaphus oryx,Common Eland,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Tragelaphus strepsiceros,Greater Kudu,Mammalia,15,2,2026-09-02,api.inaturalist.org species_counts
+home,Trichechus,Manatees,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Trichechus manatus,West Indian Manatee,Mammalia,15,8,2026-09-02,api.inaturalist.org species_counts
+home,Urocyon cinereoargenteus,Gray Fox,Mammalia,1,2,2026-09-02,api.inaturalist.org species_counts
+home,Ursus americanus,American Black Bear,Mammalia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Ursus maritimus,Polar Bear,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Varecia variegata,Black-and-white Ruffed Lemur,Mammalia,15,3,2026-09-02,api.inaturalist.org species_counts
+home,Vespertilioninae,Vesper Bats,Mammalia,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Vulpes,Typical Foxes,Mammalia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Vulpes vulpes,Red Fox,Mammalia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Zalophus californianus,California Sea Lion,Mammalia,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Agama,Typical Agamas,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Agkistrodon contortrix,Eastern Copperhead,Reptilia,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Agkistrodon laticinctus,Broad-banded Copperhead,Reptilia,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Agkistrodon piscivorus,Northern Cottonmouth,Reptilia,8,4,2026-09-02,api.inaturalist.org species_counts
+home,Aldabrachelys gigantea,Aldabra Giant Tortoise,Reptilia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Alligator mississippiensis,American Alligator,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Alligator sinensis,Chinese Alligator,Reptilia,25,2,2026-09-02,api.inaturalist.org species_counts
+home,Anguidae,Glass and Alligator Lizards,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Anolis carolinensis,Green Anole,Reptilia,1,12,2026-09-02,api.inaturalist.org species_counts
+home,Anolis sagrei,Brown Anole,Reptilia,3,3,2026-09-02,api.inaturalist.org species_counts
+home,Apalone mutica,Smooth Softshell,Reptilia,25,6,2026-09-02,api.inaturalist.org species_counts
+home,Apalone spinifera,Spiny Softshell,Reptilia,3,3,2026-09-02,api.inaturalist.org species_counts
+home,Aspidoscelis gularis,Common Spotted Whiptail,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Aspidoscelis sexlineatus,Six-lined Racerunner,Reptilia,15,3,2026-09-02,api.inaturalist.org species_counts
+home,Astrochelys radiata,Radiated Tortoise,Reptilia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Basiliscus galeritus,Western Basilisk,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Bitis gabonica,Gaboon Viper,Reptilia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Bitis parviocula,Ethiopia Viper,Reptilia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Bitis rhinoceros,Western Gaboon Viper,Reptilia,15,2,2026-09-02,api.inaturalist.org species_counts
+home,Bogertophis subocularis,Trans-pecos Ratsnake,Reptilia,8,2,2026-09-02,api.inaturalist.org species_counts
+home,Bothriechis nigroadspersus,Central American Eyelash-Viper,Reptilia,8,6,2026-09-02,api.inaturalist.org species_counts
+home,Bothrops asper,Terciopelo,Reptilia,8,2,2026-09-02,api.inaturalist.org species_counts
+home,Brachylophus bulabula,Central Fijian Banded Iguana,Reptilia,25,2,2026-09-02,api.inaturalist.org species_counts
+home,Brookesia decaryi,Spiny Leaf Chameleon,Reptilia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Caretta caretta,Loggerhead Sea Turtle,Reptilia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Carettochelys insculpta,Pig-nosed Turtle,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Centrochelys sulcata,African Spurred Tortoise,Reptilia,8,2,2026-09-02,api.inaturalist.org species_counts
+home,Chamaeleo calyptratus,Veiled Chameleon,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Chelonia mydas,Green Sea Turtle,Reptilia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Chelonoidis carbonarius,Red-footed Tortoise,Reptilia,8,2,2026-09-02,api.inaturalist.org species_counts
+home,Chelonoidis niger,Galápagos Giant Tortoise,Reptilia,15,4,2026-09-02,api.inaturalist.org species_counts
+home,Chelus fimbriata,Amazonian Mata Mata,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Chelydra serpentina,Common Snapping Turtle,Reptilia,3,18,2026-09-02,api.inaturalist.org species_counts
+home,Chrysemys picta,Painted Turtle,Reptilia,15,2,2026-09-02,api.inaturalist.org species_counts
+home,Coelognathus,Southeast Asian Ratsnakes,Reptilia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Coluber constrictor,North American Racer,Reptilia,3,2,2026-09-02,api.inaturalist.org species_counts
+home,Corallus caninus,Emerald Tree Boa,Reptilia,8,9,2026-09-02,api.inaturalist.org species_counts
+home,Corallus hortulana,Garden Tree Boa,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Correlophus,New Caledonian Crested Giant Geckos,Reptilia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Crocodylus intermedius,Orinoco Crocodile,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Crocodylus moreletii,Morelet's Crocodile,Reptilia,8,5,2026-09-02,api.inaturalist.org species_counts
+home,Crocodylus niloticus,Nile Crocodile,Reptilia,15,2,2026-09-02,api.inaturalist.org species_counts
+home,Crocodylus rhombifer,Cuban Crocodile,Reptilia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Crocodylus siamensis,Siamese Crocodile,Reptilia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Crotalus adamanteus,Eastern Diamondback Rattlesnake,Reptilia,15,3,2026-09-02,api.inaturalist.org species_counts
+home,Crotalus atrox,Western Diamond-backed Rattlesnake,Reptilia,8,2,2026-09-02,api.inaturalist.org species_counts
+home,Crotalus durissus,Neotropical Rattlesnake,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Crotalus horridus,Timber Rattlesnake,Reptilia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Crotalus tzabcan,Yucatán Neotropical Rattlesnake,Reptilia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Crotalus unicolor,Aruba Island Rattlesnake,Reptilia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Crotaphytus collaris,Eastern Collared Lizard,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Ctenosaura similis,Black Spiny-tailed Iguana,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Cyclura lewisi,Grand Cayman Blue Iguana,Reptilia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Daboia palaestinae,Palestine Viper,Reptilia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Dendroaspis angusticeps,Eastern Green Mamba,Reptilia,15,2,2026-09-02,api.inaturalist.org species_counts
+home,Diadophis punctatus,Ring-necked Snake,Reptilia,15,6,2026-09-02,api.inaturalist.org species_counts
+home,Dracaena guianensis,Northern Caiman Lizard,Reptilia,8,5,2026-09-02,api.inaturalist.org species_counts
+home,Elaphe carinata,King Ratsnake,Reptilia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Eublepharis macularius,Common Leopard Gecko,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Eunectes murinus,Green Anaconda,Reptilia,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Furcifer pardalis,Panther Chameleon,Reptilia,8,4,2026-09-02,api.inaturalist.org species_counts
+home,Gastropholis prasina,Green keel-bellied lizard,Reptilia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Geochelone elegans,Indian Star Tortoise,Reptilia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Gopherus berlandieri,Texas Tortoise,Reptilia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Graptemys geographica,Northern Map Turtle,Reptilia,25,2,2026-09-02,api.inaturalist.org species_counts
+home,Graptemys ouachitensis,Ouachita Map Turtle,Reptilia,8,10,2026-09-02,api.inaturalist.org species_counts
+home,Graptemys pseudogeographica,False Map Turtle,Reptilia,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Heloderma horridum,Beaded Lizard,Reptilia,8,5,2026-09-02,api.inaturalist.org species_counts
+home,Heloderma suspectum,Gila Monster,Reptilia,25,2,2026-09-02,api.inaturalist.org species_counts
+home,Hemidactylus garnotii,Indo-Pacific House Gecko,Reptilia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Hemidactylus platyurus,Flat-tailed House Gecko,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Hemidactylus turcicus,Mediterranean House Gecko,Reptilia,1,2,2026-09-02,api.inaturalist.org species_counts
+home,Heterodon kennerlyi,Mexican Hognose Snake,Reptilia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Heterodon nasicus,Plains Hognose Snake,Reptilia,15,3,2026-09-02,api.inaturalist.org species_counts
+home,Heterodon platirhinos,Eastern Hognose Snake,Reptilia,8,2,2026-09-02,api.inaturalist.org species_counts
+home,Hydrosaurus pustulatus,Philippine Sailfin Lizard,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Iguana iguana,Green Iguana,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Kinosternon subrubrum,Eastern Mud Turtle,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Kinyongia boehmei,Böhme’s two-horned chamaeleon,Reptilia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Lampropeltis annulata,Tamaulipan Milksnake,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Lampropeltis calligaster,Prairie Kingsnake,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Lampropeltis getula,Eastern Kingsnake,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Lampropeltis holbrooki,Speckled Kingsnake,Reptilia,8,5,2026-09-02,api.inaturalist.org species_counts
+home,Lampropeltis polyzona,West Mexican Milksnake,Reptilia,8,2,2026-09-02,api.inaturalist.org species_counts
+home,Lampropeltis splendida,Desert Kingsnake,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Leiocephalus,Curly-tailed Lizards,Reptilia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Lepidodactylus lugubris,Mourning Gecko,Reptilia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Macrochelys temminckii,Alligator Snapping Turtle,Reptilia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Malayopython reticulatus,Reticulated Python,Reptilia,15,2,2026-09-02,api.inaturalist.org species_counts
+home,Manouria emys,Asian Forest Tortoise,Reptilia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Masticophis flagellum,Common Coachwhip,Reptilia,15,3,2026-09-02,api.inaturalist.org species_counts
+home,Micrurus tener,Texas Coralsnake,Reptilia,15,9,2026-09-02,api.inaturalist.org species_counts
+home,Naja samarensis,Samar Cobra,Reptilia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Naja savannula,West African Banded Cobra,Reptilia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Nerodia erythrogaster,Plain-bellied Watersnake,Reptilia,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Nerodia fasciata,Banded Watersnake,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Nerodia rhombifer,Diamondback Watersnake,Reptilia,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Nerodia sipedon,Common Watersnake,Reptilia,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Opheodrys aestivus,Rough Greensnake,Reptilia,8,22,2026-09-02,api.inaturalist.org species_counts
+home,Ophiophagus,King Cobras,Reptilia,15,2,2026-09-02,api.inaturalist.org species_counts
+home,Paleosuchus palpebrosus,Cuvier's Dwarf Caiman,Reptilia,8,6,2026-09-02,api.inaturalist.org species_counts
+home,Pantherophis emoryi,Great Plains Ratsnake,Reptilia,8,2,2026-09-02,api.inaturalist.org species_counts
+home,Pantherophis guttatus,Red Cornsnake,Reptilia,8,3,2026-09-02,api.inaturalist.org species_counts
+home,Pantherophis obsoletus,Western Ratsnake,Reptilia,3,6,2026-09-02,api.inaturalist.org species_counts
+home,Phelsuma grandis,Madagascar Giant Day Gecko,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Phelsuma kochi,Koch's Giant Day Gecko,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Phrynosoma cornutum,Texas Horned Lizard,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Pituophis catenifer,Gopher Snake,Reptilia,25,3,2026-09-02,api.inaturalist.org species_counts
+home,Pituophis melanoleucus,Pine Snake,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Plestiodon fasciatus,Common Five-lined Skink,Reptilia,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Plestiodon laticeps,Broad-headed Skink,Reptilia,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Plestiodon tetragrammus,Four-lined Skink,Reptilia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Podarcis muralis,Common Wall Lizard,Reptilia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Podocnemis expansa,Giant South American Turtle,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Podocnemis unifilis,Yellow-headed Sideneck,Reptilia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Pogona vitticeps,Central Bearded Dragon,Reptilia,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Pseudemys concinna,River Cooter,Reptilia,3,52,2026-09-02,api.inaturalist.org species_counts
+home,Pseudemys nelsoni,Florida Red-bellied Cooter,Reptilia,8,8,2026-09-02,api.inaturalist.org species_counts
+home,Pseudemys texana,Texas Cooter,Reptilia,8,37,2026-09-02,api.inaturalist.org species_counts
+home,Python regius,Ball Python,Reptilia,3,2,2026-09-02,api.inaturalist.org species_counts
+home,Regina grahamii,Graham's Crawfish Snake,Reptilia,8,14,2026-09-02,api.inaturalist.org species_counts
+home,Rena dulcis,Texas Blind Snake,Reptilia,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Rhinocheilus lecontei,Long-nosed Snake,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Sauromalus ater,Common Chuckwalla,Reptilia,8,3,2026-09-02,api.inaturalist.org species_counts
+home,Sceloporus consobrinus,Prairie Lizard,Reptilia,8,60,2026-09-02,api.inaturalist.org species_counts
+home,Sceloporus olivaceus,Texas Spiny Lizard,Reptilia,1,3,2026-09-02,api.inaturalist.org species_counts
+home,Sceloporus tristichus,Plateau Fence Lizard,Reptilia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Scincella lateralis,Little Brown Skink,Reptilia,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Sonora episcopa,Great Plains Ground Snake,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Sphenodon punctatus,Tuatara,Reptilia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Sternotherus carinatus,Razor-backed Musk Turtle,Reptilia,3,1,2026-09-02,api.inaturalist.org species_counts
+home,Sternotherus odoratus,Eastern Musk Turtle,Reptilia,3,3,2026-09-02,api.inaturalist.org species_counts
+home,Stigmochelys pardalis,Leopard Tortoise,Reptilia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Storeria dekayi,DeKay's Brownsnake,Reptilia,3,2,2026-09-02,api.inaturalist.org species_counts
+home,Tantilla gracilis,Flat-headed Snake,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Terrapene carolina,Common Box Turtle,Reptilia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Terrapene ornata,Ornate Box Turtle,Reptilia,8,3,2026-09-02,api.inaturalist.org species_counts
+home,Terrapene triunguis,Three-toed Box Turtle,Reptilia,3,5,2026-09-02,api.inaturalist.org species_counts
+home,Testudo horsfieldii,Afghan Tortoise,Reptilia,8,2,2026-09-02,api.inaturalist.org species_counts
+home,Thamnophis marcianus,Checkered Garter Snake,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Thamnophis proximus,Western Ribbon Snake,Reptilia,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Thamnophis sirtalis,Common Garter Snake,Reptilia,8,14,2026-09-02,api.inaturalist.org species_counts
+home,Tiliqua rugosa,Shingleback,Reptilia,15,2,2026-09-02,api.inaturalist.org species_counts
+home,Tomistoma schlegelii,False Gharial,Reptilia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Trachemys callirostris,South American slider,Reptilia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Trachemys scripta,Pond Slider,Reptilia,3,54,2026-09-02,api.inaturalist.org species_counts
+home,Trachemys venusta,Mesoamerican Slider,Reptilia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Trimeresurus insularis,White-lipped Island Pitviper,Reptilia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Trimeresurus mcgregori,Philippine Pit Viper,Reptilia,25,1,2026-09-02,api.inaturalist.org species_counts
+home,Tropidoclonion lineatum,Lined Snake,Reptilia,1,1,2026-09-02,api.inaturalist.org species_counts
+home,Uromastyx,Mastigures,Reptilia,8,1,2026-09-02,api.inaturalist.org species_counts
+home,Urosaurus ornatus,Ornate Tree Lizard,Reptilia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Varanus giganteus,Perentie,Reptilia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Varanus komodoensis,Komodo Dragon,Reptilia,15,2,2026-09-02,api.inaturalist.org species_counts
+home,Varanus prasinus,Emerald Tree Monitor,Reptilia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Vipera meridionalis,,Reptilia,15,1,2026-09-02,api.inaturalist.org species_counts
+home,Virginia striatula,Rough Earthsnake,Reptilia,1,1,2026-09-02,api.inaturalist.org species_counts

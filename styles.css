@@ -1369,6 +1369,31 @@ select {
   color: #2f2f2f;
 }
 
+.detail-sheet__fauna {
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.75rem;
+  background: #f3f6f1;
+  border-radius: 6px;
+}
+
+.detail-sheet__fauna-heading {
+  margin: 0 0 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #3d4c36;
+}
+
+.detail-sheet__fauna-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: #2f2f2f;
+}
+
 .detail-sheet__actions {
   display: flex;
   justify-content: flex-end;

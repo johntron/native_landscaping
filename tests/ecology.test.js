@@ -6,6 +6,7 @@ import { RULES, STATUSES, analyzeEcology, buildEcologyContext } from '../src/ana
 import { describeMonths, monthName } from '../src/analysis/months.js';
 import { parseSpeciesCsv, createPlantFromSpecies, buildPlantsFromCsv } from '../src/data/plantParser.js';
 import { buildHostGeneraIndex } from '../src/analysis/hostGenera.js';
+import { buildInteractionsIndex, buildNearbyFaunaIndex } from '../src/analysis/faunaMatches.js';
 
 const CATALOG = parseSpeciesCsv(
   readFileSync(fileURLToPath(new URL('../plants.csv', import.meta.url)), 'utf8')
@@ -377,6 +378,77 @@ test('larval hosts: one genus is partial, two or more is ok', () => {
   const several = runWithGenera(place('Asclepias asperula', 'Passiflora incarnata'))['larval-hosts'];
   assert.equal(several.status, STATUSES.OK);
   assert.deepEqual(several.suggestions, [], 'nothing to suggest once the bar is cleared');
+});
+
+const INTERACTIONS_FIXTURE = buildInteractionsIndex(
+  `genus,animal_species,animal_common,category,interaction_type,synonym_of,source
+Asclepias,Danaus plexippus,Monarch,feeds-on,eatenBy,,globi
+Asclepias,Bombus fervidus,Golden Northern Bumble Bee,pollinator,flowersVisitedBy,,globi
+`
+);
+const NEARBY_FAUNA_FIXTURE = buildNearbyFaunaIndex(
+  `place,animal_species,animal_common,iconic_taxon,nearest_radius_mi,observation_count,fetched_on,source
+home,Danaus plexippus,Monarch,Insecta,1,42,2026-01-01,inat
+`
+);
+
+test('local fauna support reports not-declared when the project has no place', () => {
+  const result = runWithGenera(place('Asclepias asperula'), {
+    interactions: INTERACTIONS_FIXTURE,
+    nearbyFauna: NEARBY_FAUNA_FIXTURE,
+  })['local-fauna-support'];
+  assert.equal(result.status, STATUSES.NOT_DECLARED);
+});
+
+test('local fauna support reports not-declared when either table failed to load', () => {
+  const noInteractions = run(place('Asclepias asperula'), {
+    nearbyFauna: NEARBY_FAUNA_FIXTURE,
+    place: 'home',
+  })['local-fauna-support'];
+  assert.equal(noInteractions.status, STATUSES.NOT_DECLARED);
+
+  const noNearbyFauna = run(place('Asclepias asperula'), {
+    interactions: INTERACTIONS_FIXTURE,
+    place: 'home',
+  })['local-fauna-support'];
+  assert.equal(noNearbyFauna.status, STATUSES.NOT_DECLARED);
+});
+
+test('local fauna support matches a planted genus against an animal reported nearby', () => {
+  const result = run(place('Asclepias asperula'), {
+    interactions: INTERACTIONS_FIXTURE,
+    nearbyFauna: NEARBY_FAUNA_FIXTURE,
+    place: 'home',
+  })['local-fauna-support'];
+  assert.equal(result.status, STATUSES.PARTIAL, 'one matched species is a start, not ample');
+  assert.match(result.summary, /1 animal species/);
+  assert.ok(
+    result.findings.some((f) => /Asclepias/.test(f) && /Monarch/.test(f)),
+    'names the matching genus and animal'
+  );
+});
+
+test('local fauna support drops a match outside the taxon range threshold', () => {
+  const farAway = buildNearbyFaunaIndex(
+    `place,animal_species,animal_common,iconic_taxon,nearest_radius_mi,observation_count,fetched_on,source
+home,Danaus plexippus,Monarch,Insecta,25,1,2026-01-01,inat
+`
+  );
+  const result = run(place('Asclepias asperula'), {
+    interactions: INTERACTIONS_FIXTURE,
+    nearbyFauna: farAway,
+    place: 'home',
+  })['local-fauna-support'];
+  assert.equal(result.status, STATUSES.GAP);
+});
+
+test('local fauna support points at the keystone-genera check rather than inventing its own recommendation', () => {
+  const result = run(place('Asclepias asperula'), {
+    interactions: INTERACTIONS_FIXTURE,
+    nearbyFauna: NEARBY_FAUNA_FIXTURE,
+    place: 'home',
+  })['local-fauna-support'];
+  assert.ok(result.suggestions.some((s) => /[Kk]eystone genera/.test(s)));
 });
 
 test('both shipped projects analyse without throwing, and report what the data says', () => {

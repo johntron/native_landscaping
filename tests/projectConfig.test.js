@@ -707,6 +707,30 @@ test('a project with neither ecoregion nor site still loads, and writes neither 
   assert.equal('site' in serialized, false);
 });
 
+test('place survives the normalize -> serialize round trip, same whitelist trap as ecoregion/site', () => {
+  const raw = {
+    name: 'Yard',
+    yardFt: { width: 20, depth: 30 },
+    place: 'home',
+    views: [{ id: 'plan', type: 'plan' }],
+  };
+  const config = normalizeProjectConfig(raw, 'yard');
+  assert.equal(config.place, 'home');
+
+  const serialized = serializeProjectConfig(config);
+  assert.equal(serialized.place, 'home');
+  assert.deepEqual(serializeProjectConfig(normalizeProjectConfig(serialized, 'yard')), serialized);
+});
+
+test('a project with no place still loads, and writes none back', () => {
+  const config = normalizeProjectConfig(
+    { name: 'Yard', yardFt: { width: 20, depth: 30 }, views: [{ id: 'plan', type: 'plan' }] },
+    'yard'
+  );
+  assert.equal(config.place, undefined);
+  assert.equal('place' in serializeProjectConfig(config), false);
+});
+
 test('a partial site declares only what it knows', () => {
   const config = normalizeProjectConfig(
     {

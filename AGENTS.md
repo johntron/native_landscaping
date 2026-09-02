@@ -121,11 +121,14 @@ in its own `planting_layout.csv`.
 ```
 plants.csv                       shared species catalog (all projects)
 ecology/host-genera.csv          keystone/larval-host genera per ecoregion (all projects)
+ecology/plant-animal-interactions.csv  genus-keyed animal interactions (all projects)
+ecology/nearby-fauna.csv         animal species reported nearby, keyed by place
 projects/index.json              { defaultProject, projects: [{ id, name }] }
 projects/<slug>/project.json     the yard in feet, plus views[]: labels, photos
-                                 (and optional ecoregion + site, for the ecology check)
+                                 (and optional ecoregion + site + place, for the ecology check)
 projects/<slug>/planting_layout.csv
 projects/<slug>/features.json    yard features in feet; optional, absent means none
+projects/<slug>/location.json    exact address/coords behind `place` (gitignored, never committed)
 projects/<slug>/img/…            that project's background images
 projects/<slug>/layout-history.json   (generated, gitignored)
 ```
@@ -620,17 +623,23 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
 
 The app grades a planting against ecological rules and reports **per dimension with
 no composite score** — a 0–100 roll-up would need weights nobody can justify, so
-each dimension reports for itself and the reader decides what to fix first. Six
+each dimension reports for itself and the reader decides what to fix first. Seven
 dimensions ship: bloom succession (6), fall/winter bird food (7), vertical layers
-(11), keystone genera (4/10), larval hosts (5), and site match (8).
+(11), keystone genera (4/10), larval hosts (5), site match (8), and local fauna
+support (below).
 
 ```
 ecology/host-genera.csv          one genus-keyed table, shared by rules 4, 5, 10
+ecology/plant-animal-interactions.csv  genus-keyed, global (GloBI) — local-fauna-support
+ecology/nearby-fauna.csv         place-keyed, local (iNaturalist) — local-fauna-support
 src/analysis/ecology.js          the registry; analyzeEcology(ctx) -> one result per rule
 src/analysis/hostGenera.js       parse + index the table, resolving synonym_of
+src/analysis/faunaMatches.js     parse + index the two fauna tables and join them
 src/analysis/months.js           month-set helpers ("Oct-Feb", not "Oct, Nov, Dec, …")
 src/analysis/rules/*.js          one file per rule: { id, title, evaluate(ctx) }
 src/render/ecologyPanel.js       the panel above the species table — presentation only
+tools/fetch-plant-animal-interactions.mjs  offline fetch for the interactions CSV
+tools/fetch-nearby-fauna.mjs      offline fetch for the nearby-fauna CSV
 ```
 
 **`src/analysis/` is pure.** No DOM, no fetch, no judgement made outside it. Every
@@ -681,6 +690,69 @@ synonym_of, source`.
 - `ecoregion` is a column, so **a second region is a data change, not a code change**.
 - **Every row carries a `source`, and a genus with nothing sourced stays blank rather
   than guessed** — see "Don't invent fake plant data" above.
+
+### Local fauna support: `ecology/plant-animal-interactions.csv` and `ecology/nearby-fauna.csv`
+
+The other six dimensions grade against ecoregion-wide lists. This one asks a
+different question — which animals are ALREADY reported near this specific site,
+and would a planted genus plausibly serve them — and does it with the same
+"fetch offline, commit a sourced CSV, keep `src/analysis/` pure" pattern as
+`host-genera.csv`, split into two tables because the two facts have different
+lifetimes:
+
+- `ecology/plant-animal-interactions.csv` — genus-keyed, global, from
+  [GloBI](https://www.globalbioticinteractions.org/). Columns: `genus,
+  animal_species, animal_common, category, interaction_type, synonym_of,
+  source`. `category` is only `pollinator` or `feeds-on` — **not a finer split**,
+  because the underlying data does not reliably support one: a smoke test
+  against *Achillea* showed foraging bees and true herbivores both filed under
+  GloBI's generic `eatenBy` verb, with no `pollinatedBy`/`flowersVisitedBy`
+  records at all for that genus. Read the raw `interaction_type` when the
+  distinction matters. Regenerate with
+  `node tools/fetch-plant-animal-interactions.mjs` (or `--genus X` for one
+  genus, `--smoke` for a quick check — both print to stdout instead of writing).
+- `ecology/nearby-fauna.csv` — place-keyed, local, from iNaturalist's
+  `species_counts` endpoint. Columns: `place, animal_species, animal_common,
+  iconic_taxon, nearest_radius_mi, observation_count, fetched_on, source`.
+  `nearest_radius_mi` is the smallest of five fetch-tool distance bands (1, 3,
+  8, 15, 25 mi) the species was found within — a proxy for "how close is
+  confirmed presence", since `species_counts` gives a count per radius, not a
+  per-observation distance. Regenerate with `node tools/fetch-nearby-fauna.mjs
+  --project <id>` (`--smoke` for one taxon/radius, no write).
+
+**The join is genus↔species, same asymmetry as `host-genera.csv`**: interactions
+are genus-keyed because that is how the literature records them (monarch is
+documented against *Asclepias*, not *Asclepias tuberosa*), animals are
+species-keyed because that is what the user actually wants named.
+`src/analysis/faunaMatches.js` does the join — pure, no network — comparing each
+matched animal's `nearest_radius_mi` against `RANGE_THRESHOLD_MI`, a reasoned
+per-taxon-group distance judgment (3mi for insects/reptiles/amphibians, 8mi for
+mammals, 15mi for birds), the same kind of authored threshold as
+`AMPLE_SHARE`/`SOME_SHARE` in `rules/keystoneGenera.js` rather than a sourced
+biological fact. **No likelihood score is computed anywhere in this path** —
+iNaturalist counts carry heavy observer bias (monarchs wildly over-reported
+relative to native bees), so both the per-plant detail-sheet section and the
+`local-fauna-support` rule report presence + distance band + counts and leave
+judgement to the reader. The rule's own `suggestions` deliberately point at the
+keystone-genera check rather than re-deriving a ranked list of catalog species,
+since keystone status is a far more reliable signal than what iNaturalist
+happened to have observations for.
+
+**Exact coordinates never reach either CSV or git.** A project's `place` field
+(next to `ecoregion` and `site` in `project.json`) is a short label like
+`"home"` — committable, and two projects on the same property share one label
+and one fetch. The address or lat/lng behind that label lives in
+`projects/<id>/location.json`, which is gitignored (this repo is public) and
+read only by `tools/fetch-nearby-fauna.mjs`, never by the app:
+
+```json
+{ "address": "123 Main St, Dallas, TX 75204" }
+```
+
+or `{ "lat": 32.81, "lng": -96.79 }` directly. A project with no `place` (or a
+`location.json` nobody has created yet) reports `not-declared` on this one
+dimension, the same "absent means undeclared, never guessed" contract as
+`ecoregion`.
 
 ### `project.json`: `ecoregion` and `site`
 
@@ -759,6 +831,8 @@ Don't re-propose it.
 - `src/render/*` – view configuration, SVG helpers, tooltip builder, plan view and elevation renderers.
 - `src/analysis/ecology.js` – the ecological rules registry; pure, no DOM. See **Ecological Analysis**.
 - `src/analysis/hostGenera.js` – the genus-keyed keystone/larval-host table and its synonym resolution.
+- `src/analysis/faunaMatches.js` – joins the plant-animal-interactions and nearby-fauna tables; no network, no scoring.
+- `tools/fetch-plant-animal-interactions.mjs`, `tools/fetch-nearby-fauna.mjs` – the only things in this repo that call GloBI/iNaturalist; offline, never run by `npm test`.
 - `src/render/ecologyPanel.js` – the per-dimension check above the species table; presentation only.
 - `src/state/seasonalState.js` – pure logic for foliage/bloom state per month.
 - `src/interaction/dragController.js` – pointer events + hit-testing for moving plants in plan view.

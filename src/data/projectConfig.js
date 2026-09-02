@@ -151,6 +151,7 @@ export function normalizeProjectConfig(raw, id) {
     ...layout,
     ...normalizeEcoregion(raw.ecoregion),
     ...normalizeSite(raw.site, id),
+    ...normalizePlace(raw.place),
     views,
   };
 }
@@ -189,6 +190,20 @@ function normalizeSite(raw, projectId) {
     site[key] = value;
   });
   return Object.keys(site).length ? { site } : {};
+}
+
+/**
+ * A short label identifying which locality's nearby-fauna records
+ * (`ecology/nearby-fauna.csv`) apply to this project — e.g. "home". The exact
+ * address or coordinates behind that label are never committed to this
+ * (public) repo; they live in `projects/<id>/location.json`, which is
+ * gitignored and read only by the offline `tools/` fetch script, never by the
+ * app itself. Two projects on the same property (backyard, walkway) share one
+ * `place` and therefore one fetch.
+ */
+function normalizePlace(raw) {
+  const value = String(raw ?? '').trim();
+  return value ? { place: value } : {};
 }
 
 /**
@@ -550,6 +565,7 @@ export function serializeProjectConfig(config) {
     // Setup mode saves — the user's declaration gone with no error.
     ...(config.ecoregion ? { ecoregion: config.ecoregion } : {}),
     ...(config.site ? { site: { ...config.site } } : {}),
+    ...(config.place ? { place: config.place } : {}),
     views: config.views.map((view) => {
       const defaults = defaultLabels(view.type, view.viewFrom);
       const out = { id: view.id, type: view.type };
