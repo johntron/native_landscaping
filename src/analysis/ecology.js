@@ -1,11 +1,13 @@
 import { getGenus, getSpeciesKey } from '../utils/speciesKey.js';
 import { emptyHostGeneraIndex } from './hostGenera.js';
+import { emptyInteractionsIndex, emptyNearbyFaunaIndex } from './faunaMatches.js';
 import bloomSuccession from './rules/bloomSuccession.js';
 import birdFood from './rules/birdFood.js';
 import verticalLayers from './rules/verticalLayers.js';
 import keystoneGenera from './rules/keystoneGenera.js';
 import larvalHosts from './rules/larvalHosts.js';
 import siteMatch from './rules/siteMatch.js';
+import localFaunaSupport from './rules/localFaunaSupport.js';
 
 /**
  * Grade a planting design against ecological rules, **per dimension with no
@@ -31,7 +33,15 @@ export const STATUSES = Object.freeze({
 const STATUS_VALUES = new Set(Object.values(STATUSES));
 
 /** Registry order is display order. */
-export const RULES = [bloomSuccession, birdFood, verticalLayers, keystoneGenera, larvalHosts, siteMatch];
+export const RULES = [
+  bloomSuccession,
+  birdFood,
+  verticalLayers,
+  keystoneGenera,
+  larvalHosts,
+  siteMatch,
+  localFaunaSupport,
+];
 
 /**
  * Build the single context every rule reads.
@@ -42,7 +52,16 @@ export const RULES = [bloomSuccession, birdFood, verticalLayers, keystoneGenera,
  *
  * @param {{ plants?: Array, species?: Array, hostGenera?: object, site?: object, ecoregion?: string }} input
  */
-export function buildEcologyContext({ plants = [], species = [], hostGenera, site, ecoregion } = {}) {
+export function buildEcologyContext({
+  plants = [],
+  species = [],
+  hostGenera,
+  site,
+  ecoregion,
+  interactions,
+  nearbyFauna,
+  place,
+} = {}) {
   const placed = plants.filter(Boolean);
   const placedSpeciesKeys = new Set(placed.map((plant) => getSpeciesKey(plant)));
   return {
@@ -60,6 +79,9 @@ export function buildEcologyContext({ plants = [], species = [], hostGenera, sit
     hostGenera: hostGenera || emptyHostGeneraIndex(),
     site: site || null,
     ecoregion: ecoregion ? String(ecoregion) : '',
+    interactions: interactions || emptyInteractionsIndex(),
+    nearbyFauna: nearbyFauna || emptyNearbyFaunaIndex(),
+    place: place ? String(place) : '',
   };
 }
 

@@ -6,6 +6,11 @@ playwright-report/
 layout-history.json
 .env
 
+# Exact addresses/coordinates behind each project's `place` label. This repo
+# is public — see the note on docs/data-acquisition/corpus below. Read only by
+# tools/fetch-local-fauna.mjs; never by the app.
+projects/*/location.json
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db

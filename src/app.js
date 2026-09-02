@@ -36,6 +36,13 @@ import { normalizeFeatures } from './data/featureConfig.js';
 import { createFeatureController } from './interaction/featureController.js';
 import { analyzeEcology, buildEcologyContext } from './analysis/ecology.js';
 import { buildHostGeneraIndex, emptyHostGeneraIndex } from './analysis/hostGenera.js';
+import {
+  buildInteractionsIndex,
+  buildNearbyFaunaIndex,
+  emptyInteractionsIndex,
+  emptyNearbyFaunaIndex,
+  matchesForGenus,
+} from './analysis/faunaMatches.js';
 import { renderEcologyPanel } from './render/ecologyPanel.js';
 import {
   clearFeatureOverlay,
@@ -52,7 +59,7 @@ import { buildPlantLabel } from './render/labels.js';
 import { formatMonthRange } from './state/seasonalState.js';
 import { clampHiddenLayerCount, classifyPlantLayer } from './state/layers.js';
 import { buildCloneId, buildNewPlantId } from './state/plantIds.js';
-import { getSpeciesKey } from './utils/speciesKey.js';
+import { getGenus, getSpeciesKey } from './utils/speciesKey.js';
 import { buildTooltipLines } from './render/tooltip.js';
 import { createLayoutHistory } from './history/layoutHistory.js';
 import { captureViewToPng } from './export/viewCapture.js';
@@ -83,6 +90,10 @@ const appState = {
   // app down — the analysis is advisory and must never be why a yard stops
   // rendering.
   hostGenera: emptyHostGeneraIndex(),
+  // Same "advisory, never blocks rendering" contract as hostGenera above, for
+  // the local-fauna-support rule and the per-plant detail sheet section.
+  interactions: emptyInteractionsIndex(),
+  nearbyFauna: emptyNearbyFaunaIndex(),
   month: new Date().getMonth() + 1,
   zoom: DEFAULT_ZOOM,
   mode: 'view',
@@ -135,6 +146,8 @@ async function init() {
   const detailSheet = document.getElementById('detailSheet');
   const detailSheetTitle = document.getElementById('detailSheetTitle');
   const detailSheetLines = document.getElementById('detailSheetLines');
+  const detailSheetFauna = document.getElementById('detailSheetFauna');
+  const detailSheetFaunaLines = document.getElementById('detailSheetFaunaLines');
   const detailSheetCloneBtn = document.getElementById('detailSheetCloneBtn');
   const detailSheetRemoveBtn = document.getElementById('detailSheetRemoveBtn');
   const addPlantSelect = document.getElementById('addPlantSelect');
@@ -350,6 +363,9 @@ async function init() {
         hostGenera: appState.hostGenera,
         site: appState.project?.site,
         ecoregion: appState.project?.ecoregion,
+        interactions: appState.interactions,
+        nearbyFauna: appState.nearbyFauna,
+        place: appState.project?.place,
       })
     );
     renderEcologyPanel(results, container);
@@ -745,9 +761,44 @@ async function init() {
           detailSheetLines.appendChild(li);
         });
     }
+    if (detailSheetFauna && detailSheetFaunaLines) {
+      renderDetailSheetFauna(plant, detailSheetFauna, detailSheetFaunaLines);
+    }
     detailSheet.dataset.plantId = plantId;
     detailSheet.hidden = false;
     setTargetedPlant(plantId);
+  };
+
+  /**
+   * A separate section from buildTooltipLines on purpose: that list also
+   * feeds the SVG hover `<title>`, and a match list of up to a dozen animals
+   * would bloat every hover tooltip in the plan view.
+   */
+  const renderDetailSheetFauna = (plant, container, list) => {
+    list.innerHTML = '';
+    const place = appState.project?.place;
+    if (!place || !appState.nearbyFauna.size || !appState.interactions.size) {
+      container.hidden = true;
+      return;
+    }
+    const genus = getGenus(plant);
+    const matches = matchesForGenus(genus, {
+      interactions: appState.interactions,
+      nearbyFauna: appState.nearbyFauna,
+      place,
+    }).filter((match) => match.inRange !== false);
+    if (!matches.length) {
+      container.hidden = true;
+      return;
+    }
+    matches.forEach((match) => {
+      const li = document.createElement('li');
+      const name = match.animalCommon ? `${match.animalCommon} (${match.animalSpecies})` : match.animalSpecies;
+      const verb = match.category === 'pollinator' ? 'visits its flowers' : 'feeds on it';
+      li.textContent = `${name} — ${verb}, reported within ${match.nearestRadiusMi}mi (${match.observationCount} observation${match.observationCount === 1 ? '' : 's'})`;
+      list.appendChild(li);
+    });
+    container.hidden = false;
   };
 
   if (detailSheetCloneBtn) {
@@ -1224,19 +1275,33 @@ async function init() {
   }
 
   try {
-    const [speciesCsv, layoutCsv, hostGeneraCsv] = await Promise.all([
+    const [speciesCsv, layoutCsv, hostGeneraCsv, interactionsCsv, nearbyFaunaCsv] = await Promise.all([
       fetchCsv(new URL('plants.csv', document.baseURI)),
       fetchCsv(new URL(projectLayoutPath(project.id), document.baseURI)),
-      // A missing or unreadable table costs three of the six checks, not the
-      // app: caught here so it can never join the failure path above, which
-      // stops the yard rendering at all.
+      // A missing or unreadable table costs checks, not the app: caught here
+      // so it can never join the failure path above, which stops the yard
+      // rendering at all.
       fetchCsv(new URL('ecology/host-genera.csv', document.baseURI)).catch((err) => {
         console.warn('Ecology host-genera table unavailable; genus checks will report as not declared', err);
+        return '';
+      }),
+      fetchCsv(new URL('ecology/plant-animal-interactions.csv', document.baseURI)).catch((err) => {
+        console.warn('Plant-animal interaction table unavailable; local fauna check will report as not declared', err);
+        return '';
+      }),
+      fetchCsv(new URL('ecology/nearby-fauna.csv', document.baseURI)).catch((err) => {
+        console.warn('Nearby-fauna table unavailable; local fauna check will report as not declared', err);
         return '';
       }),
     ]);
     if (hostGeneraCsv) {
       appState.hostGenera = buildHostGeneraIndex(hostGeneraCsv, { ecoregion: project.ecoregion });
+    }
+    if (interactionsCsv) {
+      appState.interactions = buildInteractionsIndex(interactionsCsv);
+    }
+    if (nearbyFaunaCsv) {
+      appState.nearbyFauna = buildNearbyFaunaIndex(nearbyFaunaCsv);
     }
     loadedSpeciesCsv = speciesCsv;
     appState.species = parseSpeciesCsv(speciesCsv);

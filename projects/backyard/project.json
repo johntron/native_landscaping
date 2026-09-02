@@ -16,6 +16,7 @@
     "water": "medium",
     "soil": "clay"
   },
+  "place": "home",
   "views": [
     {
       "id": "plan",
