@@ -6,6 +6,8 @@ import {
   buildHostGeneraIndex,
   emptyHostGeneraIndex,
   normalizeGenus,
+  describeHostGeneraRow,
+  ecologicalFitNotes,
 } from '../src/analysis/hostGenera.js';
 import { getGenus } from '../src/utils/speciesKey.js';
 
@@ -86,6 +88,33 @@ test('a synonym pointing at a missing genus degrades instead of hanging', () => 
   );
   assert.equal(odd.lookup('Aaa').genus, 'Aaa', 'unresolvable synonym keeps its own row');
   assert.equal(odd.lookup('Ccc').genus, 'Ccc', 'a synonym cycle terminates');
+});
+
+test('describeHostGeneraRow names caterpillar species, specialist bees, and a synonym source', () => {
+  assert.equal(describeHostGeneraRow(index.lookup('Quercus')), '253 caterpillar species');
+  assert.equal(
+    describeHostGeneraRow(index.lookup('Salix')),
+    '214 caterpillar species, 20 specialist bees'
+  );
+  // Packera resolves through synonym_of to Senecio's numbers.
+  assert.match(describeHostGeneraRow(index.lookup('Packera')), /— listed as Senecio$/);
+});
+
+test('ecologicalFitNotes reuses the same row keystoneGenera/larvalHosts grade against', () => {
+  const notes = ecologicalFitNotes('Asclepias', index);
+  assert.ok(
+    notes.some((n) => /^Documented larval host: .*monarch/.test(n)),
+    'Asclepias is a larval host, not a keystone genus'
+  );
+  assert.ok(!notes.some((n) => n.startsWith('Keystone genus')));
+
+  const quercusNotes = ecologicalFitNotes('Quercus', index);
+  assert.ok(quercusNotes.some((n) => n.startsWith('Keystone genus for ecoregion 9: 253 caterpillar')));
+});
+
+test('ecologicalFitNotes is empty for an unknown genus or an empty index', () => {
+  assert.deepEqual(ecologicalFitNotes('Nothingia', index), []);
+  assert.deepEqual(ecologicalFitNotes('Quercus', emptyHostGeneraIndex()), []);
 });
 
 test('getGenus takes the first token of the botanical name', () => {

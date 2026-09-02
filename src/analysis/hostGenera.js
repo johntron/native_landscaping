@@ -66,6 +66,40 @@ export function buildHostGeneraIndex(csvText, { ecoregion } = {}) {
 }
 
 /**
+ * "N caterpillar species, M specialist bees — listed as X" for one resolved
+ * row. Shared by rules/keystoneGenera.js and the UI (species table + detail
+ * sheet) so a badge shown next to a plant can never disagree with what the
+ * ecology check itself says about the same genus.
+ */
+export function describeHostGeneraRow(row) {
+  const parts = [];
+  if (row.lepHostSpecies !== null) parts.push(`${row.lepHostSpecies} caterpillar species`);
+  if (row.beeSpecialistSpecies !== null) parts.push(`${row.beeSpecialistSpecies} specialist bees`);
+  const listed = row.resolvedFrom ? ` — listed as ${row.resolvedFrom}` : '';
+  return `${parts.join(', ')}${listed}`;
+}
+
+/**
+ * Short, reader-facing notes for one genus — "is this a keystone genus",
+ * "is this a documented larval host" — built from exactly the row the
+ * keystone-genera and larval-hosts rules grade against, not a re-derived
+ * judgement of its own. Empty when the genus has no row, or the table itself
+ * is empty (no ecoregion declared, or the CSV failed to load).
+ */
+export function ecologicalFitNotes(genus, hostGenera) {
+  const row = hostGenera?.lookup ? hostGenera.lookup(genus) : null;
+  if (!row) return [];
+  const notes = [];
+  if (row.lepHostSpecies !== null || row.beeSpecialistSpecies !== null) {
+    notes.push(`Keystone genus for ecoregion ${hostGenera.ecoregion}: ${describeHostGeneraRow(row)}.`);
+  }
+  if (row.larvalHosts) {
+    notes.push(`Documented larval host: ${row.larvalHosts}.`);
+  }
+  return notes;
+}
+
+/**
  * The empty index a project without an `ecoregion` — or one whose CSV failed to
  * load — analyses against. Rules see "no table" and report `not-declared`
  * rather than throwing, which is what keeps a fetch failure from breaking the app.
