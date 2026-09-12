@@ -17,6 +17,7 @@
     "water": "low",
     "soil": "clay"
   },
+  "place": "home",
   "views": [
     {
       "id": "plan",
