@@ -2,10 +2,10 @@ id,botanical_name,x_ft,y_ft
 least-daisy-a,Chaetopappa asteroides,5.066,1.645
 least-daisy-b,Chaetopappa asteroides,2.855,1.527
 fineleaf-fournerved-edge,Tetraneuris linearifolia,3.859,0.957
-fineleaf-fournerved-edge-copy,Tetraneuris linearifolia,5.884,1.012
+fineleaf-fournerved-edge-copy,Tetraneuris linearifolia,0.000,0.000
 fineleaf-fournerved-edge-copy-2,Tetraneuris linearifolia,1.840,1.045
-blue-mistflower-1,Conoclinium coelestinum,6.300,8.000
-green-milkweed-1,Asclepias viridis,4.817,10.752
+blue-mistflower-1,Conoclinium coelestinum,0.800,7.200
+green-milkweed-1,Asclepias viridis,0.000,9.600
 engelmann-daisy-1,Engelmannia peristenia,6.241,12.111
 engelmann-daisy-1-copy,Engelmannia peristenia,6.091,10.637
 sorghastrum-nutans-1,Sorghastrum nutans,3.010,10.284
@@ -23,6 +23,6 @@ solidago-rigida-1-copy-copy-copy-copy,Solidago rigida,1.780,2.829
 solidago-rigida-1-copy-copy-copy-copy-2,Solidago rigida,3.870,3.864
 ipomopsis-rubra-1,Ipomopsis rubra,5.063,6.482
 ipomopsis-rubra-1-copy,Ipomopsis rubra,5.981,6.651
-neptunia-lutea-1,Neptunia lutea,6.761,0.206
+neptunia-lutea-1,Neptunia lutea,7.000,0.000
 penstemon-cobaea-2,Penstemon cobaea,6.236,2.474
 penstemon-cobaea-2-copy,Penstemon cobaea,6.521,4.191
