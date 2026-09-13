@@ -95,6 +95,36 @@ export function buildFnctScreenIndex(csvText) {
   return byGenus;
 }
 
+/**
+ * Genera the flora carries under a different name.
+ *
+ * Without this, Symphyotrichum reads as "not in the flora" alongside larch and
+ * spruce — and every aster in North Central Texas grows in Dallas, so that is
+ * the one row in the table a room full of Master Naturalists would reject on
+ * sight. FNCT is explicit about it: it acknowledges the segregation and keeps
+ * the plants under Aster pending consensus. That is a 1999 nomenclature
+ * decision, not an absence, and the two must not render the same way.
+ *
+ * Curated and sourced, deliberately: this is a small set of known 1999-to-now
+ * changes, not an attempt at general synonymy.
+ *
+ * @returns {Map<string, {fnctGenus: string, note: string, source: string}>}
+ */
+export function buildNameChangeIndex(csvText) {
+  const byGenus = new Map();
+  parseCsv(csvText || '').forEach((row) => {
+    const current = String(row.current_genus || '').trim();
+    const fnct = String(row.fnct_genus || '').trim();
+    if (!current || !fnct) return;
+    byGenus.set(normalizeGenus(current), {
+      fnctGenus: fnct,
+      note: String(row.note || '').trim(),
+      source: String(row.source || '').trim(),
+    });
+  });
+  return byGenus;
+}
+
 /** @returns {Map<string, Array<object>>} plant genus -> its Appendix Ten records */
 export function buildLepHostIndex(csvText) {
   const byGenus = new Map();
@@ -178,6 +208,7 @@ export function screenKeystoneGenera({
   growth,
   nearbyFauna,
   place,
+  nameChanges = new Map(),
 }) {
   const nearby = nearbyFauna?.forPlace ? nearbyFauna.forPlace(place) : new Map();
   const genera = new Set();
@@ -187,7 +218,18 @@ export function screenKeystoneGenera({
   const rows = [];
   genera.forEach((key) => {
     const nwf = hostGenera?.lookup ? hostGenera.lookup(key) : null;
-    const flora = fnctScreen.get(key) || null;
+    let flora = fnctScreen.get(key) || null;
+    // Resolve through a known name change only when the genus's own name draws
+    // a blank, so a genus the flora treats directly always answers for itself.
+    let renamed = null;
+    if (!flora?.treated) {
+      const change = nameChanges.get(key);
+      const under = change ? fnctScreen.get(normalizeGenus(change.fnctGenus)) : null;
+      if (under?.treated) {
+        renamed = { ...change, page: under.page, heading: under.heading };
+        flora = under;
+      }
+    }
     const hosts = lepHosts.get(key) || [];
     const size = growth.get(key) || null;
     const resolved = size ? resolveGrowthTier(size.habit, size.maxHeightFt) : null;
@@ -225,6 +267,9 @@ export function screenKeystoneGenera({
       curatedLarvalHosts: nwf?.larvalHosts || '',
       // What the flora says
       fnctTreated: Boolean(flora?.treated),
+      fnctUnderName: renamed ? renamed.fnctGenus : '',
+      renamedNote: renamed ? renamed.note : '',
+      renamedSource: renamed ? renamed.source : '',
       fnctPage: flora?.page || '',
       fnctHeading: flora?.heading || '',
       fnctDallas: Boolean(flora?.dallas),
@@ -249,7 +294,7 @@ export function screenKeystoneGenera({
       tier: bestTier(tiers),
       tierInfo: tierInfo(bestTier(tiers)),
       // The verdict this table exists to deliver
-      verdict: verdictFor({ flora, hosts, confirmed, nwf }),
+      verdict: renamed ? 'renamed' : verdictFor({ flora, hosts, confirmed, nwf }),
     });
   });
 
@@ -288,6 +333,10 @@ export const VERDICTS = Object.freeze({
   'in-flora': {
     label: 'In the flora',
     note: 'The flora treats it, but its host-plant appendix names no Lepidoptera for it.',
+  },
+  renamed: {
+    label: 'Renamed since 1999',
+    note: 'The flora carries these plants under an older genus name. Present here, not absent — the keystone list and the 1999 flora simply disagree about what to call them.',
   },
   rejected: {
     label: 'Not in the flora',

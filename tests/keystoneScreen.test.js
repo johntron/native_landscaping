@@ -6,6 +6,7 @@ import { buildHostGeneraIndex } from '../src/analysis/hostGenera.js';
 import { buildNearbyFaunaIndex } from '../src/analysis/faunaMatches.js';
 import {
   buildFnctScreenIndex,
+  buildNameChangeIndex,
   buildGrowthIndex,
   buildLepHostIndex,
   resolveGrowthTier,
@@ -24,6 +25,7 @@ const rows = screenKeystoneGenera({
   growth: buildGrowthIndex(read('blackland-prairie-natives.csv')),
   nearbyFauna: buildNearbyFaunaIndex(read('ecology/nearby-fauna.csv')),
   place: 'home',
+  nameChanges: buildNameChangeIndex(read('ecology/fnct-name-changes.csv')),
 });
 const byGenus = (g) => rows.find((r) => r.genus === g);
 
@@ -34,6 +36,10 @@ test('the screen rejects exactly the genera the flora gives no treatment', () =>
   ['Larix', 'Tsuga', 'Abies', 'Picea', 'Pseudotsuga', 'Castanea', 'Corylus', 'Malus'].forEach((g) =>
     assert.ok(rejected.includes(g), `${g} should be rejected`)
   );
+  // Every aster in North Central Texas grows in Dallas. Listing Symphyotrichum
+  // beside larch and spruce is the one row this audience would reject on
+  // sight, so a 1999 name must never read as an absence.
+  assert.ok(!rejected.includes('Symphyotrichum'), 'renamed, not absent');
   rejected.forEach((g) => assert.equal(byGenus(g).fnctTreated, false));
 });
 
@@ -95,4 +101,39 @@ test('rows sort with the strongest local evidence first', () => {
   for (let i = 1; i < rows.length; i += 1) {
     assert.ok(rows[i - 1].confirmedCount >= rows[i].confirmedCount, 'confirmed count is non-increasing');
   }
+});
+
+test('a genus the flora carries under an older name is "renamed", not "rejected"', () => {
+  const aster = byGenus('Symphyotrichum');
+  assert.equal(aster.verdict, 'renamed');
+  assert.equal(aster.fnctTreated, true, 'the plants are in the flora');
+  assert.equal(aster.fnctUnderName, 'Aster');
+  assert.equal(aster.fnctPage, '315', "Aster's page, not a blank");
+  assert.match(aster.renamedNote, /All nc TX Aster species fall into Symphyotrichum/);
+  assert.ok(aster.renamedSource, 'the redirect is sourced');
+  assert.equal(aster.beeSpecialistSpecies, 43, "NWF's claim survives the redirect");
+});
+
+// The redirect must not fire for a genus that answers for itself, or a rename
+// could quietly relabel a real treatment with some other genus's page number.
+test('a directly treated genus is never resolved through a name change', () => {
+  const quercus = byGenus('Quercus');
+  assert.equal(quercus.fnctUnderName, '');
+  assert.equal(quercus.fnctPage, '711');
+  assert.notEqual(quercus.verdict, 'renamed');
+});
+
+test('name changes that point at an untreated genus do not rescue the row', () => {
+  const screen = buildFnctScreenIndex('genus,fnct_treated,fnct_page\nReal,yes,10\nFake,no,\n');
+  const rows = screenKeystoneGenera({
+    hostGenera: { byGenus: new Map([['fake', {}]]), lookup: () => ({ genus: 'Fake', source: 'nwf-ecoregion-9' }) },
+    fnctScreen: screen,
+    lepHosts: new Map(),
+    growth: new Map(),
+    nearbyFauna: { forPlace: () => new Map() },
+    place: 'home',
+    nameChanges: buildNameChangeIndex('current_genus,fnct_genus,note,source\nFake,Missing,n,s\n'),
+  });
+  assert.equal(rows[0].verdict, 'rejected', 'pointing at a genus with no treatment changes nothing');
+  assert.equal(rows[0].fnctUnderName, '');
 });

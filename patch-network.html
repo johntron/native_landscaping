@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Blackland Patch Network</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="patch-network.css" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  </head>
+  <body>
+    <header class="page-header">
+      <div class="header-inner">
+        <nav class="site-nav">
+          <a href="index.html" class="site-nav__link">Design</a>
+          <a href="ecosystem.html" class="site-nav__link">Nearby ecosystem</a>
+          <a href="patch-network.html" class="site-nav__link site-nav__link--active">Patch network</a>
+        </nav>
+        <h1>Blackland Patch Network</h1>
+        <p class="data-note">
+          Two questions a yard-by-yard habitat effort has to answer before it recruits anybody:
+          <em>where</em> the patches go, and <em>what</em> goes in them.
+        </p>
+      </div>
+    </header>
+
+    <main class="pn-page">
+      <div class="pn-caveat">
+        <strong>What this is and isn't.</strong> Part one is a <em>schematic</em> — invented
+        geometry demonstrating a threshold argument, not survey data and not a site plan. Part two
+        is <em>real</em>: every genus is screened against <i>Shinners &amp; Mahler's Illustrated
+        Flora of North Central Texas</i> (Diggs, Lipscomb &amp; O'Kennon 1999) with the page cited,
+        and every larval host is from that flora's own Appendix Ten. Where I have made a judgement
+        call rather than quoted a source, the row says so and says it is mine. I expect some of it
+        to be wrong. Telling me which parts is the entire point of showing it to you.
+      </div>
+
+      <!-- ================= PART ONE ================= -->
+      <section class="pn-section">
+        <p class="pn-eyebrow">Part one &middot; Geometry (schematic)</p>
+        <h2>The same number of yards, arranged two ways</h2>
+        <p class="pn-lede">
+          Most yard-habitat programs accept whoever signs up, so the resulting pattern is
+          effectively random. But the scale that matters for an insectivorous bird is a
+          <em>territory</em> — one to two hectares, several adjacent lots. Each hexagon below is
+          roughly that size. Move the slider, then flip the arrangement.
+        </p>
+
+        <div class="pn-controls">
+          <div class="pn-ctl">
+            <label for="pnRange">Participating yards</label>
+            <input type="range" id="pnRange" min="8" max="120" step="4" value="44" />
+          </div>
+          <div class="pn-ctl">
+            <label for="pnScatter">Arrangement</label>
+            <div class="pn-seg" role="group" aria-label="Arrangement">
+              <button id="pnScatter" type="button" aria-pressed="true">Opt-in (scattered)</button>
+              <button id="pnCluster" type="button" aria-pressed="false">Targeted (clustered)</button>
+            </div>
+          </div>
+          <div class="pn-ctl">
+            <label for="pnThreshold">Territory threshold</label>
+            <select id="pnThreshold">
+              <option value="0.3">30% of lots</option>
+              <option value="0.4" selected>40% of lots</option>
+              <option value="0.5">50% of lots</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="pn-map-grid">
+          <div>
+            <div class="pn-stage">
+              <svg id="pnHexMap" viewBox="0 0 496 344" role="img"
+                   aria-label="Schematic hex grid showing participating yards and which territories cross the habitat threshold"></svg>
+            </div>
+            <div class="pn-legend">
+              <span><span class="pn-sw" style="background:#4d6b8a"></span>Participating yard</span>
+              <span><span class="pn-sw" style="background:#e4dfd3;border:1px solid #c3bdae"></span>Unconverted lot</span>
+              <span><span class="pn-sw" style="background:#dbe3ec;border:1px solid #4d6b8a"></span>Territory above threshold</span>
+              <span><span class="pn-sw" style="background:#7d9c68"></span>Source habitat (creek corridor)</span>
+            </div>
+          </div>
+          <div>
+            <div class="pn-readouts">
+              <div class="pn-ro">
+                <span class="k">Territories above threshold</span>
+                <span class="v hi" id="pnRoHex">0</span>
+                <span class="sub" id="pnRoHexSub"></span>
+              </div>
+              <div class="pn-ro">
+                <span class="k">Effort inside a working cluster</span>
+                <span class="v" id="pnRoEff">0%</span>
+                <span class="sub" id="pnRoEffSub"></span>
+              </div>
+              <div class="pn-ro">
+                <span class="k">Contiguous with source habitat</span>
+                <span class="v" id="pnRoSrc">0</span>
+                <span class="sub">above-threshold territories touching the corridor</span>
+              </div>
+            </div>
+            <p class="pn-verdict" id="pnVerdict"></p>
+          </div>
+        </div>
+
+        <div class="pn-caveat">
+          <strong>The assumption I'd most like challenged.</strong> Narango, Tallamy &amp; Marra
+          (2018, PNAS) found Carolina chickadee populations fail below roughly 70% native plant
+          <em>biomass</em> within a territory. I am treating "40% of lots converted" as a stand-in
+          for that. Those are not the same measurement and the conversion between them is a guess.
+          The geometric point survives a wrong threshold; any specific number here does not.
+          Redundancy also only buffers <em>uncorrelated</em> risk — drought, a hard freeze,
+          citywide mosquito fogging and owner turnover hit every yard in a cluster at once.
+        </div>
+      </section>
+
+      <!-- ================= PART TWO ================= -->
+      <section class="pn-section">
+        <p class="pn-eyebrow">Part two &middot; What goes in them</p>
+        <h2>Where the continental keystone list and the regional flora disagree</h2>
+        <p class="pn-lede">
+          The standard advice is to plant "keystone genera" from the National Wildlife Federation's
+          list, which is keyed to EPA Level I ecoregion 9 — a unit that runs from Texas to the
+          Canadian aspen parkland. It therefore recommends larch, hemlock, fir and spruce for a
+          Blackland Prairie yard. Below, every genus is put to the flora: does it have a treatment
+          in FNCT, does the flora's own host-plant appendix name Lepidoptera for it, and are any of
+          those animals actually recorded near this site? <strong>Where the two sources disagree,
+          the flora wins</strong> — and the rejects stay visible rather than being quietly dropped.
+        </p>
+
+        <p class="pn-lede" id="pnHeadline"></p>
+
+        <div class="pn-tier-key" id="pnTierKey"></div>
+
+        <div class="pn-filters">
+          <div class="pn-ctl">
+            <label for="pnVerdictFilter">Evidence</label>
+            <select id="pnVerdictFilter">
+              <option value="confirmed-local">Confirmed near this site</option>
+              <option value="flora-cited">Flora-cited hosts (any)</option>
+              <option value="rejected">Rejected by the flora</option>
+              <option value="renamed">Renamed since 1999</option>
+              <option value="all">Everything</option>
+            </select>
+          </div>
+          <div class="pn-ctl">
+            <label for="pnHabitFilter">How much room</label>
+            <select id="pnHabitFilter"><option value="">Any</option></select>
+          </div>
+          <div class="pn-ctl">
+            <label for="pnSearch">Search</label>
+            <input type="search" id="pnSearch" placeholder="Genus or animal" />
+          </div>
+          <span class="pn-count" id="pnCount"></span>
+        </div>
+
+        <div class="pn-table-grid">
+          <div class="pn-scroll">
+            <table class="pn-table">
+              <thead>
+                <tr>
+                  <th>Genus</th>
+                  <th>Evidence</th>
+                  <th>Room needed</th>
+                  <th class="num">Mature ht</th>
+                  <th class="num">NWF lep.</th>
+                  <th class="num">NWF bees</th>
+                  <th class="num">FNCT hosts</th>
+                  <th class="num">Near here</th>
+                </tr>
+              </thead>
+              <tbody id="pnRows"></tbody>
+            </table>
+          </div>
+          <div class="pn-detail" id="pnDetail"></div>
+        </div>
+
+        <div class="pn-caveat">
+          <strong>What the columns are not.</strong> "NWF lep." is a count for a whole
+          <em>genus</em> across an entire continental ecoregion; it does not transfer to one plant
+          in one yard. "FNCT hosts" counts named Lepidoptera in the flora's Appendix Ten, which is
+          a compilation with its own coverage gaps, not an exhaustive survey. The two are different
+          measurements and are never added together. "Near here" means the animal has been reported
+          within 15 miles on iNaturalist — presence, not abundance, and heavily observer-biased.
+          Mature height stands in for size because the catalog carries no canopy width; the biomass
+          weighting that argument really wants is therefore <em>absent</em>, not estimated.
+        </div>
+      </section>
+
+      <!-- ================= PART THREE ================= -->
+      <section class="pn-section">
+        <p class="pn-eyebrow">Part three &middot; The ask</p>
+        <h2>What I need from this room</h2>
+        <p class="pn-lede">
+          I am not proposing a new organization. NPSOT, BPTMN, Pollinator Pathway and Homegrown
+          National Park already exist and already do the organizing. I am asking three questions.
+        </p>
+        <div class="pn-asks">
+          <div class="pn-ask">
+            <span class="n">ASK 01</span>
+            <h3>Red-line the screen</h3>
+            <p>
+              Every row carries an FNCT page number and, where I overrode a source, a sentence
+              saying the call was mine. Those are where I am least sure. I would rather be
+              corrected here than in front of a city arborist.
+            </p>
+          </div>
+          <div class="pn-ask">
+            <span class="n">ASK 02</span>
+            <h3>Does a chapter yard registry already exist?</h3>
+            <p>
+              If members have been logging conversions — NLCP graduates, Wildscapes certifications,
+              anything — that list is worth more than any model I can build. The targeting argument
+              is only useful with real points on it.
+            </p>
+          </div>
+          <div class="pn-ask">
+            <span class="n">ASK 03</span>
+            <h3>Is there appetite for a coordinated effort at all?</h3>
+            <p>
+              Part one argues that adjacency beats linear connection. That is untested here. Before
+              anyone builds a participant-facing anything, I would like to know whether this
+              chapter thinks the question is worth answering.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="pn-section">
+        <p class="pn-eyebrow">Sources</p>
+        <ul class="pn-lede" style="line-height:1.7">
+          <li>
+            Diggs, G.M., Lipscomb, B.L. &amp; O'Kennon, R.J. 1999. <i>Shinners &amp; Mahler's
+            Illustrated Flora of North Central Texas.</i> BRIT/Austin College. Genus treatments and
+            Appendix Ten ("Larval Host Plants of Lepidoptera of North Central Texas", compiled by
+            JoAnn Karges, pp. 1394&ndash;1403).
+          </li>
+          <li>National Wildlife Federation Native Plant Finder, EPA Level I ecoregion 9 &mdash; keystone genus counts.</li>
+          <li>USDA PLANTS &mdash; growth habit and mature height.</li>
+          <li>iNaturalist &mdash; species reported near the site, with per-place establishment means.</li>
+          <li>
+            Narango, D.L., Tallamy, D.W. &amp; Marra, P.P. 2018. Nonnative plants reduce population
+            growth of an insectivorous bird. <i>PNAS</i> 115(45).
+          </li>
+        </ul>
+        <p class="data-note">
+          Everything on this page is read from files in this repository. It runs with the network
+          off.
+        </p>
+      </section>
+    </main>
+
+    <script type="module" src="src/patchnetwork/patchNetworkPage.js"></script>
+  </body>
+</html>
