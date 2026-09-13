@@ -31,19 +31,22 @@
         <div class="plant-matches__group">
           <h3>Candidates to add</h3>
           <p class="data-note">
-            Keystone or larval-host genera for this ecoregion (per
-            <a href="ecology/host-genera.csv">ecology/host-genera.csv</a>) that are confirmed
-            growing wild near this site, but the catalog carries no species in. Ranked by the
-            sourced NWF keystone counts, never by how many times iNaturalist happened to see one —
-            see the note above the "Local fauna support" check on the design page for why.
+            Every keystone or larval-host genus for this ecoregion (per
+            <a href="ecology/host-genera.csv">ecology/host-genera.csv</a>) the catalog carries no
+            species in, prioritized by local evidence: first, an animal
+            <a href="ecology/plant-animal-interactions.csv">documented to use the genus</a> that is
+            already confirmed nearby (the plant itself need not have been observed); genera without
+            that fall back to the sourced NWF keystone counts. Never ranked by how many times
+            iNaturalist happened to see something — see the note above the "Local fauna support"
+            check on the design page for why.
           </p>
           <ul class="plant-matches__list" id="plantMatchCandidates"></ul>
         </div>
         <div class="plant-matches__group">
           <h3>Already in your catalog</h3>
           <p class="data-note">
-            Keystone genera the catalog already carries that are also confirmed growing wild
-            nearby — real local evidence they belong here, on top of the ecoregion-wide claim.
+            Keystone genera the catalog already carries, prioritized the same way — a confirmed
+            nearby animal user first, real local evidence on top of the ecoregion-wide claim.
           </p>
           <ul class="plant-matches__list" id="plantMatchCatalog"></ul>
         </div>

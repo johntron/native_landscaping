@@ -84,10 +84,14 @@
   background: #fafaf7;
 }
 
-.plant-matches__nearby {
+.plant-matches__evidence {
   color: #666;
   font-size: 0.85rem;
   margin-top: 0.15rem;
+}
+
+.plant-matches__evidence--secondary {
+  font-style: italic;
 }
 
 .plant-matches__empty {
