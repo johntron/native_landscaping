@@ -185,6 +185,18 @@ async function fetchSpeciesCounts({ lat, lng, radiusMi, iconicTaxon }) {
   // axolotl and red-eyed tree frog alongside actually-wild species.
   url.searchParams.set('captive', 'false');
   url.searchParams.set('quality_grade', 'research');
+  // Exclude species iNaturalist itself force-obscures regardless of observer
+  // choice (`taxon_geoprivacy`) — mostly raptors and poaching-targeted plants
+  // whose PUBLIC coordinates are a randomized point inside a large cell, not
+  // the true sighting. Confirmed on Haliaeetus leucocephalus (Bald Eagle):
+  // every nearby record had taxon_geoprivacy=obscured and
+  // public_positional_accuracy=29039m (~18 mi) — a "nearest radius: 8 mi"
+  // label on that would be false precision; the true location could be
+  // anywhere in an 18-mile circle. `geoprivacy=open` (the per-OBSERVATION
+  // setting) does NOT catch this — verified empirically the eagle still
+  // appears with that filter alone; taxon_geoprivacy=open is the one that
+  // actually excludes it.
+  url.searchParams.set('taxon_geoprivacy', 'open');
 
   const response = await fetchWithBackoff(url, {
     headers: { 'User-Agent': 'native-landscaping-app (ecology data fetch; github.com/johntron/native_landscaping)' },

@@ -48,7 +48,10 @@ async function load() {
       suggest which plants to add; see
       <a href="tools/fetch-ecosystem-index.mjs">tools/fetch-ecosystem-index.mjs</a> for how the
       index is built and refreshed
-      (<code>docker compose exec web npm run ecosystem:fetch -- --project ${project.id}</code>).`;
+      (<code>docker compose exec web npm run ecosystem:fetch -- --project ${project.id}</code>).
+      Species iNaturalist itself hides the true location of (protected raptors, poaching-targeted
+      plants — e.g. Bald Eagle) are left out entirely, since their public coordinates are a randomized
+      point that can be tens of miles off, making any radius label for them meaningless.`;
   }
 
   const response = await fetch(`/api/ecosystem?place=${encodeURIComponent(place)}`);
