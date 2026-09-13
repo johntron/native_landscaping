@@ -13,6 +13,13 @@
  *   node tools/fetch-plant-animal-interactions.mjs            # all genera in plants.csv
  *   node tools/fetch-plant-animal-interactions.mjs --smoke    # one genus, for a quick check
  *   node tools/fetch-plant-animal-interactions.mjs --genus Asclepias --genus Passiflora
+ *   node tools/fetch-plant-animal-interactions.mjs --genus Quercus --merge   # fetch + commit
+ *
+ * `--genus` alone only prints (a dry run, for checking what a genus would
+ * bring in before committing it). Add `--merge` to actually write: existing
+ * rows for OTHER genera are kept as-is, rows for the fetched genera are
+ * replaced wholesale (so a re-fetch doesn't just accumulate duplicates).
+ * Plain `--genus` without `--merge` is unaffected — still a dry run.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -56,6 +63,7 @@ const REQUEST_DELAY_MS = 500;
 async function main() {
   const args = process.argv.slice(2);
   const smoke = args.includes('--smoke');
+  const merge = args.includes('--merge');
   const explicitGenera = args
     .map((arg, i) => (arg === '--genus' ? args[i + 1] : null))
     .filter(Boolean);
@@ -80,7 +88,16 @@ async function main() {
     await sleep(REQUEST_DELAY_MS);
   }
 
-  writeCsv(rows, smoke || explicitGenera.length);
+  const isPartialRun = smoke || (explicitGenera.length > 0 && !merge);
+  const allRows = merge ? mergeWithExisting(rows, genera) : rows;
+  writeCsv(allRows, isPartialRun);
+}
+
+/** Existing rows for genera NOT in this run, plus this run's freshly fetched rows — so a --merge re-fetch replaces a genus wholesale rather than accumulating duplicates. */
+function mergeWithExisting(freshRows, fetchedGenera) {
+  const fetchedSet = new Set(fetchedGenera);
+  const existing = parseCsv(readFileSync(OUT_CSV, 'utf8')).filter((row) => !fetchedSet.has(row.genus));
+  return [...existing, ...freshRows];
 }
 
 function catalogGenera() {

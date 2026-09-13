@@ -7,6 +7,7 @@
 import { loadProjectIndex, loadProjectConfig, resolveActiveProjectId } from '../data/projectConfig.js';
 import { fetchCsv, parseCsv } from '../data/csvLoader.js';
 import { buildHostGeneraIndex, emptyHostGeneraIndex, describeHostGeneraRow } from '../analysis/hostGenera.js';
+import { buildInteractionsIndex, emptyInteractionsIndex } from '../analysis/faunaMatches.js';
 import { catalogGenusKeys, matchNearbyKeystoneGenera } from '../analysis/plantMatches.js';
 
 const PROJECT_QUERY_PARAM = 'project';
@@ -85,9 +86,12 @@ async function load() {
 }
 
 /**
- * The "next phase" cross-reference: ecoregion keystone/larval-host genera
- * (ecology/host-genera.csv) confirmed growing wild near this site (allRows'
- * Plantae entries), split by whether plants.csv already carries that genus.
+ * The "next phase" cross-reference: every ecoregion keystone/larval-host
+ * genus (ecology/host-genera.csv), split by whether plants.csv already
+ * carries it, and prioritized by TWO kinds of local evidence: an animal
+ * GloBI documents as using the genus is confirmed nearby (primary — the
+ * genus itself need not have been observed), or the genus itself is
+ * confirmed growing wild nearby (secondary, shown as supporting evidence).
  * Loaded after the main index so a failure here never blocks the table above.
  */
 async function loadPlantMatches(project) {
@@ -98,13 +102,16 @@ async function loadPlantMatches(project) {
 
   let speciesRows = [];
   let hostGenera = emptyHostGeneraIndex();
+  let interactions = emptyInteractionsIndex();
   try {
-    const [plantsCsv, hostGeneraCsv] = await Promise.all([
+    const [plantsCsv, hostGeneraCsv, interactionsCsv] = await Promise.all([
       fetchCsv(new URL('plants.csv', document.baseURI)),
       fetchCsv(new URL('ecology/host-genera.csv', document.baseURI)),
+      fetchCsv(new URL('ecology/plant-animal-interactions.csv', document.baseURI)),
     ]);
     speciesRows = parseCsv(plantsCsv);
     hostGenera = buildHostGeneraIndex(hostGeneraCsv, { ecoregion: project.ecoregion });
+    interactions = buildInteractionsIndex(interactionsCsv);
   } catch (err) {
     plantMatchesNoteEl.textContent = 'Could not load the catalog or keystone genera table, so plant matches could not be computed.';
     console.error(err);
@@ -115,11 +122,14 @@ async function loadPlantMatches(project) {
     observationRows: allRows,
     hostGenera,
     catalogGenusKeys: catalogGenusKeys(speciesRows),
+    interactions,
+    place: String(project.place || '').trim(),
   });
 
+  const withFauna = candidates.filter((c) => c.associatedFauna.length).length;
   plantMatchesNoteEl.textContent = candidates.length
-    ? `${candidates.length} keystone genus${candidates.length === 1 ? '' : 'es'} for ecoregion ${project.ecoregion} ${candidates.length === 1 ? 'is' : 'are'} confirmed growing wild near "${project.place}" and missing from the catalog.`
-    : `No ecoregion-${project.ecoregion} keystone genus confirmed nearby is missing from the catalog.`;
+    ? `${candidates.length} ecoregion-${project.ecoregion} keystone genus${candidates.length === 1 ? '' : 'es'} ${candidates.length === 1 ? 'is' : 'are'} missing from the catalog; ${withFauna} of those already ${withFauna === 1 ? 'has' : 'have'} an animal confirmed nearby that documented interactions say would use it.`
+    : `No ecoregion-${project.ecoregion} keystone genus is missing from the catalog.`;
 
   plantMatchCandidatesEl.innerHTML = candidates.length
     ? candidates.map(renderPlantMatchItem).join('')
@@ -129,15 +139,31 @@ async function loadPlantMatches(project) {
     : '<li class="plant-matches__empty">None found.</li>';
 }
 
-function renderPlantMatchItem({ genus, hostGeneraRow, nearbySpecies }) {
-  const named = nearbySpecies
-    .slice(0, 4)
-    .map((s) => `${s.commonName || s.taxonName} (${s.radiusMi} mi)`)
-    .join(', ');
-  const more = nearbySpecies.length > 4 ? `, +${nearbySpecies.length - 4} more` : '';
+function renderPlantMatchItem({ genus, hostGeneraRow, associatedFauna, nearbySpecies }) {
+  const evidence = [];
+  if (associatedFauna.length) {
+    const named = associatedFauna
+      .slice(0, 3)
+      .map((m) => `${m.animalCommon || m.animalSpecies} (${m.nearestRadiusMi} mi)`)
+      .join(', ');
+    const more = associatedFauna.length > 3 ? `, +${associatedFauna.length - 3} more` : '';
+    evidence.push(
+      `<div class="plant-matches__evidence">Animals confirmed nearby documented to use it: ${escapeHtml(named)}${escapeHtml(more)}</div>`
+    );
+  }
+  if (nearbySpecies.length) {
+    const named = nearbySpecies
+      .slice(0, 3)
+      .map((s) => `${s.commonName || s.taxonName} (${s.radiusMi} mi)`)
+      .join(', ');
+    const more = nearbySpecies.length > 3 ? `, +${nearbySpecies.length - 3} more` : '';
+    evidence.push(
+      `<div class="plant-matches__evidence plant-matches__evidence--secondary">Also confirmed growing wild nearby: ${escapeHtml(named)}${escapeHtml(more)}</div>`
+    );
+  }
   return `<li class="plant-matches__item">
     <strong>${escapeHtml(genus)}</strong> — ${escapeHtml(describeHostGeneraRow(hostGeneraRow))}.
-    <div class="plant-matches__nearby">Nearby: ${escapeHtml(named)}${escapeHtml(more)}</div>
+    ${evidence.join('')}
   </li>`;
 }
 
