@@ -24,6 +24,8 @@ export function openEcosystemDb(path = DEFAULT_PATH) {
       genus TEXT NOT NULL,
       radius_mi REAL NOT NULL,
       observation_count INTEGER NOT NULL,
+      photo_url TEXT,
+      photo_attribution TEXT,
       fetched_on TEXT NOT NULL,
       source TEXT NOT NULL,
       PRIMARY KEY (place, iconic_taxon, taxon_name)
@@ -39,8 +41,8 @@ export function replaceTaxonRows(db, place, iconicTaxon, rows) {
     db.prepare('DELETE FROM species_observations WHERE place = ? AND iconic_taxon = ?').run(place, iconicTaxon);
     const insert = db.prepare(`
       INSERT INTO species_observations
-        (place, iconic_taxon, taxon_name, taxon_id, common_name, genus, radius_mi, observation_count, fetched_on, source)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (place, iconic_taxon, taxon_name, taxon_id, common_name, genus, radius_mi, observation_count, photo_url, photo_attribution, fetched_on, source)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     for (const row of rows) {
       insert.run(
@@ -52,6 +54,8 @@ export function replaceTaxonRows(db, place, iconicTaxon, rows) {
         row.genus,
         row.radius_mi,
         row.observation_count,
+        row.photo_url || '',
+        row.photo_attribution || '',
         row.fetched_on,
         row.source
       );

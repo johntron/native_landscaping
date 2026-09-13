@@ -248,6 +248,14 @@ async function fetchSpeciesCounts({ lat, lng, radiusMi, iconicTaxon, probeCache,
       common_name: entry.taxon?.preferred_common_name || '',
       genus: String(entry.taxon?.name || '').trim().split(/\s+/)[0] || '',
       observation_count: entry.count ?? 0,
+      // Only hotlink photos under an actual open license (cc0/cc-by/cc-by-nc/etc,
+      // square_url is published by iNaturalist specifically for this).
+      // license_code is null for "all rights reserved" — verified empirically
+      // (e.g. Ulmus crassifolia, Cercis canadensis nearby both came back
+      // license_code=null) — those default to full copyright with no reuse
+      // grant, so they're left out entirely rather than displayed anyway.
+      photo_url: entry.taxon?.default_photo?.license_code ? entry.taxon.default_photo.square_url || '' : '',
+      photo_attribution: entry.taxon?.default_photo?.license_code ? entry.taxon.default_photo.attribution || '' : '',
     }))
     .filter((row) => row.taxon_name);
   return { results, fromCache };

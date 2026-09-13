@@ -14,6 +14,7 @@ const navDesignLink = document.getElementById('navDesignLink');
 let allRows = [];
 let sortKey = 'observation_count';
 let sortDir = -1;
+let siteLocation = null; // { lat, lng } for the active project, if it has a location.json — used to scope outbound iNaturalist links
 
 async function load() {
   let project;
@@ -25,7 +26,7 @@ async function load() {
     );
     project = await loadProjectConfig(resolved.id, fetch, document.baseURI);
   } catch (err) {
-    rowsEl.innerHTML = `<tr><td colspan="6">Unable to load project configuration.</td></tr>`;
+    rowsEl.innerHTML = `<tr><td colspan="7">Unable to load project configuration.</td></tr>`;
     console.error(err);
     return;
   }
@@ -39,7 +40,7 @@ async function load() {
   const place = String(project.place || '').trim();
   if (titleEl) titleEl.textContent = `Nearby Ecosystem — ${project.name}`;
   if (!place) {
-    rowsEl.innerHTML = `<tr><td colspan="6">"${project.name}" declares no "place" in project.json — add one before indexing.</td></tr>`;
+    rowsEl.innerHTML = `<tr><td colspan="7">"${project.name}" declares no "place" in project.json — add one before indexing.</td></tr>`;
     return;
   }
   if (noteEl) {
@@ -54,13 +55,16 @@ async function load() {
       point that can be tens of miles off, making any radius label for them meaningless.`;
   }
 
-  const response = await fetch(`/api/ecosystem?place=${encodeURIComponent(place)}`);
+  const response = await fetch(
+    `/api/ecosystem?place=${encodeURIComponent(place)}&${PROJECT_QUERY_PARAM}=${encodeURIComponent(project.id)}`
+  );
   if (!response.ok) {
-    rowsEl.innerHTML = `<tr><td colspan="6">Failed to load (${response.status}). Run <code>docker compose exec web npm run ecosystem:fetch -- --project ${project.id}</code> first.</td></tr>`;
+    rowsEl.innerHTML = `<tr><td colspan="7">Failed to load (${response.status}). Run <code>docker compose exec web npm run ecosystem:fetch -- --project ${project.id}</code> first.</td></tr>`;
     return;
   }
   const body = await response.json();
   allRows = body.rows || [];
+  siteLocation = body.location || null;
 
   const taxa = [...new Set(allRows.map((r) => r.iconic_taxon))].sort();
   taxonFilter.innerHTML =
@@ -90,27 +94,46 @@ function render() {
   rowsEl.innerHTML = filtered
     .map(
       (r) => `<tr>
+        <td>${photoThumb(r)}</td>
         <td>${escapeHtml(r.iconic_taxon)}</td>
         <td><em>${escapeHtml(r.taxon_name)}</em></td>
         <td>${escapeHtml(r.common_name)}</td>
         <td>${r.radius_mi} mi</td>
         <td>${r.observation_count}</td>
-        <td>${inaturalistLink(r.taxon_id)}</td>
+        <td>${inaturalistLink(r)}</td>
       </tr>`
     )
     .join('');
 }
 
+/** Hotlinked from iNaturalist's own CDN; the fetch script already excludes "all rights reserved" photos, keeping only openly-licensed ones. Attribution (required by most of those licenses) is kept in the title tooltip. */
+function photoThumb(row) {
+  if (!row.photo_url) return '';
+  const attribution = escapeHtml(row.photo_attribution || '');
+  return `<img src="${row.photo_url}" alt="${escapeHtml(row.common_name || row.taxon_name)}" title="${attribution}" loading="lazy" class="ecosystem-thumb" />`;
+}
+
+const MI_TO_KM = 1.60934;
+
 /**
- * Links to the taxon's global observations list, not one scoped to our
- * lat/lng — the app never sends the project's coordinates to the client
- * (see projects/<id>/location.json, gitignored), so a location-scoped link
- * would leak exactly what that convention protects.
+ * Links to the taxon's observations map, centered and radius-limited to the
+ * site — using the SAME radius this row was actually found at, so the link
+ * shows exactly the evidence behind that row's distance claim rather than a
+ * generic global search. Coordinates come from /api/ecosystem's `location`
+ * (server-side only, read from the gitignored projects/<id>/location.json)
+ * and are sent to iNaturalist.org only when this specific link is clicked —
+ * by request; see the ecosystem note for the tradeoff this makes explicit.
  */
-function inaturalistLink(taxonId) {
-  if (!taxonId) return '';
-  const url = `https://www.inaturalist.org/observations?taxon_id=${encodeURIComponent(taxonId)}`;
-  return `<a href="${url}" target="_blank" rel="noopener">View observations</a>`;
+function inaturalistLink(row) {
+  if (!row.taxon_id) return '';
+  const url = new URL('https://www.inaturalist.org/observations');
+  url.searchParams.set('taxon_id', row.taxon_id);
+  if (siteLocation) {
+    url.searchParams.set('lat', siteLocation.lat);
+    url.searchParams.set('lng', siteLocation.lng);
+    url.searchParams.set('radius', (row.radius_mi * MI_TO_KM).toFixed(3));
+  }
+  return `<a href="${url.toString()}" target="_blank" rel="noopener">View observations</a>`;
 }
 
 function escapeHtml(str) {

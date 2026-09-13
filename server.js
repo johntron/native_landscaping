@@ -282,8 +282,24 @@ const server = http.createServer(async (req, res) => {
       const iconicTaxon = url.searchParams.get('taxon') || undefined;
       const db = openEcosystemDb();
       const rows = listSpeciesObservations(db, { place, iconicTaxon });
+      // location.json is gitignored and otherwise server-only; only surfaced
+      // here, per request, so the ecosystem page can link out to iNaturalist
+      // scoped to the actual site rather than a generic global search.
+      let location = null;
+      const projectId = projectIdFromUrl(url);
+      if (projectId && isValidProjectId(projectId)) {
+        try {
+          const { locationFile } = resolveProjectPaths(projectId, PUBLIC_DIR);
+          const raw = JSON.parse(await fs.readFile(locationFile, 'utf8'));
+          if (Number.isFinite(raw.lat) && Number.isFinite(raw.lng)) {
+            location = { lat: raw.lat, lng: raw.lng };
+          }
+        } catch {
+          // No location.json for this project — links just won't be location-scoped.
+        }
+      }
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ place, rows }));
+      res.end(JSON.stringify({ place, rows, location }));
     } catch (err) {
       console.error(err);
       res.writeHead(400, { 'Content-Type': 'application/json' });

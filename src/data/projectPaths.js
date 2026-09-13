@@ -27,6 +27,7 @@ export function resolveProjectPaths(projectId, publicDir) {
     historyFile: path.join(projectDir, 'layout-history.json'),
     configFile: path.join(projectDir, 'project.json'),
     featuresFile: path.join(projectDir, 'features.json'),
+    locationFile: path.join(projectDir, 'location.json'),
   };
 }
 
