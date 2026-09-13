@@ -18,13 +18,27 @@
  * The exact coordinates never reach the index or git: they live in
  * projects/<id>/location.json, which is gitignored (this repo is public).
  *
+ * Raw API responses are cached (data/probe-cache.db, shared with
+ * tools/usda-plants/probeCache.js) keyed by their full request URL, so
+ * re-running after a pure logic change (a new filter, a taxon added) replays
+ * from disk instead of re-hitting the network. --force bypasses the cache
+ * for a real refresh of what iNaturalist currently has.
+ *
  * Usage:
  *   node tools/fetch-ecosystem-index.mjs --project backyard
  *   node tools/fetch-ecosystem-index.mjs --project backyard --smoke   # one taxon, one radius
+ *   node tools/fetch-ecosystem-index.mjs --project backyard --force   # bypass the response cache
  */
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { openEcosystemDb, replaceTaxonRows } from './ecosystemIndexDb.js';
+// Same raw-response cache tools/usda-plants/probeCache.js already built for
+// USDA, sharing its default file (data/probe-cache.db) — its schema is keyed
+// by (source, endpoint, cache_key) specifically so unrelated sources like
+// this one can share one cache file. Means re-deriving something from a
+// response we already have (a filter tweak, a new taxon) replays from disk
+// instead of a fresh ~25-request crawl; --force bypasses it for a real refresh.
+import { openProbeCache, cached } from './usda-plants/probeCache.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 
@@ -88,8 +102,9 @@ async function main() {
   const args = process.argv.slice(2);
   const projectId = argAfter(args, '--project');
   const smoke = args.includes('--smoke');
+  const force = args.includes('--force');
   if (!projectId) {
-    console.error('Usage: node tools/fetch-ecosystem-index.mjs --project <id> [--smoke]');
+    console.error('Usage: node tools/fetch-ecosystem-index.mjs --project <id> [--smoke] [--force]');
     process.exit(1);
   }
 
@@ -101,7 +116,8 @@ async function main() {
     process.exit(1);
   }
   const location = JSON.parse(readFileSync(locationPath, 'utf8'));
-  const { lat, lng } = await resolveCoordinates(location);
+  const probeCache = openProbeCache();
+  const { lat, lng } = await resolveCoordinates(location, probeCache, force);
 
   const projectConfigPath = `${ROOT}projects/${projectId}/project.json`;
   const projectConfig = JSON.parse(readFileSync(projectConfigPath, 'utf8'));
@@ -130,8 +146,10 @@ async function main() {
 
     for (const radius of radii) {
       let found = 0;
+      let wasCached = true;
       try {
-        const results = await fetchSpeciesCounts({ lat, lng, radiusMi: radius, iconicTaxon });
+        const { results, fromCache } = await fetchSpeciesCounts({ lat, lng, radiusMi: radius, iconicTaxon, probeCache, force });
+        wasCached = fromCache;
         results.forEach((entry) => {
           if (seen.has(entry.taxon_name)) return; // already have this species at a smaller radius
           seen.set(entry.taxon_name, { ...entry, radius_mi: radius, fetched_on: fetchedOn, source: 'api.inaturalist.org species_counts' });
@@ -140,8 +158,9 @@ async function main() {
       } catch (err) {
         console.warn(`  ${iconicTaxon} @ ${radius}mi: FAILED — ${err.message}`);
       }
-      console.log(`  ${iconicTaxon} @ ${radius}mi: ${found} new species`);
-      await sleep(REQUEST_DELAY_MS);
+      console.log(`  ${iconicTaxon} @ ${radius}mi: ${found} new species${wasCached ? ' (cached)' : ''}`);
+      // Only the real network calls need throttling; a cache replay is just a disk read.
+      if (!wasCached) await sleep(REQUEST_DELAY_MS);
     }
 
     const rows = [...seen.values()];
@@ -155,24 +174,33 @@ async function main() {
   }
 }
 
-async function resolveCoordinates(location) {
+async function resolveCoordinates(location, probeCache, force) {
   if (Number.isFinite(location.lat) && Number.isFinite(location.lng)) {
     return { lat: location.lat, lng: location.lng };
   }
   if (!location.address) {
     throw new Error('location.json has neither lat/lng nor an address');
   }
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(location.address)}`;
-  const response = await fetch(url, {
-    headers: { 'User-Agent': 'native-landscaping-app (ecology data fetch)' },
-  });
-  if (!response.ok) throw new Error(`Geocoding failed: HTTP ${response.status}`);
-  const results = await response.json();
+  const { raw: results } = await cached(
+    probeCache,
+    'nominatim',
+    'search',
+    location.address,
+    async () => {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(location.address)}`;
+      const response = await fetch(url, {
+        headers: { 'User-Agent': 'native-landscaping-app (ecology data fetch)' },
+      });
+      if (!response.ok) throw new Error(`Geocoding failed: HTTP ${response.status}`);
+      return response.json();
+    },
+    { force }
+  );
   if (!results.length) throw new Error(`Geocoding found nothing for "${location.address}"`);
   return { lat: Number(results[0].lat), lng: Number(results[0].lon) };
 }
 
-async function fetchSpeciesCounts({ lat, lng, radiusMi, iconicTaxon }) {
+async function fetchSpeciesCounts({ lat, lng, radiusMi, iconicTaxon, probeCache, force }) {
   const url = new URL('https://api.inaturalist.org/v1/observations/species_counts');
   url.searchParams.set('lat', lat);
   url.searchParams.set('lng', lng);
@@ -198,19 +226,31 @@ async function fetchSpeciesCounts({ lat, lng, radiusMi, iconicTaxon }) {
   // actually excludes it.
   url.searchParams.set('taxon_geoprivacy', 'open');
 
-  const response = await fetchWithBackoff(url, {
-    headers: { 'User-Agent': 'native-landscaping-app (ecology data fetch; github.com/johntron/native_landscaping)' },
-  });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const body = await response.json();
-  return (body.results || [])
+  const { raw: body, cached: fromCache } = await cached(
+    probeCache,
+    'inaturalist',
+    'observations/species_counts',
+    url.toString(),
+    async () => {
+      const response = await fetchWithBackoff(url, {
+        headers: { 'User-Agent': 'native-landscaping-app (ecology data fetch; github.com/johntron/native_landscaping)' },
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    },
+    { force }
+  );
+
+  const results = (body.results || [])
     .map((entry) => ({
+      taxon_id: entry.taxon?.id ?? null,
       taxon_name: entry.taxon?.name || '',
       common_name: entry.taxon?.preferred_common_name || '',
       genus: String(entry.taxon?.name || '').trim().split(/\s+/)[0] || '',
       observation_count: entry.count ?? 0,
     }))
     .filter((row) => row.taxon_name);
+  return { results, fromCache };
 }
 
 function argAfter(args, flag) {
