@@ -7,11 +7,15 @@
     },
     {
       "id": "example-frontyard",
-      "name": "Example front yard"
+      "name": "Front yard"
     },
     {
       "id": "walkway",
       "name": "Walkway"
+    },
+    {
+      "id": "linh-and-nam-s-backyard",
+      "name": "Linh and Nam's backyard"
     }
   ]
 }
