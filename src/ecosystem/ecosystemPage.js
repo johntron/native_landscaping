@@ -56,8 +56,7 @@ async function load() {
   }
   if (noteEl) {
     noteEl.innerHTML = `Species reported on iNaturalist near "${place}", banded by how far each taxon
-      plausibly ranges to find a newly planted specimen. Indexing only — this does not yet
-      suggest which plants to add; see
+      plausibly ranges to find a newly planted specimen. See
       <a href="tools/fetch-ecosystem-index.mjs">tools/fetch-ecosystem-index.mjs</a> for how the
       index is built and refreshed
       (<code>docker compose exec web npm run ecosystem:fetch -- --project ${project.id}</code>).
