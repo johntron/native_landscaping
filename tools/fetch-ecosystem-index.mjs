@@ -31,19 +31,32 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 /**
  * Per-taxon radius bands, in miles, ascending. Reasoned defaults (not a
  * sourced biological fact) based on typical foraging/dispersal range:
- * flying pollinators and small ectotherms range least, birds most.
+ * flying pollinators and small ectotherms range least, birds most. Every
+ * taxon gets a 0.25 mi "practically in the yard/block" band — nothing
+ * biological rules out something being that close.
  * Mirrors the ordering (though not the exact numbers) of
  * src/analysis/faunaMatches.js's RANGE_THRESHOLD_MI, which uses a single
  * per-taxon threshold for matching rather than bands for indexing.
+ *
+ * iNaturalist's `radius` API parameter is in KILOMETERS, not miles, despite
+ * every value here being a mile figure — confirmed empirically (an
+ * observation at a known 19.18 km / 11.92 mi flips from excluded to
+ * included between radius=19 and radius=19.2, not near 12). An earlier
+ * version of this script passed these numbers straight through unconverted,
+ * so every labeled band was actually only ~62% as wide as its label.
+ * `fetchSpeciesCounts` converts mi -> km at the call site so the labels
+ * stored in the index stay true miles.
  */
 const RADII_MI_BY_TAXON = {
-  Plantae: [1, 3, 8, 15],
-  Amphibia: [1, 3, 8],
-  Reptilia: [1, 3, 8],
-  Insecta: [1, 3, 8, 15, 25],
-  Mammalia: [3, 8, 15, 25],
-  Aves: [5, 15, 25, 50],
+  Plantae: [0.25, 1, 3, 8, 15],
+  Amphibia: [0.25, 1, 3, 8],
+  Reptilia: [0.25, 1, 3, 8],
+  Insecta: [0.25, 1, 3, 8, 15, 25],
+  Mammalia: [0.25, 3, 8, 15, 25],
+  Aves: [0.25, 5, 15, 25, 50],
 };
+
+const MI_TO_KM = 1.60934;
 
 const ICONIC_TAXA = Object.keys(RADII_MI_BY_TAXON);
 
@@ -118,7 +131,7 @@ async function main() {
     for (const radius of radii) {
       let found = 0;
       try {
-        const results = await fetchSpeciesCounts({ lat, lng, radius, iconicTaxon });
+        const results = await fetchSpeciesCounts({ lat, lng, radiusMi: radius, iconicTaxon });
         results.forEach((entry) => {
           if (seen.has(entry.taxon_name)) return; // already have this species at a smaller radius
           seen.set(entry.taxon_name, { ...entry, radius_mi: radius, fetched_on: fetchedOn, source: 'api.inaturalist.org species_counts' });
@@ -159,11 +172,11 @@ async function resolveCoordinates(location) {
   return { lat: Number(results[0].lat), lng: Number(results[0].lon) };
 }
 
-async function fetchSpeciesCounts({ lat, lng, radius, iconicTaxon }) {
+async function fetchSpeciesCounts({ lat, lng, radiusMi, iconicTaxon }) {
   const url = new URL('https://api.inaturalist.org/v1/observations/species_counts');
   url.searchParams.set('lat', lat);
   url.searchParams.set('lng', lng);
-  url.searchParams.set('radius', radius);
+  url.searchParams.set('radius', (radiusMi * MI_TO_KM).toFixed(3)); // API takes km, not mi — see RADII_MI_BY_TAXON's comment
   url.searchParams.set('iconic_taxa[]', iconicTaxon);
   url.searchParams.set('per_page', String(PER_TAXON_PAGE_SIZE));
   url.searchParams.set('order_by', 'observation_count'); // most-established local presence first
