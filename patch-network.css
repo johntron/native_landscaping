@@ -54,6 +54,23 @@
 .pn-sw { width: 12px; height: 12px; border-radius: 2px; flex: none; }
 
 /* ---------- Part 2: the screened table ---------- */
+/* The fixed comparison strip. Deliberately not scrollable and not filtered:
+   it is the thing to point at, and a demo that needs a dropdown driven mid-
+   sentence is a demo that stalls. */
+.pn-compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1px; background: #d9d5cc; border: 1px solid #d9d5cc; margin: 1rem 0 1.4rem; }
+.pn-card { background: #fffdf7; padding: 0.7rem 0.8rem; display: flex; flex-direction: column; gap: 0.25rem; }
+.pn-card--reject { background: #fbf4f0; }
+.pn-card .g { font-style: italic; font-weight: 600; font-size: 1rem; }
+.pn-card--reject .g { text-decoration: line-through; text-decoration-color: #c09a86; color: #8a6a5a; }
+.pn-card .room { font-size: 0.72rem; letter-spacing: 0.05em; text-transform: uppercase; color: #7a7566; }
+.pn-pair { display: flex; gap: 0.9rem; margin: 0.15rem 0 0.1rem; }
+.pn-stat { display: flex; flex-direction: column; }
+.pn-stat b { font-size: 1.3rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.pn-stat b.ok { color: #2c5530; }
+.pn-stat b.no { color: #8c4a2f; }
+.pn-stat i { font-style: normal; font-size: 0.64rem; letter-spacing: 0.06em; text-transform: uppercase; color: #7a7566; }
+.pn-card .sub { font-size: 0.76rem; color: #6a655a; line-height: 1.4; }
+
 .pn-filters { display: flex; flex-wrap: wrap; gap: 0.8rem 1.2rem; align-items: flex-end; margin-bottom: 1rem; }
 .pn-filters select, .pn-filters input { font: inherit; font-size: 0.88rem; padding: 0.3rem 0.45rem; border: 1px solid #c3bdae; background: #fffdf7; color: #2f2f2f; }
 .pn-count { margin-left: auto; font-size: 0.85rem; color: #7a7566; }
@@ -68,6 +85,9 @@
 .pn-tier--aggregator { background: #f0ece2; color: #6a6250; border: 1px dashed #b3a98f; }
 .pn-tier--tertiary { background: #f5e7e0; color: #7a4a33; border: 1px dotted #b08060; }
 .pn-tier--unknown { background: #eee; color: #777; border: 1px dotted #bbb; }
+
+.pn-hostonly { display: inline-block; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.1rem 0.35rem; border-radius: 2px; background: #f5e7e0; color: #7a4a33; border: 1px dotted #b08060; white-space: nowrap; }
+.pn-warn { background: #f8e8e2; border-left: 3px solid #8c4a2f; padding: 0.55rem 0.65rem; font-size: 0.82rem; color: #6a3a28; margin-top: 0.5rem; line-height: 1.5; }
 
 .pn-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 .pn-table th, .pn-table td { text-align: left; padding: 0.4rem 0.55rem; border-bottom: 1px solid #e4e0d6; vertical-align: top; }

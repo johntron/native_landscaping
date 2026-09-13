@@ -88,6 +88,7 @@ function renderTierKey() {
 }
 
 function matchesFilters(row, { verdict, habit, search }) {
+  if (verdict === 'recommendable' && !(row.inCatalog && row.verdict === 'confirmed-local')) return false;
   if (verdict === 'confirmed-local' && row.verdict !== 'confirmed-local') return false;
   if (verdict === 'flora-cited' && !row.lepHostCount) return false;
   if (verdict === 'rejected' && row.verdict !== 'rejected') return false;
@@ -119,7 +120,11 @@ function renderTable() {
         const verdict = VERDICTS[row.verdict] || { label: row.verdict };
         const tierClass = row.verdict === 'rejected' ? ' class="pn-rejected"' : '';
         return `<tr${tierClass} data-genus="${escapeHtml(row.genus)}">
-        <td><span class="pn-genus">${escapeHtml(row.genus)}</span> ${tierBadge(row.tier)}</td>
+        <td><span class="pn-genus">${escapeHtml(row.genus)}</span> ${tierBadge(row.tier)}${
+          row.inCatalog
+            ? ''
+            : ' <span class="pn-hostonly" title="FNCT records Lepidoptera using this genus. That is not a recommendation to plant it — the genus is not in the Blackland natives catalog and may include introduced species.">host record only</span>'
+        }</td>
         <td><span class="pn-verdict-chip pn-v-${escapeHtml(row.verdict)}">${escapeHtml(verdict.label)}</span></td>
         <td>${escapeHtml(row.growthTier ? row.growthTier.room : '—')}</td>
         <td class="num">${row.maxHeightFt === null ? '—' : `${Math.round(row.maxHeightFt)} ft`}</td>
@@ -197,6 +202,11 @@ function renderDetail() {
       <dt>NWF claim</dt><dd>${row.lepHostSpecies ?? '—'} caterpillar spp., ${row.beeSpecialistSpecies ?? '—'} specialist bees</dd>
     </dl>
     ${row.fnctDallasEvidence ? `<p class="pn-cite">&ldquo;${escapeHtml(row.fnctDallasEvidence)}&rdquo;</p>` : ''}
+    ${
+      row.inCatalog
+        ? ''
+        : '<p class="pn-warn"><strong>A record, not a recommendation.</strong> The flora documents Lepidoptera using this genus, which is not the same as advice to plant it. It is not in the Blackland natives catalog, and some genera on this list are introduced or weedy — <i>Stenotaphrum</i> (St. Augustine turf) carries a confirmed skipper. Check the species before recommending anything here.</p>'
+    }
     ${row.renamedNote ? `<p class="pn-mine"><strong>Renamed since 1999.</strong> ${escapeHtml(row.renamedNote)}<br><span style="font-size:0.76rem">${escapeHtml(row.renamedSource)}</span></p>` : ''}
     ${row.habitConflict ? `<p class="pn-mine"><strong>My call, not the source's.</strong> ${escapeHtml(row.habitConflict)}</p>` : ''}
     ${row.curatedLarvalHosts ? `<p class="pn-mine"><strong>Hand-added, weaker provenance.</strong> ${escapeHtml(row.curatedLarvalHosts)}</p>` : ''}
@@ -208,21 +218,61 @@ function renderDetail() {
   `;
 }
 
+/**
+ * The six genera the talk actually walks through, pinned above the scrollable
+ * table. Chosen to span the argument rather than to top any ranking: a canopy
+ * tree the keystone list and the flora agree on, the tree only the flora
+ * carries, a forb, and the two the keystone list gets wrong in the two
+ * different ways it gets things wrong.
+ */
+const COMPARE_GENERA = ['Quercus', 'Celtis', 'Asclepias', 'Betula', 'Larix', 'Symphyotrichum'];
+
+function renderCompare() {
+  const cards = COMPARE_GENERA.map((genus) => {
+    const row = allRows.find((r) => r.genus === genus);
+    if (!row) return '';
+    const reject = row.verdict === 'rejected';
+    const nwf = row.lepHostSpecies === null ? '—' : String(row.lepHostSpecies);
+
+    // Each card states BOTH claims side by side rather than resolving them to
+    // one number. Betula is why: it is the card that matters most and the
+    // honest version of it is "189 versus none", which a single figure cannot
+    // say. The one-line reading underneath is mine, and is labelled as such in
+    // the caption below the strip.
+    const reading = reject
+      ? 'On the keystone list. No treatment in the flora at all — recommending it here would be a mistake.'
+      : row.verdict === 'renamed'
+        ? `Not absent — the flora keeps these under <i>${escapeHtml(row.fnctUnderName)}</i>, a 1999 naming decision.`
+        : row.lepHostCount === 0
+          ? `In the flora (p. ${escapeHtml(row.fnctPage)}), but its host appendix names no Lepidoptera, and its one nc TX species is a riverbank tree with no Dallas record.`
+          : `${row.confirmedCount ? `<span class="pn-near">${row.confirmedCount} of them recorded near here.</span> ` : ''}Cited to FNCT p. ${escapeHtml(row.fnctPage)}.`;
+
+    return `<div class="pn-card${reject ? ' pn-card--reject' : ''}">
+      <span class="g">${escapeHtml(genus)}</span>
+      <span class="room">${escapeHtml(row.growthTier ? row.growthTier.room : 'Not in the natives catalog')}</span>
+      <span class="pn-pair">
+        <span class="pn-stat"><b class="no">${nwf}</b><i>NWF claim</i></span>
+        <span class="pn-stat"><b class="${row.lepHostCount ? 'ok' : 'no'}">${row.lepHostCount || 'none'}</b><i>FNCT hosts</i></span>
+      </span>
+      <span class="sub">${reading}</span>
+    </div>`;
+  });
+  $('pnCompare').innerHTML = cards.join('');
+}
+
 function renderHeadline() {
-  const confirmed = allRows.filter((r) => r.verdict === 'confirmed-local');
+  const confirmed = allRows.filter((r) => r.verdict === 'confirmed-local' && r.inCatalog);
   const rejected = allRows.filter((r) => r.verdict === 'rejected');
   const worstReject = rejected
     .filter((r) => r.lepHostSpecies)
     .sort((a, b) => b.lepHostSpecies - a.lepHostSpecies)[0];
-  const nearTaxa = new Set(
-    allRows.flatMap((r) => r.confirmedNearby.map((c) => c.species))
-  );
+  const nearTaxa = new Set(confirmed.flatMap((r) => r.confirmedNearby.map((c) => c.species)));
   const habits = new Set(confirmed.map((r) => r.habit).filter(Boolean));
 
   $('pnHeadline').innerHTML =
-    `<strong>${confirmed.length} genera</strong> clear the screen with at least one flora-cited ` +
-    `larval host confirmed near this site — ${nearTaxa.size} distinct butterflies and moths in all, ` +
-    `across ${habits.size} growth forms, from canopy trees to forbs. ` +
+    `<strong>${confirmed.length} genera</strong> in the Blackland natives catalog clear the screen with ` +
+    `at least one flora-cited larval host confirmed near this site — ${nearTaxa.size} distinct butterflies ` +
+    `and moths, across ${habits.size} growth forms, from canopy trees to forbs. ` +
     `<strong>${rejected.length} genera</strong> on the keystone list have no treatment in the flora at all` +
     (worstReject
       ? `, including <i>${escapeHtml(worstReject.genus)}</i>, which that list credits with ${worstReject.lepHostSpecies} caterpillar species.`
@@ -274,6 +324,7 @@ async function main() {
   });
 
   populateHabitFilter();
+  renderCompare();
   renderHeadline();
   ['pnVerdictFilter', 'pnHabitFilter'].forEach((id) =>
     $(id).addEventListener('change', () => renderTable())

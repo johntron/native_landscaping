@@ -289,6 +289,16 @@ export function screenKeystoneGenera({
       maxHeightFt: size?.maxHeightFt ?? null,
       catalogSpecies: size?.speciesCount || 0,
       catalogExamples: size?.examples || [],
+      // **Whether this is a RECOMMENDATION or merely a record.** Appendix Ten
+      // documents what Lepidoptera were observed using, which includes plants
+      // nobody should plant: Stenotaphrum (St. Augustine turf grass), Daucus,
+      // Trifolium and Sisymbrium all carry confirmed local butterflies. The
+      // clouded skipper really does use St. Augustine, and saying so to a
+      // native plant society as though it were advice would be the single
+      // worst error this page could make. The native catalog
+      // (blackland-prairie-natives.csv) is the screen that separates the two,
+      // and the UI must never present a genus it does not carry as a planting
+      // suggestion.
       inCatalog: Boolean(size),
       // Provenance
       tier: bestTier(tiers),

@@ -130,13 +130,24 @@
 
         <p class="pn-lede" id="pnHeadline"></p>
 
+        <!-- The six rows that carry the argument, fixed above the fold so the
+             demo never depends on driving a filter in front of a room. -->
+        <div class="pn-compare" id="pnCompare"></div>
+        <p class="data-note" style="margin:-0.8rem 0 1.2rem">
+          Six genera that carry the argument. <strong>NWF claim</strong> is caterpillar species for
+          the whole genus across a continental ecoregion; <strong>FNCT hosts</strong> is Lepidoptera
+          named for it in the flora's Appendix Ten for North Central Texas. The one-line reading
+          under each is mine, not either source's.
+        </p>
+
         <div class="pn-tier-key" id="pnTierKey"></div>
 
         <div class="pn-filters">
           <div class="pn-ctl">
             <label for="pnVerdictFilter">Evidence</label>
             <select id="pnVerdictFilter">
-              <option value="confirmed-local">Confirmed near this site</option>
+              <option value="recommendable">Plantable &amp; confirmed near this site</option>
+              <option value="confirmed-local">Any confirmed host (incl. non-natives)</option>
               <option value="flora-cited">Flora-cited hosts (any)</option>
               <option value="rejected">Rejected by the flora</option>
               <option value="renamed">Renamed since 1999</option>
