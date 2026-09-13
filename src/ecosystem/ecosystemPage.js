@@ -25,7 +25,7 @@ async function load() {
     );
     project = await loadProjectConfig(resolved.id, fetch, document.baseURI);
   } catch (err) {
-    rowsEl.innerHTML = `<tr><td colspan="5">Unable to load project configuration.</td></tr>`;
+    rowsEl.innerHTML = `<tr><td colspan="6">Unable to load project configuration.</td></tr>`;
     console.error(err);
     return;
   }
@@ -39,7 +39,7 @@ async function load() {
   const place = String(project.place || '').trim();
   if (titleEl) titleEl.textContent = `Nearby Ecosystem — ${project.name}`;
   if (!place) {
-    rowsEl.innerHTML = `<tr><td colspan="5">"${project.name}" declares no "place" in project.json — add one before indexing.</td></tr>`;
+    rowsEl.innerHTML = `<tr><td colspan="6">"${project.name}" declares no "place" in project.json — add one before indexing.</td></tr>`;
     return;
   }
   if (noteEl) {
@@ -56,7 +56,7 @@ async function load() {
 
   const response = await fetch(`/api/ecosystem?place=${encodeURIComponent(place)}`);
   if (!response.ok) {
-    rowsEl.innerHTML = `<tr><td colspan="5">Failed to load (${response.status}). Run <code>docker compose exec web npm run ecosystem:fetch -- --project ${project.id}</code> first.</td></tr>`;
+    rowsEl.innerHTML = `<tr><td colspan="6">Failed to load (${response.status}). Run <code>docker compose exec web npm run ecosystem:fetch -- --project ${project.id}</code> first.</td></tr>`;
     return;
   }
   const body = await response.json();
@@ -95,19 +95,31 @@ function render() {
         <td>${escapeHtml(r.common_name)}</td>
         <td>${r.radius_mi} mi</td>
         <td>${r.observation_count}</td>
+        <td>${inaturalistLink(r.taxon_id)}</td>
       </tr>`
     )
     .join('');
+}
+
+/**
+ * Links to the taxon's global observations list, not one scoped to our
+ * lat/lng — the app never sends the project's coordinates to the client
+ * (see projects/<id>/location.json, gitignored), so a location-scoped link
+ * would leak exactly what that convention protects.
+ */
+function inaturalistLink(taxonId) {
+  if (!taxonId) return '';
+  const url = `https://www.inaturalist.org/observations?taxon_id=${encodeURIComponent(taxonId)}`;
+  return `<a href="${url}" target="_blank" rel="noopener">View observations</a>`;
 }
 
 function escapeHtml(str) {
   return String(str ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 }
 
-document.querySelectorAll('.ecosystem-table th').forEach((th, i) => {
-  const keys = ['iconic_taxon', 'taxon_name', 'common_name', 'radius_mi', 'observation_count'];
+document.querySelectorAll('.ecosystem-table th[data-sort-key]').forEach((th) => {
   th.addEventListener('click', () => {
-    const key = keys[i];
+    const key = th.dataset.sortKey;
     sortDir = sortKey === key ? -sortDir : -1;
     sortKey = key;
     render();
