@@ -20,6 +20,7 @@ import {
   supersededBackgrounds,
 } from './src/data/backgroundStore.js';
 import { openEcosystemDb, listSpeciesObservations } from './tools/ecosystemIndexDb.js';
+import { excludeNonNative } from './src/analysis/establishmentMeans.js';
 
 const envPort = Number(process.env.PORT);
 const PORT = Number.isFinite(envPort) ? envPort : 8000;
@@ -281,7 +282,7 @@ const server = http.createServer(async (req, res) => {
       const place = url.searchParams.get('place') || 'home';
       const iconicTaxon = url.searchParams.get('taxon') || undefined;
       const db = openEcosystemDb();
-      const rows = listSpeciesObservations(db, { place, iconicTaxon });
+      const rows = excludeNonNative(listSpeciesObservations(db, { place, iconicTaxon }));
       // location.json is gitignored and otherwise server-only; only surfaced
       // here, per request, so the ecosystem page can link out to iNaturalist
       // scoped to the actual site rather than a generic global search.

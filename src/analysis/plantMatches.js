@@ -73,6 +73,45 @@ function rank(row) {
   return (row.lepHostSpecies ?? 0) * 2 + (row.beeSpecialistSpecies ?? 0);
 }
 
+/**
+ * How far a taxon group plausibly ranges to find a newly planted specimen —
+ * this module's own copy, deliberately NOT reusing
+ * `faunaMatches.js`'s `RANGE_THRESHOLD_MI` (an earlier advisor review flagged
+ * touching that tested, in-use rules-engine constant as scope creep for this
+ * module; its Insecta/Amphibia/Reptilia/Mammalia/Aves values do match it, but
+ * this one also needs a Plantae figure, which RANGE_THRESHOLD_MI has no
+ * reason to carry). Used only to scale the proximity weight below, not as an
+ * in/out cutoff like `faunaMatches.js`'s `inRange`.
+ */
+const TAXON_RANGE_MI = Object.freeze({
+  Insecta: 3,
+  Amphibia: 3,
+  Reptilia: 3,
+  Mammalia: 8,
+  Aves: 15,
+  Plantae: 5,
+});
+
+/**
+ * Weight in (0, 1], inversely proportional to distance and scaled by how far
+ * this taxon typically ranges: a bee 1mi away (a third of its ~3mi range) and
+ * a bird 5mi away (a third of its ~15mi range) score the same, even though
+ * the raw distances differ 5x — "close" is relative to the taxon, not an
+ * absolute mile figure. `radiusMi` is a coarse band (see RADII_MI_BY_TAXON in
+ * tools/fetch-ecosystem-index.mjs), not a measured distance, so this is a
+ * step function over those bands, not a smooth curve.
+ */
+function proximityWeight(radiusMi, iconicTaxon) {
+  const range = TAXON_RANGE_MI[iconicTaxon];
+  if (!Number.isFinite(range) || !Number.isFinite(radiusMi)) return 0;
+  return range / (range + radiusMi);
+}
+
+/** Sum of each confirmed-nearby animal's proximity weight — used only to order WITHIN the "has associated fauna" tier, never to cross it (see byPriority). */
+function faunaWeight(associatedFauna) {
+  return associatedFauna.reduce((sum, m) => sum + proximityWeight(m.nearestRadiusMi, m.iconicTaxon), 0);
+}
+
 function animalKey(name) {
   return String(name || '')
     .trim()
@@ -163,8 +202,22 @@ export function matchNearbyKeystoneGenera({
     }
   });
 
-  const byPriority = (a, b) =>
-    b.associatedFauna.length - a.associatedFauna.length || rank(b.hostGeneraRow) - rank(a.hostGeneraRow);
+  // Tiers first (has any confirmed-nearby associated fauna, or not) — same
+  // contract as before this weighting was added — then, within the
+  // "has fauna" tier, orders by summed proximity weight rather than raw
+  // count, so one bird confirmed close beats five bees confirmed at the
+  // edge of their range. Falls back to host-genera.csv's keystone rank on a
+  // tie (including the "no fauna" tier, where it's the only signal).
+  const byPriority = (a, b) => {
+    const aHasFauna = a.associatedFauna.length > 0;
+    const bHasFauna = b.associatedFauna.length > 0;
+    if (aHasFauna !== bHasFauna) return aHasFauna ? -1 : 1;
+    if (aHasFauna) {
+      const weightDiff = faunaWeight(b.associatedFauna) - faunaWeight(a.associatedFauna);
+      if (weightDiff) return weightDiff;
+    }
+    return rank(b.hostGeneraRow) - rank(a.hostGeneraRow);
+  };
   candidates.sort(byPriority);
   alreadyInCatalog.sort(byPriority);
 

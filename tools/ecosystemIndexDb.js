@@ -31,6 +31,15 @@ export function openEcosystemDb(path = DEFAULT_PATH) {
       PRIMARY KEY (place, iconic_taxon, taxon_name)
     )
   `);
+  // Added after the table already existed in the wild (gitignored, local —
+  // no migration needed beyond this guard). native/introduced/invasive/etc,
+  // per iNaturalist's preferred_establishment_means; see establishmentMeans.js.
+  const hasColumn = db
+    .prepare("SELECT 1 FROM pragma_table_info('species_observations') WHERE name = 'establishment_means'")
+    .get();
+  if (!hasColumn) {
+    db.exec('ALTER TABLE species_observations ADD COLUMN establishment_means TEXT');
+  }
   return db;
 }
 
@@ -41,8 +50,8 @@ export function replaceTaxonRows(db, place, iconicTaxon, rows) {
     db.prepare('DELETE FROM species_observations WHERE place = ? AND iconic_taxon = ?').run(place, iconicTaxon);
     const insert = db.prepare(`
       INSERT INTO species_observations
-        (place, iconic_taxon, taxon_name, taxon_id, common_name, genus, radius_mi, observation_count, photo_url, photo_attribution, fetched_on, source)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (place, iconic_taxon, taxon_name, taxon_id, common_name, genus, radius_mi, observation_count, photo_url, photo_attribution, fetched_on, source, establishment_means)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     for (const row of rows) {
       insert.run(
@@ -57,7 +66,8 @@ export function replaceTaxonRows(db, place, iconicTaxon, rows) {
         row.photo_url || '',
         row.photo_attribution || '',
         row.fetched_on,
-        row.source
+        row.source,
+        row.establishment_means || null
       );
     }
     db.exec('COMMIT');
