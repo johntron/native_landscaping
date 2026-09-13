@@ -73,9 +73,18 @@ export function createSetupPanel({
     return state.views.find((view) => view.id === state.selectedId) || null;
   }
 
-  /** Commit a transformed copy; the panel keeps no draft of its own. */
+  /**
+   * Commit a transformed copy; the panel keeps no draft of its own.
+   *
+   * Applying a field edit only updates the live project in memory — the title,
+   * the picker label, the drawing all update immediately, which looks exactly
+   * like a save. Set the reminder before calling onCommit: a rejected edit
+   * replaces it with the validation error via setStatus's own rerender, and an
+   * accepted one carries it into the render that follows.
+   */
   function commit(patch, nextSelectedId) {
     if (nextSelectedId !== undefined) state.selectedId = nextSelectedId;
+    state.status = { message: 'Not yet saved — click "Save views" to keep this change.', state: 'info' };
     onCommit?.({ ...state.project, ...patch });
   }
 
