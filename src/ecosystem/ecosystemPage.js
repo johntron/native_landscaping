@@ -1,18 +1,59 @@
-/** Standalone page: browse the local ecosystem index (nl-a7e). Reads /api/ecosystem, which reads data/ecosystem.db. */
+/** Page for browsing the local ecosystem index (nl-a7e). Reads /api/ecosystem, which reads data/ecosystem.db. */
+import { loadProjectIndex, loadProjectConfig, resolveActiveProjectId } from '../data/projectConfig.js';
+
+const PROJECT_QUERY_PARAM = 'project';
 
 const taxonFilter = document.getElementById('taxonFilter');
 const searchFilter = document.getElementById('searchFilter');
 const rowsEl = document.getElementById('ecosystemRows');
 const countEl = document.getElementById('ecosystemCount');
+const titleEl = document.getElementById('ecosystemTitle');
+const noteEl = document.getElementById('ecosystemNote');
+const navDesignLink = document.getElementById('navDesignLink');
 
 let allRows = [];
 let sortKey = 'observation_count';
 let sortDir = -1;
 
 async function load() {
-  const response = await fetch('/api/ecosystem?place=home');
+  let project;
+  try {
+    const projectIndex = await loadProjectIndex(fetch, document.baseURI);
+    const resolved = resolveActiveProjectId(
+      new URLSearchParams(window.location.search).get(PROJECT_QUERY_PARAM),
+      projectIndex
+    );
+    project = await loadProjectConfig(resolved.id, fetch, document.baseURI);
+  } catch (err) {
+    rowsEl.innerHTML = `<tr><td colspan="5">Unable to load project configuration.</td></tr>`;
+    console.error(err);
+    return;
+  }
+
+  if (navDesignLink) {
+    const url = new URL(navDesignLink.href);
+    url.searchParams.set(PROJECT_QUERY_PARAM, project.id);
+    navDesignLink.href = url.toString();
+  }
+
+  const place = String(project.place || '').trim();
+  if (titleEl) titleEl.textContent = `Nearby Ecosystem — ${project.name}`;
+  if (!place) {
+    rowsEl.innerHTML = `<tr><td colspan="5">"${project.name}" declares no "place" in project.json — add one before indexing.</td></tr>`;
+    return;
+  }
+  if (noteEl) {
+    noteEl.innerHTML = `Species reported on iNaturalist near "${place}", banded by how far each taxon
+      plausibly ranges to find a newly planted specimen. Indexing only — this does not yet
+      suggest which plants to add; see
+      <a href="tools/fetch-ecosystem-index.mjs">tools/fetch-ecosystem-index.mjs</a> for how the
+      index is built and refreshed
+      (<code>docker compose exec web npm run ecosystem:fetch -- --project ${project.id}</code>).`;
+  }
+
+  const response = await fetch(`/api/ecosystem?place=${encodeURIComponent(place)}`);
   if (!response.ok) {
-    rowsEl.innerHTML = `<tr><td colspan="5">Failed to load (${response.status}). Run <code>node tools/fetch-ecosystem-index.mjs --project backyard</code> first.</td></tr>`;
+    rowsEl.innerHTML = `<tr><td colspan="5">Failed to load (${response.status}). Run <code>docker compose exec web npm run ecosystem:fetch -- --project ${project.id}</code> first.</td></tr>`;
     return;
   }
   const body = await response.json();

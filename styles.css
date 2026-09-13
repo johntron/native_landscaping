@@ -45,6 +45,32 @@ h1 {
   letter-spacing: 0.01em;
 }
 
+.site-nav {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.site-nav__link {
+  color: #5a5a5a;
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding-bottom: 0.15rem;
+  border-bottom: 2px solid transparent;
+}
+
+.site-nav__link:hover {
+  color: #2f7a8c;
+}
+
+.site-nav__link--active {
+  color: #2f7a8c;
+  border-bottom-color: #2f7a8c;
+}
+
 .species-table__toggle-cell {
   display: none;
 }

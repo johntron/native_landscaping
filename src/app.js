@@ -183,6 +183,13 @@ async function init() {
     projectTitle.textContent = `${project.name} Visualization`;
   }
 
+  const navEcosystemLink = document.getElementById('navEcosystemLink');
+  if (navEcosystemLink) {
+    const url = new URL(navEcosystemLink.href);
+    url.searchParams.set(PROJECT_QUERY_PARAM, project.id);
+    navEcosystemLink.href = url.toString();
+  }
+
   initProjectPicker(projectSelect, projectIndex, project.id);
   initNewProjectForm({
     button: newProjectBtn,
