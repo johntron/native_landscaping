@@ -18,14 +18,38 @@
         <h1 id="ecosystemTitle">Nearby Ecosystem</h1>
         <p class="data-note" id="ecosystemNote">
           Species reported on iNaturalist near this project's site, banded by how far each taxon
-          plausibly ranges to find a newly planted specimen. Indexing only — this does not yet
-          suggest which plants to add; see
+          plausibly ranges to find a newly planted specimen. See
           <a href="tools/fetch-ecosystem-index.mjs">tools/fetch-ecosystem-index.mjs</a> for how the
           index is built and refreshed (<code>docker compose exec web npm run ecosystem:fetch -- --project &lt;id&gt;</code>).
         </p>
       </div>
     </header>
     <main class="ecosystem-page">
+      <section class="plant-matches" id="plantMatches">
+        <h2>Plant matches</h2>
+        <p class="data-note" id="plantMatchesNote"></p>
+        <div class="plant-matches__group">
+          <h3>Candidates to add</h3>
+          <p class="data-note">
+            Keystone or larval-host genera for this ecoregion (per
+            <a href="ecology/host-genera.csv">ecology/host-genera.csv</a>) that are confirmed
+            growing wild near this site, but the catalog carries no species in. Ranked by the
+            sourced NWF keystone counts, never by how many times iNaturalist happened to see one —
+            see the note above the "Local fauna support" check on the design page for why.
+          </p>
+          <ul class="plant-matches__list" id="plantMatchCandidates"></ul>
+        </div>
+        <div class="plant-matches__group">
+          <h3>Already in your catalog</h3>
+          <p class="data-note">
+            Keystone genera the catalog already carries that are also confirmed growing wild
+            nearby — real local evidence they belong here, on top of the ecoregion-wide claim.
+          </p>
+          <ul class="plant-matches__list" id="plantMatchCatalog"></ul>
+        </div>
+      </section>
+
+      <h2>Full index</h2>
       <div class="ecosystem-controls">
         <label for="taxonFilter">Taxon</label>
         <select id="taxonFilter">
