@@ -26,13 +26,14 @@
  *
  * Usage: node tools/fnct-genus-screen.mjs [--genus Quercus]
  */
-import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { parseCsv } from '../src/data/csvLoader.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const CORPUS_DIR = `${ROOT}docs/data-acquisition/corpus`;
 const HOST_GENERA = `${ROOT}ecology/host-genera.csv`;
+const LEP_HOSTS = `${ROOT}ecology/fnct-lepidoptera-hosts.csv`;
 const OUT_CSV = `${ROOT}ecology/fnct-genus-screen.csv`;
 
 /** "712 FAGACEAE/QUERCUS" (verso) or "QUERCUS/FAGACEAE 713" (recto). */
@@ -189,9 +190,16 @@ function main() {
   const corpus = loadCorpus();
   console.log(`Corpus: ${corpus.length} volumes, ${corpus.reduce((n, v) => n + v.lines.length, 0)} lines`);
 
-  const genera = only
-    ? [only]
-    : [...new Set(parseCsv(readFileSync(HOST_GENERA, 'utf8')).map((r) => String(r.genus || '').trim()))].filter(Boolean);
+  // Screen the keystone list AND every genus the flora's own host appendix
+  // names. Celtis is why: it is absent from NWF's top 30, so screening only
+  // the keystone list left the signature Blackland tree with no treatment row
+  // and it fell through as "unscreened" despite three butterflies confirmed
+  // within a mile of the site.
+  const fromKeystones = parseCsv(readFileSync(HOST_GENERA, 'utf8')).map((r) => String(r.genus || '').trim());
+  const fromAppendix = existsSync(LEP_HOSTS)
+    ? parseCsv(readFileSync(LEP_HOSTS, 'utf8')).map((r) => String(r.plant_genus || '').trim())
+    : [];
+  const genera = only ? [only] : [...new Set([...fromKeystones, ...fromAppendix])].filter(Boolean).sort();
 
   const rows = genera.map((genus) => {
     const result = screenGenus(genus, corpus);
