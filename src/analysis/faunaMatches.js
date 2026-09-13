@@ -25,6 +25,56 @@ import { isExcludedEstablishment } from './establishmentMeans.js';
  */
 
 /**
+ * What a GloBI verb actually witnesses, as three labels rather than one score.
+ *
+ * `category` in the CSV is deliberately coarse — two buckets, because
+ * tools/fetch-plant-animal-interactions.mjs found that GloBI's `eatenBy`
+ * conflates true herbivory with bees filed generically as "forages on", and
+ * refused to invent a split the data does not carry. This keeps that refusal
+ * and adds only what the raw verb genuinely distinguishes:
+ *
+ *   develops-on   the animal completes part of its life cycle ON the plant
+ *   consumes      the animal eats it; which tissue, and as what life stage,
+ *                 the record does not say
+ *   flower-visit  the animal was recorded at the flowers
+ *
+ * **`develops-on` is not a synonym for "caterpillar", and the counts prove
+ * the verbs are source-dependent rather than biological.** Against this
+ * repo's tables, only 7 of 22 screened genera carry ANY `hostOf` record near
+ * this site (18 records, against 112 `eatenBy`), Quercus's two are a gall
+ * wasp and a gall midge rather than any Lepidoptera, and Carya's walnut sphinx
+ * — unambiguously a caterpillar developing on the plant — arrives as
+ * `eatenBy`. So these labels say what was recorded, not what is true, and a
+ * reader must be shown both columns. Filtering to `develops-on` alone would
+ * silently drop real host records; that is why nothing here defaults to it.
+ */
+export const EVIDENCE_BY_INTERACTION_TYPE = Object.freeze({
+  hostOf: 'develops-on',
+  hasEggsLayedOnBy: 'develops-on',
+  eatenBy: 'consumes',
+  pollinatedBy: 'flower-visit',
+  flowersVisitedBy: 'flower-visit',
+  visitsFlowersOf: 'flower-visit',
+  visitedBy: 'flower-visit',
+});
+
+/** '' for a verb the fetch tool did not keep, so an unknown never reads as evidence. */
+export function evidenceKind(interactionType) {
+  return EVIDENCE_BY_INTERACTION_TYPE[String(interactionType || '').trim()] || '';
+}
+
+/**
+ * Which label to keep when one animal is recorded against one plant under
+ * several verbs — a strength ordering for DEDUPING ONLY, not a score anything
+ * is ranked or summed by.
+ */
+const EVIDENCE_RANK = { 'develops-on': 3, consumes: 2, 'flower-visit': 1 };
+
+function evidenceRank(evidence) {
+  return EVIDENCE_RANK[evidence] || 0;
+}
+
+/**
  * How far a taxon group plausibly ranges to find a newly planted specimen.
  * Reasoned defaults, not a sourced biological fact like host-genera.csv's
  * counts — the same kind of authored judgment threshold as AMPLE_SHARE in
@@ -110,29 +160,45 @@ export function emptyNearbyFaunaIndex() {
  * species are kept either way — no listing is not evidence of non-native
  * status (see establishmentMeans.js).
  *
+ * `evidence` labels each match per EVIDENCE_BY_INTERACTION_TYPE, and
+ * `evidenceKinds` narrows to the labels a caller wants. Read that constant's
+ * note before narrowing: the verbs are source-dependent, so asking for
+ * 'develops-on' alone drops real host records filed as 'consumes'.
+ *
  * @param {string} genus
- * @param {{ interactions: ReturnType<typeof buildInteractionsIndex>, nearbyFauna: ReturnType<typeof buildNearbyFaunaIndex>, place: string, nativeOnly?: boolean }} ctx
- * @returns {Array<{ animalSpecies: string, animalCommon: string, category: string, interactionType: string, iconicTaxon: string, nearestRadiusMi: number, observationCount: number, establishmentMeans: string, inRange: boolean }>}
+ * @param {{ interactions: ReturnType<typeof buildInteractionsIndex>, nearbyFauna: ReturnType<typeof buildNearbyFaunaIndex>, place: string, nativeOnly?: boolean, evidenceKinds?: Iterable<string> }} ctx
+ * @returns {Array<{ animalSpecies: string, animalCommon: string, category: string, interactionType: string, evidence: string, iconicTaxon: string, nearestRadiusMi: number, observationCount: number, establishmentMeans: string, inRange: boolean }>}
  */
-export function matchesForGenus(genus, { interactions, nearbyFauna, place, nativeOnly = false }) {
+export function matchesForGenus(
+  genus,
+  { interactions, nearbyFauna, place, nativeOnly = false, evidenceKinds = null }
+) {
+  const wantedEvidence = evidenceKinds ? new Set(evidenceKinds) : null;
   const nearby = nearbyFauna.forPlace(place);
   if (!nearby.size) return [];
-  const seen = new Set();
-  const matches = [];
+  // One row per animal per category, as before. But `category` is coarse
+  // enough that hostOf and eatenBy share the 'feeds-on' bucket, so which verb
+  // reached the reader used to depend on CSV row order. Now the strongest
+  // evidence recorded for that animal wins, which is deterministic and is the
+  // claim a reader would want: "developing on it" outranks "eating it".
+  const byDedupeKey = new Map();
   interactions.forGenus(genus).forEach((interaction) => {
     const key = animalKey(interaction.animalSpecies);
     const local = nearby.get(key);
     if (!local) return;
     if (nativeOnly && isExcludedEstablishment(local.establishmentMeans)) return;
+    const evidence = evidenceKind(interaction.interactionType);
+    if (wantedEvidence && !wantedEvidence.has(evidence)) return;
     const dedupeKey = `${key}|${interaction.category}`;
-    if (seen.has(dedupeKey)) return;
-    seen.add(dedupeKey);
+    const existing = byDedupeKey.get(dedupeKey);
+    if (existing && evidenceRank(evidence) <= evidenceRank(existing.evidence)) return;
     const threshold = RANGE_THRESHOLD_MI[local.iconicTaxon];
-    matches.push({
+    byDedupeKey.set(dedupeKey, {
       animalSpecies: local.animalSpecies,
       animalCommon: local.animalCommon || interaction.animalCommon,
       category: interaction.category,
       interactionType: interaction.interactionType,
+      evidence,
       iconicTaxon: local.iconicTaxon,
       nearestRadiusMi: local.nearestRadiusMi,
       observationCount: local.observationCount,
@@ -140,7 +206,7 @@ export function matchesForGenus(genus, { interactions, nearbyFauna, place, nativ
       inRange: Number.isFinite(threshold) ? local.nearestRadiusMi <= threshold : null,
     });
   });
-  return matches.sort((a, b) => a.nearestRadiusMi - b.nearestRadiusMi);
+  return [...byDedupeKey.values()].sort((a, b) => a.nearestRadiusMi - b.nearestRadiusMi);
 }
 
 /** Scientific names sometimes carry a trinomial subspecies on one side and not the other. */

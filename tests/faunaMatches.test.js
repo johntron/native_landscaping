@@ -5,6 +5,7 @@ import {
   buildNearbyFaunaIndex,
   emptyInteractionsIndex,
   emptyNearbyFaunaIndex,
+  evidenceKind,
   matchesForGenus,
   RANGE_THRESHOLD_MI,
 } from '../src/analysis/faunaMatches.js';
@@ -129,4 +130,63 @@ test('nativeOnly drops positively-introduced animals but keeps unassessed ones',
     names.includes('Bombus pensylvanicus'),
     'unassessed is not the same as introduced — it must survive the filter'
   );
+});
+
+// --- evidence labelling ---------------------------------------------------
+test('evidenceKind maps the kept verbs and refuses to guess at an unknown one', () => {
+  assert.equal(evidenceKind('hostOf'), 'develops-on');
+  assert.equal(evidenceKind('hasEggsLayedOnBy'), 'develops-on');
+  assert.equal(evidenceKind('eatenBy'), 'consumes');
+  assert.equal(evidenceKind('flowersVisitedBy'), 'flower-visit');
+  assert.equal(evidenceKind('adjacentTo'), '', 'a verb the fetch tool drops is not evidence');
+  assert.equal(evidenceKind(undefined), '');
+});
+
+// hostOf and eatenBy share the coarse 'feeds-on' category, so before the
+// strength ordering the surviving row — and therefore its label — depended on
+// which one the CSV happened to list first. Both orders must now agree.
+const BOTH_VERBS = (first, second) =>
+  [
+    'genus,animal_species,animal_common,category,interaction_type,synonym_of,source',
+    `Cercis,Hyphantria cunea,Fall Webworm Moth,feeds-on,${first},,globi`,
+    `Cercis,Hyphantria cunea,Fall Webworm Moth,feeds-on,${second},,globi`,
+  ].join('\n');
+
+const WEBWORM_NEARBY = [
+  'place,animal_species,animal_common,iconic_taxon,nearest_radius_mi,observation_count,establishment_means,fetched_on,source',
+  'home,Hyphantria cunea,Fall Webworm Moth,Insecta,1,12,native,2026-09-13,inat',
+].join('\n');
+
+for (const [first, second] of [
+  ['hostOf', 'eatenBy'],
+  ['eatenBy', 'hostOf'],
+]) {
+  test(`the strongest evidence wins regardless of row order (${first} then ${second})`, () => {
+    const matches = matchesForGenus('Cercis', {
+      interactions: buildInteractionsIndex(BOTH_VERBS(first, second)),
+      nearbyFauna: buildNearbyFaunaIndex(WEBWORM_NEARBY),
+      place: 'home',
+    });
+    assert.equal(matches.length, 1, 'still one row per animal per category');
+    assert.equal(matches[0].evidence, 'develops-on');
+    assert.equal(matches[0].interactionType, 'hostOf');
+  });
+}
+
+test('evidenceKinds narrows to the requested labels', () => {
+  const ctx = {
+    interactions: buildInteractionsIndex(ESTABLISHMENT_INTERACTIONS),
+    nearbyFauna: buildNearbyFaunaIndex(ESTABLISHMENT_FAUNA),
+    place: 'home',
+  };
+  const all = matchesForGenus('Quercus', ctx);
+  assert.ok(all.every((m) => m.evidence), 'every match carries a label');
+
+  const visits = matchesForGenus('Quercus', { ...ctx, evidenceKinds: ['flower-visit'] });
+  assert.deepEqual(
+    visits.map((m) => m.animalSpecies),
+    ['Bombus pensylvanicus']
+  );
+  const none = matchesForGenus('Quercus', { ...ctx, evidenceKinds: ['develops-on'] });
+  assert.deepEqual(none, [], 'no hostOf records in this fixture, and none are invented');
 });
