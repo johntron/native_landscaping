@@ -1,5 +1,13 @@
-/** Page for browsing the local ecosystem index (nl-a7e). Reads /api/ecosystem, which reads data/ecosystem.db. */
+/**
+ * Page for browsing the local ecosystem index (nl-a7e), plus its "next
+ * phase" (matchNearbyKeystoneGenera, see src/analysis/plantMatches.js):
+ * which ecoregion keystone/larval-host genera are confirmed growing wild
+ * near this site per /api/ecosystem, cross-referenced against the catalog.
+ */
 import { loadProjectIndex, loadProjectConfig, resolveActiveProjectId } from '../data/projectConfig.js';
+import { fetchCsv, parseCsv } from '../data/csvLoader.js';
+import { buildHostGeneraIndex, emptyHostGeneraIndex, describeHostGeneraRow } from '../analysis/hostGenera.js';
+import { catalogGenusKeys, matchNearbyKeystoneGenera } from '../analysis/plantMatches.js';
 
 const PROJECT_QUERY_PARAM = 'project';
 
@@ -10,6 +18,9 @@ const countEl = document.getElementById('ecosystemCount');
 const titleEl = document.getElementById('ecosystemTitle');
 const noteEl = document.getElementById('ecosystemNote');
 const navDesignLink = document.getElementById('navDesignLink');
+const plantMatchesNoteEl = document.getElementById('plantMatchesNote');
+const plantMatchCandidatesEl = document.getElementById('plantMatchCandidates');
+const plantMatchCatalogEl = document.getElementById('plantMatchCatalog');
 
 let allRows = [];
 let sortKey = 'observation_count';
@@ -71,6 +82,64 @@ async function load() {
     '<option value="">All</option>' + taxa.map((t) => `<option value="${t}">${t}</option>`).join('');
 
   render();
+  await loadPlantMatches(project);
+}
+
+/**
+ * The "next phase" cross-reference: ecoregion keystone/larval-host genera
+ * (ecology/host-genera.csv) confirmed growing wild near this site (allRows'
+ * Plantae entries), split by whether plants.csv already carries that genus.
+ * Loaded after the main index so a failure here never blocks the table above.
+ */
+async function loadPlantMatches(project) {
+  if (!project.ecoregion) {
+    plantMatchesNoteEl.textContent = `"${project.name}" declares no ecoregion, and the keystone lists are per ecoregion.`;
+    return;
+  }
+
+  let speciesRows = [];
+  let hostGenera = emptyHostGeneraIndex();
+  try {
+    const [plantsCsv, hostGeneraCsv] = await Promise.all([
+      fetchCsv(new URL('plants.csv', document.baseURI)),
+      fetchCsv(new URL('ecology/host-genera.csv', document.baseURI)),
+    ]);
+    speciesRows = parseCsv(plantsCsv);
+    hostGenera = buildHostGeneraIndex(hostGeneraCsv, { ecoregion: project.ecoregion });
+  } catch (err) {
+    plantMatchesNoteEl.textContent = 'Could not load the catalog or keystone genera table, so plant matches could not be computed.';
+    console.error(err);
+    return;
+  }
+
+  const { candidates, alreadyInCatalog } = matchNearbyKeystoneGenera({
+    observationRows: allRows,
+    hostGenera,
+    catalogGenusKeys: catalogGenusKeys(speciesRows),
+  });
+
+  plantMatchesNoteEl.textContent = candidates.length
+    ? `${candidates.length} keystone genus${candidates.length === 1 ? '' : 'es'} for ecoregion ${project.ecoregion} ${candidates.length === 1 ? 'is' : 'are'} confirmed growing wild near "${project.place}" and missing from the catalog.`
+    : `No ecoregion-${project.ecoregion} keystone genus confirmed nearby is missing from the catalog.`;
+
+  plantMatchCandidatesEl.innerHTML = candidates.length
+    ? candidates.map(renderPlantMatchItem).join('')
+    : '<li class="plant-matches__empty">None found.</li>';
+  plantMatchCatalogEl.innerHTML = alreadyInCatalog.length
+    ? alreadyInCatalog.map(renderPlantMatchItem).join('')
+    : '<li class="plant-matches__empty">None found.</li>';
+}
+
+function renderPlantMatchItem({ genus, hostGeneraRow, nearbySpecies }) {
+  const named = nearbySpecies
+    .slice(0, 4)
+    .map((s) => `${s.commonName || s.taxonName} (${s.radiusMi} mi)`)
+    .join(', ');
+  const more = nearbySpecies.length > 4 ? `, +${nearbySpecies.length - 4} more` : '';
+  return `<li class="plant-matches__item">
+    <strong>${escapeHtml(genus)}</strong> — ${escapeHtml(describeHostGeneraRow(hostGeneraRow))}.
+    <div class="plant-matches__nearby">Nearby: ${escapeHtml(named)}${escapeHtml(more)}</div>
+  </li>`;
 }
 
 function render() {
