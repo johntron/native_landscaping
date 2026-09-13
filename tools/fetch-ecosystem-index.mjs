@@ -213,18 +213,25 @@ async function fetchSpeciesCounts({ lat, lng, radiusMi, iconicTaxon, probeCache,
   // axolotl and red-eyed tree frog alongside actually-wild species.
   url.searchParams.set('captive', 'false');
   url.searchParams.set('quality_grade', 'research');
-  // Exclude species iNaturalist itself force-obscures regardless of observer
-  // choice (`taxon_geoprivacy`) — mostly raptors and poaching-targeted plants
-  // whose PUBLIC coordinates are a randomized point inside a large cell, not
-  // the true sighting. Confirmed on Haliaeetus leucocephalus (Bald Eagle):
-  // every nearby record had taxon_geoprivacy=obscured and
-  // public_positional_accuracy=29039m (~18 mi) — a "nearest radius: 8 mi"
-  // label on that would be false precision; the true location could be
-  // anywhere in an 18-mile circle. `geoprivacy=open` (the per-OBSERVATION
-  // setting) does NOT catch this — verified empirically the eagle still
-  // appears with that filter alone; taxon_geoprivacy=open is the one that
-  // actually excludes it.
+  // Two INDEPENDENT obscuring mechanisms, both of which randomize the public
+  // location within a large cell (not the true sighting), and both need
+  // excluding — one does not imply the other:
+  //  - taxon_geoprivacy=open: excludes species iNaturalist itself
+  //    force-obscures regardless of observer choice (raptors,
+  //    poaching-targeted plants). Confirmed on Haliaeetus leucocephalus
+  //    (Bald Eagle): every nearby record had taxon_geoprivacy=obscured,
+  //    public_positional_accuracy=29039m (~18 mi). geoprivacy=open alone did
+  //    NOT catch this — verified empirically the eagle still appeared.
+  //  - geoprivacy=open: excludes an individual OBSERVER's own choice to
+  //    obscure a record, independent of the species. Confirmed on a nearby
+  //    Phyllanthus polygonoides record: obscured=true, geoprivacy=obscured,
+  //    but taxon_geoprivacy=None — taxon_geoprivacy=open alone did NOT
+  //    catch this one; only adding geoprivacy=open did. Verified this
+  //    doesn't over-filter: it drops nearby Plantae results by only ~1.5%
+  //    (1062 -> 1046), not the near-total loss it'd be if "open" excluded
+  //    ordinary public records with no geoprivacy value set.
   url.searchParams.set('taxon_geoprivacy', 'open');
+  url.searchParams.set('geoprivacy', 'open');
 
   const { raw: body, cached: fromCache } = await cached(
     probeCache,
