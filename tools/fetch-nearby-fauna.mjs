@@ -20,6 +20,15 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { parseCsv } from '../src/data/csvLoader.js';
+import { openProbeCache, cached } from './usda-plants/probeCache.js';
+import {
+  MI_TO_KM,
+  USER_AGENT,
+  fetchEstablishmentMeans,
+  fetchWithBackoff,
+  resolvePlaceId,
+  sleep,
+} from './inatShared.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const OUT_CSV = `${ROOT}ecology/nearby-fauna.csv`;
@@ -45,8 +54,9 @@ async function main() {
   const args = process.argv.slice(2);
   const projectId = argAfter(args, '--project');
   const smoke = args.includes('--smoke');
+  const force = args.includes('--force');
   if (!projectId) {
-    console.error('Usage: node tools/fetch-nearby-fauna.mjs --project <id> [--smoke]');
+    console.error('Usage: node tools/fetch-nearby-fauna.mjs --project <id> [--smoke] [--force]');
     process.exit(1);
   }
 
@@ -71,8 +81,35 @@ async function main() {
   const radii = smoke ? [RADII_MI[Math.floor(RADII_MI.length / 2)]] : RADII_MI;
   const taxa = smoke ? [ICONIC_TAXA[0]] : ICONIC_TAXA;
 
+  // Same raw-response cache fetch-ecosystem-index.mjs uses, so re-deriving the
+  // CSV after a column change replays from disk instead of re-crawling.
+  const probeCache = openProbeCache();
+  const fetchJson = async (endpoint, url) => {
+    const { raw, cached: fromCache } = await cached(
+      probeCache,
+      'inaturalist',
+      endpoint,
+      url.toString(),
+      async () => {
+        const response = await fetchWithBackoff(url, { headers: { 'User-Agent': USER_AGENT } });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+      },
+      { force }
+    );
+    if (!fromCache) await sleep(REQUEST_DELAY_MS);
+    return raw;
+  };
+
   console.log(`Fetching nearby fauna for place "${place}" (lat=${lat}, lng=${lng})`);
   console.log(`Radii: ${radii.join(', ')} mi; taxa: ${taxa.join(', ')}`);
+
+  const placeId = await resolvePlaceId(lat, lng, { fetchJson });
+  if (placeId) {
+    console.log(`Native/introduced status will be checked against iNaturalist place_id=${placeId}`);
+  } else {
+    console.warn('Could not resolve a state/country place_id — establishment_means will be blank for every row.');
+  }
 
   // seen: nearest (smallest) radius a species was found at, across all iconic
   // taxa queried so far — radii are visited ascending so the first hit IS the
@@ -83,7 +120,7 @@ async function main() {
     for (const radius of radii) {
       let found = 0;
       try {
-        const results = await fetchSpeciesCounts({ lat, lng, radius, iconicTaxon });
+        const results = await fetchSpeciesCounts({ lat, lng, radiusMi: radius, iconicTaxon, fetchJson });
         results.forEach((entry) => {
           const key = `${iconicTaxon}|${entry.animal_species}`;
           if (seen.has(key)) return; // already have this species at a smaller radius
@@ -94,11 +131,27 @@ async function main() {
         console.warn(`  ${iconicTaxon} @ ${radius}mi: FAILED — ${err.message}`);
       }
       console.log(`  ${iconicTaxon} @ ${radius}mi: ${found} new species`);
-      await sleep(REQUEST_DELAY_MS);
     }
   }
 
   const newRows = [...seen.values()];
+
+  // Which of these are actually native here. Stored rather than filtered: the
+  // read side decides, and "unassessed" is not "introduced" — see
+  // src/analysis/establishmentMeans.js.
+  if (placeId && newRows.length) {
+    const meansById = await fetchEstablishmentMeans(
+      newRows.map((row) => Number(row.taxon_id)),
+      placeId,
+      { fetchJson }
+    );
+    newRows.forEach((row) => {
+      row.establishment_means = meansById.get(Number(row.taxon_id)) || '';
+    });
+    const flagged = newRows.filter((row) => row.establishment_means);
+    const introduced = newRows.filter((row) => row.establishment_means === 'introduced');
+    console.log(`\nestablishment_means resolved for ${flagged.length}/${newRows.length} species (${introduced.length} introduced)`);
+  }
   if (smoke) {
     console.log(`\n--smoke run: printing ${newRows.length} rows to stdout, NOT writing ecology/nearby-fauna.csv\n`);
     console.log(toCsv(newRows));
@@ -125,24 +178,23 @@ async function resolveCoordinates(location) {
   return { lat: Number(results[0].lat), lng: Number(results[0].lon) };
 }
 
-async function fetchSpeciesCounts({ lat, lng, radius, iconicTaxon }) {
+async function fetchSpeciesCounts({ lat, lng, radiusMi, iconicTaxon, fetchJson }) {
   const url = new URL('https://api.inaturalist.org/v1/observations/species_counts');
   url.searchParams.set('lat', lat);
   url.searchParams.set('lng', lng);
-  url.searchParams.set('radius', radius);
+  // The API's radius is in KM, not miles (nl-a8v). Passing the mile figure
+  // straight through is what made every band here roughly 0.62x its label.
+  url.searchParams.set('radius', (radiusMi * MI_TO_KM).toFixed(3));
   url.searchParams.set('iconic_taxa[]', iconicTaxon);
   url.searchParams.set('per_page', String(PER_TAXON_PAGE_SIZE));
   url.searchParams.set('order_by', 'observation_count'); // most-established local presence first
 
-  const response = await fetch(url, {
-    headers: { 'User-Agent': 'native-landscaping-app (ecology data fetch)' },
-  });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const body = await response.json();
+  const body = await fetchJson('observations/species_counts', url);
   return (body.results || [])
     .map((entry) => ({
       animal_species: entry.taxon?.name || '',
       animal_common: entry.taxon?.preferred_common_name || '',
+      taxon_id: entry.taxon?.id ?? '',
       observation_count: entry.count ?? '',
     }))
     .filter((row) => row.animal_species);
@@ -162,6 +214,7 @@ function mergeAndWrite(place, newRows) {
       iconic_taxon: row.iconic_taxon,
       nearest_radius_mi: row.nearest_radius_mi,
       observation_count: row.observation_count,
+      establishment_means: row.establishment_means || '',
       fetched_on: fetchedOn,
       source: 'api.inaturalist.org species_counts',
     })),
@@ -177,6 +230,7 @@ const CSV_HEADER = [
   'iconic_taxon',
   'nearest_radius_mi',
   'observation_count',
+  'establishment_means',
   'fetched_on',
   'source',
 ];
@@ -208,9 +262,6 @@ function argAfter(args, flag) {
   return idx >= 0 ? args[idx + 1] : null;
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 main().catch((err) => {
   console.error(err);

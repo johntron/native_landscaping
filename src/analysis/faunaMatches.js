@@ -1,5 +1,6 @@
 import { parseCsv } from '../data/csvLoader.js';
 import { normalizeGenus } from './hostGenera.js';
+import { isExcludedEstablishment } from './establishmentMeans.js';
 
 /**
  * Join two checked-in, sourced tables — same shape as ecology/host-genera.csv,
@@ -70,7 +71,8 @@ export function emptyInteractionsIndex() {
  *
  * Columns: place, animal_species, animal_common, iconic_taxon,
  * nearest_radius_mi (the smallest of the fetch tool's distance bands the
- * species was found within), observation_count, fetched_on, source.
+ * species was found within), observation_count, establishment_means,
+ * fetched_on, source.
  */
 export function buildNearbyFaunaIndex(csvText) {
   const rows = parseCsv(csvText || '').map(normalizeFaunaRow).filter((row) => row.place);
@@ -100,11 +102,19 @@ export function emptyNearbyFaunaIndex() {
  * Pure join, no scoring: `inRange` is the only judgement made, and it is a
  * distance comparison, not a likelihood estimate.
  *
+ * `establishmentMeans` rides along on every match, and `nativeOnly` drops the
+ * animals iNaturalist's checklist positively calls introduced/naturalized/
+ * invasive for this place. Off by default so existing callers are unchanged;
+ * a page arguing that a native plant supports local wildlife should turn it on,
+ * because a European Starling on that list argues the opposite. Unassessed
+ * species are kept either way — no listing is not evidence of non-native
+ * status (see establishmentMeans.js).
+ *
  * @param {string} genus
- * @param {{ interactions: ReturnType<typeof buildInteractionsIndex>, nearbyFauna: ReturnType<typeof buildNearbyFaunaIndex>, place: string }} ctx
- * @returns {Array<{ animalSpecies: string, animalCommon: string, category: string, interactionType: string, iconicTaxon: string, nearestRadiusMi: number, observationCount: number, inRange: boolean }>}
+ * @param {{ interactions: ReturnType<typeof buildInteractionsIndex>, nearbyFauna: ReturnType<typeof buildNearbyFaunaIndex>, place: string, nativeOnly?: boolean }} ctx
+ * @returns {Array<{ animalSpecies: string, animalCommon: string, category: string, interactionType: string, iconicTaxon: string, nearestRadiusMi: number, observationCount: number, establishmentMeans: string, inRange: boolean }>}
  */
-export function matchesForGenus(genus, { interactions, nearbyFauna, place }) {
+export function matchesForGenus(genus, { interactions, nearbyFauna, place, nativeOnly = false }) {
   const nearby = nearbyFauna.forPlace(place);
   if (!nearby.size) return [];
   const seen = new Set();
@@ -113,6 +123,7 @@ export function matchesForGenus(genus, { interactions, nearbyFauna, place }) {
     const key = animalKey(interaction.animalSpecies);
     const local = nearby.get(key);
     if (!local) return;
+    if (nativeOnly && isExcludedEstablishment(local.establishmentMeans)) return;
     const dedupeKey = `${key}|${interaction.category}`;
     if (seen.has(dedupeKey)) return;
     seen.add(dedupeKey);
@@ -125,6 +136,7 @@ export function matchesForGenus(genus, { interactions, nearbyFauna, place }) {
       iconicTaxon: local.iconicTaxon,
       nearestRadiusMi: local.nearestRadiusMi,
       observationCount: local.observationCount,
+      establishmentMeans: local.establishmentMeans,
       inRange: Number.isFinite(threshold) ? local.nearestRadiusMi <= threshold : null,
     });
   });
@@ -160,6 +172,7 @@ function normalizeFaunaRow(row) {
     iconicTaxon: String(row.iconic_taxon || '').trim(),
     nearestRadiusMi: Number(row.nearest_radius_mi),
     observationCount: Number(row.observation_count) || 0,
+    establishmentMeans: String(row.establishment_means || '').trim(),
     source: String(row.source || '').trim(),
   };
 }

@@ -79,3 +79,54 @@ test('empty indexes report zero size and never throw', () => {
     []
   );
 });
+
+// --- establishment_means (nl-a8v follow-on) -------------------------------
+// nearby-fauna.csv now carries iNaturalist's per-place establishment_means, so
+// a page arguing "this native plant feeds local wildlife" can stop citing
+// European Starlings as evidence.
+const ESTABLISHMENT_INTERACTIONS = [
+  'genus,animal_species,animal_common,category,interaction_type,synonym_of,source',
+  'Quercus,Erynnis horatius,Horace\'s Duskywing,feeds-on,eatenBy,,globi',
+  'Quercus,Sturnus vulgaris,European Starling,feeds-on,eatenBy,,globi',
+  'Quercus,Bombus pensylvanicus,American Bumble Bee,pollinator,flowersVisitedBy,,globi',
+].join('\n');
+
+const ESTABLISHMENT_FAUNA = [
+  'place,animal_species,animal_common,iconic_taxon,nearest_radius_mi,observation_count,establishment_means,fetched_on,source',
+  'home,Erynnis horatius,Horace\'s Duskywing,Insecta,3,4,native,2026-09-13,inat',
+  'home,Sturnus vulgaris,European Starling,Aves,1,900,introduced,2026-09-13,inat',
+  'home,Bombus pensylvanicus,American Bumble Bee,Insecta,3,20,,2026-09-13,inat',
+].join('\n');
+
+function establishmentCtx(extra = {}) {
+  return {
+    interactions: buildInteractionsIndex(ESTABLISHMENT_INTERACTIONS),
+    nearbyFauna: buildNearbyFaunaIndex(ESTABLISHMENT_FAUNA),
+    place: 'home',
+    ...extra,
+  };
+}
+
+test('establishment_means is parsed and carried onto every match', () => {
+  const matches = matchesForGenus('Quercus', establishmentCtx());
+  const byName = new Map(matches.map((m) => [m.animalSpecies, m.establishmentMeans]));
+  assert.equal(byName.get('Erynnis horatius'), 'native');
+  assert.equal(byName.get('Sturnus vulgaris'), 'introduced');
+  assert.equal(byName.get('Bombus pensylvanicus'), '', 'unassessed stays empty, not guessed');
+});
+
+test('matches stay unfiltered by default, so existing callers are unchanged', () => {
+  const matches = matchesForGenus('Quercus', establishmentCtx());
+  assert.equal(matches.length, 3);
+});
+
+test('nativeOnly drops positively-introduced animals but keeps unassessed ones', () => {
+  const matches = matchesForGenus('Quercus', establishmentCtx({ nativeOnly: true }));
+  const names = matches.map((m) => m.animalSpecies);
+  assert.ok(!names.includes('Sturnus vulgaris'), 'an introduced starling is not evidence for an oak');
+  assert.ok(names.includes('Erynnis horatius'));
+  assert.ok(
+    names.includes('Bombus pensylvanicus'),
+    'unassessed is not the same as introduced — it must survive the filter'
+  );
+});
