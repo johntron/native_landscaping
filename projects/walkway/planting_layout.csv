@@ -1,13 +1,11 @@
 id,botanical_name,x_ft,y_ft
-passiflora-incarnata-1,Passiflora incarnata,27.685,0.000
-lonicera-sempervirens-1,Lonicera sempervirens,25.295,1.366
-lonicera-sempervirens-1-copy,Lonicera sempervirens,25.303,5.127
-lonicera-sempervirens-1-copy-copy,Lonicera sempervirens,25.105,8.595
+lonicera-sempervirens-1,Lonicera sempervirens,25.295,1.571
+lonicera-sempervirens-1-copy,Lonicera sempervirens,25.609,5.139
+lonicera-sempervirens-1-copy-copy,Lonicera sempervirens,25.105,10.795
 lonicera-sempervirens-1-copy-copy-copy,Lonicera sempervirens,25.064,12.387
-lonicera-sempervirens-1-copy-copy-copy-copy,Lonicera sempervirens,24.977,16.300
-lonicera-sempervirens-1-copy-copy-copy-copy-copy,Lonicera sempervirens,24.875,20.326
-lonicera-sempervirens-1-copy-copy-copy-copy-copy-copy,Lonicera sempervirens,24.892,24.946
-lonicera-sempervirens-1-copy-copy-copy-copy-copy-copy-copy,Lonicera sempervirens,24.923,28.853
-matelea-gonocarpos-1,Matelea gonocarpos,25.000,33.298
-clematis-pitcheri-1,Clematis pitcheri,25.000,35.481
-passiflora-lutea-1,Passiflora lutea,25.000,37.444
+clematis-pitcheri-1,Clematis pitcheri,24.873,18.365
+passiflora-lutea-1,Passiflora lutea,27.448,4.073
+matelea-gonocarpos-1-copy,Matelea gonocarpos,28.323,0.000
+clematis-pitcheri-1-copy,Clematis pitcheri,26.100,29.084
+clematis-pitcheri-1-copy-2,Clematis pitcheri,24.899,25.059
+clematis-pitcheri-1-copy-3,Clematis pitcheri,24.951,21.982
