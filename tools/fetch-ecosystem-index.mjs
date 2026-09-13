@@ -1,0 +1,203 @@
+#!/usr/bin/env node
+/**
+ * Index plants AND animals reported nearby a project's site on iNaturalist,
+ * banded by a per-taxon dispersal radius, into a local SQLite file
+ * (data/ecosystem.db). Foundation for a future "which plants would expand
+ * the local ecosystem" page — this pass only indexes; it draws no
+ * plant-animal conclusions.
+ *
+ * Deliberately separate from tools/fetch-nearby-fauna.mjs, which already
+ * feeds the committed ecology/nearby-fauna.csv that src/analysis/ reads
+ * offline — that pipeline is tested and in active use, so this script does
+ * not touch it. This one covers a superset of taxa (adds Plantae), uses
+ * real per-taxon radius ranges instead of one shared band list, and writes
+ * to a gitignored SQLite index (like data/probe-cache.db) rather than a
+ * committed CSV, since it's meant to be rebuilt by re-running this script,
+ * not hand-curated.
+ *
+ * The exact coordinates never reach the index or git: they live in
+ * projects/<id>/location.json, which is gitignored (this repo is public).
+ *
+ * Usage:
+ *   node tools/fetch-ecosystem-index.mjs --project backyard
+ *   node tools/fetch-ecosystem-index.mjs --project backyard --smoke   # one taxon, one radius
+ */
+import { readFileSync, existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { openEcosystemDb, replaceTaxonRows } from './ecosystemIndexDb.js';
+
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
+
+/**
+ * Per-taxon radius bands, in miles, ascending. Reasoned defaults (not a
+ * sourced biological fact) based on typical foraging/dispersal range:
+ * flying pollinators and small ectotherms range least, birds most.
+ * Mirrors the ordering (though not the exact numbers) of
+ * src/analysis/faunaMatches.js's RANGE_THRESHOLD_MI, which uses a single
+ * per-taxon threshold for matching rather than bands for indexing.
+ */
+const RADII_MI_BY_TAXON = {
+  Plantae: [1, 3, 8, 15],
+  Amphibia: [1, 3, 8],
+  Reptilia: [1, 3, 8],
+  Insecta: [1, 3, 8, 15, 25],
+  Mammalia: [3, 8, 15, 25],
+  Aves: [5, 15, 25, 50],
+};
+
+const ICONIC_TAXA = Object.keys(RADII_MI_BY_TAXON);
+
+/** Sorted by observation count already; the long tail past this is mostly noise/vagrants for our purpose. */
+const PER_TAXON_PAGE_SIZE = 200;
+
+// iNaturalist's documented API guidance asks for roughly <=1 request/second
+// and a descriptive User-Agent; this script issues requests strictly
+// sequentially (never in parallel) and pads the delay a bit below that
+// ceiling rather than riding it exactly. A run indexes ~20-25 requests total
+// (taxa x radii), so this costs well under a minute, and results are cached
+// in SQLite so re-running only happens when the index is deliberately
+// refreshed, not on every page load.
+const REQUEST_DELAY_MS = 1500;
+
+/** Retry once with backoff on 429/5xx instead of immediately giving up or hammering the API. */
+async function fetchWithBackoff(url, options, attempt = 1) {
+  const response = await fetch(url, options);
+  if ((response.status === 429 || response.status >= 500) && attempt <= 3) {
+    const retryAfterMs = Number(response.headers.get('retry-after')) * 1000 || attempt * 5000;
+    console.warn(`  HTTP ${response.status} — backing off ${retryAfterMs}ms before retry ${attempt}/3`);
+    await sleep(retryAfterMs);
+    return fetchWithBackoff(url, options, attempt + 1);
+  }
+  return response;
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+  const projectId = argAfter(args, '--project');
+  const smoke = args.includes('--smoke');
+  if (!projectId) {
+    console.error('Usage: node tools/fetch-ecosystem-index.mjs --project <id> [--smoke]');
+    process.exit(1);
+  }
+
+  const locationPath = `${ROOT}projects/${projectId}/location.json`;
+  if (!existsSync(locationPath)) {
+    console.error(
+      `${locationPath} does not exist. Create it (gitignored) with { "lat": ..., "lng": ... } or { "address": "..." }.`
+    );
+    process.exit(1);
+  }
+  const location = JSON.parse(readFileSync(locationPath, 'utf8'));
+  const { lat, lng } = await resolveCoordinates(location);
+
+  const projectConfigPath = `${ROOT}projects/${projectId}/project.json`;
+  const projectConfig = JSON.parse(readFileSync(projectConfigPath, 'utf8'));
+  const place = String(projectConfig.place || '').trim();
+  if (!place) {
+    console.error(`projects/${projectId}/project.json declares no "place"; add one before fetching.`);
+    process.exit(1);
+  }
+
+  const taxa = smoke ? [ICONIC_TAXA[0]] : ICONIC_TAXA;
+
+  console.log(`Indexing ecosystem for place "${place}" (lat=${lat}, lng=${lng})`);
+  console.log(`Taxa: ${taxa.join(', ')}`);
+
+  const db = openEcosystemDb();
+  const fetchedOn = new Date().toISOString().slice(0, 10);
+
+  for (const iconicTaxon of taxa) {
+    const radii = smoke
+      ? [RADII_MI_BY_TAXON[iconicTaxon][Math.floor(RADII_MI_BY_TAXON[iconicTaxon].length / 2)]]
+      : RADII_MI_BY_TAXON[iconicTaxon];
+
+    // seen: nearest (smallest) radius a species was found at — radii are
+    // visited ascending so the first hit IS the nearest band.
+    const seen = new Map(); // key: taxon_name -> row
+
+    for (const radius of radii) {
+      let found = 0;
+      try {
+        const results = await fetchSpeciesCounts({ lat, lng, radius, iconicTaxon });
+        results.forEach((entry) => {
+          if (seen.has(entry.taxon_name)) return; // already have this species at a smaller radius
+          seen.set(entry.taxon_name, { ...entry, radius_mi: radius, fetched_on: fetchedOn, source: 'api.inaturalist.org species_counts' });
+          found += 1;
+        });
+      } catch (err) {
+        console.warn(`  ${iconicTaxon} @ ${radius}mi: FAILED — ${err.message}`);
+      }
+      console.log(`  ${iconicTaxon} @ ${radius}mi: ${found} new species`);
+      await sleep(REQUEST_DELAY_MS);
+    }
+
+    const rows = [...seen.values()];
+    if (smoke) {
+      console.log(`\n--smoke run: ${rows.length} ${iconicTaxon} rows, NOT writing data/ecosystem.db\n`);
+      console.log(rows.map((r) => `${r.taxon_name} (${r.common_name})\t${r.radius_mi}mi\t${r.observation_count}`).join('\n'));
+      continue;
+    }
+    replaceTaxonRows(db, place, iconicTaxon, rows);
+    console.log(`  Wrote ${rows.length} ${iconicTaxon} rows for "${place}"`);
+  }
+}
+
+async function resolveCoordinates(location) {
+  if (Number.isFinite(location.lat) && Number.isFinite(location.lng)) {
+    return { lat: location.lat, lng: location.lng };
+  }
+  if (!location.address) {
+    throw new Error('location.json has neither lat/lng nor an address');
+  }
+  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(location.address)}`;
+  const response = await fetch(url, {
+    headers: { 'User-Agent': 'native-landscaping-app (ecology data fetch)' },
+  });
+  if (!response.ok) throw new Error(`Geocoding failed: HTTP ${response.status}`);
+  const results = await response.json();
+  if (!results.length) throw new Error(`Geocoding found nothing for "${location.address}"`);
+  return { lat: Number(results[0].lat), lng: Number(results[0].lon) };
+}
+
+async function fetchSpeciesCounts({ lat, lng, radius, iconicTaxon }) {
+  const url = new URL('https://api.inaturalist.org/v1/observations/species_counts');
+  url.searchParams.set('lat', lat);
+  url.searchParams.set('lng', lng);
+  url.searchParams.set('radius', radius);
+  url.searchParams.set('iconic_taxa[]', iconicTaxon);
+  url.searchParams.set('per_page', String(PER_TAXON_PAGE_SIZE));
+  url.searchParams.set('order_by', 'observation_count'); // most-established local presence first
+  // Exclude pet-store/cultivated records and anything not vetted to species —
+  // without these, e.g. a Dallas search for Amphibia returns a captive
+  // axolotl and red-eyed tree frog alongside actually-wild species.
+  url.searchParams.set('captive', 'false');
+  url.searchParams.set('quality_grade', 'research');
+
+  const response = await fetchWithBackoff(url, {
+    headers: { 'User-Agent': 'native-landscaping-app (ecology data fetch; github.com/johntron/native_landscaping)' },
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const body = await response.json();
+  return (body.results || [])
+    .map((entry) => ({
+      taxon_name: entry.taxon?.name || '',
+      common_name: entry.taxon?.preferred_common_name || '',
+      genus: String(entry.taxon?.name || '').trim().split(/\s+/)[0] || '',
+      observation_count: entry.count ?? 0,
+    }))
+    .filter((row) => row.taxon_name);
+}
+
+function argAfter(args, flag) {
+  const idx = args.indexOf(flag);
+  return idx >= 0 ? args[idx + 1] : null;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

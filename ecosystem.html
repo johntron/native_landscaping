@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Nearby Ecosystem</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="ecosystem.css" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  </head>
+  <body>
+    <header class="page-header">
+      <div class="header-inner">
+        <h1>Nearby Ecosystem</h1>
+        <p class="data-note">
+          Species reported on iNaturalist near "home", banded by how far each taxon plausibly
+          ranges to find a newly planted specimen. Indexing only — this does not yet suggest
+          which plants to add; see <a href="tools/fetch-ecosystem-index.mjs">tools/fetch-ecosystem-index.mjs</a>
+          for how the index is built and refreshed.
+        </p>
+      </div>
+    </header>
+    <main class="ecosystem-page">
+      <div class="ecosystem-controls">
+        <label for="taxonFilter">Taxon</label>
+        <select id="taxonFilter">
+          <option value="">All</option>
+        </select>
+        <label for="searchFilter">Search</label>
+        <input type="search" id="searchFilter" placeholder="Species or common name" />
+        <span class="ecosystem-count" id="ecosystemCount"></span>
+      </div>
+      <table class="ecosystem-table">
+        <thead>
+          <tr>
+            <th>Taxon</th>
+            <th>Species</th>
+            <th>Common name</th>
+            <th>Nearest radius</th>
+            <th>Observations</th>
+          </tr>
+        </thead>
+        <tbody id="ecosystemRows"></tbody>
+      </table>
+    </main>
+    <script type="module" src="src/ecosystem/ecosystemPage.js"></script>
+  </body>
+</html>

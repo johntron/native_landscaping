@@ -19,6 +19,7 @@ import {
   sniffImageType,
   supersededBackgrounds,
 } from './src/data/backgroundStore.js';
+import { openEcosystemDb, listSpeciesObservations } from './tools/ecosystemIndexDb.js';
 
 const envPort = Number(process.env.PORT);
 const PORT = Number.isFinite(envPort) ? envPort : 8000;
@@ -271,6 +272,22 @@ const server = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ error: err.message }), () => {
         if (tooLarge) req.destroy();
       });
+    }
+    return;
+  }
+
+  if (pathname === '/api/ecosystem' && req.method === 'GET') {
+    try {
+      const place = url.searchParams.get('place') || 'home';
+      const iconicTaxon = url.searchParams.get('taxon') || undefined;
+      const db = openEcosystemDb();
+      const rows = listSpeciesObservations(db, { place, iconicTaxon });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ place, rows }));
+    } catch (err) {
+      console.error(err);
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
     }
     return;
   }
