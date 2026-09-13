@@ -35,14 +35,13 @@ import { createFeaturePanel } from './interaction/featurePanel.js';
 import { normalizeFeatures } from './data/featureConfig.js';
 import { createFeatureController } from './interaction/featureController.js';
 import { analyzeEcology, buildEcologyContext } from './analysis/ecology.js';
-import { buildHostGeneraIndex, emptyHostGeneraIndex, ecologicalFitNotes } from './analysis/hostGenera.js';
+import { emptyHostGeneraIndex, ecologicalFitNotes } from './analysis/hostGenera.js';
 import {
-  buildInteractionsIndex,
-  buildNearbyFaunaIndex,
   emptyInteractionsIndex,
   emptyNearbyFaunaIndex,
   matchesForGenus,
 } from './analysis/faunaMatches.js';
+import { loadEcologyTables } from './data/ecologyTables.js';
 import { renderEcologyPanel } from './render/ecologyPanel.js';
 import {
   clearFeatureOverlay,
@@ -1307,34 +1306,17 @@ async function init() {
   }
 
   try {
-    const [speciesCsv, layoutCsv, hostGeneraCsv, interactionsCsv, nearbyFaunaCsv] = await Promise.all([
+    const [speciesCsv, layoutCsv, ecology] = await Promise.all([
       fetchCsv(new URL('plants.csv', document.baseURI)),
       fetchCsv(new URL(projectLayoutPath(project.id), document.baseURI)),
-      // A missing or unreadable table costs checks, not the app: caught here
-      // so it can never join the failure path above, which stops the yard
-      // rendering at all.
-      fetchCsv(new URL('ecology/host-genera.csv', document.baseURI)).catch((err) => {
-        console.warn('Ecology host-genera table unavailable; genus checks will report as not declared', err);
-        return '';
-      }),
-      fetchCsv(new URL('ecology/plant-animal-interactions.csv', document.baseURI)).catch((err) => {
-        console.warn('Plant-animal interaction table unavailable; local fauna check will report as not declared', err);
-        return '';
-      }),
-      fetchCsv(new URL('ecology/nearby-fauna.csv', document.baseURI)).catch((err) => {
-        console.warn('Nearby-fauna table unavailable; local fauna check will report as not declared', err);
-        return '';
-      }),
+      // A missing or unreadable ecology table costs checks, not the app, so
+      // this never joins the failure path above — which stops the yard
+      // rendering at all. loadEcologyTables owns that tolerance.
+      loadEcologyTables({ ecoregion: project.ecoregion }),
     ]);
-    if (hostGeneraCsv) {
-      appState.hostGenera = buildHostGeneraIndex(hostGeneraCsv, { ecoregion: project.ecoregion });
-    }
-    if (interactionsCsv) {
-      appState.interactions = buildInteractionsIndex(interactionsCsv);
-    }
-    if (nearbyFaunaCsv) {
-      appState.nearbyFauna = buildNearbyFaunaIndex(nearbyFaunaCsv);
-    }
+    appState.hostGenera = ecology.hostGenera;
+    appState.interactions = ecology.interactions;
+    appState.nearbyFauna = ecology.nearbyFauna;
     loadedSpeciesCsv = speciesCsv;
     appState.species = parseSpeciesCsv(speciesCsv);
     const initialPlants = buildPlantsFromCsv(speciesCsv, layoutCsv);

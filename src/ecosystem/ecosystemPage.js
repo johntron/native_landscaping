@@ -6,9 +6,9 @@
  */
 import { loadProjectIndex, loadProjectConfig, resolveActiveProjectId } from '../data/projectConfig.js';
 import { fetchCsv, parseCsv } from '../data/csvLoader.js';
-import { buildHostGeneraIndex, emptyHostGeneraIndex, describeHostGeneraRow } from '../analysis/hostGenera.js';
-import { buildInteractionsIndex, emptyInteractionsIndex } from '../analysis/faunaMatches.js';
+import { describeHostGeneraRow } from '../analysis/hostGenera.js';
 import { catalogGenusKeys, matchNearbyKeystoneGenera } from '../analysis/plantMatches.js';
+import { loadEcologyTables } from '../data/ecologyTables.js';
 
 const PROJECT_QUERY_PARAM = 'project';
 
@@ -103,21 +103,27 @@ async function loadPlantMatches(project) {
     return;
   }
 
+  // The catalog is required — without it there is no "already carried" split to
+  // make — but a missing ecology table only empties an index, and an empty index
+  // is what these matchers are written to return nothing from. So only the
+  // catalog fetch aborts; loadEcologyTables absorbs the rest and says what it lost.
   let speciesRows = [];
-  let hostGenera = emptyHostGeneraIndex();
-  let interactions = emptyInteractionsIndex();
+  let ecology;
   try {
-    const [plantsCsv, hostGeneraCsv, interactionsCsv] = await Promise.all([
+    const [plantsCsv, tables] = await Promise.all([
       fetchCsv(new URL('plants.csv', document.baseURI)),
-      fetchCsv(new URL('ecology/host-genera.csv', document.baseURI)),
-      fetchCsv(new URL('ecology/plant-animal-interactions.csv', document.baseURI)),
+      loadEcologyTables({ ecoregion: project.ecoregion }),
     ]);
     speciesRows = parseCsv(plantsCsv);
-    hostGenera = buildHostGeneraIndex(hostGeneraCsv, { ecoregion: project.ecoregion });
-    interactions = buildInteractionsIndex(interactionsCsv);
+    ecology = tables;
   } catch (err) {
-    plantMatchesNoteEl.textContent = 'Could not load the catalog or keystone genera table, so plant matches could not be computed.';
+    plantMatchesNoteEl.textContent = 'Could not load the plant catalog, so plant matches could not be computed.';
     console.error(err);
+    return;
+  }
+  const { hostGenera, interactions } = ecology;
+  if (ecology.warnings.length) {
+    plantMatchesNoteEl.textContent = `Some ecology tables did not load, so this list is incomplete: ${ecology.warnings.join('; ')}.`;
     return;
   }
 
