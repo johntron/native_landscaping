@@ -180,6 +180,40 @@ test('synonym_of resolves so Packera carries Senecio\'s keystone counts', () => 
   assert.equal(packera.hostGeneraRow.beeSpecialistSpecies, 22);
 });
 
+test('within the associated-fauna tier, a closer-for-its-taxon match outranks a farther one, overriding keystone rank', () => {
+  const hostGenera = buildHostGeneraIndex(HOST_GENERA_CSV, { ecoregion: '9' });
+  const interactionsCsv = `genus,animal_species,animal_common,category,interaction_type,synonym_of,source
+Senecio,Bombus pensylvanicus,American bumblebee,pollinator,visitsFlowersOf,,test
+Rubus,Cardinalis cardinalis,Northern cardinal,feeds-on,eats,,test
+`;
+  const interactions = buildInteractionsIndex(interactionsCsv);
+  const rows = [
+    // Senecio (higher keystone rank, 22): one insect at the edge of Insecta's ~3mi range — weight 0.5.
+    observation({ taxon: 'Insecta', name: 'Bombus pensylvanicus', radius: 3 }),
+    // Rubus (lower keystone rank, 20): one bird close for Aves's much wider ~15mi range — weight 0.9375.
+    observation({ taxon: 'Aves', name: 'Cardinalis cardinalis', radius: 1 }),
+  ];
+
+  const { candidates } = matchNearbyKeystoneGenera({
+    observationRows: rows,
+    hostGenera,
+    catalogGenusKeys: new Set(),
+    interactions,
+    place: 'home',
+  });
+
+  const rubus = candidates.find((c) => c.genus === 'Rubus');
+  const senecio = candidates.find((c) => c.genus === 'Senecio');
+  assert.equal(rubus.associatedFauna.length, 1);
+  assert.equal(senecio.associatedFauna.length, 1);
+  // Both have exactly one associated-fauna match, so the OLD count-then-rank
+  // tiebreak would have put Senecio (rank 22) ahead of Rubus (rank 20).
+  // Proximity-weighted, Rubus's close-for-a-bird match (0.9375) outweighs
+  // Senecio's at-the-edge-of-range insect (0.5), flipping the order.
+  const order = candidates.map((c) => c.genus);
+  assert.ok(order.indexOf('Rubus') < order.indexOf('Senecio'));
+});
+
 test('nearby Plantae observations still show as secondary evidence when present', () => {
   const hostGenera = buildHostGeneraIndex(HOST_GENERA_CSV, { ecoregion: '9' });
   const rows = [observation({ name: 'Quercus shumardii', genus: 'Quercus', radius: 1 })];

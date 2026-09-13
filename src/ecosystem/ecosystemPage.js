@@ -63,7 +63,10 @@ async function load() {
       (<code>docker compose exec web npm run ecosystem:fetch -- --project ${project.id}</code>).
       Species iNaturalist itself hides the true location of (protected raptors, poaching-targeted
       plants — e.g. Bald Eagle) are left out entirely, since their public coordinates are a randomized
-      point that can be tens of miles off, making any radius label for them meaningless.`;
+      point that can be tens of miles off, making any radius label for them meaningless. Species
+      iNaturalist's own checklists flag as introduced, naturalized, or invasive in this state are
+      excluded too (a species with no checklist entry is left in — unassessed isn't the same as
+      non-native).`;
   }
 
   const response = await fetch(

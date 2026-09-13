@@ -39,6 +39,7 @@ import { openEcosystemDb, replaceTaxonRows } from './ecosystemIndexDb.js';
 // response we already have (a filter tweak, a new taxon) replays from disk
 // instead of a fresh ~25-request crawl; --force bypasses it for a real refresh.
 import { openProbeCache, cached } from './usda-plants/probeCache.js';
+import { isExcludedEstablishment } from '../src/analysis/establishmentMeans.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 
@@ -118,6 +119,12 @@ async function main() {
   const location = JSON.parse(readFileSync(locationPath, 'utf8'));
   const probeCache = openProbeCache();
   const { lat, lng } = await resolveCoordinates(location, probeCache, force);
+  const placeId = await resolvePlaceId(lat, lng, probeCache, force);
+  if (placeId) {
+    console.log(`Native/introduced status will be checked against iNaturalist place_id=${placeId}`);
+  } else {
+    console.warn('Could not resolve a state/country place_id — establishment_means will be left blank for every row (nothing excluded).');
+  }
 
   const projectConfigPath = `${ROOT}projects/${projectId}/project.json`;
   const projectConfig = JSON.parse(readFileSync(projectConfigPath, 'utf8'));
@@ -163,7 +170,28 @@ async function main() {
       if (!wasCached) await sleep(REQUEST_DELAY_MS);
     }
 
-    const rows = [...seen.values()];
+    let rows = [...seen.values()];
+    if (placeId) {
+      const meansById = await fetchEstablishmentMeans(
+        rows.map((r) => r.taxon_id).filter((id) => Number.isFinite(id)),
+        placeId,
+        probeCache,
+        force
+      );
+      rows = rows.map((r) => ({ ...r, establishment_means: meansById.get(r.taxon_id) || null }));
+      // Stored, not filtered out here — data/ecosystem.db keeps every row
+      // (see establishmentMeans.js for why: "unassessed" isn't "native", and
+      // the page's own "N of M species" count wants the full picture). The
+      // read side (server.js /api/ecosystem) excludes introduced/naturalized/
+      // invasive rows by default.
+      const excluded = rows.filter((r) => isExcludedEstablishment(r.establishment_means));
+      if (excluded.length) {
+        console.log(
+          `  Flagged ${excluded.length} non-native/invasive ${iconicTaxon} (kept in the index, excluded from the page): ${excluded.map((r) => `${r.taxon_name} (${r.establishment_means})`).join(', ')}`
+        );
+      }
+    }
+
     if (smoke) {
       console.log(`\n--smoke run: ${rows.length} ${iconicTaxon} rows, NOT writing data/ecosystem.db\n`);
       console.log(rows.map((r) => `${r.taxon_name} (${r.common_name})\t${r.radius_mi}mi\t${r.observation_count}`).join('\n'));
@@ -198,6 +226,88 @@ async function resolveCoordinates(location, probeCache, force) {
   );
   if (!results.length) throw new Error(`Geocoding found nothing for "${location.address}"`);
   return { lat: Number(results[0].lat), lng: Number(results[0].lon) };
+}
+
+// iNaturalist per-taxon "listed_taxa" (native/introduced/invasive/etc,
+// preferred_establishment_means) is checklist data scoped to a PLACE, and
+// coverage varies wildly by which place: empirically, for a Dallas, TX site,
+// the county checklist (place_type 9) flagged only ~15-30% of nearby species,
+// while the STATE checklist (place_type 8) flagged 70-100% of the same
+// species (verified against a 60-species sample spanning Plantae/Aves/
+// Insecta — Columba livia, Apis mellifera, Ligustrum quihoui, Melia
+// azedarach all correctly came back "introduced" at state level; several
+// were unlisted at county level). So this deliberately prefers state
+// (place_type 8) over the finer county, falling back to country (12) if a
+// site has no enclosing state (non-US), and to nothing if neither resolves
+// — leaving establishment_means blank for every row, which excludes nothing
+// (see establishmentMeans.js: unassessed is not the same as non-native).
+const PREFERRED_PLACE_TYPES = [8, 12];
+const PLACE_BBOX_DEG = 0.05;
+
+async function resolvePlaceId(lat, lng, probeCache, force) {
+  const url = new URL('https://api.inaturalist.org/v1/places/nearby');
+  url.searchParams.set('swlat', lat - PLACE_BBOX_DEG);
+  url.searchParams.set('swlng', lng - PLACE_BBOX_DEG);
+  url.searchParams.set('nelat', lat + PLACE_BBOX_DEG);
+  url.searchParams.set('nelng', lng + PLACE_BBOX_DEG);
+  const { raw: body } = await cached(
+    probeCache,
+    'inaturalist',
+    'places/nearby',
+    url.toString(),
+    async () => {
+      const response = await fetchWithBackoff(url, {
+        headers: { 'User-Agent': 'native-landscaping-app (ecology data fetch; github.com/johntron/native_landscaping)' },
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    },
+    { force }
+  );
+  const standard = body.results?.standard || [];
+  for (const placeType of PREFERRED_PLACE_TYPES) {
+    const match = standard.find((p) => p.place_type === placeType);
+    if (match) return match.id;
+  }
+  return null;
+}
+
+/** Batches taxon ids (iNaturalist's /v1/taxa/{ids} rejects more than 30 at once — verified empirically). */
+const TAXA_IDS_PER_REQUEST = 30;
+
+async function fetchEstablishmentMeans(taxonIds, placeId, probeCache, force) {
+  const uniqueIds = [...new Set(taxonIds)];
+  const meansById = new Map();
+  for (let i = 0; i < uniqueIds.length; i += TAXA_IDS_PER_REQUEST) {
+    const chunk = uniqueIds.slice(i, i + TAXA_IDS_PER_REQUEST);
+    const url = new URL(`https://api.inaturalist.org/v1/taxa/${chunk.join(',')}`);
+    url.searchParams.set('preferred_place_id', String(placeId));
+    let wasCached = true;
+    try {
+      const { raw: body, cached: fromCache } = await cached(
+        probeCache,
+        'inaturalist',
+        'taxa/preferred_establishment_means',
+        url.toString(),
+        async () => {
+          const response = await fetchWithBackoff(url, {
+            headers: { 'User-Agent': 'native-landscaping-app (ecology data fetch; github.com/johntron/native_landscaping)' },
+          });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return response.json();
+        },
+        { force }
+      );
+      wasCached = fromCache;
+      (body.results || []).forEach((taxon) => {
+        if (taxon.preferred_establishment_means) meansById.set(taxon.id, taxon.preferred_establishment_means);
+      });
+    } catch (err) {
+      console.warn(`  establishment_means lookup FAILED for a batch of ${chunk.length} taxa — ${err.message}`);
+    }
+    if (!wasCached) await sleep(REQUEST_DELAY_MS);
+  }
+  return meansById;
 }
 
 async function fetchSpeciesCounts({ lat, lng, radiusMi, iconicTaxon, probeCache, force }) {
