@@ -28,7 +28,21 @@ The priority is **ecological legibility and usability**, not UI flashiness.
 ## Current Tech Stack
 
 - Plain HTML + CSS + ES modules (no bundler or build step).
-- `index.html` loads `src/app.js`, which orchestrates CSV loading, state, and rendering.
+- `index.html` is the **patch-network argument** (`src/patchnetwork/patchNetworkPage.js`) and
+  the site's landing page. It needs no project: it argues at the scale of a bird territory.
+- `design.html` loads `src/app.js`, which orchestrates CSV loading, state, and rendering. This is
+  the per-yard tool, reached by picking a yard in the handoff section of `index.html`; it is
+  project-scoped via `?project=<slug>`.
+- The **nearby ecosystem** is split: the plant-matches lookup is a drawer
+  (`src/ui/ecosystemDrawer.js`) available on any page carrying a `?project=`, and the full
+  observation index stays at `ecosystem.html`. Both compute matches through
+  `src/ecosystem/plantMatches.view.js` so they cannot disagree.
+- Colour lives in the token block at the top of `styles.css` -- a theme is a change to that
+  block. The rule the tokens encode: **amber means life, and only data glows**; cyan is the
+  apparatus that measures it. Chrome never glows.
+- Reference apparatus (column definitions, page cites, sources) sits behind click-to-open
+  disclosure markers (`src/ui/disclosure.js`); the caveats and the three asks stay visible,
+  because they are what the page is asking the reader to argue with.
 - `styles.css` handles layout plus the diagrammatic backdrops (WebP files in `img/`).
 - Data lives in `plants.csv` (species) and `planting_layout.csv` (placements).
 - All JavaScript is split into focused modules under `src/`:
@@ -898,12 +912,12 @@ When the user delegates work, here are examples of useful tasks:
 
 - Run `npm test` to execute `node tests/run-tests.cjs`, which covers the layout history stack and the persistence module (ensuring the app hits `/api/layout` when committing changes).
 - Run `npm run serve` (or `node server.js`) to launch the bundled static + persistence server locally — but the deployed instance is the Docker `web` service, and every change ends with `docker compose restart web`; see **Dev Workflow**. `/api/layout`, `/api/history`, `/api/history/cursor`, `/api/project`, `/api/features`, and `/api/view-background` are all scoped by a required `?project=<slug>` query parameter and write inside that project's directory only.
-- No external dependencies are required to execute `npm test`; `npm run test:e2e` needs the `@playwright/test` devDependency (see below). Run `npm install` once before serving the app: `index.html` loads JSZip from `node_modules/jszip/dist/jszip.min.js`.
+- No external dependencies are required to execute `npm test`; `npm run test:e2e` needs the `@playwright/test` devDependency (see below). Run `npm install` once before serving the app: `design.html` loads JSZip from `node_modules/jszip/dist/jszip.min.js`.
 
 ### End-to-end browser tests (Playwright)
 
 `npm run test:e2e` runs the Playwright suite in `tests-e2e/`. It boots `node server.js`
-on port `8123` (override with `E2E_PORT`) and drives the real `index.html` in Chrome.
+on port `8123` (override with `E2E_PORT`) and drives the real `design.html` in Chrome.
 
 - Specs live in `tests-e2e/`, **not** `tests/` — `tests/run-tests.cjs` auto-discovers every
   `*.test.js`/`*.test.cjs` under `tests/` and runs it with `node --test`, which cannot

@@ -14,7 +14,9 @@ server), `codegraph explore/node/callers/impact` for code intelligence (also ava
 Multi-project layout: `plants.csv` at the root is the shared species catalog; each yard
 lives in `projects/<slug>/` (`project.json`, `planting_layout.csv`, `img/`, and an
 optional `features.json`) and is listed in `projects/index.json`. The active project comes
-from `?project=<slug>`; switching reloads the page.
+from `?project=<slug>`; switching reloads the page. **`/` is the patch-network argument**
+(`index.html`, project-agnostic); the yard tool is `design.html`, entered by picking a yard in
+the argument page's handoff section.
 
 **`project.json` declares one yard** — `yardFt` (east-west × north-south), `paddingFt`,
 `elevationFt` (above/below the ground line), `pxPerFt` — and **every view's rectangle is
