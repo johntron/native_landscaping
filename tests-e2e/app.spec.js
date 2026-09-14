@@ -545,7 +545,7 @@ test.describe('project switching', () => {
   });
 
   test('an unknown project falls back to the default and says so', async ({ page }) => {
-    await page.goto('/index.html?project=does-not-exist');
+    await page.goto('/design.html?project=does-not-exist');
     await expect(page.locator('#projectNotice')).toBeVisible();
     await expect(page.locator('#projectNotice')).toContainText('does-not-exist');
     await expect(page.locator('#topSvg g[data-plant-id]').first()).toBeVisible();
@@ -568,7 +568,7 @@ test.describe('hand-edited layout mistakes', () => {
       route.fulfill({ status: 200, contentType: 'text/csv', body: badLayoutCsv })
     );
 
-    await page.goto('/index.html?project=example-frontyard');
+    await page.goto('/design.html?project=example-frontyard');
 
     const banner = page.locator('.error-banner');
     await expect(banner).toBeVisible();

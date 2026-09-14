@@ -24,6 +24,7 @@ import {
 } from '../analysis/keystoneScreen.js';
 import { buildGrid, buildOrders, evaluate, renderSvg, verdictText } from './territoryMap.js';
 import { initDisclosures } from '../ui/disclosure.js';
+import { initHandoff } from './handoff.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -339,6 +340,9 @@ async function main() {
 // The markers in the static markup must work even if the data never loads --
 // otherwise a fetch failure turns every citation into a dead button.
 initDisclosures();
+// Independent of the screened table: the picker must work even if the flora
+// data fails to load.
+initHandoff();
 
 main().catch((err) => {
   console.error(err);

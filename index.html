@@ -2,234 +2,302 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Backyard Visualization</title>
+    <title>Blackland Patch Network</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- The main stylesheet defines the page layout and backgrounds for each view. -->
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="patch-network.css" />
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   </head>
   <body>
     <header class="page-header">
       <div class="header-inner">
         <nav class="site-nav">
-          <a href="index.html" class="site-nav__link site-nav__link--active">Design</a>
-          <a href="ecosystem.html" class="site-nav__link" id="navEcosystemLink">Nearby ecosystem</a>
-          <a href="patch-network.html" class="site-nav__link">Patch network</a>
+          <a href="index.html" class="site-nav__link site-nav__link--active">The argument</a>
+          <a href="design.html" class="site-nav__link" id="navDesignLink">Your yard</a>
         </nav>
-        <h1 id="projectTitle">Backyard Visualization</h1>
+        <h1>Blackland Patch Network</h1>
         <p class="data-note">
-          Seasonal native landscape views driven by plants.csv (shared species catalog) and each project's planting_layout.csv. Serve locally to load
-          the data files (for example, <code>npx serve</code>).
+          Two questions a yard-by-yard habitat effort has to answer before it recruits anybody:
+          <em>where</em> the patches go, and <em>what</em> goes in them.
         </p>
-        <div class="project-picker">
-          <label for="projectSelect">Project</label>
-          <select id="projectSelect" disabled></select>
-          <button type="button" id="newProjectBtn" class="button pill-button">+ New project</button>
-          <span class="project-picker__note" id="projectNotice" hidden></span>
-        </div>
-        <form class="project-picker__create" id="newProjectForm" hidden>
-          <input
-            type="text"
-            id="newProjectName"
-            class="project-picker__create-input"
-            placeholder="New project name"
-            autocomplete="off"
-          />
-          <button type="submit" class="button pill-button">Create</button>
-          <button type="button" id="newProjectCancelBtn" class="button pill-button">Cancel</button>
-          <span class="project-picker__create-status" id="newProjectStatus"></span>
-        </form>
       </div>
     </header>
-    <div class="page">
-      <div class="view-shell">
-        <div class="view-toolbar">
-          <div class="view-toolbar__row view-toolbar__row--top">
-            <div class="mode-switch" id="modeSwitch" role="group" aria-label="View, edit, set up, or draw features on the drawings">
-              <button type="button" class="mode-switch__btn" data-mode="view" aria-pressed="true">
-                <span class="mode-switch__icon" aria-hidden="true">&#128065;</span> View
-              </button>
-              <button type="button" class="mode-switch__btn" data-mode="edit" aria-pressed="false">
-                <span class="mode-switch__icon" aria-hidden="true">&#9998;</span> Edit
-              </button>
-              <button type="button" class="mode-switch__btn" data-mode="setup" aria-pressed="false">
-                <span class="mode-switch__icon" aria-hidden="true">&#9707;</span> Setup
-              </button>
-              <button type="button" class="mode-switch__btn" data-mode="features" aria-pressed="false">
-                <span class="mode-switch__icon" aria-hidden="true">&#9638;</span> Features
-              </button>
-            </div>
-            <button type="button" id="settingsToggleBtn" class="settings-toggle" aria-expanded="false" aria-controls="settingsDrawer">
-              <span aria-hidden="true">&#8943;</span>
-              <span class="sr-only">Legend</span>
-            </button>
-          </div>
-          <div class="settings-drawer" id="settingsDrawer" hidden>
-            <div class="legend">
-              <div class="legend__item">
-                <span class="legend__swatch legend__swatch--label">CA</span>
-                <span class="legend__text">Species initials</span>
-              </div>
-              <div class="legend__item">
-                <span class="legend__swatch legend__swatch--flower"></span>
-                <span class="legend__text">Current blooms</span>
-              </div>
-              <div class="legend__item">
-                <span class="legend__swatch legend__swatch--foliage"></span>
-                <span class="legend__text">Foliage canopy</span>
-              </div>
-            </div>
-          </div>
-          <div class="view-toolbar__row view-toolbar__row--controls">
-            <div class="month-control">
-              <div class="control-title">Season</div>
-              <div class="month-slider">
-                <input id="monthSlider" type="range" min="1" max="12" step="1" />
-                <div class="month-readout" id="monthReadout">January</div>
-              </div>
-            </div>
-            <div class="control-pair control-pair--layers">
-              <label for="layerVisibilitySelect">Layers</label>
-              <select id="layerVisibilitySelect">
-                <option value="0">All layers</option>
-                <option value="1">Hide trees</option>
-                <option value="2">Hide trees + sculptural</option>
-                <option value="3">Hide through accents</option>
-                <option value="4">Hide everything</option>
-              </select>
-            </div>
-          </div>
-          <!-- Populated by createSetupPanel from the project's views[]. -->
-          <div class="setup-row" id="setupRow" hidden></div>
-          <div class="setup-row" id="featureRow" hidden></div>
-          <div class="edit-row" id="editRow" hidden>
-            <div class="toggle-row">
-              <label class="pill-switch" for="labelToggle">
-                <input id="labelToggle" type="checkbox" checked />
-                <span class="pill-body">
-                  <span class="pill-thumb"></span>
-                  <span class="pill-content">
-                    <span class="pill-icon pill-icon--text" aria-hidden="true">Aa</span>
-                    <span class="pill-text">
-                      <span class="pill-title">Plant labels</span>
-                      <span class="pill-hint">show initials</span>
-                    </span>
-                  </span>
-                </span>
-              </label>
-              <div class="history-controls">
-                <button id="undoLayoutBtn" class="button pill-button" type="button" disabled>Undo</button>
-                <button id="redoLayoutBtn" class="button pill-button" type="button" disabled>Redo</button>
-              </div>
-            </div>
-            <!--
-              Places one plant of the chosen species at the middle of the plan
-              view; options come from the shared plants.csv catalog at load.
-              Removing a plant lives on the plant itself (detail sheet / right-click).
-            -->
-            <div class="add-plant" id="addPlantRow">
-              <label for="addPlantSelect">Add plant</label>
-              <select id="addPlantSelect" disabled></select>
-              <button id="addPlantBtn" class="button pill-button" type="button" disabled>Add</button>
-            </div>
-            <div class="view-toolbar__control-group">
-              <div class="control-pair control-pair--scale">
-                <label for="scaleSlider">Zoom</label>
-                <div class="scale-inputs">
-                  <input id="scaleSlider" type="range" step="0.1" min="0.5" aria-label="Zoom slider" />
-                  <input id="scaleInput" type="number" inputmode="decimal" step="0.1" min="0.5" />
-                </div>
-              </div>
-              <div class="scale-indicator scale-indicator--compact" id="scaleIndicator">
-                <div class="scale-indicator__title">Scale reference</div>
-                <div class="scale-indicator__bars">
-                  <div class="scale-indicator__item" data-inches="3">
-                    <div class="scale-indicator__line"></div>
-                    <span>3 in</span>
-                  </div>
-                  <div class="scale-indicator__item" data-feet="1">
-                    <div class="scale-indicator__line"></div>
-                    <span>1 ft</span>
-                  </div>
-                  <div class="scale-indicator__item" data-feet="10">
-                    <div class="scale-indicator__line"></div>
-                    <span>10 ft</span>
-                  </div>
-                </div>
-                <div class="scale-indicator__hint">Every view is drawn at this scale.</div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <!--
-          One panel per entry in the project's views[]; configureViews clones this
-          template, so adding a view to project.json adds a panel.
-        -->
-        <template id="viewPanelTemplate">
-          <div class="view-panel">
-            <div class="view-panel__header">
-              <p class="view-label">
-                <span class="view-label__name" data-view-label></span>
-                <span class="view-label__subtitle" data-view-sublabel></span>
-              </p>
-              <button
-                class="view-panel__toggle"
-                type="button"
-                data-maximize-target
-                aria-pressed="false"
-                title="Maximize this view"
-              >
-                <span class="view-panel__toggle-icon" aria-hidden="true">⤢</span>
-                <span class="view-panel__toggle-text">Maximize</span>
-              </button>
-            </div>
-            <div class="view">
-              <!--
-                The per-panel scale badge is gone: every panel is drawn at the
-                page's one scale now, so the toolbar's scale reference speaks
-                for all of them instead of only for the first.
-              -->
-              <!-- viewBox is measured in yard units; configured at runtime from the view. -->
-              <svg xmlns="http://www.w3.org/2000/svg"></svg>
-            </div>
-          </div>
-        </template>
-        <main class="views"></main>
+
+    <main class="pn-page">
+      <div class="pn-caveat">
+        <strong>What this is and isn't.</strong> Part one is a <em>schematic</em> — invented
+        geometry demonstrating a threshold argument, not survey data and not a site plan. Part two
+        is <em>real</em>: every genus is screened against <i>Shinners &amp; Mahler's Illustrated
+        Flora of North Central Texas</i> (Diggs, Lipscomb &amp; O'Kennon 1999) with the page cited,
+        and every larval host is from that flora's own Appendix Ten. Where I have made a judgement
+        call rather than quoted a source, the row says so and says it is mine. I expect some of it
+        to be wrong. Telling me which parts is the entire point of showing it to you.
       </div>
-      <div class="ecology-check" id="ecologyCheck" hidden></div>
-      <div class="species-table" id="speciesTable"></div>
-      <div class="data-actions">
-        <div class="history-status" id="layoutHistoryStatus">
-          Saving disabled until you run <code>node server.js</code>.
+
+      <!-- ================= PART ONE ================= -->
+      <section class="pn-section">
+        <p class="pn-eyebrow">Part one &middot; Geometry (schematic)</p>
+        <h2>The same number of yards, arranged two ways</h2>
+        <p class="pn-lede">
+          Most yard-habitat programs accept whoever signs up, so the resulting pattern is
+          effectively random. But the scale that matters for an insectivorous bird is a
+          <em>territory</em> — one to two hectares, several adjacent lots. Each hexagon below is
+          roughly that size. Move the slider, then flip the arrangement.
+        </p>
+
+        <div class="pn-controls">
+          <div class="pn-ctl">
+            <label for="pnRange">Participating yards</label>
+            <input type="range" id="pnRange" min="8" max="120" step="4" value="44" />
+          </div>
+          <div class="pn-ctl">
+            <label for="pnScatter">Arrangement</label>
+            <div class="pn-seg" role="group" aria-label="Arrangement">
+              <button id="pnScatter" type="button" aria-pressed="true">Opt-in (scattered)</button>
+              <button id="pnCluster" type="button" aria-pressed="false">Targeted (clustered)</button>
+            </div>
+          </div>
+          <div class="pn-ctl">
+            <label for="pnThreshold">Territory threshold</label>
+            <select id="pnThreshold">
+              <option value="0.3">30% of lots</option>
+              <option value="0.4" selected>40% of lots</option>
+              <option value="0.5">50% of lots</option>
+            </select>
+          </div>
         </div>
-        <div class="admin-buttons">
-          <button id="managePlantsBtn" class="button pill-button" type="button" disabled>Manage plants data</button>
-          <button id="exportBundleBtn" class="button pill-button" type="button" disabled>Download plan bundle (zip)</button>
+
+        <div class="pn-map-grid">
+          <div>
+            <div class="pn-stage">
+              <svg id="pnHexMap" viewBox="0 0 496 344" role="img"
+                   aria-label="Schematic hex grid showing participating yards and which territories cross the habitat threshold"></svg>
+            </div>
+            <div class="pn-legend">
+              <span><span class="pn-sw" style="background:#4d6b8a"></span>Participating yard</span>
+              <span><span class="pn-sw" style="background:#e4dfd3;border:1px solid #c3bdae"></span>Unconverted lot</span>
+              <span><span class="pn-sw" style="background:#dbe3ec;border:1px solid #4d6b8a"></span>Territory above threshold</span>
+              <span><span class="pn-sw" style="background:#7d9c68"></span>Source habitat (creek corridor)</span>
+            </div>
+          </div>
+          <div>
+            <div class="pn-readouts">
+              <div class="pn-ro">
+                <span class="k">Territories above threshold</span>
+                <span class="v hi" id="pnRoHex">0</span>
+                <span class="sub" id="pnRoHexSub"></span>
+              </div>
+              <div class="pn-ro">
+                <span class="k">Effort inside a working cluster</span>
+                <span class="v" id="pnRoEff">0%</span>
+                <span class="sub" id="pnRoEffSub"></span>
+              </div>
+              <div class="pn-ro">
+                <span class="k">Contiguous with source habitat</span>
+                <span class="v" id="pnRoSrc">0</span>
+                <span class="sub">above-threshold territories touching the corridor</span>
+              </div>
+            </div>
+            <p class="pn-verdict" id="pnVerdict"></p>
+          </div>
         </div>
+
+        <div class="pn-caveat">
+          <strong>The assumption I'd most like challenged.</strong> Narango, Tallamy &amp; Marra
+          (2018, PNAS) found Carolina chickadee populations fail below roughly 70% native plant
+          <em>biomass</em> within a territory. I am treating "40% of lots converted" as a stand-in
+          for that. Those are not the same measurement and the conversion between them is a guess.
+          The geometric point survives a wrong threshold; any specific number here does not.
+          Redundancy also only buffers <em>uncorrelated</em> risk — drought, a hard freeze,
+          citywide mosquito fogging and owner turnover hit every yard in a cluster at once.
+        </div>
+      </section>
+
+      <!-- ================= PART TWO ================= -->
+      <section class="pn-section">
+        <p class="pn-eyebrow">Part two &middot; What goes in them</p>
+        <h2>Where the continental keystone list and the regional flora disagree</h2>
+        <p class="pn-lede">
+          The standard advice is to plant "keystone genera" from the National Wildlife Federation's
+          list, which is keyed to EPA Level I ecoregion 9 — a unit that runs from Texas to the
+          Canadian aspen parkland. It therefore recommends larch, hemlock, fir and spruce for a
+          Blackland Prairie yard. Below, every genus is put to the flora: does it have a treatment
+          in FNCT, does the flora's own host-plant appendix name Lepidoptera for it, and are any of
+          those animals actually recorded near this site? <strong>Where the two sources disagree,
+          the flora wins</strong> — and the rejects stay visible rather than being quietly dropped.
+        </p>
+
+        <p class="pn-lede" id="pnHeadline"></p>
+
+        <!-- The six rows that carry the argument, fixed above the fold so the
+             demo never depends on driving a filter in front of a room. -->
+        <div class="pn-compare" id="pnCompare"></div>
+        <p class="data-note" style="margin:-0.8rem 0 1.2rem">
+          Six genera that carry the argument. The one-line reading under each is mine, not
+          either source’s.<button type="button" class="disclosure" data-disclosure aria-controls="dCompare" aria-label="What these six cards are means">?</button>
+        </p>
+
+        <div class="pn-tier-key" id="pnTierKey"></div>
+
+        <div class="pn-filters">
+          <div class="pn-ctl">
+            <label for="pnVerdictFilter">Evidence</label>
+            <select id="pnVerdictFilter">
+              <option value="recommendable">Plantable &amp; confirmed near this site</option>
+              <option value="confirmed-local">Any confirmed host (incl. non-natives)</option>
+              <option value="flora-cited">Flora-cited hosts (any)</option>
+              <option value="rejected">Rejected by the flora</option>
+              <option value="renamed">Renamed since 1999</option>
+              <option value="all">Everything</option>
+            </select>
+          </div>
+          <div class="pn-ctl">
+            <label for="pnHabitFilter">How much room</label>
+            <select id="pnHabitFilter"><option value="">Any</option></select>
+          </div>
+          <div class="pn-ctl">
+            <label for="pnSearch">Search</label>
+            <input type="search" id="pnSearch" placeholder="Genus or animal" />
+          </div>
+          <span class="pn-count" id="pnCount"></span>
+        </div>
+
+        <div class="pn-table-grid">
+          <div class="pn-scroll">
+            <table class="pn-table">
+              <thead>
+                <tr>
+                  <th>Genus</th>
+                  <th>Evidence</th>
+                  <th>Room needed</th>
+                  <th class="num">Mature ht<button type="button" class="disclosure" data-disclosure aria-controls="dMatureHt" aria-label="What mature height means">?</button></th>
+                  <th class="num">NWF lep.<button type="button" class="disclosure" data-disclosure aria-controls="dNwfLep" aria-label="What the NWF lepidoptera count means">?</button></th>
+                  <th class="num">NWF bees<button type="button" class="disclosure" data-disclosure aria-controls="dNwfBees" aria-label="What the NWF bee count means">?</button></th>
+                  <th class="num">FNCT hosts<button type="button" class="disclosure" data-disclosure aria-controls="dFnctHosts" aria-label="What the FNCT host count means">?</button></th>
+                  <th class="num">Near here<button type="button" class="disclosure" data-disclosure aria-controls="dNearHere" aria-label="What near here means">?</button></th>
+                </tr>
+              </thead>
+              <tbody id="pnRows"></tbody>
+            </table>
+          </div>
+          <div class="pn-detail" id="pnDetail"></div>
+        </div>
+
+        <p class="data-note">
+          Every column heading carries its own definition &mdash; the <span aria-hidden="true">?</span>
+          markers above open what each number is, and is not.
+        </p>
+      </section>
+
+
+      <!-- ================= THE HANDOFF ================= -->
+      <!--
+        The argument above is about a neighbourhood and needs no project. The
+        design tool is about one yard and cannot work without one. This section
+        IS that boundary, which is why the project picker lives here rather than
+        as a header control on the tool: choosing a yard is the drill-down, not
+        a setting you adjust once you have arrived.
+      -->
+      <section class="pn-section handoff" id="handoff">
+        <p class="pn-eyebrow">From the neighbourhood to one lot</p>
+        <h2>Your yard is one hexagon</h2>
+        <p class="pn-lede">
+          Everything above is argued at the scale of a bird territory &mdash; several adjacent
+          lots, one to two hectares. It is the scale at which the ecology works and the scale at
+          which no individual can act. This is the other end of it: the one lot you control,
+          drawn to scale, planted with species screened against the flora above.
+        </p>
+        <div class="handoff__picker">
+          <label for="handoffProject">Open a yard</label>
+          <select id="handoffProject" disabled>
+            <option>Loading&hellip;</option>
+          </select>
+          <button type="button" class="button pill-button" id="handoffOpen" disabled>Open</button>
+          <span class="handoff__note" id="handoffNote"></span>
+        </div>
+        <p class="data-note">
+          Nothing above this line depends on which yard you pick; nothing below it works without
+          one.
+        </p>
+      </section>
+
+      <!-- ================= PART THREE ================= -->
+      <section class="pn-section">
+        <p class="pn-eyebrow">Part three &middot; The ask</p>
+        <h2>What I need from this room</h2>
+        <p class="pn-lede">
+          I am not proposing a new organization. NPSOT, BPTMN, Pollinator Pathway and Homegrown
+          National Park already exist and already do the organizing. I am asking three questions.
+        </p>
+        <div class="pn-asks">
+          <div class="pn-ask">
+            <span class="n">ASK 01</span>
+            <h3>Red-line the screen</h3>
+            <p>
+              Every row carries an FNCT page number and, where I overrode a source, a sentence
+              saying the call was mine. Those are where I am least sure. I would rather be
+              corrected here than in front of a city arborist.
+            </p>
+          </div>
+          <div class="pn-ask">
+            <span class="n">ASK 02</span>
+            <h3>Does a chapter yard registry already exist?</h3>
+            <p>
+              If members have been logging conversions — NLCP graduates, Wildscapes certifications,
+              anything — that list is worth more than any model I can build. The targeting argument
+              is only useful with real points on it.
+            </p>
+          </div>
+          <div class="pn-ask">
+            <span class="n">ASK 03</span>
+            <h3>Is there appetite for a coordinated effort at all?</h3>
+            <p>
+              Part one argues that adjacency beats linear connection. That is untested here. Before
+              anyone builds a participant-facing anything, I would like to know whether this
+              chapter thinks the question is worth answering.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="pn-section">
+        <details class="apparatus">
+        <summary>Sources</summary>
+        <ul class="pn-lede" style="line-height:1.7">
+          <li>
+            Diggs, G.M., Lipscomb, B.L. &amp; O'Kennon, R.J. 1999. <i>Shinners &amp; Mahler's
+            Illustrated Flora of North Central Texas.</i> BRIT/Austin College. Genus treatments and
+            Appendix Ten ("Larval Host Plants of Lepidoptera of North Central Texas", compiled by
+            JoAnn Karges, pp. 1394&ndash;1403).
+          </li>
+          <li>National Wildlife Federation Native Plant Finder, EPA Level I ecoregion 9 &mdash; keystone genus counts.</li>
+          <li>USDA PLANTS &mdash; growth habit and mature height.</li>
+          <li>iNaturalist &mdash; species reported near the site, with per-place establishment means.</li>
+          <li>
+            Narango, D.L., Tallamy, D.W. &amp; Marra, P.P. 2018. Nonnative plants reduce population
+            growth of an insectivorous bird. <i>PNAS</i> 115(45).
+          </li>
+        </ul>
+        </details>
+        <p class="data-note">
+          Everything on this page is read from files in this repository. It runs with the network
+          off.
+        </p>
+      </section>
+
+      <!-- Disclosure panels live here, not inline: a panel holding <p> inside a
+           <p class="data-note"> makes the parser close the paragraph early and
+           spill the panel into the page. Anchored by aria-controls instead. -->
+      <div class="disclosure__panels">
+        <div id="dCompare" hidden><p><strong>NWF claim</strong> is caterpillar species for the whole genus across a continental ecoregion; <strong>FNCT hosts</strong> is Lepidoptera named for it in the flora’s Appendix Ten for North Central Texas.</p><p>The two are different measurements and are never added together.</p></div>
+        <div id="dMatureHt" hidden><p>Mature height stands in for size because the catalog carries no canopy width. The biomass weighting this argument really wants is therefore <em>absent</em>, not estimated.</p></div>
+        <div id="dNwfLep" hidden><p>Caterpillar species for a whole <em>genus</em> across an entire continental ecoregion. It does not transfer to one plant in one yard.</p><p>Never added to the FNCT column &mdash; they are different measurements.</p></div>
+        <div id="dNwfBees" hidden><p>Bee species recorded for the genus across the same continental ecoregion, with the same caveat: a genus-wide, region-wide count.</p></div>
+        <div id="dFnctHosts" hidden><p>Lepidoptera named for the genus in the flora’s Appendix Ten for North Central Texas &mdash; a compilation with its own coverage gaps, not an exhaustive survey.</p><p><cite>Diggs, Lipscomb &amp; O’Kennon 1999, pp. 1394&ndash;1403.</cite></p></div>
+        <div id="dNearHere" hidden><p>The animal has been reported within 15 miles on iNaturalist. <em>Presence, not abundance</em>, and heavily observer-biased.</p></div>
       </div>
-    </div>
-    <div class="detail-sheet" id="detailSheet" hidden>
-      <div class="detail-sheet__backdrop" data-detail-close></div>
-      <div class="detail-sheet__panel" role="dialog" aria-modal="true" aria-labelledby="detailSheetTitle">
-        <button type="button" class="detail-sheet__close" data-detail-close aria-label="Close details">×</button>
-        <h2 class="detail-sheet__title" id="detailSheetTitle"></h2>
-        <ul class="detail-sheet__lines" id="detailSheetLines"></ul>
-        <div class="detail-sheet__fauna" id="detailSheetEcology" hidden>
-          <h3 class="detail-sheet__fauna-heading">Ecological fit</h3>
-          <ul class="detail-sheet__fauna-lines" id="detailSheetEcologyLines"></ul>
-        </div>
-        <div class="detail-sheet__fauna" id="detailSheetFauna" hidden>
-          <h3 class="detail-sheet__fauna-heading">Nearby wildlife reported using this genus</h3>
-          <ul class="detail-sheet__fauna-lines" id="detailSheetFaunaLines"></ul>
-        </div>
-        <div class="detail-sheet__actions">
-          <button type="button" class="button pill-button" id="detailSheetCloneBtn">Clone plant</button>
-          <button type="button" class="button pill-button pill-button--danger" id="detailSheetRemoveBtn">Remove plant</button>
-        </div>
-      </div>
-    </div>
-    <script src="node_modules/jszip/dist/jszip.min.js"></script>
-    <!-- The application logic lives in the ES module entry point. -->
-    <script type="module" src="src/app.js"></script>
+    </main>
+
+    <script type="module" src="src/patchnetwork/patchNetworkPage.js"></script>
   </body>
 </html>

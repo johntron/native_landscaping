@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Backyard Visualization</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- The main stylesheet defines the page layout and backgrounds for each view. -->
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  </head>
+  <body>
+    <header class="page-header">
+      <div class="header-inner">
+        <nav class="site-nav">
+          <a href="index.html" class="site-nav__link">The argument</a>
+          <a href="design.html" class="site-nav__link site-nav__link--active" id="navDesignLink">Your yard</a>
+        </nav>
+        <h1 id="projectTitle">Backyard Visualization</h1>
+        <p class="data-note">
+          Seasonal native landscape views driven by plants.csv (shared species catalog) and each project's planting_layout.csv. Serve locally to load
+          the data files (for example, <code>npx serve</code>).
+        </p>
+        <div class="project-picker">
+          <label for="projectSelect">Project</label>
+          <select id="projectSelect" disabled></select>
+          <button type="button" id="newProjectBtn" class="button pill-button">+ New project</button>
+          <span class="project-picker__note" id="projectNotice" hidden></span>
+        </div>
+        <form class="project-picker__create" id="newProjectForm" hidden>
+          <input
+            type="text"
+            id="newProjectName"
+            class="project-picker__create-input"
+            placeholder="New project name"
+            autocomplete="off"
+          />
+          <button type="submit" class="button pill-button">Create</button>
+          <button type="button" id="newProjectCancelBtn" class="button pill-button">Cancel</button>
+          <span class="project-picker__create-status" id="newProjectStatus"></span>
+        </form>
+      </div>
+    </header>
+    <div class="page">
+      <div class="view-shell">
+        <div class="view-toolbar">
+          <div class="view-toolbar__row view-toolbar__row--top">
+            <div class="mode-switch" id="modeSwitch" role="group" aria-label="View, edit, set up, or draw features on the drawings">
+              <button type="button" class="mode-switch__btn" data-mode="view" aria-pressed="true">
+                <span class="mode-switch__icon" aria-hidden="true">&#128065;</span> View
+              </button>
+              <button type="button" class="mode-switch__btn" data-mode="edit" aria-pressed="false">
+                <span class="mode-switch__icon" aria-hidden="true">&#9998;</span> Edit
+              </button>
+              <button type="button" class="mode-switch__btn" data-mode="setup" aria-pressed="false">
+                <span class="mode-switch__icon" aria-hidden="true">&#9707;</span> Setup
+              </button>
+              <button type="button" class="mode-switch__btn" data-mode="features" aria-pressed="false">
+                <span class="mode-switch__icon" aria-hidden="true">&#9638;</span> Features
+              </button>
+            </div>
+            <button type="button" id="settingsToggleBtn" class="settings-toggle" aria-expanded="false" aria-controls="settingsDrawer">
+              <span aria-hidden="true">&#8943;</span>
+              <span class="sr-only">Legend</span>
+            </button>
+          </div>
+          <div class="settings-drawer" id="settingsDrawer" hidden>
+            <div class="legend">
+              <div class="legend__item">
+                <span class="legend__swatch legend__swatch--label">CA</span>
+                <span class="legend__text">Species initials</span>
+              </div>
+              <div class="legend__item">
+                <span class="legend__swatch legend__swatch--flower"></span>
+                <span class="legend__text">Current blooms</span>
+              </div>
+              <div class="legend__item">
+                <span class="legend__swatch legend__swatch--foliage"></span>
+                <span class="legend__text">Foliage canopy</span>
+              </div>
+            </div>
+          </div>
+          <div class="view-toolbar__row view-toolbar__row--controls">
+            <div class="month-control">
+              <div class="control-title">Season</div>
+              <div class="month-slider">
+                <input id="monthSlider" type="range" min="1" max="12" step="1" />
+                <div class="month-readout" id="monthReadout">January</div>
+              </div>
+            </div>
+            <div class="control-pair control-pair--layers">
+              <label for="layerVisibilitySelect">Layers</label>
+              <select id="layerVisibilitySelect">
+                <option value="0">All layers</option>
+                <option value="1">Hide trees</option>
+                <option value="2">Hide trees + sculptural</option>
+                <option value="3">Hide through accents</option>
+                <option value="4">Hide everything</option>
+              </select>
+            </div>
+          </div>
+          <!-- Populated by createSetupPanel from the project's views[]. -->
+          <div class="setup-row" id="setupRow" hidden></div>
+          <div class="setup-row" id="featureRow" hidden></div>
+          <div class="edit-row" id="editRow" hidden>
+            <div class="toggle-row">
+              <label class="pill-switch" for="labelToggle">
+                <input id="labelToggle" type="checkbox" checked />
+                <span class="pill-body">
+                  <span class="pill-thumb"></span>
+                  <span class="pill-content">
+                    <span class="pill-icon pill-icon--text" aria-hidden="true">Aa</span>
+                    <span class="pill-text">
+                      <span class="pill-title">Plant labels</span>
+                      <span class="pill-hint">show initials</span>
+                    </span>
+                  </span>
+                </span>
+              </label>
+              <div class="history-controls">
+                <button id="undoLayoutBtn" class="button pill-button" type="button" disabled>Undo</button>
+                <button id="redoLayoutBtn" class="button pill-button" type="button" disabled>Redo</button>
+              </div>
+            </div>
+            <!--
+              Places one plant of the chosen species at the middle of the plan
+              view; options come from the shared plants.csv catalog at load.
+              Removing a plant lives on the plant itself (detail sheet / right-click).
+            -->
+            <div class="add-plant" id="addPlantRow">
+              <label for="addPlantSelect">Add plant</label>
+              <select id="addPlantSelect" disabled></select>
+              <button id="addPlantBtn" class="button pill-button" type="button" disabled>Add</button>
+            </div>
+            <div class="view-toolbar__control-group">
+              <div class="control-pair control-pair--scale">
+                <label for="scaleSlider">Zoom</label>
+                <div class="scale-inputs">
+                  <input id="scaleSlider" type="range" step="0.1" min="0.5" aria-label="Zoom slider" />
+                  <input id="scaleInput" type="number" inputmode="decimal" step="0.1" min="0.5" />
+                </div>
+              </div>
+              <div class="scale-indicator scale-indicator--compact" id="scaleIndicator">
+                <div class="scale-indicator__title">Scale reference</div>
+                <div class="scale-indicator__bars">
+                  <div class="scale-indicator__item" data-inches="3">
+                    <div class="scale-indicator__line"></div>
+                    <span>3 in</span>
+                  </div>
+                  <div class="scale-indicator__item" data-feet="1">
+                    <div class="scale-indicator__line"></div>
+                    <span>1 ft</span>
+                  </div>
+                  <div class="scale-indicator__item" data-feet="10">
+                    <div class="scale-indicator__line"></div>
+                    <span>10 ft</span>
+                  </div>
+                </div>
+                <div class="scale-indicator__hint">Every view is drawn at this scale.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!--
+          One panel per entry in the project's views[]; configureViews clones this
+          template, so adding a view to project.json adds a panel.
+        -->
+        <template id="viewPanelTemplate">
+          <div class="view-panel">
+            <div class="view-panel__header">
+              <p class="view-label">
+                <span class="view-label__name" data-view-label></span>
+                <span class="view-label__subtitle" data-view-sublabel></span>
+              </p>
+              <button
+                class="view-panel__toggle"
+                type="button"
+                data-maximize-target
+                aria-pressed="false"
+                title="Maximize this view"
+              >
+                <span class="view-panel__toggle-icon" aria-hidden="true">⤢</span>
+                <span class="view-panel__toggle-text">Maximize</span>
+              </button>
+            </div>
+            <div class="view">
+              <!--
+                The per-panel scale badge is gone: every panel is drawn at the
+                page's one scale now, so the toolbar's scale reference speaks
+                for all of them instead of only for the first.
+              -->
+              <!-- viewBox is measured in yard units; configured at runtime from the view. -->
+              <svg xmlns="http://www.w3.org/2000/svg"></svg>
+            </div>
+          </div>
+        </template>
+        <main class="views"></main>
+      </div>
+      <div class="ecology-check" id="ecologyCheck" hidden></div>
+      <div class="species-table" id="speciesTable"></div>
+      <div class="data-actions">
+        <div class="history-status" id="layoutHistoryStatus">
+          Saving disabled until you run <code>node server.js</code>.
+        </div>
+        <div class="admin-buttons">
+          <button id="managePlantsBtn" class="button pill-button" type="button" disabled>Manage plants data</button>
+          <button id="exportBundleBtn" class="button pill-button" type="button" disabled>Download plan bundle (zip)</button>
+        </div>
+      </div>
+    </div>
+    <div class="detail-sheet" id="detailSheet" hidden>
+      <div class="detail-sheet__backdrop" data-detail-close></div>
+      <div class="detail-sheet__panel" role="dialog" aria-modal="true" aria-labelledby="detailSheetTitle">
+        <button type="button" class="detail-sheet__close" data-detail-close aria-label="Close details">×</button>
+        <h2 class="detail-sheet__title" id="detailSheetTitle"></h2>
+        <ul class="detail-sheet__lines" id="detailSheetLines"></ul>
+        <div class="detail-sheet__fauna" id="detailSheetEcology" hidden>
+          <h3 class="detail-sheet__fauna-heading">Ecological fit</h3>
+          <ul class="detail-sheet__fauna-lines" id="detailSheetEcologyLines"></ul>
+        </div>
+        <div class="detail-sheet__fauna" id="detailSheetFauna" hidden>
+          <h3 class="detail-sheet__fauna-heading">Nearby wildlife reported using this genus</h3>
+          <ul class="detail-sheet__fauna-lines" id="detailSheetFaunaLines"></ul>
+        </div>
+        <div class="detail-sheet__actions">
+          <button type="button" class="button pill-button" id="detailSheetCloneBtn">Clone plant</button>
+          <button type="button" class="button pill-button pill-button--danger" id="detailSheetRemoveBtn">Remove plant</button>
+        </div>
+      </div>
+    </div>
+    <script src="node_modules/jszip/dist/jszip.min.js"></script>
+    <!-- The application logic lives in the ES module entry point. -->
+    <script type="module" src="src/app.js"></script>
+  </body>
+</html>

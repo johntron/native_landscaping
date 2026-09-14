@@ -170,6 +170,7 @@ const FRONTYARD_SAVE_VIEWS = {
 // a spec asserting on them would fail for the wrong reason.
 const LINKED = [
   'index.html',
+  'design.html',
   'styles.css',
   'favicon.svg',
   'src',

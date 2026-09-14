@@ -35,13 +35,13 @@ export async function readLayoutRows(projectId) {
  * that CSV loading, parsing, and rendering all completed.
  */
 export async function openProject(page, projectId) {
-  await page.goto(`/index.html?project=${projectId}`);
+  await page.goto(`/design.html?project=${projectId}`);
   await page.locator('#topSvg g[data-plant-id]').first().waitFor();
 }
 
 /** Open a project on the write-safe server, for specs that save. */
 export async function openScratchProject(page, projectId) {
-  await page.goto(`${SCRATCH_BASE}/index.html?project=${projectId}`);
+  await page.goto(`${SCRATCH_BASE}/design.html?project=${projectId}`);
   await page.locator('#topSvg g[data-plant-id]').first().waitFor();
 }
 
