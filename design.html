@@ -6,6 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!-- The main stylesheet defines the page layout and backgrounds for each view. -->
     <link rel="stylesheet" href="styles.css" />
+    <!-- The nearby-ecosystem drawer is global chrome now, and it reuses the
+         plant-matches list styles, so this page needs them too. -->
+    <link rel="stylesheet" href="ecosystem.css" />
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   </head>
   <body>
@@ -230,5 +233,9 @@
     <script src="node_modules/jszip/dist/jszip.min.js"></script>
     <!-- The application logic lives in the ES module entry point. -->
     <script type="module" src="src/app.js"></script>
+      <script type="module">
+      import { initEcosystemDrawer } from "./src/ui/ecosystemDrawer.js";
+      initEcosystemDrawer();
+    </script>
   </body>
 </html>

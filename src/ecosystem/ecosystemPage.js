@@ -6,9 +6,7 @@
  */
 import { loadProjectIndex, loadProjectConfig, resolveActiveProjectId } from '../data/projectConfig.js';
 import { fetchCsv, parseCsv } from '../data/csvLoader.js';
-import { describeHostGeneraRow } from '../analysis/hostGenera.js';
-import { catalogGenusKeys, matchNearbyKeystoneGenera } from '../analysis/plantMatches.js';
-import { loadEcologyTables } from '../data/ecologyTables.js';
+import { computePlantMatches, renderPlantMatchItem, escapeHtml } from './plantMatches.view.js';
 
 const PROJECT_QUERY_PARAM = 'project';
 
@@ -98,82 +96,11 @@ async function load() {
  * Loaded after the main index so a failure here never blocks the table above.
  */
 async function loadPlantMatches(project) {
-  if (!project.ecoregion) {
-    plantMatchesNoteEl.textContent = `"${project.name}" declares no ecoregion, and the keystone lists are per ecoregion.`;
-    return;
-  }
-
-  // The catalog is required — without it there is no "already carried" split to
-  // make — but a missing ecology table only empties an index, and an empty index
-  // is what these matchers are written to return nothing from. So only the
-  // catalog fetch aborts; loadEcologyTables absorbs the rest and says what it lost.
-  let speciesRows = [];
-  let ecology;
-  try {
-    const [plantsCsv, tables] = await Promise.all([
-      fetchCsv(new URL('plants.csv', document.baseURI)),
-      loadEcologyTables({ ecoregion: project.ecoregion }),
-    ]);
-    speciesRows = parseCsv(plantsCsv);
-    ecology = tables;
-  } catch (err) {
-    plantMatchesNoteEl.textContent = 'Could not load the plant catalog, so plant matches could not be computed.';
-    console.error(err);
-    return;
-  }
-  const { hostGenera, interactions } = ecology;
-  if (ecology.warnings.length) {
-    plantMatchesNoteEl.textContent = `Some ecology tables did not load, so this list is incomplete: ${ecology.warnings.join('; ')}.`;
-    return;
-  }
-
-  const { candidates, alreadyInCatalog } = matchNearbyKeystoneGenera({
-    observationRows: allRows,
-    hostGenera,
-    catalogGenusKeys: catalogGenusKeys(speciesRows),
-    interactions,
-    place: String(project.place || '').trim(),
-  });
-
-  const withFauna = candidates.filter((c) => c.associatedFauna.length).length;
-  plantMatchesNoteEl.textContent = candidates.length
-    ? `${candidates.length} ecoregion-${project.ecoregion} keystone genus${candidates.length === 1 ? '' : 'es'} ${candidates.length === 1 ? 'is' : 'are'} missing from the catalog; ${withFauna} of those already ${withFauna === 1 ? 'has' : 'have'} an animal confirmed nearby that documented interactions say would use it.`
-    : `No ecoregion-${project.ecoregion} keystone genus is missing from the catalog.`;
-
-  plantMatchCandidatesEl.innerHTML = candidates.length
-    ? candidates.map(renderPlantMatchItem).join('')
-    : '<li class="plant-matches__empty">None found.</li>';
-  plantMatchCatalogEl.innerHTML = alreadyInCatalog.length
-    ? alreadyInCatalog.map(renderPlantMatchItem).join('')
-    : '<li class="plant-matches__empty">None found.</li>';
-}
-
-function renderPlantMatchItem({ genus, hostGeneraRow, associatedFauna, nearbySpecies }) {
-  const evidence = [];
-  if (associatedFauna.length) {
-    const named = associatedFauna
-      .slice(0, 3)
-      .map((m) => `${m.animalCommon || m.animalSpecies} (${m.nearestRadiusMi} mi)`)
-      .join(', ');
-    const more = associatedFauna.length > 3 ? `, +${associatedFauna.length - 3} more` : '';
-    evidence.push(
-      `<div class="plant-matches__evidence">Animals confirmed nearby documented to use it: ${escapeHtml(named)}${escapeHtml(more)}</div>`
-    );
-  }
-  if (nearbySpecies.length) {
-    const named = nearbySpecies
-      .slice(0, 3)
-      .map((s) => `${s.commonName || s.taxonName} (${s.radiusMi} mi)`)
-      .join(', ');
-    const more = nearbySpecies.length > 3 ? `, +${nearbySpecies.length - 3} more` : '';
-    evidence.push(
-      `<div class="plant-matches__evidence plant-matches__evidence--secondary">Also confirmed growing wild nearby: ${escapeHtml(named)}${escapeHtml(more)}</div>`
-    );
-  }
-  return `<li class="plant-matches__item">
-    <strong>${escapeHtml(genus)}</strong> — ${escapeHtml(describeHostGeneraRow(hostGeneraRow))}.
-    ${evidence.join('')}
-  </li>`;
+  const { note, candidates, alreadyInCatalog } = await computePlantMatches(project, allRows);
+  plantMatchesNoteEl.textContent = note;
+  if (!candidates) return;
+  plantMatchCandidatesEl.innerHTML = candidates;
+  plantMatchCatalogEl.innerHTML = alreadyInCatalog;
 }
 
 function render() {
@@ -239,9 +166,6 @@ function inaturalistLink(row) {
   return `<a href="${url.toString()}" target="_blank" rel="noopener">View observations</a>`;
 }
 
-function escapeHtml(str) {
-  return String(str ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-}
 
 document.querySelectorAll('.ecosystem-table th[data-sort-key]').forEach((th) => {
   th.addEventListener('click', () => {
