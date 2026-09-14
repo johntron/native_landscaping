@@ -1,0 +1,1578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Night Prairie — Blackland Patch Network (Theme C mockup)</title>
+<style>
+  /* ============================================================
+     THEME C — NIGHT PRAIRIE / HABITAT LUMINANCE
+     Dark-first. Light variant defined on bare :root per spec;
+     dark overrides both by system preference and [data-theme].
+     ============================================================ */
+
+  :root {
+    color-scheme: light dark;
+
+    /* ---- LIGHT (base) palette — "glow becomes ink density" ---- */
+    --bg: #f3efe4;
+    --bg-raised: #fbf9f3;
+    --bg-raised-2: #ffffff;
+    --bg-sunken: #e9e3d3;
+    --border: rgba(40, 34, 20, 0.14);
+    --border-strong: rgba(40, 34, 20, 0.26);
+    --text: #22201a;
+    --text-dim: #55503f;
+    --text-faint: #837c66;
+    --amber: #a3660f;
+    --amber-strong: #7a4c09;
+    --amber-wash: rgba(163, 102, 15, 0.14);
+    --amber-wash-strong: rgba(163, 102, 15, 0.30);
+    --cyan: #1f6e7a;
+    --cyan-wash: rgba(31, 110, 122, 0.14);
+    --reject: #9a3f2f;
+    --reject-wash: rgba(154, 63, 47, 0.12);
+    --hex-unconverted: #d8d0ba;
+    --hex-unconverted-stroke: rgba(40, 34, 20, 0.22);
+    --hex-participating: #c99a4a;
+    --hex-corridor: #b97a1c;
+    --glow-blur: 0;
+    --glow-opacity: 0.55;
+    --shadow-card: 0 1px 2px rgba(40, 34, 20, 0.08);
+    --focus-ring: #1f6e7a;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #10141a;
+      --bg-raised: #161b22;
+      --bg-raised-2: #1b212a;
+      --bg-sunken: #0b0e13;
+      --border: rgba(255, 255, 255, 0.08);
+      --border-strong: rgba(255, 255, 255, 0.16);
+      --text: #e9e2d0;
+      --text-dim: #a8a396;
+      --text-faint: #706a5c;
+      --amber: #e0aa4d;
+      --amber-strong: #f2c26a;
+      --amber-wash: rgba(224, 170, 77, 0.12);
+      --amber-wash-strong: rgba(224, 170, 77, 0.22);
+      --cyan: #6fb6c4;
+      --cyan-wash: rgba(111, 182, 196, 0.12);
+      --reject: #c47b64;
+      --reject-wash: rgba(196, 123, 100, 0.12);
+      --hex-unconverted: #171c23;
+      --hex-unconverted-stroke: rgba(255, 255, 255, 0.09);
+      --hex-participating: #4a3c22;
+      --hex-corridor: #e0aa4d;
+      --glow-blur: 6;
+      --glow-opacity: 0.9;
+      --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+      --focus-ring: #6fb6c4;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #10141a;
+    --bg-raised: #161b22;
+    --bg-raised-2: #1b212a;
+    --bg-sunken: #0b0e13;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.16);
+    --text: #e9e2d0;
+    --text-dim: #a8a396;
+    --text-faint: #706a5c;
+    --amber: #e0aa4d;
+    --amber-strong: #f2c26a;
+    --amber-wash: rgba(224, 170, 77, 0.12);
+    --amber-wash-strong: rgba(224, 170, 77, 0.22);
+    --cyan: #6fb6c4;
+    --cyan-wash: rgba(111, 182, 196, 0.12);
+    --reject: #c47b64;
+    --reject-wash: rgba(196, 123, 100, 0.12);
+    --hex-unconverted: #171c23;
+    --hex-unconverted-stroke: rgba(255, 255, 255, 0.09);
+    --hex-participating: #4a3c22;
+    --hex-corridor: #e0aa4d;
+    --glow-blur: 6;
+    --glow-opacity: 0.9;
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --focus-ring: #6fb6c4;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-weight: 400;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection { background: var(--amber-wash-strong); color: var(--text); }
+
+  a { color: var(--cyan); text-decoration-color: transparent; text-underline-offset: 3px; transition: text-decoration-color .15s ease; }
+  a:hover { text-decoration-color: currentColor; }
+  a:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible {
+    outline: 2px solid var(--focus-ring); outline-offset: 2px;
+  }
+
+  .mono {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", "Consolas", monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  h1, h2, h3 {
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", "Times New Roman", serif;
+    font-weight: 400;
+    color: var(--text);
+    letter-spacing: 0.002em;
+  }
+
+  /* ---------------- header ---------------- */
+  .page-header {
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .header-inner {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 1.4rem 1.75rem 1.6rem;
+  }
+  .site-nav {
+    display: flex;
+    gap: 1.6rem;
+    margin-bottom: 1.4rem;
+  }
+  .site-nav__link {
+    font-size: 0.72rem;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--text-faint);
+    padding-bottom: 0.15rem;
+    border-bottom: 1px solid transparent;
+  }
+  .site-nav__link:hover { color: var(--text-dim); text-decoration: none; }
+  .site-nav__link--active { color: var(--text); border-bottom-color: var(--amber); }
+  .page-header h1 {
+    font-size: 2rem;
+    margin: 0 0 0.55rem;
+  }
+  .data-note {
+    color: var(--text-dim);
+    font-size: 0.92rem;
+    max-width: 68ch;
+    line-height: 1.65;
+  }
+  .data-note em { color: var(--text); font-style: italic; }
+  .data-note code {
+    font-family: ui-monospace, "SF Mono", monospace;
+    background: var(--bg-sunken);
+    padding: 0.05em 0.35em;
+    border-radius: 3px;
+    font-size: 0.88em;
+    border: 1px solid var(--border);
+  }
+
+  /* ---------------- page layout ---------------- */
+  main.pn-page {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 1.75rem 5rem;
+  }
+
+  .pn-caveat {
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--cyan);
+    border-radius: 4px;
+    padding: 1.1rem 1.3rem;
+    margin: 2rem 0;
+    max-width: 74ch;
+    font-size: 0.95rem;
+    color: var(--text-dim);
+    line-height: 1.7;
+  }
+  .pn-caveat strong { color: var(--text); font-weight: 600; }
+  .pn-caveat em { font-style: italic; color: var(--text); }
+
+  .pn-section { padding: 3.4rem 0; border-top: 1px solid var(--border); }
+  .pn-section:first-of-type { border-top: none; padding-top: 2.6rem; }
+
+  .pn-eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.13em;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--amber);
+    margin: 0 0 0.7rem;
+  }
+  .pn-section h2 {
+    font-size: 1.6rem;
+    margin: 0 0 1.1rem;
+    max-width: 30ch;
+  }
+  .pn-lede {
+    max-width: 65ch;
+    color: var(--text-dim);
+    font-size: 1.02rem;
+    line-height: 1.75;
+    margin: 0 0 1.6rem;
+  }
+  .pn-lede strong { color: var(--text); font-weight: 600; }
+  .pn-lede em { color: var(--text); font-style: italic; }
+
+  /* ---------------- controls ---------------- */
+  .pn-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2.2rem;
+    align-items: flex-end;
+    padding: 1.2rem 1.4rem;
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 1.8rem;
+  }
+  .pn-ctl { display: flex; flex-direction: column; gap: 0.45rem; }
+  .pn-ctl label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+    font-weight: 600;
+  }
+  input[type="range"] {
+    width: 180px;
+    accent-color: var(--cyan);
+    background: transparent;
+  }
+  select, input[type="search"] {
+    background: var(--bg-sunken);
+    border: 1px solid var(--border-strong);
+    color: var(--text);
+    padding: 0.45rem 0.7rem;
+    border-radius: 4px;
+    font-size: 0.88rem;
+    font-family: inherit;
+  }
+  .pn-seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 5px; overflow: hidden; }
+  .pn-seg button {
+    background: var(--bg-sunken);
+    border: none;
+    color: var(--text-dim);
+    padding: 0.5rem 0.9rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .pn-seg button[aria-pressed="true"] { background: var(--amber-wash); color: var(--amber); }
+  .pn-seg button:not(:last-child) { border-right: 1px solid var(--border-strong); }
+
+  /* ---------------- hex maps ---------------- */
+  .pn-map-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.4rem;
+    margin-bottom: 1.6rem;
+  }
+  .pn-map-card {
+    background: var(--bg-sunken);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.1rem 1.1rem 1.3rem;
+  }
+  .pn-map-card__head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 0.7rem;
+  }
+  .pn-map-card__head h3 {
+    font-size: 0.98rem;
+    font-family: inherit;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0;
+  }
+  .pn-map-card__head .tag {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+    font-weight: 600;
+  }
+  .pn-stage { width: 100%; }
+  .pn-stage svg { width: 100%; height: auto; display: block; }
+
+  .hx {
+    fill: var(--hex-unconverted);
+    stroke: var(--hex-unconverted-stroke);
+    stroke-width: 1;
+  }
+  .hx.participating {
+    fill: var(--hex-participating);
+    stroke: var(--amber);
+    stroke-opacity: 0.5;
+  }
+  .hx.corridor {
+    fill: var(--hex-corridor);
+    stroke: var(--hex-corridor);
+    filter: url(#hexGlowSoft);
+  }
+  .territory-glow { filter: url(#hexGlowBig); }
+  .territory-glow .blob {
+    fill: var(--amber);
+    opacity: var(--glow-opacity);
+  }
+
+  .pn-readouts-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.9rem;
+    margin-top: 0.9rem;
+    padding-top: 0.9rem;
+    border-top: 1px dashed var(--border-strong);
+  }
+  .pn-ro-mini .k {
+    display: block;
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-faint);
+    margin-bottom: 0.25rem;
+  }
+  .pn-ro-mini .v {
+    display: block;
+    font-family: ui-monospace, "SF Mono", monospace;
+    font-size: 1.4rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+  }
+  .pn-ro-mini .v.hi { color: var(--amber); }
+  .pn-ro-mini .v.zero { color: var(--text-faint); }
+
+  .pn-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.4rem;
+    margin: 1.4rem 0 0;
+    font-size: 0.82rem;
+    color: var(--text-dim);
+  }
+  .pn-legend span { display: inline-flex; align-items: center; gap: 0.5rem; }
+  .pn-sw { width: 13px; height: 13px; border-radius: 2px; display: inline-block; flex-shrink: 0; }
+
+  .pn-verdict {
+    max-width: 68ch;
+    font-size: 1rem;
+    color: var(--text);
+    line-height: 1.75;
+    margin-top: 1.4rem;
+    padding: 1rem 1.2rem;
+    background: var(--amber-wash);
+    border-radius: 6px;
+    border: 1px solid var(--amber-wash-strong);
+  }
+  .pn-verdict b { color: var(--amber-strong); }
+
+  /* ---------------- compare cards ---------------- */
+  .pn-compare {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 0.8rem;
+    margin-bottom: 0.9rem;
+  }
+  .pn-card {
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 0.9rem 0.85rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    box-shadow: var(--shadow-card);
+  }
+  .pn-card--reject { border-color: var(--reject-wash); background: var(--reject-wash); }
+  .pn-card .g {
+    font-family: Georgia, "Iowan Old Style", serif;
+    font-style: italic;
+    font-size: 1.08rem;
+    color: var(--text);
+  }
+  .pn-card .room {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-faint);
+    font-weight: 600;
+  }
+  .pn-pair { display: flex; gap: 0.9rem; }
+  .pn-stat { display: flex; flex-direction: column; }
+  .pn-stat b {
+    font-family: ui-monospace, "SF Mono", monospace;
+    font-size: 1.25rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .pn-stat b.ok { color: var(--amber); }
+  .pn-stat b.no { color: var(--text-faint); }
+  .pn-stat i {
+    font-style: normal;
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-faint);
+  }
+  .pn-card .sub { font-size: 0.82rem; color: var(--text-dim); line-height: 1.55; }
+  .pn-card .sub .pn-near { color: var(--amber); font-weight: 600; }
+
+  /* ---------------- tier key + filters ---------------- */
+  .pn-tier-key {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.1rem;
+    font-size: 0.78rem;
+    color: var(--text-faint);
+    margin: 0 0 1.6rem;
+    padding: 0.7rem 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .pn-tier-key .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 0.4rem; }
+
+  .pn-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.6rem;
+    align-items: flex-end;
+    margin-bottom: 1.2rem;
+  }
+  .pn-count { font-size: 0.82rem; color: var(--text-faint); margin-left: auto; align-self: center; }
+
+  /* ---------------- table ---------------- */
+  .pn-table-grid { display: block; }
+  .pn-scroll {
+    overflow-x: auto;
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  table.pn-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+    min-width: 760px;
+  }
+  .pn-table thead th {
+    text-align: left;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-faint);
+    font-weight: 600;
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid var(--border-strong);
+    background: var(--bg-raised-2);
+    position: sticky;
+    top: 0;
+  }
+  .pn-table th.num, .pn-table td.num { text-align: right; }
+  .pn-table td {
+    padding: 0.8rem 1rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+    vertical-align: top;
+  }
+  .pn-table tbody tr:last-child td { border-bottom: none; }
+  .pn-table tbody tr:hover { background: var(--bg-raised-2); }
+  .pn-table tbody tr[hidden] { display: none; }
+  .pn-table td.genus { color: var(--text); font-family: Georgia, "Iowan Old Style", serif; font-style: italic; font-size: 0.98rem; }
+  .pn-table td .cite { display: block; font-size: 0.74rem; color: var(--text-faint); font-family: ui-monospace, monospace; margin-top: 0.15rem; }
+
+  .verdict-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.76rem;
+    font-weight: 600;
+    padding: 0.2rem 0.55rem;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+  .verdict-chip .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .verdict-confirmed-local { background: var(--amber-wash); color: var(--amber-strong); }
+  .verdict-confirmed-local .dot { background: var(--amber); }
+  .verdict-flora-hosts, .verdict-in-flora { background: var(--cyan-wash); color: var(--cyan); }
+  .verdict-flora-hosts .dot, .verdict-in-flora .dot { background: var(--cyan); }
+  .verdict-rejected { background: var(--reject-wash); color: var(--reject); }
+  .verdict-rejected .dot { background: var(--reject); }
+  .verdict-renamed { background: var(--bg-sunken); color: var(--text-dim); border: 1px dashed var(--border-strong); }
+  .verdict-renamed .dot { background: var(--text-faint); }
+
+  /* ---------------- asks ---------------- */
+  .pn-asks {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.3rem;
+  }
+  .pn-ask {
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.4rem 1.4rem 1.5rem;
+  }
+  .pn-ask .n {
+    font-family: ui-monospace, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.09em;
+    color: var(--cyan);
+    font-weight: 700;
+  }
+  .pn-ask h3 {
+    font-size: 1.08rem;
+    margin: 0.5rem 0 0.6rem;
+    font-family: Georgia, serif;
+  }
+  .pn-ask p { font-size: 0.9rem; color: var(--text-dim); line-height: 1.65; margin: 0; }
+
+  /* ---------------- drill-down handoff ---------------- */
+  .handoff {
+    background: radial-gradient(ellipse 60% 90% at 30% 40%, var(--amber-wash) 0%, transparent 70%), var(--bg-sunken);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 3rem 2.4rem;
+    margin: 0.5rem 0 1.5rem;
+    display: grid;
+    grid-template-columns: 1fr 1.15fr;
+    gap: 2.5rem;
+    align-items: center;
+  }
+  .handoff-copy .pn-eyebrow { color: var(--cyan); }
+  .handoff-copy h2 { font-size: 1.55rem; max-width: 20ch; margin-bottom: 1rem; }
+  .handoff-copy p { color: var(--text-dim); font-size: 0.98rem; line-height: 1.7; max-width: 46ch; margin-bottom: 1.6rem; }
+
+  .yard-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .yard-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    background: var(--bg-raised);
+    border: 1px solid var(--border-strong);
+    border-radius: 7px;
+    padding: 0.85rem 1.1rem;
+    text-decoration: none;
+    transition: border-color .15s ease;
+  }
+  .yard-card:hover { border-color: var(--amber); text-decoration: none; }
+  .yard-card .name { color: var(--text); font-weight: 600; font-size: 0.95rem; }
+  .yard-card .meta { color: var(--text-faint); font-size: 0.78rem; display: block; margin-top: 0.15rem; }
+  .yard-card .arrow { color: var(--amber); font-family: ui-monospace, monospace; }
+  .yard-card--new {
+    border-style: dashed;
+    color: var(--text-dim);
+    justify-content: center;
+    font-size: 0.85rem;
+  }
+
+  .pinpoint-svg { display: block; margin: 0 auto 0.9rem; }
+
+  /* ---------------- sources ---------------- */
+  .pn-sources { line-height: 1.85; font-size: 0.95rem; color: var(--text-dim); max-width: 68ch; padding-left: 1.1rem; }
+  .pn-sources li { margin-bottom: 0.55rem; }
+  .pn-sources i { color: var(--text); font-style: italic; }
+
+  footer.pn-foot {
+    border-top: 1px solid var(--border);
+    padding: 1.6rem 1.75rem 3rem;
+    max-width: 1180px;
+    margin: 0 auto;
+  }
+
+  /* ---------------- ecosystem drawer ---------------- */
+  .eco-tab {
+    position: fixed;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%) rotate(180deg);
+    writing-mode: vertical-rl;
+    background: var(--amber);
+    color: #17130a;
+    font-weight: 700;
+    font-size: 0.78rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 1rem 0.55rem;
+    border-radius: 8px 0 0 8px;
+    border: none;
+    cursor: pointer;
+    z-index: 40;
+    box-shadow: -2px 0 10px rgba(0,0,0,0.25);
+  }
+  [data-theme="light"] .eco-tab, :root:not([data-theme="dark"]) .eco-tab { color: #2a1c05; }
+
+  .eco-drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    height: 100vh;
+    width: 420px;
+    max-width: 92vw;
+    background: var(--bg-raised);
+    border-left: 1px solid var(--border-strong);
+    box-shadow: -12px 0 40px rgba(0,0,0,0.35);
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(0%);
+    transition: transform .25s ease;
+  }
+  .eco-drawer.closed { transform: translateX(100%); }
+  .eco-drawer__head {
+    padding: 1.3rem 1.4rem 1rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+  .eco-drawer__head h2 {
+    font-size: 1.15rem;
+    margin: 0 0 0.35rem;
+  }
+  .eco-drawer__head p { font-size: 0.8rem; color: var(--text-faint); margin: 0; line-height: 1.55; }
+  .eco-drawer__close {
+    background: var(--bg-sunken);
+    border: 1px solid var(--border-strong);
+    color: var(--text-dim);
+    border-radius: 5px;
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+    flex-shrink: 0;
+    font-size: 0.9rem;
+    line-height: 1;
+  }
+  .eco-drawer__body {
+    overflow-y: auto;
+    padding: 1.1rem 1.4rem 2rem;
+    flex: 1;
+  }
+  .eco-drawer__controls {
+    display: flex;
+    gap: 0.6rem;
+    margin-bottom: 1.2rem;
+  }
+  .eco-drawer__controls select, .eco-drawer__controls input {
+    flex: 1;
+    font-size: 0.82rem;
+    padding: 0.4rem 0.55rem;
+  }
+  .eco-group { margin-bottom: 1.6rem; }
+  .eco-group h3 {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--text-faint);
+    font-weight: 700;
+    margin: 0 0 0.2rem;
+    font-family: inherit;
+  }
+  .eco-group .hint { font-size: 0.76rem; color: var(--text-faint); margin: 0 0 0.7rem; line-height: 1.5; }
+  .eco-match {
+    display: flex;
+    gap: 0.7rem;
+    padding: 0.65rem 0;
+    border-bottom: 1px solid var(--border);
+    align-items: flex-start;
+  }
+  .eco-match:last-child { border-bottom: none; }
+  .eco-match .swatch {
+    width: 8px; height: 8px; border-radius: 50%;
+    margin-top: 0.4rem; flex-shrink: 0;
+    background: var(--amber);
+  }
+  .eco-match.in-catalog .swatch { background: var(--cyan); }
+  .eco-match .body { flex: 1; }
+  .eco-match .common { font-size: 0.88rem; color: var(--text); font-weight: 600; }
+  .eco-match .bot { font-style: italic; color: var(--text-faint); font-size: 0.8rem; }
+  .eco-match .desc { font-size: 0.79rem; color: var(--text-dim); line-height: 1.5; margin-top: 0.2rem; }
+  .eco-match .stat { font-size: 0.72rem; color: var(--amber); font-family: ui-monospace, monospace; margin-top: 0.25rem; display: block; }
+  .eco-match.in-catalog .stat { color: var(--cyan); }
+
+  .eco-drawer__foot {
+    padding: 1rem 1.4rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.82rem;
+  }
+  .eco-drawer__foot a { color: var(--cyan); font-weight: 600; }
+
+  .eco-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.35);
+    z-index: 45;
+    display: none;
+  }
+  .eco-backdrop.show { display: block; }
+
+  @media (max-width: 900px) {
+    .handoff { grid-template-columns: 1fr; }
+    .pn-map-pair { grid-template-columns: 1fr; }
+    .pn-compare { grid-template-columns: repeat(2, 1fr); }
+    .pn-asks { grid-template-columns: 1fr; }
+    .pn-readouts-row { grid-template-columns: 1fr; }
+    .eco-drawer { width: 100%; max-width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<!-- SVG filter defs, shared -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <filter id="hexGlowSoft" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="hexGlowBig" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="9" result="blur"/>
+      <feMerge><feMergeNode in="blur"/></feMerge>
+    </filter>
+    <filter id="pinGlow" x="-200%" y="-200%" width="500%" height="500%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+</svg>
+
+<header class="page-header">
+  <div class="header-inner">
+    <nav class="site-nav">
+      <a href="#" class="site-nav__link">Design</a>
+      <a href="#" class="site-nav__link">Nearby ecosystem</a>
+      <a href="#" class="site-nav__link site-nav__link--active">Patch network</a>
+    </nav>
+    <h1>Blackland Patch Network</h1>
+    <p class="data-note">
+      Two questions a yard-by-yard habitat effort has to answer before it recruits anybody:
+      <em>where</em> the patches go, and <em>what</em> goes in them.
+    </p>
+  </div>
+</header>
+
+<main class="pn-page">
+
+  <div class="pn-caveat">
+    <strong>What this is and isn't.</strong> Part one is a <em>schematic</em> — invented
+    geometry demonstrating a threshold argument, not survey data and not a site plan. Part two
+    is <em>real</em>: every genus is screened against <i>Shinners &amp; Mahler's Illustrated
+    Flora of North Central Texas</i> (Diggs, Lipscomb &amp; O'Kennon 1999) with the page cited,
+    and every larval host is from that flora's own Appendix Ten. Where I have made a judgement
+    call rather than quoted a source, the row says so and says it is mine. I expect some of it
+    to be wrong. Telling me which parts is the entire point of showing it to you.
+  </div>
+
+  <!-- ================= PART ONE ================= -->
+  <section class="pn-section">
+    <p class="pn-eyebrow">Part one · Geometry (schematic)</p>
+    <h2>The same number of yards, arranged two ways</h2>
+    <p class="pn-lede">
+      Most yard-habitat programs accept whoever signs up, so the resulting pattern is
+      effectively random. But the scale that matters for an insectivorous bird is a
+      <em>territory</em> — one to two hectares, several adjacent lots. Each hexagon below is
+      roughly that size. 18 of the same 54 lots, arranged two ways.
+    </p>
+
+    <div class="pn-controls">
+      <div class="pn-ctl">
+        <label for="pnRange">Participating yards</label>
+        <input type="range" id="pnRange" min="8" max="120" step="4" value="44" disabled />
+      </div>
+      <div class="pn-ctl">
+        <label>Arrangement</label>
+        <div class="pn-seg" role="group" aria-label="Arrangement">
+          <button type="button" aria-pressed="true">Opt-in (scattered)</button>
+          <button type="button" aria-pressed="true">Targeted (clustered)</button>
+        </div>
+      </div>
+      <div class="pn-ctl">
+        <label for="pnThreshold">Territory threshold</label>
+        <select id="pnThreshold">
+          <option value="0.3">30% of lots</option>
+          <option value="0.4" selected>40% of lots</option>
+          <option value="0.5">50% of lots</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="pn-map-pair">
+      <!-- SCATTERED -->
+      <div class="pn-map-card">
+        <div class="pn-map-card__head">
+          <h3>Opt-in — scattered</h3>
+          <span class="tag">Same 18 yards</span>
+        </div>
+        <div class="pn-stage">
+          <svg viewBox="-22 -22 302 232" role="img" aria-label="Scattered arrangement: 18 participating yards spread thin, no territory crosses the threshold">
+            <polygon class="hx unconverted" points="18.8,0.0 9.4,16.3 -9.4,16.3 -18.8,0.0 -9.4,-16.3 9.4,-16.3"/>
+            <polygon class="hx participating" points="18.8,34.6 9.4,50.9 -9.4,50.9 -18.8,34.6 -9.4,18.4 9.4,18.4"/>
+            <polygon class="hx unconverted" points="18.8,69.3 9.4,85.6 -9.4,85.6 -18.8,69.3 -9.4,53.0 9.4,53.0"/>
+            <polygon class="hx participating" points="18.8,103.9 9.4,120.2 -9.4,120.2 -18.8,103.9 -9.4,87.6 9.4,87.6"/>
+            <polygon class="hx unconverted" points="18.8,138.6 9.4,154.8 -9.4,154.8 -18.8,138.6 -9.4,122.3 9.4,122.3"/>
+            <polygon class="hx corridor" points="18.8,173.2 9.4,189.5 -9.4,189.5 -18.8,173.2 -9.4,156.9 9.4,156.9"/>
+            <polygon class="hx participating" points="48.8,17.3 39.4,33.6 20.6,33.6 11.2,17.3 20.6,1.0 39.4,1.0"/>
+            <polygon class="hx unconverted" points="48.8,52.0 39.4,68.2 20.6,68.2 11.2,52.0 20.6,35.7 39.4,35.7"/>
+            <polygon class="hx unconverted" points="48.8,86.6 39.4,102.9 20.6,102.9 11.2,86.6 20.6,70.3 39.4,70.3"/>
+            <polygon class="hx unconverted" points="48.8,121.2 39.4,137.5 20.6,137.5 11.2,121.2 20.6,105.0 39.4,105.0"/>
+            <polygon class="hx participating" points="48.8,155.9 39.4,172.2 20.6,172.2 11.2,155.9 20.6,139.6 39.4,139.6"/>
+            <polygon class="hx corridor" points="48.8,190.5 39.4,206.8 20.6,206.8 11.2,190.5 20.6,174.2 39.4,174.2"/>
+            <polygon class="hx unconverted" points="78.8,0.0 69.4,16.3 50.6,16.3 41.2,0.0 50.6,-16.3 69.4,-16.3"/>
+            <polygon class="hx unconverted" points="78.8,34.6 69.4,50.9 50.6,50.9 41.2,34.6 50.6,18.4 69.4,18.4"/>
+            <polygon class="hx participating" points="78.8,69.3 69.4,85.6 50.6,85.6 41.2,69.3 50.6,53.0 69.4,53.0"/>
+            <polygon class="hx unconverted" points="78.8,103.9 69.4,120.2 50.6,120.2 41.2,103.9 50.6,87.6 69.4,87.6"/>
+            <polygon class="hx participating" points="78.8,138.6 69.4,154.8 50.6,154.8 41.2,138.6 50.6,122.3 69.4,122.3"/>
+            <polygon class="hx corridor" points="78.8,173.2 69.4,189.5 50.6,189.5 41.2,173.2 50.6,156.9 69.4,156.9"/>
+            <polygon class="hx participating" points="108.8,17.3 99.4,33.6 80.6,33.6 71.2,17.3 80.6,1.0 99.4,1.0"/>
+            <polygon class="hx unconverted" points="108.8,52.0 99.4,68.2 80.6,68.2 71.2,52.0 80.6,35.7 99.4,35.7"/>
+            <polygon class="hx unconverted" points="108.8,86.6 99.4,102.9 80.6,102.9 71.2,86.6 80.6,70.3 99.4,70.3"/>
+            <polygon class="hx participating" points="108.8,121.2 99.4,137.5 80.6,137.5 71.2,121.2 80.6,105.0 99.4,105.0"/>
+            <polygon class="hx unconverted" points="108.8,155.9 99.4,172.2 80.6,172.2 71.2,155.9 80.6,139.6 99.4,139.6"/>
+            <polygon class="hx corridor" points="108.8,190.5 99.4,206.8 80.6,206.8 71.2,190.5 80.6,174.2 99.4,174.2"/>
+            <polygon class="hx unconverted" points="138.8,0.0 129.4,16.3 110.6,16.3 101.2,0.0 110.6,-16.3 129.4,-16.3"/>
+            <polygon class="hx participating" points="138.8,34.6 129.4,50.9 110.6,50.9 101.2,34.6 110.6,18.4 129.4,18.4"/>
+            <polygon class="hx unconverted" points="138.8,69.3 129.4,85.6 110.6,85.6 101.2,69.3 110.6,53.0 129.4,53.0"/>
+            <polygon class="hx unconverted" points="138.8,103.9 129.4,120.2 110.6,120.2 101.2,103.9 110.6,87.6 129.4,87.6"/>
+            <polygon class="hx participating" points="138.8,138.6 129.4,154.8 110.6,154.8 101.2,138.6 110.6,122.3 129.4,122.3"/>
+            <polygon class="hx corridor" points="138.8,173.2 129.4,189.5 110.6,189.5 101.2,173.2 110.6,156.9 129.4,156.9"/>
+            <polygon class="hx unconverted" points="168.8,17.3 159.4,33.6 140.6,33.6 131.2,17.3 140.6,1.0 159.4,1.0"/>
+            <polygon class="hx unconverted" points="168.8,52.0 159.4,68.2 140.6,68.2 131.2,52.0 140.6,35.7 159.4,35.7"/>
+            <polygon class="hx participating" points="168.8,86.6 159.4,102.9 140.6,102.9 131.2,86.6 140.6,70.3 159.4,70.3"/>
+            <polygon class="hx unconverted" points="168.8,121.2 159.4,137.5 140.6,137.5 131.2,121.2 140.6,105.0 159.4,105.0"/>
+            <polygon class="hx participating" points="168.8,155.9 159.4,172.2 140.6,172.2 131.2,155.9 140.6,139.6 159.4,139.6"/>
+            <polygon class="hx corridor" points="168.8,190.5 159.4,206.8 140.6,206.8 131.2,190.5 140.6,174.2 159.4,174.2"/>
+            <polygon class="hx participating" points="198.8,0.0 189.4,16.3 170.6,16.3 161.2,0.0 170.6,-16.3 189.4,-16.3"/>
+            <polygon class="hx unconverted" points="198.8,34.6 189.4,50.9 170.6,50.9 161.2,34.6 170.6,18.4 189.4,18.4"/>
+            <polygon class="hx unconverted" points="198.8,69.3 189.4,85.6 170.6,85.6 161.2,69.3 170.6,53.0 189.4,53.0"/>
+            <polygon class="hx participating" points="198.8,103.9 189.4,120.2 170.6,120.2 161.2,103.9 170.6,87.6 189.4,87.6"/>
+            <polygon class="hx unconverted" points="198.8,138.6 189.4,154.8 170.6,154.8 161.2,138.6 170.6,122.3 189.4,122.3"/>
+            <polygon class="hx corridor" points="198.8,173.2 189.4,189.5 170.6,189.5 161.2,173.2 170.6,156.9 189.4,156.9"/>
+            <polygon class="hx unconverted" points="228.8,17.3 219.4,33.6 200.6,33.6 191.2,17.3 200.6,1.0 219.4,1.0"/>
+            <polygon class="hx participating" points="228.8,52.0 219.4,68.2 200.6,68.2 191.2,52.0 200.6,35.7 219.4,35.7"/>
+            <polygon class="hx unconverted" points="228.8,86.6 219.4,102.9 200.6,102.9 191.2,86.6 200.6,70.3 219.4,70.3"/>
+            <polygon class="hx unconverted" points="228.8,121.2 219.4,137.5 200.6,137.5 191.2,121.2 200.6,105.0 219.4,105.0"/>
+            <polygon class="hx participating" points="228.8,155.9 219.4,172.2 200.6,172.2 191.2,155.9 200.6,139.6 219.4,139.6"/>
+            <polygon class="hx corridor" points="228.8,190.5 219.4,206.8 200.6,206.8 191.2,190.5 200.6,174.2 219.4,174.2"/>
+            <polygon class="hx unconverted" points="258.8,0.0 249.4,16.3 230.6,16.3 221.2,0.0 230.6,-16.3 249.4,-16.3"/>
+            <polygon class="hx unconverted" points="258.8,34.6 249.4,50.9 230.6,50.9 221.2,34.6 230.6,18.4 249.4,18.4"/>
+            <polygon class="hx participating" points="258.8,69.3 249.4,85.6 230.6,85.6 221.2,69.3 230.6,53.0 249.4,53.0"/>
+            <polygon class="hx unconverted" points="258.8,103.9 249.4,120.2 230.6,120.2 221.2,103.9 230.6,87.6 249.4,87.6"/>
+            <polygon class="hx participating" points="258.8,138.6 249.4,154.8 230.6,154.8 221.2,138.6 230.6,122.3 249.4,122.3"/>
+            <polygon class="hx corridor" points="258.8,173.2 249.4,189.5 230.6,189.5 221.2,173.2 230.6,156.9 249.4,156.9"/>
+          </svg>
+        </div>
+        <div class="pn-readouts-row">
+          <div class="pn-ro-mini"><span class="k">Above threshold</span><span class="v zero">0</span></div>
+          <div class="pn-ro-mini"><span class="k">Effort in a cluster</span><span class="v zero">6%</span></div>
+          <div class="pn-ro-mini"><span class="k">Touching corridor</span><span class="v zero">0</span></div>
+        </div>
+      </div>
+
+      <!-- CLUSTERED -->
+      <div class="pn-map-card">
+        <div class="pn-map-card__head">
+          <h3>Targeted — clustered</h3>
+          <span class="tag">Same 18 yards</span>
+        </div>
+        <div class="pn-stage">
+          <svg viewBox="-22 -22 302 232" role="img" aria-label="Clustered arrangement: the same 18 participating yards concentrated next to the creek corridor, five territories cross the threshold and glow">
+            <polygon class="hx unconverted" points="18.8,0.0 9.4,16.3 -9.4,16.3 -18.8,0.0 -9.4,-16.3 9.4,-16.3"/>
+            <polygon class="hx unconverted" points="18.8,34.6 9.4,50.9 -9.4,50.9 -18.8,34.6 -9.4,18.4 9.4,18.4"/>
+            <polygon class="hx unconverted" points="18.8,69.3 9.4,85.6 -9.4,85.6 -18.8,69.3 -9.4,53.0 9.4,53.0"/>
+            <polygon class="hx unconverted" points="18.8,103.9 9.4,120.2 -9.4,120.2 -18.8,103.9 -9.4,87.6 9.4,87.6"/>
+            <polygon class="hx unconverted" points="18.8,138.6 9.4,154.8 -9.4,154.8 -18.8,138.6 -9.4,122.3 9.4,122.3"/>
+            <polygon class="hx corridor" points="18.8,173.2 9.4,189.5 -9.4,189.5 -18.8,173.2 -9.4,156.9 9.4,156.9"/>
+            <polygon class="hx unconverted" points="48.8,17.3 39.4,33.6 20.6,33.6 11.2,17.3 20.6,1.0 39.4,1.0"/>
+            <polygon class="hx unconverted" points="48.8,52.0 39.4,68.2 20.6,68.2 11.2,52.0 20.6,35.7 39.4,35.7"/>
+            <polygon class="hx participating" points="48.8,86.6 39.4,102.9 20.6,102.9 11.2,86.6 20.6,70.3 39.4,70.3"/>
+            <polygon class="hx participating" points="48.8,121.2 39.4,137.5 20.6,137.5 11.2,121.2 20.6,105.0 39.4,105.0"/>
+            <polygon class="hx participating" points="48.8,155.9 39.4,172.2 20.6,172.2 11.2,155.9 20.6,139.6 39.4,139.6"/>
+            <polygon class="hx corridor" points="48.8,190.5 39.4,206.8 20.6,206.8 11.2,190.5 20.6,174.2 39.4,174.2"/>
+            <polygon class="hx unconverted" points="78.8,0.0 69.4,16.3 50.6,16.3 41.2,0.0 50.6,-16.3 69.4,-16.3"/>
+            <polygon class="hx unconverted" points="78.8,34.6 69.4,50.9 50.6,50.9 41.2,34.6 50.6,18.4 69.4,18.4"/>
+            <polygon class="hx participating" points="78.8,69.3 69.4,85.6 50.6,85.6 41.2,69.3 50.6,53.0 69.4,53.0"/>
+            <polygon class="hx participating" points="78.8,103.9 69.4,120.2 50.6,120.2 41.2,103.9 50.6,87.6 69.4,87.6"/>
+            <polygon class="hx participating" points="78.8,138.6 69.4,154.8 50.6,154.8 41.2,138.6 50.6,122.3 69.4,122.3"/>
+            <polygon class="hx corridor" points="78.8,173.2 69.4,189.5 50.6,189.5 41.2,173.2 50.6,156.9 69.4,156.9"/>
+            <polygon class="hx unconverted" points="108.8,17.3 99.4,33.6 80.6,33.6 71.2,17.3 80.6,1.0 99.4,1.0"/>
+            <polygon class="hx unconverted" points="108.8,52.0 99.4,68.2 80.6,68.2 71.2,52.0 80.6,35.7 99.4,35.7"/>
+            <polygon class="hx participating" points="108.8,86.6 99.4,102.9 80.6,102.9 71.2,86.6 80.6,70.3 99.4,70.3"/>
+            <polygon class="hx participating" points="108.8,121.2 99.4,137.5 80.6,137.5 71.2,121.2 80.6,105.0 99.4,105.0"/>
+            <polygon class="hx participating" points="108.8,155.9 99.4,172.2 80.6,172.2 71.2,155.9 80.6,139.6 99.4,139.6"/>
+            <polygon class="hx corridor" points="108.8,190.5 99.4,206.8 80.6,206.8 71.2,190.5 80.6,174.2 99.4,174.2"/>
+            <polygon class="hx unconverted" points="138.8,0.0 129.4,16.3 110.6,16.3 101.2,0.0 110.6,-16.3 129.4,-16.3"/>
+            <polygon class="hx unconverted" points="138.8,34.6 129.4,50.9 110.6,50.9 101.2,34.6 110.6,18.4 129.4,18.4"/>
+            <polygon class="hx participating" points="138.8,69.3 129.4,85.6 110.6,85.6 101.2,69.3 110.6,53.0 129.4,53.0"/>
+            <polygon class="hx participating" points="138.8,103.9 129.4,120.2 110.6,120.2 101.2,103.9 110.6,87.6 129.4,87.6"/>
+            <polygon class="hx participating" points="138.8,138.6 129.4,154.8 110.6,154.8 101.2,138.6 110.6,122.3 129.4,122.3"/>
+            <polygon class="hx corridor" points="138.8,173.2 129.4,189.5 110.6,189.5 101.2,173.2 110.6,156.9 129.4,156.9"/>
+            <polygon class="hx unconverted" points="168.8,17.3 159.4,33.6 140.6,33.6 131.2,17.3 140.6,1.0 159.4,1.0"/>
+            <polygon class="hx unconverted" points="168.8,52.0 159.4,68.2 140.6,68.2 131.2,52.0 140.6,35.7 159.4,35.7"/>
+            <polygon class="hx participating" points="168.8,86.6 159.4,102.9 140.6,102.9 131.2,86.6 140.6,70.3 159.4,70.3"/>
+            <polygon class="hx participating" points="168.8,121.2 159.4,137.5 140.6,137.5 131.2,121.2 140.6,105.0 159.4,105.0"/>
+            <polygon class="hx participating" points="168.8,155.9 159.4,172.2 140.6,172.2 131.2,155.9 140.6,139.6 159.4,139.6"/>
+            <polygon class="hx corridor" points="168.8,190.5 159.4,206.8 140.6,206.8 131.2,190.5 140.6,174.2 159.4,174.2"/>
+            <polygon class="hx unconverted" points="198.8,0.0 189.4,16.3 170.6,16.3 161.2,0.0 170.6,-16.3 189.4,-16.3"/>
+            <polygon class="hx unconverted" points="198.8,34.6 189.4,50.9 170.6,50.9 161.2,34.6 170.6,18.4 189.4,18.4"/>
+            <polygon class="hx participating" points="198.8,69.3 189.4,85.6 170.6,85.6 161.2,69.3 170.6,53.0 189.4,53.0"/>
+            <polygon class="hx participating" points="198.8,103.9 189.4,120.2 170.6,120.2 161.2,103.9 170.6,87.6 189.4,87.6"/>
+            <polygon class="hx participating" points="198.8,138.6 189.4,154.8 170.6,154.8 161.2,138.6 170.6,122.3 189.4,122.3"/>
+            <polygon class="hx corridor" points="198.8,173.2 189.4,189.5 170.6,189.5 161.2,173.2 170.6,156.9 189.4,156.9"/>
+            <polygon class="hx unconverted" points="228.8,17.3 219.4,33.6 200.6,33.6 191.2,17.3 200.6,1.0 219.4,1.0"/>
+            <polygon class="hx unconverted" points="228.8,52.0 219.4,68.2 200.6,68.2 191.2,52.0 200.6,35.7 219.4,35.7"/>
+            <polygon class="hx unconverted" points="228.8,86.6 219.4,102.9 200.6,102.9 191.2,86.6 200.6,70.3 219.4,70.3"/>
+            <polygon class="hx unconverted" points="228.8,121.2 219.4,137.5 200.6,137.5 191.2,121.2 200.6,105.0 219.4,105.0"/>
+            <polygon class="hx unconverted" points="228.8,155.9 219.4,172.2 200.6,172.2 191.2,155.9 200.6,139.6 219.4,139.6"/>
+            <polygon class="hx corridor" points="228.8,190.5 219.4,206.8 200.6,206.8 191.2,190.5 200.6,174.2 219.4,174.2"/>
+            <polygon class="hx unconverted" points="258.8,0.0 249.4,16.3 230.6,16.3 221.2,0.0 230.6,-16.3 249.4,-16.3"/>
+            <polygon class="hx unconverted" points="258.8,34.6 249.4,50.9 230.6,50.9 221.2,34.6 230.6,18.4 249.4,18.4"/>
+            <polygon class="hx unconverted" points="258.8,69.3 249.4,85.6 230.6,85.6 221.2,69.3 230.6,53.0 249.4,53.0"/>
+            <polygon class="hx unconverted" points="258.8,103.9 249.4,120.2 230.6,120.2 221.2,103.9 230.6,87.6 249.4,87.6"/>
+            <polygon class="hx unconverted" points="258.8,138.6 249.4,154.8 230.6,154.8 221.2,138.6 230.6,122.3 249.4,122.3"/>
+            <polygon class="hx corridor" points="258.8,173.2 249.4,189.5 230.6,189.5 221.2,173.2 230.6,156.9 249.4,156.9"/>
+
+            <!-- territory glow: soft warm blob over the contiguous cluster, merging with the corridor -->
+            <g class="territory-glow">
+              <ellipse class="blob" cx="105" cy="130" rx="105" ry="80"/>
+            </g>
+          </svg>
+        </div>
+        <div class="pn-readouts-row">
+          <div class="pn-ro-mini"><span class="k">Above threshold</span><span class="v hi">5</span></div>
+          <div class="pn-ro-mini"><span class="k">Effort in a cluster</span><span class="v hi">100%</span></div>
+          <div class="pn-ro-mini"><span class="k">Touching corridor</span><span class="v hi">5</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pn-legend">
+      <span><span class="pn-sw" style="background:var(--hex-participating)"></span>Participating yard</span>
+      <span><span class="pn-sw" style="background:var(--hex-unconverted); border:1px solid var(--hex-unconverted-stroke)"></span>Unconverted lot</span>
+      <span><span class="pn-sw" style="background:var(--amber-wash-strong); border:1px solid var(--amber)"></span>Territory above threshold</span>
+      <span><span class="pn-sw" style="background:var(--hex-corridor)"></span>Source habitat (creek corridor)</span>
+    </div>
+
+    <p class="pn-verdict">
+      Same 18 lots. <b>Scattered</b>: no contiguous run ever reaches 40% of a local territory, so
+      nothing crosses and nothing touches the corridor. <b>Clustered</b>: the identical 18 lots
+      form one solid run against the creek — five territories cross threshold and every one of
+      them is contiguous with existing habitat. The geometry is the whole argument.
+    </p>
+
+    <div class="pn-caveat">
+      <strong>The assumption I'd most like challenged.</strong> Narango, Tallamy &amp; Marra
+      (2018, PNAS) found Carolina chickadee populations fail below roughly 70% native plant
+      <em>biomass</em> within a territory. I am treating "40% of lots converted" as a stand-in
+      for that. Those are not the same measurement and the conversion between them is a guess.
+      The geometric point survives a wrong threshold; any specific number here does not.
+      Redundancy also only buffers <em>uncorrelated</em> risk — drought, a hard freeze,
+      citywide mosquito fogging and owner turnover hit every yard in a cluster at once.
+    </div>
+  </section>
+
+  <!-- ================= PART TWO ================= -->
+  <section class="pn-section">
+    <p class="pn-eyebrow">Part two · What goes in them</p>
+    <h2>Where the continental keystone list and the regional flora disagree</h2>
+    <p class="pn-lede">
+      The standard advice is to plant "keystone genera" from the National Wildlife Federation's
+      list, which is keyed to EPA Level I ecoregion 9 — a unit that runs from Texas to the
+      Canadian aspen parkland. It therefore recommends larch, hemlock, fir and spruce for a
+      Blackland Prairie yard. Below, every genus is put to the flora: does it have a treatment
+      in FNCT, does the flora's own host-plant appendix name Lepidoptera for it, and are any of
+      those animals actually recorded near this site? <strong>Where the two sources disagree,
+      the flora wins</strong> — and the rejects stay visible rather than being quietly dropped.
+    </p>
+
+    <p class="pn-lede">
+      <strong>7 genera</strong> in the Blackland natives catalog clear the screen with at least
+      one flora-cited larval host confirmed near this site — 9 distinct butterflies and moths,
+      across 5 growth forms, from canopy trees to forbs. <strong>2 genera</strong> on the
+      keystone list have no treatment in the flora at all, including <i>Larix</i>, which that
+      list credits with 99 caterpillar species.
+    </p>
+
+    <div class="pn-compare">
+      <div class="pn-card">
+        <span class="g">Quercus</span>
+        <span class="room">Needs a yard</span>
+        <span class="pn-pair">
+          <span class="pn-stat"><b class="no">253</b><i>NWF claim</i></span>
+          <span class="pn-stat"><b class="ok">17</b><i>FNCT hosts</i></span>
+        </span>
+        <span class="sub"><span class="pn-near">2 of them recorded near here.</span> Cited to FNCT p. 711.</span>
+      </div>
+      <div class="pn-card">
+        <span class="g">Celtis</span>
+        <span class="room">Needs a yard</span>
+        <span class="pn-pair">
+          <span class="pn-stat"><b class="no">—</b><i>NWF claim</i></span>
+          <span class="pn-stat"><b class="ok">7</b><i>FNCT hosts</i></span>
+        </span>
+        <span class="sub"><span class="pn-near">4 of them recorded near here.</span> Cited to FNCT p. 1036. Never on the continental list at all.</span>
+      </div>
+      <div class="pn-card">
+        <span class="g">Asclepias</span>
+        <span class="room">Fits a bed</span>
+        <span class="pn-pair">
+          <span class="pn-stat"><b class="no">—</b><i>NWF claim</i></span>
+          <span class="pn-stat"><b class="ok">2</b><i>FNCT hosts</i></span>
+        </span>
+        <span class="sub"><span class="pn-near">1 of them recorded near here.</span> The monarch, one mile out. Cited to FNCT p. 276.</span>
+      </div>
+      <div class="pn-card">
+        <span class="g">Betula</span>
+        <span class="room">Needs a yard</span>
+        <span class="pn-pair">
+          <span class="pn-stat"><b class="no">189</b><i>NWF claim</i></span>
+          <span class="pn-stat"><b class="no">none</b><i>FNCT hosts</i></span>
+        </span>
+        <span class="sub">In the flora (p. 439), but its host appendix names no Lepidoptera, and its one nc TX species is a riverbank tree with no Dallas record.</span>
+      </div>
+      <div class="pn-card pn-card--reject">
+        <span class="g">Larix</span>
+        <span class="room">Not in the natives catalog</span>
+        <span class="pn-pair">
+          <span class="pn-stat"><b class="no">99</b><i>NWF claim</i></span>
+          <span class="pn-stat"><b class="no">none</b><i>FNCT hosts</i></span>
+        </span>
+        <span class="sub">On the keystone list. No treatment in the flora at all — recommending it here would be a mistake.</span>
+      </div>
+      <div class="pn-card">
+        <span class="g">Symphyotrichum</span>
+        <span class="room">Fits anywhere</span>
+        <span class="pn-pair">
+          <span class="pn-stat"><b class="no">—</b><i>NWF claim</i></span>
+          <span class="pn-stat"><b class="ok">2</b><i>FNCT hosts</i></span>
+        </span>
+        <span class="sub">Not absent — the flora keeps these under <i>Aster</i>, p. 315, a 1999 naming decision.</span>
+      </div>
+    </div>
+    <p class="data-note" style="margin:0 0 1.6rem">
+      Six genera that carry the argument. <strong>NWF claim</strong> is caterpillar species for
+      the whole genus across a continental ecoregion; <strong>FNCT hosts</strong> is Lepidoptera
+      named for it in the flora's Appendix Ten for North Central Texas. The one-line reading
+      under each is mine, not either source's.
+    </p>
+
+    <div class="pn-tier-key">
+      <span><span class="dot" style="background:var(--amber)"></span>Primary · flora treatment, direct</span>
+      <span><span class="dot" style="background:var(--cyan)"></span>Primary · flora appendix host record</span>
+      <span><span class="dot" style="background:var(--text-faint)"></span>Aggregator · iNaturalist nearby record</span>
+      <span><span class="dot" style="background:var(--reject)"></span>Agency · NWF continental estimate only</span>
+    </div>
+
+    <div class="pn-filters">
+      <div class="pn-ctl">
+        <label for="pnVerdictFilter">Evidence</label>
+        <select id="pnVerdictFilter">
+          <option value="all">Plantable &amp; confirmed near this site</option>
+          <option value="flora-hosts">Flora-cited hosts (any)</option>
+          <option value="rejected">Rejected by the flora</option>
+          <option value="renamed">Renamed since 1999</option>
+          <option value="everything">Everything</option>
+        </select>
+      </div>
+      <div class="pn-ctl">
+        <label for="pnSearch">Search</label>
+        <input type="search" id="pnSearch" placeholder="Genus or animal" />
+      </div>
+      <span class="pn-count" id="pnCount">16 genera</span>
+    </div>
+
+    <div class="pn-table-grid">
+      <div class="pn-scroll">
+        <table class="pn-table" id="pnTable">
+          <thead>
+            <tr>
+              <th>Genus</th>
+              <th>Evidence</th>
+              <th>Room needed</th>
+              <th class="num">Mature ht</th>
+              <th class="num">NWF lep.</th>
+              <th class="num">NWF bees</th>
+              <th class="num">FNCT hosts</th>
+              <th class="num">Near here</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr data-verdict="all confirmed-local">
+              <td class="genus">Quercus<span class="cite">FNCT p. 711</span></td>
+              <td><span class="verdict-chip verdict-confirmed-local"><span class="dot"></span>Confirmed here</span></td>
+              <td>Canopy tree</td>
+              <td class="num">60 ft</td>
+              <td class="num">253</td>
+              <td class="num">—</td>
+              <td class="num">17</td>
+              <td class="num">2</td>
+            </tr>
+            <tr data-verdict="all confirmed-local">
+              <td class="genus">Celtis<span class="cite">FNCT p. 1036</span></td>
+              <td><span class="verdict-chip verdict-confirmed-local"><span class="dot"></span>Confirmed here</span></td>
+              <td>Canopy tree</td>
+              <td>60 ft</td>
+              <td class="num">—</td>
+              <td class="num">—</td>
+              <td class="num">7</td>
+              <td class="num">4</td>
+            </tr>
+            <tr data-verdict="all confirmed-local">
+              <td class="genus">Prunus<span class="cite">FNCT p. 947</span></td>
+              <td><span class="verdict-chip verdict-confirmed-local"><span class="dot"></span>Confirmed here</span></td>
+              <td>Shrub / small tree</td>
+              <td class="num">25 ft</td>
+              <td class="num">222</td>
+              <td class="num">—</td>
+              <td class="num">19</td>
+              <td class="num">3</td>
+            </tr>
+            <tr data-verdict="all confirmed-local">
+              <td class="genus">Vitis<span class="cite">FNCT p. 1068</span></td>
+              <td><span class="verdict-chip verdict-confirmed-local"><span class="dot"></span>Confirmed here</span></td>
+              <td>Vine</td>
+              <td class="num">—</td>
+              <td class="num">60</td>
+              <td class="num">—</td>
+              <td class="num">10</td>
+              <td class="num">2</td>
+            </tr>
+            <tr data-verdict="all confirmed-local">
+              <td class="genus">Asclepias<span class="cite">FNCT p. 276</span></td>
+              <td><span class="verdict-chip verdict-confirmed-local"><span class="dot"></span>Confirmed here</span></td>
+              <td>Forb</td>
+              <td class="num">3 ft</td>
+              <td class="num">—</td>
+              <td class="num">—</td>
+              <td class="num">2</td>
+              <td class="num">1</td>
+            </tr>
+            <tr data-verdict="all confirmed-local">
+              <td class="genus">Salix<span class="cite">FNCT p. 976</span></td>
+              <td><span class="verdict-chip verdict-confirmed-local"><span class="dot"></span>Confirmed here</span></td>
+              <td>Shrub / small tree</td>
+              <td class="num">40 ft</td>
+              <td class="num">214</td>
+              <td class="num">20</td>
+              <td class="num">12</td>
+              <td class="num">1</td>
+            </tr>
+            <tr data-verdict="all confirmed-local">
+              <td class="genus">Helianthus<span class="cite">FNCT p. 368</span></td>
+              <td><span class="verdict-chip verdict-confirmed-local"><span class="dot"></span>Confirmed here</span></td>
+              <td>Forb</td>
+              <td class="num">6 ft</td>
+              <td class="num">58</td>
+              <td class="num">89</td>
+              <td class="num">3</td>
+              <td class="num">1</td>
+            </tr>
+            <tr data-verdict="flora-hosts">
+              <td class="genus">Solidago<span class="cite">FNCT p. 408</span></td>
+              <td><span class="verdict-chip verdict-flora-hosts"><span class="dot"></span>Flora-cited hosts</span></td>
+              <td>Forb</td>
+              <td class="num">4 ft</td>
+              <td class="num">71</td>
+              <td class="num">56</td>
+              <td class="num">0</td>
+              <td class="num">0</td>
+            </tr>
+            <tr data-verdict="flora-hosts">
+              <td class="genus">Juniperus<span class="cite">FNCT p. 202</span></td>
+              <td><span class="verdict-chip verdict-flora-hosts"><span class="dot"></span>Flora-cited hosts</span></td>
+              <td>Canopy tree</td>
+              <td class="num">30 ft</td>
+              <td class="num">—</td>
+              <td class="num">—</td>
+              <td class="num">2</td>
+              <td class="num">0</td>
+            </tr>
+            <tr data-verdict="flora-hosts">
+              <td class="genus">Cercis<span class="cite">FNCT p. 640</span></td>
+              <td><span class="verdict-chip verdict-flora-hosts"><span class="dot"></span>Flora-cited hosts</span></td>
+              <td>Shrub / small tree</td>
+              <td class="num">25 ft</td>
+              <td class="num">—</td>
+              <td class="num">—</td>
+              <td class="num">2</td>
+              <td class="num">0</td>
+            </tr>
+            <tr data-verdict="flora-hosts">
+              <td class="genus">Rubus<span class="cite">FNCT p. 958</span></td>
+              <td><span class="verdict-chip verdict-flora-hosts"><span class="dot"></span>Flora-cited hosts</span></td>
+              <td>Vine</td>
+              <td class="num">—</td>
+              <td class="num">88</td>
+              <td class="num">—</td>
+              <td class="num">0</td>
+              <td class="num">0</td>
+            </tr>
+            <tr data-verdict="all in-flora">
+              <td class="genus">Betula<span class="cite">FNCT p. 439</span></td>
+              <td><span class="verdict-chip verdict-in-flora"><span class="dot"></span>In the flora</span></td>
+              <td>Canopy tree</td>
+              <td class="num">70 ft</td>
+              <td class="num">189</td>
+              <td class="num">—</td>
+              <td class="num">0</td>
+              <td class="num">0</td>
+            </tr>
+            <tr data-verdict="renamed">
+              <td class="genus">Symphyotrichum<span class="cite">as <i>Aster</i>, p. 315</span></td>
+              <td><span class="verdict-chip verdict-renamed"><span class="dot"></span>Renamed since 1999</span></td>
+              <td>Forb</td>
+              <td class="num">3 ft</td>
+              <td class="num">—</td>
+              <td class="num">43</td>
+              <td class="num">2</td>
+              <td class="num">0</td>
+            </tr>
+            <tr data-verdict="rejected">
+              <td class="genus">Larix<span class="cite">no treatment</span></td>
+              <td><span class="verdict-chip verdict-rejected"><span class="dot"></span>Not in the flora</span></td>
+              <td>Not in the natives catalog</td>
+              <td class="num">—</td>
+              <td class="num">99</td>
+              <td class="num">—</td>
+              <td class="num">—</td>
+              <td class="num">—</td>
+            </tr>
+            <tr data-verdict="rejected">
+              <td class="genus">Abies<span class="cite">no treatment</span></td>
+              <td><span class="verdict-chip verdict-rejected"><span class="dot"></span>Not in the flora</span></td>
+              <td>Not in the natives catalog</td>
+              <td class="num">—</td>
+              <td class="num">85</td>
+              <td class="num">—</td>
+              <td class="num">—</td>
+              <td class="num">—</td>
+            </tr>
+            <tr data-verdict="everything">
+              <td class="genus">Malvaviscus<span class="cite">FNCT p. 814</span></td>
+              <td><span class="verdict-chip verdict-flora-hosts"><span class="dot"></span>Flora-cited hosts</span></td>
+              <td>Subshrub</td>
+              <td class="num">3 ft</td>
+              <td class="num">—</td>
+              <td class="num">—</td>
+              <td class="num">3</td>
+              <td class="num">0</td>
+            </tr>
+            <tr data-verdict="everything">
+              <td class="genus">Schizachyrium<span class="cite">FNCT p. 1316</span></td>
+              <td><span class="verdict-chip verdict-flora-hosts"><span class="dot"></span>Flora-cited hosts</span></td>
+              <td>Grass / sedge</td>
+              <td class="num">3 ft</td>
+              <td class="num">—</td>
+              <td class="num">—</td>
+              <td class="num">6</td>
+              <td class="num">0</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="pn-caveat">
+      <strong>What the columns are not.</strong> "NWF lep." is a count for a whole
+      <em>genus</em> across an entire continental ecoregion; it does not transfer to one plant
+      in one yard. "FNCT hosts" counts named Lepidoptera in the flora's Appendix Ten, which is
+      a compilation with its own coverage gaps, not an exhaustive survey. The two are different
+      measurements and are never added together. "Near here" means the animal has been reported
+      within 15 miles on iNaturalist — presence, not abundance, and heavily observer-biased.
+      Mature height stands in for size because the catalog carries no canopy width; the biomass
+      weighting that argument really wants is therefore <em>absent</em>, not estimated.
+    </div>
+  </section>
+
+  <!-- ================= PART THREE ================= -->
+  <section class="pn-section">
+    <p class="pn-eyebrow">Part three · The ask</p>
+    <h2>What I need from this room</h2>
+    <p class="pn-lede">
+      I am not proposing a new organization. NPSOT, BPTMN, Pollinator Pathway and Homegrown
+      National Park already exist and already do the organizing. I am asking three questions.
+    </p>
+    <div class="pn-asks">
+      <div class="pn-ask">
+        <span class="n">ASK 01</span>
+        <h3>Red-line the screen</h3>
+        <p>
+          Every row carries an FNCT page number and, where I overrode a source, a sentence
+          saying the call was mine. Those are where I am least sure. I would rather be
+          corrected here than in front of a city arborist.
+        </p>
+      </div>
+      <div class="pn-ask">
+        <span class="n">ASK 02</span>
+        <h3>Does a chapter yard registry already exist?</h3>
+        <p>
+          If members have been logging conversions — NLCP graduates, Wildscapes certifications,
+          anything — that list is worth more than any model I can build. The targeting argument
+          is only useful with real points on it.
+        </p>
+      </div>
+      <div class="pn-ask">
+        <span class="n">ASK 03</span>
+        <h3>Is there appetite for a coordinated effort at all?</h3>
+        <p>
+          Part one argues that adjacency beats linear connection. That is untested here. Before
+          anyone builds a participant-facing anything, I would like to know whether this
+          chapter thinks the question is worth answering.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= DRILL-DOWN HANDOFF ================= -->
+  <section class="pn-section">
+    <p class="pn-eyebrow">From the constellation to one point of light</p>
+    <h2 style="max-width:none">The argument is general. Your yard isn't.</h2>
+    <div class="handoff">
+      <div class="handoff-copy">
+        <svg class="pinpoint-svg" width="220" height="140" viewBox="0 0 220 140">
+          <g opacity="0.35">
+            <circle cx="30" cy="30" r="2" fill="var(--text-faint)"/>
+            <circle cx="55" cy="60" r="2" fill="var(--text-faint)"/>
+            <circle cx="20" cy="90" r="2" fill="var(--text-faint)"/>
+            <circle cx="80" cy="25" r="2" fill="var(--text-faint)"/>
+            <circle cx="95" cy="100" r="2" fill="var(--text-faint)"/>
+            <circle cx="150" cy="35" r="2" fill="var(--text-faint)"/>
+            <circle cx="180" cy="70" r="2" fill="var(--text-faint)"/>
+            <circle cx="140" cy="105" r="2" fill="var(--text-faint)"/>
+            <circle cx="195" cy="20" r="2" fill="var(--text-faint)"/>
+          </g>
+          <line x1="30" y1="30" x2="110" y2="70" stroke="var(--border-strong)" stroke-width="1" stroke-dasharray="2 3"/>
+          <line x1="180" y1="70" x2="110" y2="70" stroke="var(--border-strong)" stroke-width="1" stroke-dasharray="2 3"/>
+          <line x1="140" y1="105" x2="110" y2="70" stroke="var(--border-strong)" stroke-width="1" stroke-dasharray="2 3"/>
+          <circle cx="110" cy="70" r="6" fill="var(--amber)" filter="url(#pinGlow)"/>
+          <circle cx="110" cy="70" r="2.4" fill="#fff8ea"/>
+          <text x="110" y="128" text-anchor="middle" font-size="11" fill="var(--text-faint)" font-family="ui-monospace, monospace" letter-spacing="0.5">YOUR LOT</text>
+        </svg>
+        <p>
+          Everything above is a schematic. Your address is not — it has a real footprint, a real
+          creek distance, and a real starting catalog. Pick a project below to move from the
+          territory argument into the plan for one yard.
+        </p>
+      </div>
+      <div class="yard-picker">
+        <a class="yard-card" href="#">
+          <span>
+            <span class="name">614 Comal Ct.</span>
+            <span class="meta">0.4 mi from the creek corridor · 6 keystone genera planted</span>
+          </span>
+          <span class="arrow">→</span>
+        </a>
+        <a class="yard-card" href="#">
+          <span>
+            <span class="name">Prairie Ridge HOA — common area</span>
+            <span class="meta">Borders the corridor directly · Setup in progress</span>
+          </span>
+          <span class="arrow">→</span>
+        </a>
+        <a class="yard-card" href="#">
+          <span>
+            <span class="name">228 Meander Way</span>
+            <span class="meta">1.1 mi from the creek corridor · 2 keystone genera planted</span>
+          </span>
+          <span class="arrow">→</span>
+        </a>
+        <a class="yard-card yard-card--new" href="#">+ New project</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SOURCES ================= -->
+  <section class="pn-section">
+    <p class="pn-eyebrow">Sources</p>
+    <ul class="pn-sources">
+      <li>
+        Diggs, G.M., Lipscomb, B.L. &amp; O'Kennon, R.J. 1999. <i>Shinners &amp; Mahler's
+        Illustrated Flora of North Central Texas.</i> BRIT/Austin College. Genus treatments and
+        Appendix Ten ("Larval Host Plants of Lepidoptera of North Central Texas", compiled by
+        JoAnn Karges, pp. 1394–1403).
+      </li>
+      <li>National Wildlife Federation Native Plant Finder, EPA Level I ecoregion 9 — keystone genus counts.</li>
+      <li>USDA PLANTS — growth habit and mature height.</li>
+      <li>iNaturalist — species reported near the site, with per-place establishment means.</li>
+      <li>
+        Narango, D.L., Tallamy, D.W. &amp; Marra, P.P. 2018. Nonnative plants reduce population
+        growth of an insectivorous bird. <i>PNAS</i> 115(45).
+      </li>
+    </ul>
+    <p class="data-note">
+      Everything on this page is read from files in this repository. It runs with the network
+      off.
+    </p>
+  </section>
+
+</main>
+
+<footer class="pn-foot">
+  <p class="data-note">Blackland Patch Network — a project-agnostic argument. See the drawer at right for what's confirmed near your own yard.</p>
+</footer>
+
+<!-- ================= NEARBY ECOSYSTEM — PULLABLE DRAWER ================= -->
+<button class="eco-tab" id="ecoTab" aria-expanded="true" aria-controls="ecoDrawer">Nearby ecosystem</button>
+<div class="eco-backdrop" id="ecoBackdrop"></div>
+<aside class="eco-drawer" id="ecoDrawer">
+  <div class="eco-drawer__head">
+    <div>
+      <h2>Plant matches</h2>
+      <p>For 614 Comal Ct. — species reported on iNaturalist within 15 miles, matched against keystone and larval-host genera.</p>
+    </div>
+    <button class="eco-drawer__close" id="ecoClose" aria-label="Close drawer">✕</button>
+  </div>
+  <div class="eco-drawer__body">
+    <div class="eco-drawer__controls">
+      <select aria-label="Filter by taxon">
+        <option>All taxa</option>
+        <option>Lepidoptera</option>
+        <option>Bees</option>
+      </select>
+      <input type="search" placeholder="Genus or animal" aria-label="Search matches" />
+    </div>
+
+    <div class="eco-group">
+      <h3>Candidates to add</h3>
+      <p class="hint">Keystone or larval-host genera the catalog carries no species in, prioritized by a confirmed nearby animal first.</p>
+      <div class="eco-match">
+        <span class="swatch"></span>
+        <div class="body">
+          <span class="common">Cedar elm</span> <span class="bot">Ulmus crassifolia</span>
+          <div class="desc">Brings the keystone genus <i>Ulmus</i> — 109 caterpillar species (NWF ecoregion 9).</div>
+          <span class="stat">Question mark confirmed 1 mi away</span>
+        </div>
+      </div>
+      <div class="eco-match">
+        <span class="swatch"></span>
+        <div class="body">
+          <span class="common">Texas redbud</span> <span class="bot">Cercis canadensis var. texensis</span>
+          <div class="desc">Brings the keystone genus <i>Cercis</i> — 2 flora-cited larval hosts (FNCT p. 640).</div>
+          <span class="stat">Henry's elfin: no confirmed record within 15 mi</span>
+        </div>
+      </div>
+      <div class="eco-match">
+        <span class="swatch"></span>
+        <div class="body">
+          <span class="common">Possumhaw holly</span> <span class="bot">Ilex decidua</span>
+          <div class="desc">Brings the keystone genus <i>Ilex</i> — 1 flora-cited larval host (FNCT p. 268).</div>
+          <span class="stat">Henry's elfin: no confirmed record within 15 mi</span>
+        </div>
+      </div>
+      <div class="eco-match">
+        <span class="swatch"></span>
+        <div class="body">
+          <span class="common">Purple passionflower</span> <span class="bot">Passiflora incarnata</span>
+          <div class="desc">Brings the keystone genus <i>Passiflora</i> — 3 flora-cited larval hosts (FNCT p. 62).</div>
+          <span class="stat">Gulf fritillary confirmed 2 mi away</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="eco-group">
+      <h3>Already in your catalog</h3>
+      <p class="hint">Keystone genera this yard already plants, same priority order.</p>
+      <div class="eco-match in-catalog">
+        <span class="swatch"></span>
+        <div class="body">
+          <span class="common">Shumard oak</span> <span class="bot">Quercus shumardii</span>
+          <div class="desc">Keystone genus <i>Quercus</i> — 17 flora-cited larval hosts (FNCT p. 711).</div>
+          <span class="stat">Horace's duskywing, polyphemus moth confirmed 3 mi away</span>
+        </div>
+      </div>
+      <div class="eco-match in-catalog">
+        <span class="swatch"></span>
+        <div class="body">
+          <span class="common">Sugarberry</span> <span class="bot">Celtis laevigata</span>
+          <div class="desc">Keystone genus <i>Celtis</i> — 7 flora-cited larval hosts (FNCT p. 1036).</div>
+          <span class="stat">Hackberry emperor, tawny emperor confirmed 1 mi away</span>
+        </div>
+      </div>
+      <div class="eco-match in-catalog">
+        <span class="swatch"></span>
+        <div class="body">
+          <span class="common">Antelope-horns milkweed</span> <span class="bot">Asclepias asperula</span>
+          <div class="desc">Keystone genus <i>Asclepias</i> — 2 flora-cited larval hosts (FNCT p. 276).</div>
+          <span class="stat">Monarch confirmed 1 mi away</span>
+        </div>
+      </div>
+      <div class="eco-match in-catalog">
+        <span class="swatch"></span>
+        <div class="body">
+          <span class="common">Maximilian sunflower</span> <span class="bot">Helianthus maximiliani</span>
+          <div class="desc">Keystone genus <i>Helianthus</i> — 58 caterpillar species, 89 specialist bees (NWF).</div>
+          <span class="stat">No confirmed larval host within 15 mi yet</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="eco-drawer__foot">
+    <a href="#">See the full nearby-species index →</a>
+  </div>
+</aside>
+
+<script>
+  (function () {
+    var drawer = document.getElementById('ecoDrawer');
+    var tab = document.getElementById('ecoTab');
+    var closeBtn = document.getElementById('ecoClose');
+    var backdrop = document.getElementById('ecoBackdrop');
+    var narrow = window.matchMedia('(max-width: 900px)');
+
+    function setOpen(open) {
+      drawer.classList.toggle('closed', !open);
+      tab.setAttribute('aria-expanded', String(open));
+      if (narrow.matches) backdrop.classList.toggle('show', open);
+    }
+    // Shown open by default at desktop widths; still toggle-able.
+    setOpen(!narrow.matches ? true : false);
+
+    tab.addEventListener('click', function () { setOpen(drawer.classList.contains('closed')); });
+    closeBtn.addEventListener('click', function () { setOpen(false); });
+    backdrop.addEventListener('click', function () { setOpen(false); });
+
+    // Cheap evidence filter for the screened table.
+    var select = document.getElementById('pnVerdictFilter');
+    var search = document.getElementById('pnSearch');
+    var rows = document.querySelectorAll('#pnTable tbody tr');
+    var count = document.getElementById('pnCount');
+
+    function applyFilter() {
+      var mode = select.value;
+      var q = search.value.trim().toLowerCase();
+      var shown = 0;
+      rows.forEach(function (row) {
+        var tags = (row.getAttribute('data-verdict') || '').split(' ');
+        var matchesMode = mode === 'everything' || tags.indexOf(mode) !== -1;
+        var text = row.textContent.toLowerCase();
+        var matchesSearch = !q || text.indexOf(q) !== -1;
+        var show = matchesMode && matchesSearch;
+        row.hidden = !show;
+        if (show) shown++;
+      });
+      count.textContent = shown + (shown === 1 ? ' genus' : ' genera');
+    }
+    select.addEventListener('change', applyFilter);
+    search.addEventListener('input', applyFilter);
+    applyFilter();
+  })();
+</script>
+</body>
+</html>

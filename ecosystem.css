@@ -14,7 +14,7 @@
 
 .ecosystem-count {
   margin-left: auto;
-  color: #666;
+  color: var(--ink-faint);
   font-size: 0.9rem;
 }
 
@@ -28,13 +28,13 @@
 .ecosystem-table td {
   text-align: left;
   padding: 0.35rem 0.6rem;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--rule);
 }
 
 .ecosystem-table th {
   position: sticky;
   top: 0;
-  background: #fff;
+  background: var(--surface-card);
   user-select: none;
 }
 
@@ -57,7 +57,7 @@
 .plant-matches {
   margin-bottom: 2rem;
   padding-bottom: 1rem;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--rule);
 }
 
 .plant-matches__group {
@@ -79,13 +79,13 @@
 
 .plant-matches__item {
   padding: 0.5rem 0.75rem;
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--rule);
   border-radius: 6px;
   background: #fafaf7;
 }
 
 .plant-matches__evidence {
-  color: #666;
+  color: var(--ink-faint);
   font-size: 0.85rem;
   margin-top: 0.15rem;
 }
@@ -95,7 +95,7 @@
 }
 
 .plant-matches__empty {
-  color: #666;
+  color: var(--ink-faint);
   font-size: 0.9rem;
   list-style: none;
 }

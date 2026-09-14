@@ -1,0 +1,1386 @@
+<title>Patch Network — Land Survey</title>
+<style>
+  :root {
+    --paper: #f3f2ee;
+    --paper-line: #dcd9d0;
+    --graphite: #26261f;
+    --graphite-soft: #55534a;
+    --ink-faint: #8b8a7f;
+    --line: #b9b6a9;
+    --line-strong: #26261f;
+    --accent: #b5461f;       /* survey-orange / transit-red */
+    --accent-soft: #e8d9cf;
+    --creek: #4b6b4f;        /* muted corridor green */
+    --creek-soft: #dce6dc;
+    --panel: #fbfaf7;
+    --mono: "IBM Plex Mono", "Berkeley Mono", ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    --sans: "Neue Haas Grotesk Text Pro", "Inter", "Helvetica Neue", Arial, sans-serif;
+    --grid-size: 28px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #16160f;
+      --paper-line: #262620;
+      --graphite: #e9e7dd;
+      --graphite-soft: #b3b0a3;
+      --ink-faint: #706e63;
+      --line: #3a382f;
+      --line-strong: #e9e7dd;
+      --accent: #e07a4c;
+      --accent-soft: #3a271d;
+      --creek: #8bab8c;
+      --creek-soft: #223226;
+      --panel: #1c1c14;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #16160f;
+    --paper-line: #262620;
+    --graphite: #e9e7dd;
+    --graphite-soft: #b3b0a3;
+    --ink-faint: #706e63;
+    --line: #3a382f;
+    --line-strong: #e9e7dd;
+    --accent: #e07a4c;
+    --accent-soft: #3a271d;
+    --creek: #8bab8c;
+    --creek-soft: #223226;
+    --panel: #1c1c14;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background:
+      linear-gradient(var(--paper-line) 1px, transparent 1px) 0 0 / var(--grid-size) var(--grid-size),
+      linear-gradient(90deg, var(--paper-line) 1px, transparent 1px) 0 0 / var(--grid-size) var(--grid-size),
+      var(--paper);
+    color: var(--graphite);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  table, .tabular, .num {
+    font-variant-numeric: tabular-nums;
+    font-family: var(--mono);
+  }
+
+  a { color: var(--accent); }
+
+  .wrap {
+    max-width: 1064px;
+    margin: 0 auto;
+    padding: 0 24px 120px;
+  }
+
+  /* ---------- masthead ---------- */
+  header.masthead {
+    border-bottom: 2px solid var(--line-strong);
+    background: var(--panel);
+    padding: 14px 24px;
+    position: sticky;
+    top: 0;
+    z-index: 40;
+  }
+  .masthead-inner {
+    max-width: 1064px;
+    margin: 0 auto;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+  .brandmark {
+    font-family: var(--mono);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: 0.82rem;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .brandmark .plat-no {
+    color: var(--ink-faint);
+    font-weight: 400;
+  }
+  nav.masthead-nav {
+    display: flex;
+    gap: 22px;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+  }
+  nav.masthead-nav a {
+    color: var(--graphite-soft);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    padding-bottom: 2px;
+  }
+  nav.masthead-nav a:hover { border-bottom-color: var(--graphite-soft); }
+  nav.masthead-nav a.active { color: var(--graphite); border-bottom-color: var(--accent); }
+
+  .drawer-toggle {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: var(--graphite);
+    color: var(--paper);
+    border: 1px solid var(--graphite);
+    padding: 7px 12px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .drawer-toggle:hover { background: var(--accent); border-color: var(--accent); }
+  .drawer-toggle .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--creek);
+    display: inline-block;
+  }
+
+  /* ---------- section furniture ---------- */
+  .section {
+    margin-top: 68px;
+  }
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    border-bottom: 1.5px solid var(--line-strong);
+    padding-bottom: 8px;
+    margin-bottom: 26px;
+  }
+  .section-index {
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    color: var(--accent);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .section-head h2 {
+    font-family: var(--sans);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 1.05rem;
+    margin: 0;
+  }
+  .section-head .fileline {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    color: var(--ink-faint);
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+
+  .lede {
+    max-width: 640px;
+    font-size: 1rem;
+    color: var(--graphite-soft);
+    margin-bottom: 18px;
+  }
+  .lede strong { color: var(--graphite); font-weight: 600; }
+
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    padding: 12px 16px;
+    font-size: 0.92rem;
+    max-width: 640px;
+    margin: 20px 0;
+  }
+  .callout .tag {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 4px;
+  }
+
+  /* ---------- hero / part one ---------- */
+  .hero-top {
+    margin-top: 40px;
+  }
+  .plat-title {
+    font-family: var(--sans);
+    font-weight: 800;
+    font-size: clamp(1.8rem, 3.6vw, 2.7rem);
+    line-height: 1.08;
+    letter-spacing: -0.01em;
+    margin: 0 0 14px;
+    max-width: 760px;
+  }
+  .plat-title em {
+    font-style: normal;
+    color: var(--accent);
+  }
+
+  .coord-strip {
+    display: flex;
+    gap: 28px;
+    flex-wrap: wrap;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--ink-faint);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    padding: 8px 0;
+    margin: 18px 0 34px;
+  }
+  .coord-strip b { color: var(--graphite-soft); font-weight: 600; }
+
+  .geom-layout {
+    display: grid;
+    grid-template-columns: 1.35fr 1fr;
+    gap: 32px;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .geom-layout { grid-template-columns: 1fr; }
+  }
+
+  .figure-frame {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    position: relative;
+  }
+  .figure-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .figure-body { padding: 8px; position: relative; }
+
+  .ticks-x, .ticks-y { font-family: var(--mono); font-size: 8px; fill: var(--ink-faint); }
+  .grat-line { stroke: var(--line); stroke-width: 0.5; }
+
+  .hexmap-svg { width: 100%; height: auto; display: block; }
+  .hex-participating { fill: var(--creek-soft); stroke: var(--creek); stroke-width: 1.4; }
+  .hex-unconverted { fill: none; stroke: var(--line); stroke-width: 1; stroke-dasharray: 2 2; }
+  .hex-above { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; }
+  .hex-source { fill: var(--creek); fill-opacity: 0.85; stroke: var(--creek); }
+
+  .north-arrow text { font-family: var(--mono); font-size: 9px; fill: var(--graphite-soft); }
+
+  .scalebar-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px 12px;
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--ink-faint);
+    border-top: 1px dashed var(--line);
+  }
+
+  .figure-legend {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 18px;
+    padding: 12px 14px 14px;
+    border-top: 1px solid var(--line);
+    font-family: var(--mono);
+    font-size: 0.7rem;
+  }
+  .legend-item { display: flex; align-items: center; gap: 8px; }
+  .legend-swatch { width: 14px; height: 14px; flex: none; }
+  .sw-participating { background: var(--creek-soft); border: 1.4px solid var(--creek); }
+  .sw-unconverted { background: none; border: 1px dashed var(--line); }
+  .sw-above { background: var(--accent-soft); border: 2px solid var(--accent); }
+  .sw-source { background: var(--creek); border: 1px solid var(--creek); }
+
+  /* controls panel */
+  .controls-panel {
+    border: 1px solid var(--line);
+    background: var(--panel);
+  }
+  .controls-head {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .control-block {
+    padding: 16px 16px 18px;
+    border-bottom: 1px solid var(--line);
+  }
+  .control-block:last-child { border-bottom: none; }
+  .control-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+  .control-label .val {
+    font-family: var(--mono);
+    color: var(--accent);
+    font-weight: 700;
+  }
+  input[type="range"] {
+    width: 100%;
+    accent-color: var(--accent);
+  }
+  .toggle-row {
+    display: flex;
+    border: 1px solid var(--line);
+  }
+  .toggle-row button {
+    flex: 1;
+    background: var(--paper);
+    border: none;
+    padding: 8px 10px;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--graphite-soft);
+    cursor: pointer;
+    border-right: 1px solid var(--line);
+  }
+  .toggle-row button:last-child { border-right: none; }
+  .toggle-row button.active { background: var(--graphite); color: var(--paper); }
+  select.survey-select {
+    width: 100%;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    padding: 8px 10px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    color: var(--graphite);
+  }
+
+  .readouts {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    margin-top: 20px;
+  }
+  .readout {
+    background: var(--panel);
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .readout .rlabel {
+    font-size: 0.78rem;
+    color: var(--graphite-soft);
+  }
+  .readout .rvalue {
+    font-family: var(--mono);
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--graphite);
+  }
+  .readout .rvalue.hot { color: var(--accent); }
+  .readout .rvalue .unit { font-size: 0.6rem; color: var(--ink-faint); font-weight: 400; margin-left: 3px; }
+
+  /* ---------- part two: table ---------- */
+  .filter-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+  }
+  .filter-chip {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.03em;
+    padding: 7px 12px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--graphite-soft);
+    cursor: pointer;
+  }
+  .filter-chip.active {
+    background: var(--graphite);
+    color: var(--paper);
+    border-color: var(--graphite);
+  }
+
+  .table-scroll { overflow-x: auto; border: 1px solid var(--line-strong); }
+  table.survey-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+    min-width: 780px;
+    background: var(--panel);
+  }
+  table.survey-table thead th {
+    text-align: left;
+    font-family: var(--sans);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 0.66rem;
+    color: var(--graphite-soft);
+    border-bottom: 2px solid var(--line-strong);
+    padding: 10px 12px;
+    background: var(--paper);
+    white-space: nowrap;
+  }
+  table.survey-table thead th .unit {
+    display: block;
+    font-family: var(--mono);
+    font-weight: 400;
+    font-size: 0.6rem;
+    color: var(--ink-faint);
+    text-transform: none;
+    letter-spacing: 0.02em;
+    margin-top: 2px;
+  }
+  table.survey-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  table.survey-table td.num { text-align: right; }
+  table.survey-table tr:last-child td { border-bottom: none; }
+  table.survey-table td.genus {
+    font-family: var(--sans);
+    font-weight: 700;
+    font-style: italic;
+    font-size: 0.86rem;
+    white-space: nowrap;
+  }
+  .prov-tier {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    padding: 1px 6px;
+    border: 1px solid currentColor;
+    margin-bottom: 3px;
+  }
+  .prov-quoted { color: var(--creek); }
+  .prov-derived { color: var(--graphite-soft); }
+  .prov-judgement { color: var(--accent); }
+  .evidence-note { font-size: 0.74rem; color: var(--graphite-soft); }
+  .footnote-dagger { color: var(--accent); cursor: help; }
+  .near-yes { color: var(--creek); font-weight: 700; }
+  .near-no { color: var(--ink-faint); }
+
+  .table-footer {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    color: var(--ink-faint);
+    padding: 8px 2px;
+    border-top: none;
+  }
+
+  /* ---------- part three: asks ---------- */
+  .ask-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--line-strong);
+    border: 1px solid var(--line-strong);
+  }
+  @media (max-width: 900px) {
+    .ask-grid { grid-template-columns: 1fr; }
+  }
+  .ask-card {
+    background: var(--panel);
+    padding: 22px 20px 24px;
+  }
+  .ask-no {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--accent);
+    letter-spacing: 0.08em;
+    margin-bottom: 10px;
+  }
+  .ask-card h3 {
+    font-size: 1rem;
+    margin: 0 0 10px;
+    line-height: 1.3;
+  }
+  .ask-card p {
+    font-size: 0.86rem;
+    color: var(--graphite-soft);
+    margin: 0;
+  }
+
+  /* ---------- sources ---------- */
+  .sources-list {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    border-top: 1px solid var(--line);
+  }
+  .source-item {
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .source-item .src-no { color: var(--accent); }
+  .source-item .src-body { color: var(--graphite-soft); }
+  .source-item .src-body b { color: var(--graphite); font-weight: 600; }
+
+  /* ---------- handoff ---------- */
+  .handoff {
+    margin-top: 90px;
+    border: 1.5px solid var(--line-strong);
+    background: var(--panel);
+    padding: 0;
+    position: relative;
+    overflow: hidden;
+  }
+  .handoff-strip {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 20px;
+    background: var(--graphite);
+    color: var(--paper);
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .zoom-steps {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+  }
+  .zoom-step {
+    padding: 2px 8px;
+    border: 1px solid rgba(243,242,238,0.35);
+    color: rgba(243,242,238,0.6);
+  }
+  .zoom-step.current {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--paper);
+    font-weight: 700;
+  }
+  .zoom-arrow { color: rgba(243,242,238,0.4); }
+
+  .handoff-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+  }
+  @media (max-width: 900px) {
+    .handoff-body { grid-template-columns: 1fr; }
+  }
+  .handoff-panel {
+    padding: 28px 28px 32px;
+  }
+  .handoff-panel + .handoff-panel {
+    border-left: 1px solid var(--line);
+  }
+  @media (max-width: 900px) {
+    .handoff-panel + .handoff-panel { border-left: none; border-top: 1px solid var(--line); }
+  }
+  .handoff-panel h3 {
+    font-family: var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 0.78rem;
+    color: var(--ink-faint);
+    margin: 0 0 14px;
+  }
+  .handoff-panel p { font-size: 0.9rem; color: var(--graphite-soft); }
+
+  .lot-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .lot-option {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 1px solid var(--line);
+    padding: 10px 14px;
+    background: var(--paper);
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .lot-option:hover { border-color: var(--accent); }
+  .lot-option .lid { font-family: var(--mono); color: var(--ink-faint); font-size: 0.72rem; }
+  .lot-option.new-lot { border-style: dashed; color: var(--accent); font-weight: 600; }
+
+  .detail-inset {
+    position: relative;
+  }
+  .inset-box {
+    position: absolute;
+    border: 1.5px dashed var(--accent);
+  }
+
+  /* ---------- drawer ---------- */
+  .eco-drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    height: 100vh;
+    width: min(420px, 92vw);
+    background: var(--panel);
+    border-left: 1.5px solid var(--line-strong);
+    box-shadow: -8px 0 24px rgba(0,0,0,0.12);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(0);
+    transition: transform 0.25s ease;
+  }
+  .eco-drawer.closed { transform: translateX(100%); }
+
+  .drawer-head {
+    padding: 16px 18px 14px;
+    border-bottom: 1.5px solid var(--line-strong);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    background: var(--paper);
+  }
+  .drawer-head-title {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .drawer-head h3 {
+    margin: 4px 0 0;
+    font-family: var(--sans);
+    font-size: 1.05rem;
+    text-transform: none;
+  }
+  .drawer-close {
+    background: none;
+    border: 1px solid var(--line);
+    width: 26px;
+    height: 26px;
+    font-family: var(--mono);
+    cursor: pointer;
+    color: var(--graphite-soft);
+    flex: none;
+  }
+  .drawer-close:hover { border-color: var(--accent); color: var(--accent); }
+
+  .drawer-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 18px 30px;
+  }
+
+  .drawer-search {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .drawer-search input {
+    flex: 1;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    background: var(--paper);
+    color: var(--graphite);
+  }
+  .drawer-search button {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    background: var(--graphite);
+    color: var(--paper);
+    border: none;
+    padding: 0 12px;
+    cursor: pointer;
+  }
+
+  .drawer-filters {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .drawer-filters .filter-chip { font-size: 0.62rem; padding: 5px 9px; }
+
+  .match-group-head {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin: 18px 0 8px;
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 6px;
+  }
+  .match-group-head .count {
+    margin-left: auto;
+    color: var(--graphite-soft);
+  }
+
+  .match-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 10px;
+    padding: 9px 0;
+    border-bottom: 1px dotted var(--line);
+    font-size: 0.82rem;
+  }
+  .match-row .sp-taxon { font-style: italic; font-weight: 600; }
+  .match-row .sp-common { color: var(--graphite-soft); font-size: 0.76rem; grid-column: 1; }
+  .match-row .sp-dist {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    text-align: right;
+    color: var(--creek);
+    align-self: start;
+  }
+  .match-row.catalog .sp-dist { color: var(--ink-faint); }
+  .match-row .sp-meta {
+    grid-column: 1 / -1;
+    font-family: var(--mono);
+    font-size: 0.66rem;
+    color: var(--ink-faint);
+    display: flex;
+    gap: 12px;
+    margin-top: 2px;
+  }
+
+  .drawer-footer-link {
+    display: block;
+    text-align: center;
+    margin-top: 20px;
+    padding: 10px;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border: 1px solid var(--line);
+    color: var(--graphite-soft);
+    text-decoration: none;
+  }
+  .drawer-footer-link:hover { border-color: var(--accent); color: var(--accent); }
+
+  .drawer-scrim {
+    position: fixed;
+    inset: 0;
+    background: rgba(20,20,14,0.15);
+    z-index: 90;
+  }
+  .drawer-scrim.closed { display: none; }
+
+  footer.endmatter {
+    margin-top: 100px;
+    border-top: 2px solid var(--line-strong);
+    padding: 20px 24px;
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    color: var(--ink-faint);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+</style>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="brandmark">
+      PATCH NETWORK <span class="plat-no">— PLAT NO. 001 · BLACKLAND PRAIRIE, DFW</span>
+    </div>
+    <nav class="masthead-nav">
+      <a href="#geometry" class="active">§ 1 Geometry</a>
+      <a href="#screen">§ 2 Screen</a>
+      <a href="#asks">§ 3 The Ask</a>
+      <a href="#sources">Sources</a>
+    </nav>
+    <button class="drawer-toggle" onclick="document.getElementById('ecoDrawer').classList.remove('closed'); document.getElementById('ecoScrim').classList.remove('closed');">
+      <span class="dot"></span> Nearby ecosystem
+    </button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="hero-top">
+    <h1 class="plat-title">A yard is a plot line.<br>A neighborhood is <em>a territory</em>.</h1>
+    <p class="lede">
+      Bird territories in this ecoregion run <strong>1–2 hectares</strong>. No single yard closes
+      that distance. A cluster of participating lots can. This page surveys the geometry of
+      that cluster, screens the plant list against the regional flora, and asks three
+      questions I can't answer alone.
+    </p>
+    <div class="coord-strip">
+      <span><b>REGION</b> North Central Texas · Blackland Prairie</span>
+      <span><b>UNIT</b> 1 hex ≈ 1.5 ha territory</span>
+      <span><b>DATUM</b> Diggs, Lipscomb &amp; O'Kennon 1999</span>
+      <span><b>REV</b> 2026-09</span>
+    </div>
+  </div>
+
+  <!-- ================= SECTION 1: GEOMETRY ================= -->
+  <section class="section" id="geometry">
+    <div class="section-head">
+      <span class="section-index">§ 1.01</span>
+      <h2>Geometry — the schematic</h2>
+      <span class="fileline">fig. 1 / hex-territory schematic / scale 1:5000 (abstract)</span>
+    </div>
+    <p class="lede">
+      Each hexagon is one bird territory-sized cell, not one lot. Participating yards
+      inside a cell push it toward the conversion threshold that makes it functionally
+      habitat rather than a decorated lawn.
+    </p>
+
+    <div class="geom-layout">
+      <!-- FIGURE -->
+      <div class="figure-frame">
+        <div class="figure-head">
+          <span>FIG. 1 — TERRITORY GRID</span>
+          <span>n = 61 cells</span>
+        </div>
+        <div class="figure-body">
+          <svg class="hexmap-svg" viewBox="0 0 560 460" xmlns="http://www.w3.org/2000/svg">
+            <!-- graticule -->
+            <g class="grat-line">
+              <line x1="0" y1="60" x2="560" y2="60"/>
+              <line x1="0" y1="140" x2="560" y2="140"/>
+              <line x1="0" y1="220" x2="560" y2="220"/>
+              <line x1="0" y1="300" x2="560" y2="300"/>
+              <line x1="0" y1="380" x2="560" y2="380"/>
+              <line x1="80" y1="0" x2="80" y2="460"/>
+              <line x1="200" y1="0" x2="200" y2="460"/>
+              <line x1="320" y1="0" x2="320" y2="460"/>
+              <line x1="440" y1="0" x2="440" y2="460"/>
+            </g>
+            <g class="ticks-x">
+              <text x="80" y="12">N-1</text>
+              <text x="200" y="12">N-2</text>
+              <text x="320" y="12">N-3</text>
+              <text x="440" y="12">N-4</text>
+            </g>
+            <g class="ticks-y">
+              <text x="4" y="64">E-1</text>
+              <text x="4" y="144">E-2</text>
+              <text x="4" y="224">E-3</text>
+              <text x="4" y="304">E-4</text>
+              <text x="4" y="384">E-5</text>
+            </g>
+
+            <!-- creek corridor (source habitat), diagonal band -->
+            <polygon points="0,420 90,460 180,460 40,380 0,360" class="hex-source"/>
+            <polygon points="0,340 40,320 100,340 60,400 0,400" class="hex-source" fill-opacity="0.55"/>
+
+            <!-- hex grid: hand-placed flat-top hexes, radius 34 -->
+            <!-- helper: each hex approx center-based -->
+            <g stroke-linejoin="round">
+              <!-- row pattern generated manually for a convincing static field -->
+              <polygon class="hex-unconverted" points="130,90 160,73 190,90 190,124 160,141 130,124"/>
+              <polygon class="hex-participating" points="190,90 220,73 250,90 250,124 220,141 190,124"/>
+              <polygon class="hex-unconverted" points="250,90 280,73 310,90 310,124 280,141 250,124"/>
+              <polygon class="hex-above" points="310,90 340,73 370,90 370,124 340,141 310,124"/>
+              <polygon class="hex-unconverted" points="370,90 400,73 430,90 430,124 400,141 370,124"/>
+              <polygon class="hex-participating" points="430,90 460,73 490,90 490,124 460,141 430,124"/>
+
+              <polygon class="hex-participating" points="100,141 130,124 160,141 160,175 130,192 100,175"/>
+              <polygon class="hex-above" points="160,141 190,124 220,141 220,175 190,192 160,175"/>
+              <polygon class="hex-above" points="220,141 250,124 280,141 280,175 250,192 220,175"/>
+              <polygon class="hex-participating" points="280,141 310,124 340,141 340,175 310,192 280,175"/>
+              <polygon class="hex-unconverted" points="340,141 370,124 400,141 400,175 370,192 340,175"/>
+              <polygon class="hex-participating" points="400,141 430,124 460,141 460,175 430,192 400,175"/>
+              <polygon class="hex-unconverted" points="460,141 490,124 520,141 520,175 490,192 460,175"/>
+
+              <polygon class="hex-unconverted" points="130,192 160,175 190,192 190,226 160,243 130,226"/>
+              <polygon class="hex-above" points="190,192 220,175 250,192 250,226 220,243 190,226"/>
+              <polygon class="hex-above" points="250,192 280,175 310,192 310,226 280,243 250,226"/>
+              <polygon class="hex-above" points="310,192 340,175 370,192 370,226 340,243 310,226"/>
+              <polygon class="hex-participating" points="370,192 400,175 430,192 430,226 400,243 370,226"/>
+              <polygon class="hex-unconverted" points="430,192 460,175 490,192 490,226 460,243 430,226"/>
+
+              <polygon class="hex-participating" points="100,243 130,226 160,243 160,277 130,294 100,277"/>
+              <polygon class="hex-above" points="160,243 190,226 220,243 220,277 190,294 160,277"/>
+              <polygon class="hex-participating" points="220,243 250,226 280,243 280,277 250,294 220,277"/>
+              <polygon class="hex-unconverted" points="280,243 310,226 340,243 340,277 310,294 280,277"/>
+              <polygon class="hex-unconverted" points="340,243 370,226 400,243 400,277 370,294 340,277"/>
+              <polygon class="hex-participating" points="400,243 430,226 460,243 460,277 430,294 400,277"/>
+              <polygon class="hex-unconverted" points="460,243 490,226 520,243 520,277 490,294 460,277"/>
+
+              <polygon class="hex-unconverted" points="130,294 160,277 190,294 190,328 160,345 130,328"/>
+              <polygon class="hex-participating" points="190,294 220,277 250,294 250,328 220,345 190,328"/>
+              <polygon class="hex-unconverted" points="250,294 280,277 310,294 310,328 280,345 250,328"/>
+              <polygon class="hex-participating" points="310,294 340,277 370,294 370,328 340,345 310,328"/>
+              <polygon class="hex-unconverted" points="370,294 400,277 430,294 430,328 400,345 370,328"/>
+              <polygon class="hex-participating" points="430,294 460,277 490,294 490,328 460,345 430,328"/>
+
+              <polygon class="hex-unconverted" points="160,345 190,328 220,345 220,379 190,396 160,379"/>
+              <polygon class="hex-unconverted" points="220,345 250,328 280,345 280,379 250,396 220,379"/>
+              <polygon class="hex-participating" points="280,345 310,328 340,345 340,379 310,396 280,379"/>
+              <polygon class="hex-unconverted" points="340,345 370,328 400,345 400,379 370,396 340,379"/>
+            </g>
+
+            <!-- callout ring on one "above threshold" hex to demonstrate labeling -->
+            <circle cx="220" cy="158" r="4" fill="var(--accent)"/>
+
+            <!-- north arrow -->
+            <g class="north-arrow" transform="translate(510,40)">
+              <line x1="0" y1="18" x2="0" y2="-14" stroke="var(--graphite)" stroke-width="1.4"/>
+              <polygon points="0,-18 -5,-8 5,-8" fill="var(--graphite)"/>
+              <text x="0" y="30" text-anchor="middle">N</text>
+            </g>
+          </svg>
+        </div>
+        <div class="scalebar-row">
+          <span>0</span>
+          <svg width="140" height="10"><line x1="0" y1="5" x2="140" y2="5" stroke="var(--graphite)" stroke-width="1.5"/><line x1="0" y1="1" x2="0" y2="9" stroke="var(--graphite)" stroke-width="1.5"/><line x1="70" y1="2" x2="70" y2="8" stroke="var(--graphite)" stroke-width="1"/><line x1="140" y1="1" x2="140" y2="9" stroke="var(--graphite)" stroke-width="1.5"/></svg>
+          <span>~1.5 ha / cell — schematic, not georeferenced</span>
+        </div>
+        <div class="figure-legend">
+          <div class="legend-item"><span class="legend-swatch sw-participating"></span> Participating yard</div>
+          <div class="legend-item"><span class="legend-swatch sw-unconverted"></span> Unconverted lot</div>
+          <div class="legend-item"><span class="legend-swatch sw-above"></span> Territory above threshold</div>
+          <div class="legend-item"><span class="legend-swatch sw-source"></span> Source habitat (creek corridor)</div>
+        </div>
+      </div>
+
+      <!-- CONTROLS -->
+      <div>
+        <div class="controls-panel">
+          <div class="controls-head">Instrument settings</div>
+          <div class="control-block">
+            <div class="control-label"><span>Participating yards</span><span class="val">46</span></div>
+            <input type="range" min="8" max="120" value="46">
+            <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:0.62rem;color:var(--ink-faint);margin-top:4px;">
+              <span>8</span><span>120</span>
+            </div>
+          </div>
+          <div class="control-block">
+            <div class="control-label"><span>Distribution</span></div>
+            <div class="toggle-row">
+              <button class="active">Opt-in (scattered)</button>
+              <button>Targeted (clustered)</button>
+            </div>
+          </div>
+          <div class="control-block">
+            <div class="control-label"><span>Territory threshold</span></div>
+            <select class="survey-select">
+              <option>30% of lots</option>
+              <option selected>40% of lots</option>
+              <option>50% of lots</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="readouts">
+          <div class="readout">
+            <span class="rlabel">Territories above threshold</span>
+            <span class="rvalue hot">9<span class="unit">/ 61</span></span>
+          </div>
+          <div class="readout">
+            <span class="rlabel">Effort inside a working cluster</span>
+            <span class="rvalue">61<span class="unit">%</span></span>
+          </div>
+          <div class="readout">
+            <span class="rlabel">Contiguous with source habitat</span>
+            <span class="rvalue">4<span class="unit">of 9</span></span>
+          </div>
+        </div>
+
+        <div class="callout">
+          <span class="tag">Reading the instrument</span>
+          Scattered opt-in rarely clears a single territory. The same 46 yards, targeted
+          adjacent to the creek corridor, clear four. That gap is the entire argument for
+          coordinating <em>where</em> people plant, not just how many.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SECTION 2: THE SCREEN ================= -->
+  <section class="section" id="screen">
+    <div class="section-head">
+      <span class="section-index">§ 1.02</span>
+      <h2>What goes in them — the screened genera</h2>
+      <span class="fileline">table 1 / keystone genera / screened against local flora</span>
+    </div>
+    <p class="lede">
+      Every genus below is checked against the regional flora before it's allowed on this
+      list. <strong>Where I have made a judgement call rather than quoted a source, the row
+      says so and says it is mine.</strong> I expect some of it to be wrong. Telling me which
+      parts is the entire point of showing it to you.
+    </p>
+
+    <div class="filter-row">
+      <button class="filter-chip active">Plantable &amp; confirmed near this site</button>
+      <button class="filter-chip">Flora-cited hosts (any)</button>
+      <button class="filter-chip">Rejected by the flora</button>
+      <button class="filter-chip">Renamed since 1999</button>
+      <button class="filter-chip">Everything</button>
+    </div>
+
+    <div class="table-scroll">
+      <table class="survey-table">
+        <thead>
+          <tr>
+            <th>Genus</th>
+            <th>Evidence</th>
+            <th>Room needed<span class="unit">ft rad.</span></th>
+            <th>Mature ht<span class="unit">ft</span></th>
+            <th>NWF lep.<span class="unit">spp. hosted</span></th>
+            <th>NWF bees<span class="unit">spp. supported</span></th>
+            <th>FNCT hosts<span class="unit">Appx. 10</span></th>
+            <th>Near here<span class="unit">iNat</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="genus">Quercus</td>
+            <td><span class="prov-tier prov-quoted">Quoted</span><br><span class="evidence-note">Flora p. 1395, oak decline noted<span class="footnote-dagger" title="Diggs et al. 1999, Appx. 10">†</span></span></td>
+            <td class="num">25–40</td>
+            <td class="num">50–80</td>
+            <td class="num">436</td>
+            <td class="num">—</td>
+            <td class="num">61</td>
+            <td class="near-yes">confirmed</td>
+          </tr>
+          <tr>
+            <td class="genus">Prunus</td>
+            <td><span class="prov-tier prov-quoted">Quoted</span><br><span class="evidence-note">Flora p. 1397<span class="footnote-dagger" title="Diggs et al. 1999, Appx. 10">†</span></span></td>
+            <td class="num">8–15</td>
+            <td class="num">15–25</td>
+            <td class="num">456</td>
+            <td class="num">—</td>
+            <td class="num">24</td>
+            <td class="near-yes">confirmed</td>
+          </tr>
+          <tr>
+            <td class="genus">Salix</td>
+            <td><span class="prov-tier prov-quoted">Quoted</span><br><span class="evidence-note">Flora p. 1401, riparian<span class="footnote-dagger" title="Diggs et al. 1999, Appx. 10">†</span></span></td>
+            <td class="num">10–20</td>
+            <td class="num">20–35</td>
+            <td class="num">455</td>
+            <td class="num">—</td>
+            <td class="num">19</td>
+            <td class="near-yes">confirmed</td>
+          </tr>
+          <tr>
+            <td class="genus">Helianthus</td>
+            <td><span class="prov-tier prov-quoted">Quoted</span><br><span class="evidence-note">Flora p. 1399<span class="footnote-dagger" title="Diggs et al. 1999, Appx. 10">†</span></span></td>
+            <td class="num">2–4</td>
+            <td class="num">3–8</td>
+            <td class="num">73</td>
+            <td class="num">37</td>
+            <td class="num">14</td>
+            <td class="near-yes">confirmed</td>
+          </tr>
+          <tr>
+            <td class="genus">Solidago</td>
+            <td><span class="prov-tier prov-derived">Derived</span><br><span class="evidence-note">Genus cited; species list inferred from NWF range map</span></td>
+            <td class="num">1.5–3</td>
+            <td class="num">2–5</td>
+            <td class="num">104</td>
+            <td class="num">42</td>
+            <td class="num">—</td>
+            <td class="near-yes">confirmed</td>
+          </tr>
+          <tr>
+            <td class="genus">Vitis</td>
+            <td><span class="prov-tier prov-quoted">Quoted</span><br><span class="evidence-note">Flora p. 1402<span class="footnote-dagger" title="Diggs et al. 1999, Appx. 10">†</span></span></td>
+            <td class="num">6–10</td>
+            <td class="num">vine</td>
+            <td class="num">79</td>
+            <td class="num">—</td>
+            <td class="num">11</td>
+            <td class="near-no">not yet observed</td>
+          </tr>
+          <tr>
+            <td class="genus">Rubus</td>
+            <td><span class="prov-tier prov-judgement">My judgement</span><br><span class="evidence-note">Genus present in flora; host count is a regional estimate, not a page cite</span></td>
+            <td class="num">4–6</td>
+            <td class="num">3–5</td>
+            <td class="num">163</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="near-no">not yet observed</td>
+          </tr>
+          <tr>
+            <td class="genus">Celtis</td>
+            <td><span class="prov-tier prov-quoted">Quoted</span><br><span class="evidence-note">Flora p. 1394<span class="footnote-dagger" title="Diggs et al. 1999, Appx. 10">†</span></span></td>
+            <td class="num">20–30</td>
+            <td class="num">40–60</td>
+            <td class="num">49</td>
+            <td class="num">—</td>
+            <td class="num">9</td>
+            <td class="near-yes">confirmed</td>
+          </tr>
+          <tr>
+            <td class="genus">Juniperus</td>
+            <td><span class="prov-tier prov-derived">Derived</span><br><span class="evidence-note">Ashe juniper co-occurs; host value likely overstated for this soil type</span></td>
+            <td class="num">10–15</td>
+            <td class="num">15–30</td>
+            <td class="num">42</td>
+            <td class="num">—</td>
+            <td class="num">6</td>
+            <td class="near-no">not yet observed</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="table-footer">† Diggs, Lipscomb &amp; O'Kennon 1999, Appendix Ten (pp. 1394–1403). NWF counts via Native Plant Finder, ZIP-level. "Near here" from iNaturalist observations within site radius.</div>
+  </section>
+
+  <!-- ================= SECTION 3: THE ASK ================= -->
+  <section class="section" id="asks">
+    <div class="section-head">
+      <span class="section-index">§ 1.03</span>
+      <h2>The ask</h2>
+      <span class="fileline">three open items, unresolved</span>
+    </div>
+    <p class="lede">
+      This is not a finished proposal. <strong>The assumption I'd most like challenged</strong>
+      is that a coordinated effort is wanted at all — the questions below are in that order
+      on purpose.
+    </p>
+    <div class="ask-grid">
+      <div class="ask-card">
+        <div class="ask-no">ASK 01</div>
+        <h3>Red-line the screen</h3>
+        <p>The genus table above is a first pass. If a citation is wrong, a species is
+        misidentified, or a "my judgement" row should be rejected outright — mark it up.</p>
+      </div>
+      <div class="ask-card">
+        <div class="ask-no">ASK 02</div>
+        <h3>Does a chapter yard registry already exist?</h3>
+        <p>If a native-plant chapter is already tracking participating yards in this area,
+        this whole page may be duplicate effort. I'd rather find that out now.</p>
+      </div>
+      <div class="ask-card">
+        <div class="ask-no">ASK 03</div>
+        <h3>Is there appetite for a coordinated effort at all?</h3>
+        <p>Before geometry, before species lists — do enough people want to plant toward a
+        shared cluster, rather than independently, for this to be worth building?</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SOURCES ================= -->
+  <section class="section" id="sources">
+    <div class="section-head">
+      <span class="section-index">§ 1.04</span>
+      <h2>Sources</h2>
+      <span class="fileline">works cited</span>
+    </div>
+    <div class="sources-list">
+      <div class="source-item">
+        <span class="src-no">01</span>
+        <span class="src-body"><b>Diggs, Lipscomb &amp; O'Kennon, 1999.</b> Shinners &amp; Mahler's Illustrated Flora of North Central Texas. Appendix Ten, pp. 1394–1403.</span>
+      </div>
+      <div class="source-item">
+        <span class="src-no">02</span>
+        <span class="src-body"><b>NWF Native Plant Finder.</b> National Wildlife Federation, ZIP-code lepidoptera and bee host counts.</span>
+      </div>
+      <div class="source-item">
+        <span class="src-no">03</span>
+        <span class="src-body"><b>USDA PLANTS Database.</b> Species distribution and nomenclature.</span>
+      </div>
+      <div class="source-item">
+        <span class="src-no">04</span>
+        <span class="src-body"><b>iNaturalist.</b> Observation records near the site.</span>
+      </div>
+      <div class="source-item">
+        <span class="src-no">05</span>
+        <span class="src-body"><b>Narango, Tallamy &amp; Marra, 2018.</b> "Nonnative plants reduce population growth of an insectivorous bird." PNAS 115(45).</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= HANDOFF ================= -->
+  <div class="handoff" id="handoff">
+    <div class="handoff-strip">
+      <span>Drill-down &rarr; your lot</span>
+      <div class="zoom-steps">
+        <span class="zoom-step">1:5000</span>
+        <span class="zoom-arrow">&rarr;</span>
+        <span class="zoom-step">1:1000</span>
+        <span class="zoom-arrow">&rarr;</span>
+        <span class="zoom-step current">1:100</span>
+      </div>
+    </div>
+    <div class="handoff-body">
+      <div class="handoff-panel">
+        <h3>From territory to lot</h3>
+        <p>Everything above treats a yard as one filled hexagon. Below, the same idea keyed
+        to a specific address: your yard, dimensioned in feet, with the design tool driving
+        off the same screened genus list.</p>
+        <div class="detail-inset">
+          <svg viewBox="0 0 260 200" width="100%" height="auto" style="border:1px solid var(--line); background:var(--paper);">
+            <g stroke-linejoin="round">
+              <polygon class="hex-participating" points="60,60 90,43 120,60 120,94 90,111 60,94"/>
+              <polygon class="hex-above" points="120,60 150,43 180,60 180,94 150,111 120,94"/>
+              <polygon class="hex-unconverted" points="90,111 120,94 150,111 150,145 120,162 90,145"/>
+            </g>
+            <rect class="inset-box" x="112" y="52" width="46" height="46"/>
+            <line x1="158" y1="75" x2="220" y2="75" stroke="var(--accent)" stroke-width="1" stroke-dasharray="3 2"/>
+            <line x1="158" y1="52" x2="220" y2="20" stroke="var(--accent)" stroke-width="1" stroke-dasharray="3 2"/>
+            <rect x="200" y="20" width="55" height="55" fill="var(--panel)" stroke="var(--accent)" stroke-width="1.5"/>
+            <text x="227" y="52" text-anchor="middle" font-family="var(--mono)" font-size="8" fill="var(--accent)">YOUR LOT</text>
+          </svg>
+        </div>
+      </div>
+      <div class="handoff-panel">
+        <h3>Select a project</h3>
+        <p>Existing yards, or start a new plat.</p>
+        <div class="lot-picker">
+          <div class="lot-option"><span>Elm Street — front bed</span><span class="lid">plot-01</span></div>
+          <div class="lot-option"><span>Elm Street — back slope</span><span class="lid">plot-02</span></div>
+          <div class="lot-option"><span>Comanche Trail lot</span><span class="lid">plot-03</span></div>
+          <div class="lot-option new-lot"><span>+ New project</span><span class="lid">plot-0?</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer class="endmatter">
+  <span>PATCH NETWORK / PLAT 001</span>
+  <span>drafted for review — not a final survey</span>
+  <span>REV 2026-09-13</span>
+</footer>
+
+<!-- ================= ECOSYSTEM DRAWER ================= -->
+<div class="drawer-scrim closed" id="ecoScrim" onclick="document.getElementById('ecoDrawer').classList.add('closed'); this.classList.add('closed');"></div>
+<aside class="eco-drawer closed" id="ecoDrawer">
+  <div class="drawer-head">
+    <div>
+      <div class="drawer-head-title">Reference · pulled from anywhere</div>
+      <h3>Nearby ecosystem</h3>
+    </div>
+    <button class="drawer-close" onclick="document.getElementById('ecoDrawer').classList.add('closed'); document.getElementById('ecoScrim').classList.add('closed');">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div class="drawer-search">
+      <input type="text" placeholder="Is this species supported near me? e.g. Asclepias" value="Asclepias">
+      <button>Check</button>
+    </div>
+    <div class="drawer-filters">
+      <button class="filter-chip active">All ranks</button>
+      <button class="filter-chip">Genus</button>
+      <button class="filter-chip">Species</button>
+      <button class="filter-chip">≤ 5 mi</button>
+    </div>
+
+    <div class="match-group-head">Candidates to add <span class="count">5</span></div>
+    <div class="match-row">
+      <span class="sp-taxon">Asclepias viridis</span>
+      <span class="sp-dist">0.6 mi</span>
+      <span class="sp-common">Green antelopehorn</span>
+      <span class="sp-meta"><span>12 obs.</span><span>rank: species</span></span>
+    </div>
+    <div class="match-row">
+      <span class="sp-taxon">Asclepias asperula</span>
+      <span class="sp-dist">1.4 mi</span>
+      <span class="sp-common">Antelope horns</span>
+      <span class="sp-meta"><span>7 obs.</span><span>rank: species</span></span>
+    </div>
+    <div class="match-row">
+      <span class="sp-taxon">Liatris mucronata</span>
+      <span class="sp-dist">0.9 mi</span>
+      <span class="sp-common">Narrowleaf gayfeather</span>
+      <span class="sp-meta"><span>21 obs.</span><span>rank: species</span></span>
+    </div>
+    <div class="match-row">
+      <span class="sp-taxon">Salvia azurea</span>
+      <span class="sp-dist">2.1 mi</span>
+      <span class="sp-common">Pitcher sage</span>
+      <span class="sp-meta"><span>5 obs.</span><span>rank: species</span></span>
+    </div>
+    <div class="match-row">
+      <span class="sp-taxon">Rudbeckia hirta</span>
+      <span class="sp-dist">0.3 mi</span>
+      <span class="sp-common">Black-eyed Susan</span>
+      <span class="sp-meta"><span>44 obs.</span><span>rank: species</span></span>
+    </div>
+
+    <div class="match-group-head">Already in your catalog <span class="count">4</span></div>
+    <div class="match-row catalog">
+      <span class="sp-taxon">Quercus shumardii</span>
+      <span class="sp-dist">1.1 mi</span>
+      <span class="sp-common">Shumard oak</span>
+      <span class="sp-meta"><span>18 obs.</span><span>rank: species</span></span>
+    </div>
+    <div class="match-row catalog">
+      <span class="sp-taxon">Prunus mexicana</span>
+      <span class="sp-dist">1.8 mi</span>
+      <span class="sp-common">Mexican plum</span>
+      <span class="sp-meta"><span>9 obs.</span><span>rank: species</span></span>
+    </div>
+    <div class="match-row catalog">
+      <span class="sp-taxon">Helianthus maximiliani</span>
+      <span class="sp-dist">0.5 mi</span>
+      <span class="sp-common">Maximilian sunflower</span>
+      <span class="sp-meta"><span>27 obs.</span><span>rank: species</span></span>
+    </div>
+    <div class="match-row catalog">
+      <span class="sp-taxon">Celtis laevigata</span>
+      <span class="sp-dist">2.4 mi</span>
+      <span class="sp-common">Sugarberry</span>
+      <span class="sp-meta"><span>15 obs.</span><span>rank: species</span></span>
+    </div>
+
+    <a href="#" class="drawer-footer-link">Open full index (147 taxa) →</a>
+  </div>
+</aside>
+
+<script>
+  document.querySelectorAll('.toggle-row').forEach(function(row){
+    row.addEventListener('click', function(e){
+      if (e.target.tagName === 'BUTTON') {
+        row.querySelectorAll('button').forEach(function(b){ b.classList.remove('active'); });
+        e.target.classList.add('active');
+      }
+    });
+  });
+  document.querySelectorAll('.filter-row, .drawer-filters').forEach(function(row){
+    row.addEventListener('click', function(e){
+      if (e.target.classList.contains('filter-chip')) {
+        row.querySelectorAll('.filter-chip').forEach(function(b){ b.classList.remove('active'); });
+        e.target.classList.add('active');
+      }
+    });
+  });
+  document.querySelectorAll('.lot-option').forEach(function(el){
+    el.addEventListener('click', function(){
+      document.getElementById('handoff').scrollIntoView({behavior:'smooth'});
+    });
+  });
+</script>
