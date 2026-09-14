@@ -9,62 +9,204 @@
  */
 
 /*
- * Design tokens.
+ * Design tokens -- theme "Night Prairie".
  *
  * Every colour the layout depends on is named here once, so a theme is a
- * change to this block rather than a sweep through 2,000 lines. Near-identical
- * values in the original stylesheet (four off-whites, five warm greys) were
- * collapsed into one token each; the shifts are imperceptible and they are what
- * make re-theming tractable.
+ * change to this block rather than a sweep through 2,000 lines. Names say
+ * ROLE, not appearance: `--ink` is body text whether it lands near-black on
+ * paper or bone on charcoal.
  *
- * Names say ROLE, not appearance: `--ink` is body text whether it ends up near
- * black on paper or bone on charcoal. Nothing here should be named for a hue.
+ * The theme is dark-FIRST in intent but light-BASE in code: the light palette
+ * is defined on bare :root so that a browser with no preference, a printer, or
+ * a stylesheet-less fallback all get something readable. Dark is applied both
+ * by system preference and by an explicit [data-theme="dark"], so the toggle
+ * wins in both directions.
+ *
+ * The discipline that makes this theme work, and the easy thing to break:
+ * AMBER MEANS LIFE, AND ONLY DATA GLOWS. Amber is habitat -- a territory over
+ * threshold, a confirmed nearby animal. Cyan is the apparatus that measures it
+ * -- filters, citations, provenance. Chrome (nav, buttons, borders) is never
+ * amber and never glows; the moment a button glows, the map stops meaning
+ * anything.
  */
 :root {
-  color-scheme: light;
+  color-scheme: light dark;
 
-  /* Surfaces, from the page ground upward. */
-  --ground: #f2f0eb;
-  --surface-header: #f7f5ef;
-  --surface-raised: #fffdf7;
+  /* ---- Surfaces. Light base: "the glow becomes ink density." ---- */
+  --ground: #f3efe4;
+  --surface-header: #fbf9f3;
+  --surface-raised: #fbf9f3;
   --surface-card: #ffffff;
-  --surface-sunken: #e4dfd3;
+  --surface-sunken: #e9e3d3;
 
-  /* Rules and borders. */
-  --rule: #d9d5cc;
-  --rule-strong: #c3bdae;
-  --rule-cool: #c7ced8;
+  /* Rules are alpha, not opaque, so they hold up over any surface. */
+  --rule: rgba(40, 34, 20, 0.14);
+  --rule-strong: rgba(40, 34, 20, 0.26);
+  --rule-cool: rgba(31, 110, 122, 0.22);
 
-  /* Text, darkest to lightest. */
-  --ink-deep: #1f2a35;
-  --ink: #2f2f2f;
-  --ink-soft: #4b4f54;
-  --ink-muted: #5a5a5a;
-  --ink-faint: #7a7566;
+  /* ---- Text, darkest to lightest. ---- */
+  --ink-deep: #17150f;
+  --ink: #22201a;
+  --ink-soft: #44402f;
+  --ink-muted: #55503f;
+  --ink-faint: #837c66;
 
-  /* Accents. The teal carries interactive state; the cool blue is the
-     measurement/apparatus layer the patch-network schematic draws with. */
-  --accent: #2f7a8c;
-  --accent-deep: #215a64;
-  --accent-cool: #4d6b8a;
+  /* ---- Apparatus (cyan): interaction, measurement, citation. ---- */
+  --accent: #1f6e7a;
+  --accent-deep: #17545e;
+  --accent-cool: #1f6e7a;
+  --accent-wash: rgba(31, 110, 122, 0.14);
 
-  /* Ecology signal colours: habitat green, and the warn/danger pair the
-     evidence tiers use for "rejected by the flora" and similar. */
-  --green: #4f7c55;
+  /* ---- Habitat (amber): life, and anything past a threshold. ---- */
+  --signal: #a3660f;
+  --signal-strong: #7a4c09;
+  --signal-wash: rgba(163, 102, 15, 0.14);
+  --signal-wash-strong: rgba(163, 102, 15, 0.30);
+
+  /* ---- Ecology signal colours. ---- */
+  --green: #46703f;
   --green-deep: #2c5530;
-  --green-soft: #7d9c68;
-  --green-wash: #dceadb;
+  --green-soft: #6d8f56;
+  --green-wash: rgba(70, 112, 63, 0.14);
   --warn: #8c4a2f;
-  --warn-wash: #f7f3e6;
-  --danger: #c1121f;
+  --warn-wash: rgba(140, 74, 47, 0.12);
+  --danger: #9a3f2f;
   --danger-soft: #a8332b;
-  --danger-wash: #fbf4f0;
+  --danger-wash: rgba(154, 63, 47, 0.12);
+  /* Taxonomic revision -- its own category, neither good nor bad. */
+  --violet: #4a3d66;
+  --violet-wash: rgba(74, 61, 102, 0.12);
+
+  /* ---- Schematic fills for the patch-network hex map. ---- */
+  --hex-unconverted: #d8d0ba;
+  --hex-unconverted-stroke: rgba(40, 34, 20, 0.22);
+  --hex-participating: #c99a4a;
+  --hex-corridor: #b97a1c;
+
+  /* In light mode the glow is flat ink density, not blur. */
+  --glow-blur: 0;
+  --glow-opacity: 0.55;
+  --shadow-card: 0 1px 2px rgba(40, 34, 20, 0.08);
+  --focus-ring: #1f6e7a;
+
+  /* ---- Type. Serif for argument, sans for UI, mono for every figure. ---- */
+  --font-body: Georgia, "Iowan Old Style", "Palatino Linotype", "Times New Roman", serif;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
 }
+
+/* Dark by system preference -- but only when the reader has not explicitly
+   chosen light. The :not() guard alone is NOT enough: it matches every
+   document that is not opted into light, so without the media query it
+   would force dark on everyone. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #10141a;
+    --surface-header: #161b22;
+    --surface-raised: #161b22;
+    --surface-card: #1b212a;
+    --surface-sunken: #0b0e13;
+
+    --rule: rgba(255, 255, 255, 0.08);
+    --rule-strong: rgba(255, 255, 255, 0.16);
+    --rule-cool: rgba(111, 182, 196, 0.24);
+
+    --ink-deep: #f6f1e2;
+    --ink: #e9e2d0;
+    --ink-soft: #c0b9a8;
+    --ink-muted: #a8a396;
+    --ink-faint: #706a5c;
+
+    --accent: #6fb6c4;
+    --accent-deep: #8fcedb;
+    --accent-cool: #6fb6c4;
+    --accent-wash: rgba(111, 182, 196, 0.12);
+
+    --signal: #e0aa4d;
+    --signal-strong: #f2c26a;
+    --signal-wash: rgba(224, 170, 77, 0.12);
+    --signal-wash-strong: rgba(224, 170, 77, 0.22);
+
+    --green: #8aa96a;
+    --green-deep: #6d8f56;
+    --green-soft: #a9c9a0;
+    --green-wash: rgba(138, 169, 106, 0.12);
+    --warn: #d9a07f;
+    --warn-wash: rgba(217, 160, 127, 0.12);
+    --danger: #c47b64;
+    --danger-soft: #dfa79c;
+    --danger-wash: rgba(196, 123, 100, 0.12);
+    --violet: #b0a2d0;
+    --violet-wash: rgba(176, 162, 208, 0.12);
+
+    --hex-unconverted: #171c23;
+    --hex-unconverted-stroke: rgba(255, 255, 255, 0.09);
+    --hex-participating: #4a3c22;
+    --hex-corridor: #e0aa4d;
+
+    --glow-blur: 6;
+    --glow-opacity: 0.9;
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --focus-ring: #6fb6c4;
+  }
+}
+
+/* Explicit choice beats system preference, in both directions. */
+:root[data-theme="dark"] {
+  --ground: #10141a;
+  --surface-header: #161b22;
+  --surface-raised: #161b22;
+  --surface-card: #1b212a;
+  --surface-sunken: #0b0e13;
+
+  --rule: rgba(255, 255, 255, 0.08);
+  --rule-strong: rgba(255, 255, 255, 0.16);
+  --rule-cool: rgba(111, 182, 196, 0.24);
+
+  --ink-deep: #f6f1e2;
+  --ink: #e9e2d0;
+  --ink-soft: #c0b9a8;
+  --ink-muted: #a8a396;
+  --ink-faint: #706a5c;
+
+  --accent: #6fb6c4;
+  --accent-deep: #8fcedb;
+  --accent-cool: #6fb6c4;
+  --accent-wash: rgba(111, 182, 196, 0.12);
+
+  --signal: #e0aa4d;
+  --signal-strong: #f2c26a;
+  --signal-wash: rgba(224, 170, 77, 0.12);
+  --signal-wash-strong: rgba(224, 170, 77, 0.22);
+
+  --green: #8aa96a;
+  --green-deep: #6d8f56;
+  --green-soft: #a9c9a0;
+  --green-wash: rgba(138, 169, 106, 0.12);
+  --warn: #d9a07f;
+  --warn-wash: rgba(217, 160, 127, 0.12);
+  --danger: #c47b64;
+  --danger-soft: #dfa79c;
+  --danger-wash: rgba(196, 123, 100, 0.12);
+  --violet: #b0a2d0;
+  --violet-wash: rgba(176, 162, 208, 0.12);
+
+  --hex-unconverted: #171c23;
+  --hex-unconverted-stroke: rgba(255, 255, 255, 0.09);
+  --hex-participating: #4a3c22;
+  --hex-corridor: #e0aa4d;
+
+  --glow-blur: 6;
+  --glow-opacity: 0.9;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --focus-ring: #6fb6c4;
+}
+
 
 html, body {
   margin: 0;
   padding: 0;
-  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--font-ui);
   background-color: var(--ground);
   color: var(--ink);
 }
@@ -1070,8 +1212,8 @@ select {
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #1b1b1b;
-  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  color: var(--ink-deep);
+  font-family: var(--font-ui);
 }
 
 /*
@@ -2074,4 +2216,39 @@ select {
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-top: 0.7rem;
+}
+
+/*
+ * Type roles.
+ *
+ * The chrome is a dense tool, so it stays in the UI sans -- a serif at 13px in
+ * a toolbar is just harder to read. The serif is for ARGUMENT: the prose on the
+ * patch-network page that someone actually sits and reads, and the headings
+ * that introduce it. Figures go mono everywhere so columns of numbers line up
+ * and a page citation cannot be mistaken for running text.
+ */
+.pn-lede,
+.pn-caveat,
+.pn-ask p,
+.data-note {
+  font-family: var(--font-body);
+}
+
+h1,
+h2,
+.pn-section h2,
+.pn-ask h3 {
+  font-family: var(--font-body);
+  letter-spacing: 0.01em;
+}
+
+/* Every figure, page cite and measurement. Tabular so columns align. */
+.pn-table .num,
+.pn-ro .v,
+.pn-count,
+.ecosystem-count,
+.scale-indicator,
+code {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }

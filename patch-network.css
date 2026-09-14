@@ -21,9 +21,9 @@
 /* A caveat is a first-class element here: the honest limits are part of the
    argument, not an appendix to it. */
 .pn-caveat {
-  background: var(--warn-wash); border-left: 3px solid #b08a2e;
+  background: var(--warn-wash); border-left: 3px solid var(--warn);
   padding: 0.8rem 1rem; margin: 1.1rem 0; max-width: 78ch;
-  font-size: 0.92rem; line-height: 1.55; color: #4a4438;
+  font-size: 0.92rem; line-height: 1.55; color: var(--ink-soft);
 }
 .pn-caveat strong { color: var(--ink); }
 
@@ -61,7 +61,7 @@
 .pn-card { background: var(--surface-raised); padding: 0.7rem 0.8rem; display: flex; flex-direction: column; gap: 0.25rem; }
 .pn-card--reject { background: var(--danger-wash); }
 .pn-card .g { font-style: italic; font-weight: 600; font-size: 1rem; }
-.pn-card--reject .g { text-decoration: line-through; text-decoration-color: #c09a86; color: #8a6a5a; }
+.pn-card--reject .g { text-decoration: line-through; text-decoration-color: var(--danger-soft); color: var(--ink-faint); }
 .pn-card .room { font-size: 0.72rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-faint); }
 .pn-pair { display: flex; gap: 0.9rem; margin: 0.15rem 0 0.1rem; }
 .pn-stat { display: flex; flex-direction: column; }
@@ -81,30 +81,30 @@
    page citation in the flora and a Wikipedia link are different claims. */
 .pn-tier { display: inline-block; font-size: 0.68rem; letter-spacing: 0.05em; text-transform: uppercase; padding: 0.12rem 0.4rem; border-radius: 2px; white-space: nowrap; }
 .pn-tier--primary-flora { background: var(--green-wash); color: var(--green-deep); border: 1px solid var(--green); font-weight: 600; }
-.pn-tier--agency-database { background: #e3e8f0; color: #33465f; border: 1px solid #7d92b0; }
-.pn-tier--aggregator { background: #f0ece2; color: #6a6250; border: 1px dashed #b3a98f; }
-.pn-tier--tertiary { background: var(--danger-wash); color: #7a4a33; border: 1px dotted #b08060; }
-.pn-tier--unknown { background: var(--rule); color: #777; border: 1px dotted #bbb; }
+.pn-tier--agency-database { background: var(--accent-wash); color: var(--accent); border: 1px solid var(--accent); }
+.pn-tier--aggregator { background: var(--surface-sunken); color: var(--ink-muted); border: 1px dashed var(--rule-strong); }
+.pn-tier--tertiary { background: var(--danger-wash); color: var(--danger); border: 1px dotted var(--danger); }
+.pn-tier--unknown { background: var(--surface-sunken); color: var(--ink-faint); border: 1px dotted var(--rule-strong); }
 
-.pn-hostonly { display: inline-block; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.1rem 0.35rem; border-radius: 2px; background: var(--danger-wash); color: #7a4a33; border: 1px dotted #b08060; white-space: nowrap; }
-.pn-warn { background: #f8e8e2; border-left: 3px solid var(--warn); padding: 0.55rem 0.65rem; font-size: 0.82rem; color: #6a3a28; margin-top: 0.5rem; line-height: 1.5; }
+.pn-hostonly { display: inline-block; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.1rem 0.35rem; border-radius: 2px; background: var(--danger-wash); color: var(--danger); border: 1px dotted var(--danger); white-space: nowrap; }
+.pn-warn { background: var(--warn-wash); border-left: 3px solid var(--warn); padding: 0.55rem 0.65rem; font-size: 0.82rem; color: var(--ink-soft); margin-top: 0.5rem; line-height: 1.5; }
 
 .pn-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 .pn-table th, .pn-table td { text-align: left; padding: 0.4rem 0.55rem; border-bottom: 1px solid var(--surface-sunken); vertical-align: top; }
-.pn-table thead th { background: var(--surface-sunken); font-weight: 600; font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; color: #5a5548; position: sticky; top: 0; }
+.pn-table thead th { background: var(--surface-sunken); font-weight: 600; font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-muted); position: sticky; top: 0; }
 .pn-table tbody tr:hover { background: var(--surface-header); }
 .pn-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .pn-genus { font-style: italic; font-weight: 600; }
-.pn-rejected td { color: #8a6a5a; background: var(--danger-wash); }
-.pn-rejected .pn-genus { text-decoration: line-through; text-decoration-color: #c09a86; }
+.pn-rejected td { color: var(--ink-faint); background: var(--danger-wash); }
+.pn-rejected .pn-genus { text-decoration: line-through; text-decoration-color: var(--danger-soft); }
 
 .pn-verdict-chip { display: inline-block; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.12rem 0.4rem; border-radius: 2px; }
 .pn-v-confirmed-local { background: var(--green-wash); color: var(--green-deep); border: 1px solid var(--green); }
-.pn-v-flora-hosts { background: #e8ecdc; color: #4a5a30; border: 1px solid #8a9c68; }
-.pn-v-in-flora { background: #eeece4; color: #6a6558; border: 1px solid var(--rule-strong); }
-.pn-v-rejected { background: #f5e0d6; color: var(--warn); border: 1px solid #c08a70; }
-.pn-v-renamed { background: #e8e4f0; color: #4a3d66; border: 1px solid #9084b0; }
-.pn-v-unscreened { background: var(--rule); color: #777; border: 1px dotted #bbb; }
+.pn-v-flora-hosts { background: var(--green-wash); color: var(--green); border: 1px solid var(--green); }
+.pn-v-in-flora { background: var(--surface-sunken); color: var(--ink-muted); border: 1px solid var(--rule-strong); }
+.pn-v-rejected { background: var(--warn-wash); color: var(--warn); border: 1px solid var(--warn); }
+.pn-v-renamed { background: var(--violet-wash); color: var(--violet); border: 1px solid var(--violet); }
+.pn-v-unscreened { background: var(--surface-sunken); color: var(--ink-faint); border: 1px dotted var(--rule-strong); }
 
 .pn-detail { background: var(--surface-raised); border: 1px solid var(--rule); border-top: 3px solid var(--green); padding: 1rem; position: sticky; top: 0.6rem; }
 .pn-detail h3 { margin: 0 0 0.2rem; font-size: 1.15rem; font-style: italic; }
@@ -112,7 +112,7 @@
 .pn-detail dt { font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-faint); }
 .pn-detail dd { margin: 0; color: var(--ink-muted); }
 .pn-cite { font-size: 0.76rem; color: var(--ink-faint); border-top: 1px solid var(--surface-sunken); padding-top: 0.5rem; margin-top: 0.6rem; line-height: 1.5; }
-.pn-mine { background: var(--warn-wash); border-left: 3px solid #b08a2e; padding: 0.5rem 0.6rem; font-size: 0.82rem; color: #5a5140; margin-top: 0.5rem; }
+.pn-mine { background: var(--warn-wash); border-left: 3px solid var(--warn); padding: 0.5rem 0.6rem; font-size: 0.82rem; color: var(--ink-soft); margin-top: 0.5rem; }
 .pn-hostlist { margin: 0.3rem 0 0; padding-left: 1.1rem; font-size: 0.84rem; color: var(--ink-muted); }
 .pn-hostlist li { margin-bottom: 0.15rem; }
 .pn-hostlist .sci { font-style: italic; }
