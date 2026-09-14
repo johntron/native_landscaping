@@ -95,6 +95,14 @@ document.addEventListener('keydown', (event) => {
   closeAll();
   focus.focus();   // Escape must not strand focus in a panel that is now gone.
 });
-// Re-place rather than re-open: the anchor moves, the panel should follow.
-window.addEventListener('resize', closeAll);
-window.addEventListener('scroll', closeAll, true);
+/*
+ * Follow the anchor rather than dismissing. The screened table scrolls inside
+ * its own .pn-scroll container and the page scrolls under that, so closing on
+ * scroll would mean the act of scrolling to READ a panel dismissed it -- which
+ * on a phone is most of the ways you would open one.
+ */
+function reflow() {
+  for (const entry of OPEN) place(entry.panel, entry.trigger);
+}
+window.addEventListener('resize', reflow);
+window.addEventListener('scroll', reflow, true);

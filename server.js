@@ -309,8 +309,33 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Links to the pre-rename layout. The argument page is the one built to be
+  // sent to a room, so its old URL is the one most likely to be sitting in
+  // somebody's email; and an old design-tool bookmark carries ?project=, which
+  // now lands on the argument page and silently shows the wrong thing rather
+  // than erroring. Both redirect instead.
+  const legacy = legacyRedirect(pathname, url.search);
+  if (legacy) {
+    res.writeHead(301, { Location: legacy });
+    res.end();
+    return;
+  }
+
   await serveStaticFile(res, pathname);
 });
+
+/**
+ * Where a pre-rename URL should go now, or null if it is already current.
+ * The argument page is project-agnostic, so a ?project= on it is proof the
+ * link was written for the design tool back when that lived at /index.html.
+ */
+function legacyRedirect(pathname, search) {
+  if (pathname === '/patch-network.html') return `/${search || ''}`;
+  if ((pathname === '/index.html' || pathname === '/') && /[?&]project=/.test(search || '')) {
+    return `/design.html${search}`;
+  }
+  return null;
+}
 
 server.listen(PORT, () => {
   const address = server.address();
