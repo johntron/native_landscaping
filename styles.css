@@ -2252,3 +2252,86 @@ code {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
+
+/*
+ * Disclosure markers.
+ *
+ * The marker is deliberately visible and deliberately small: it has to say
+ * "there is a source behind this" without competing with the sentence it sits
+ * in. Cyan, because a citation is apparatus -- never amber, which on this site
+ * means habitat.
+ */
+.disclosure {
+  font: inherit;
+  font-size: 0.72em;
+  font-family: var(--font-ui);
+  line-height: 1;
+  vertical-align: super;
+  margin-left: 0.15em;
+  padding: 0.15em 0.32em;
+  color: var(--accent);
+  background: var(--accent-wash);
+  border: 1px solid var(--rule-cool);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.disclosure:hover,
+.disclosure[aria-expanded="true"] {
+  background: var(--accent);
+  color: var(--surface-card);
+  border-color: var(--accent);
+}
+
+.disclosure:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* A marker on a table header sits inline, not superscript -- the header is
+   already small and a raised marker pushes the row taller. */
+th .disclosure {
+  vertical-align: baseline;
+}
+
+.disclosure__panel {
+  position: fixed;
+  z-index: 60;
+  max-width: min(38ch, calc(100vw - 16px));
+  padding: 0.7rem 0.8rem;
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--surface-card);
+  border: 1px solid var(--rule-strong);
+  border-left: 3px solid var(--accent);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+}
+
+.disclosure__panel p { margin: 0 0 0.5rem; }
+.disclosure__panel p:last-child { margin-bottom: 0; }
+.disclosure__panel cite { color: var(--ink-muted); font-size: 0.92em; }
+
+/*
+ * Collapsed apparatus: the sources list and other long reference blocks that
+ * should stay ON the page (so they can be cited and linked) without occupying
+ * a screen of it.
+ */
+.apparatus > summary {
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  padding: 0.4rem 0;
+}
+
+.apparatus > summary:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.apparatus[open] > summary { margin-bottom: 0.4rem; }

@@ -23,6 +23,7 @@ import {
   VERDICTS,
 } from '../analysis/keystoneScreen.js';
 import { buildGrid, buildOrders, evaluate, renderSvg, verdictText } from './territoryMap.js';
+import { initDisclosures } from '../ui/disclosure.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -331,7 +332,13 @@ async function main() {
   );
   $('pnSearch').addEventListener('input', () => renderTable());
   renderTable();
+  // After the table exists, so markers rendered into rows are wired too.
+  initDisclosures();
 }
+
+// The markers in the static markup must work even if the data never loads --
+// otherwise a fetch failure turns every citation into a dead button.
+initDisclosures();
 
 main().catch((err) => {
   console.error(err);
