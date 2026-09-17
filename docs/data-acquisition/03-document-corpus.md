@@ -300,18 +300,22 @@ was invisible in the output and obvious in the controls.
 
 Running both channels over `blackland-prairie-natives.csv` (469 rows, *labelled natives*):
 
-**Four carry the flora's explicit `I`** — i.e. the flora says they originate outside the
-continental U.S.:
+**Four were originally reported as carrying the flora's explicit `I`. Re-verifying each
+treatment against the flora text (nl-41o.11) found two of the four misattributed** — the
+"hand-verified" label on the original pass was not enough, because both misattributions
+came from a same-genus or same-species neighbor with a confusingly similar name:
 
-| Species | Flora |
-|---|---|
-| `Poa pratensis` | `Native of the Old World (despite the common name)` |
-| `Bothriochloa barbinodis` | `Native of c and e Asia` |
-| `Digitaria ciliaris` | `presumably introduced from the Old World` (hand-verified) |
-| `Prunella vulgaris` | `I` (hand-verified) |
+| Species | Flora says of *this exact taxon* | Verdict |
+|---|---|---|
+| `Poa pratensis` | `Native of the Old World (despite the common name)` | **introduced, confirmed** — removed from `blackland-prairie-natives.csv` |
+| `Digitaria ciliaris` | `presumably introduced from the Old World`, tagged `I` | **introduced, confirmed** — removed from `blackland-prairie-natives.csv` |
+| `Bothriochloa barbinodis` | No origin statement; NCTX distribution given (`Sandy or rocky limestone soils. Mostly May–Oct.`) | **native by silence — misattributed.** `Native of c and e Asia` / `I` belongs to a different species in the same genus, `Bothriochloa ischaemum` (KR bluestem), which is not in this catalog. Left in the file. |
+| `Prunella vulgaris` | Treatment is for `subsp. lanceolata`: NCTX distribution given, no origin statement, no `I`. The introduced, `I`-tagged text belongs to `subsp. vulgaris`, of which the flora says *"We have seen no nc TX material of this subspecies."* | **native by silence — misattributed.** The catalog's unqualified `Prunella vulgaris` matches the NCTX-occurring subspecies, not the absent introduced one. Left in the file. |
 
 **Seventeen more carry a non-NCTX origin statement to review**, `Chilopsis linearis` among
-them — the epic's worked example, found by the pipeline rather than by hand.
+them — the epic's worked example, found by the pipeline rather than by hand. Given the two
+misattributions just found among only four "hand-verified" rows, each of these seventeen
+needs the same full-text, exact-taxon re-check before any is acted on — not a bulk pass.
 
 And `plants.csv`, the live catalog, has one:
 
@@ -324,9 +328,17 @@ Texas native, which the regional flora says is adventive here with its native ra
 elsewhere. It was in the *positive control set* — the set assumed to be all-native — which
 is a useful reminder that the answer key was itself a belief.
 
-**No action on these files yet.** This bead is analysis; correcting catalog rows belongs to
-the collection epic, and each correction needs the review pass §4 describes. Filed as
-evidence, not as a change.
+**Action taken on the two confirmed rows (nl-41o.11):** `Poa pratensis` and `Digitaria
+ciliaris` removed from `blackland-prairie-natives.csv` — both are unambiguous under the
+flora's own explicit `I` marker, referenced by no project layout, and the file is
+explicitly labelled *natives*. The two misattributions were left in place, uncorrected
+(they need no correction). **No action on `plants.csv`** — the `Anisacanthus` row stays;
+it is live and placed in real yards, and there is no field yet to record a caveat like
+this (nl-41o.5 owns that decision, still open). The seventeen prose-hit rows in
+`blackland-prairie-natives.csv` remain queued for the same per-taxon review — correcting
+those, and any future correction to a live catalog, belongs to the collection epic and
+still needs the review pass §4 describes. Filed as evidence plus two narrow, verified
+corrections — not a bulk change.
 
 ---
 
