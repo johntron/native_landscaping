@@ -65,7 +65,10 @@ test('a save carries every photo placement through untouched', async ({ page }) 
   // the real project was every view at once, so isolation is the property worth
   // pinning.
   await page.locator('#setupRow .setup-panel__pick').nth(1).click();
-  const name = page.locator('#setupRow .setup-panel__field', { hasText: 'Name' }).locator('input');
+  const name = page
+    .locator('#setupRow .setup-panel__section', { has: page.locator('h3', { hasText: 'Selected view' }) })
+    .locator('.setup-panel__field', { hasText: 'Name' })
+    .locator('input');
   await name.fill('North side');
   await name.blur();
   await saveViews(page);

@@ -172,6 +172,8 @@ const LINKED = [
   'index.html',
   'design.html',
   'styles.css',
+  'patch-network.css',
+  'ecosystem.css',
   'favicon.svg',
   'src',
   'plants.csv',
@@ -199,6 +201,11 @@ export function buildScratchPublicDir() {
       recursive: true,
     });
   });
+
+  // backyard now carries a real features.json (the passionflower trellis), but
+  // features.spec.js relies on drag-plan — a plain backyard copy — to still be a
+  // project that has never drawn a feature, so its copy loses that file.
+  rmSync(path.join(SCRATCH_DIR, 'projects', 'drag-plan', 'features.json'), { force: true });
 
   // Written after the copy so it replaces the backyard project.json cpSync laid down.
   writeFileSync(

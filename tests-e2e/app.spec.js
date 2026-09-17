@@ -219,7 +219,10 @@ test.describe('setup mode', () => {
     await page.locator('[data-mode="setup"]').click();
     await expect(eastWest).toHaveValue('30');
 
-    const name = page.locator('.setup-panel__field', { hasText: 'Name' }).locator('input');
+    const name = page
+      .locator('.setup-panel__section', { has: page.locator('h3', { hasText: 'Selected view' }) })
+      .locator('.setup-panel__field', { hasText: 'Name' })
+      .locator('input');
     await name.fill('Overhead');
     await name.press('Enter');
     await expect(page.locator('[data-view-panel="plan"] [data-view-label]')).toHaveText('Overhead');

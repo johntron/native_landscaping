@@ -5,7 +5,7 @@ import { openScratchProject } from './helpers.js';
 // project missing from SCRATCH_PROJECTS does not fail, it silently falls back
 // to drag-plan and asserts against the wrong yard. `ecology-check` is a copy of
 // backyard, which declares ecoregion 9 and a part-sun / medium / clay site, so
-// all six dimensions have the inputs they need.
+// all seven dimensions have the inputs they need.
 
 const rows = (page) => page.locator('#ecologyCheck .ecology-check__row');
 
@@ -15,7 +15,7 @@ test.describe('the ecology check panel', () => {
 
     const panel = page.locator('#ecologyCheck');
     await expect(panel).toBeVisible();
-    await expect(rows(page)).toHaveCount(6);
+    await expect(rows(page)).toHaveCount(7);
 
     // Every row carries one of exactly the four chips the analysis emits — an
     // unrecognised status would render as an unstyled chip, not an error.
