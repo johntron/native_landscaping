@@ -80,6 +80,14 @@ function evidenceRank(evidence) {
  * counts — the same kind of authored judgment threshold as AMPLE_SHARE in
  * rules/keystoneGenera.js. Ordered by typical foraging/home-range scale:
  * flying pollinators and small ectotherms range least, birds and mammals most.
+ *
+ * These were always meant as real miles (nl-rma): nearby-fauna.csv's
+ * nearest_radius_mi held kilometres by mistake for a while after these
+ * thresholds were written (fixed by nl-a8v), but the mistake was in the
+ * CSV's generation, not in this reasoning — these numbers were authored
+ * against plausible home ranges in miles, never tuned against the
+ * mislabeled column. So nl-a8v's fix made the comparison correct for the
+ * first time rather than needing a matching change here.
  */
 export const RANGE_THRESHOLD_MI = Object.freeze({
   Insecta: 3,
