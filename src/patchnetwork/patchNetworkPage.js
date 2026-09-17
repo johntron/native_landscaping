@@ -184,13 +184,13 @@ function renderDetail() {
 }
 
 /**
- * The six genera the talk actually walks through, pinned above the scrollable
+ * The five genera the talk actually walks through, pinned above the scrollable
  * table. Chosen to span the argument rather than to top any ranking: a canopy
  * tree the keystone list and the flora agree on, the tree only the flora
- * carries, a forb, and the two the keystone list gets wrong in the two
- * different ways it gets things wrong.
+ * carries, a forb, and the one case where the keystone list's caterpillar
+ * count doesn't hold up against the flora.
  */
-const COMPARE_GENERA = ['Quercus', 'Celtis', 'Asclepias', 'Betula', 'Larix', 'Symphyotrichum'];
+const COMPARE_GENERA = ['Quercus', 'Celtis', 'Asclepias', 'Betula', 'Symphyotrichum'];
 
 function renderCompare() {
   const cards = COMPARE_GENERA.map((genus) => {
