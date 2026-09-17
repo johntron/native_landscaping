@@ -1,8 +1,7 @@
 /**
- * The NPSOT chapter demo page.
- *
- * Part one is the territory schematic (src/patchnetwork/territoryMap.js).
- * Part two is the screened keystone table (src/analysis/keystoneScreen.js).
+ * The NPSOT chapter demo page: the screened keystone table
+ * (src/analysis/keystoneScreen.js) plus the static PLANTS-spine copy in
+ * index.html.
  *
  * Everything is read from files already in this repository — no API call, no
  * font CDN, no remote asset — because the meeting wifi is unreliable and a demo
@@ -22,52 +21,10 @@ import {
   GROWTH_TIERS,
   VERDICTS,
 } from '../analysis/keystoneScreen.js';
-import { buildGrid, buildOrders, evaluate, renderSvg, verdictText } from './territoryMap.js';
 import { initDisclosures } from '../ui/disclosure.js';
 import { initHandoff } from './handoff.js';
 
 const $ = (id) => document.getElementById(id);
-
-/* ------------------------------------------------------------------ Part 1 */
-
-const grid = buildGrid();
-const orders = buildOrders(grid);
-const mapState = { n: 44, mode: 'scatter', threshold: 0.4 };
-
-function renderMap() {
-  const chosen = orders[mapState.mode].slice(0, mapState.n);
-  const result = evaluate({ hexes: grid.hexes, chosen, threshold: mapState.threshold });
-
-  $('pnHexMap').innerHTML = renderSvg({ hexes: grid.hexes, chosen, activeIds: result.activeIds });
-  $('pnRoHex').textContent = result.active;
-  $('pnRoHexSub').textContent = `of ${grid.hexes.length} in the study frame`;
-  $('pnRoEff').textContent = `${Math.round(result.effortShare * 100)}%`;
-  $('pnRoEffSub').textContent = `${result.insideActive} of ${mapState.n} participating yards`;
-  $('pnRoSrc').textContent = result.sourceTouching;
-  $('pnVerdict').textContent = verdictText({ mode: mapState.mode, n: mapState.n, ...result });
-}
-
-function wireMap() {
-  $('pnRange').addEventListener('input', (e) => {
-    mapState.n = Number(e.target.value);
-    renderMap();
-  });
-  $('pnThreshold').addEventListener('change', (e) => {
-    mapState.threshold = Number(e.target.value);
-    renderMap();
-  });
-  const setMode = (mode) => {
-    mapState.mode = mode;
-    $('pnScatter').setAttribute('aria-pressed', String(mode === 'scatter'));
-    $('pnCluster').setAttribute('aria-pressed', String(mode === 'cluster'));
-    renderMap();
-  };
-  $('pnScatter').addEventListener('click', () => setMode('scatter'));
-  $('pnCluster').addEventListener('click', () => setMode('cluster'));
-  renderMap();
-}
-
-/* ------------------------------------------------------------------ Part 2 */
 
 let allRows = [];
 let selected = null;
@@ -295,7 +252,6 @@ function populateHabitFilter() {
 }
 
 async function main() {
-  wireMap();
   renderTierKey();
 
   let project = { ecoregion: '9', place: 'home' };

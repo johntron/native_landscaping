@@ -25,96 +25,101 @@
 
     <main class="pn-page">
       <div class="pn-caveat">
-        <strong>What this is and isn't.</strong> Part one is a <em>schematic</em> — invented
-        geometry demonstrating a threshold argument, not survey data and not a site plan. What
-        belongs here is <em>real</em>: every genus is screened against <i>Shinners &amp; Mahler's Illustrated
-        Flora of North Central Texas</i> (Diggs, Lipscomb &amp; O'Kennon 1999) with the page cited,
-        and every larval host is from that flora's own Appendix Ten. Where I have made a judgement
-        call rather than quoted a source, the row says so and says it is mine. I expect some of it
-        to be wrong. Telling me which parts is the entire point of showing it to you.
+        <strong>What this is and isn't.</strong> The PLANTS spine below is a memory aid I put
+        together, not a published framework — treat it as a packaging of the literature, not new
+        evidence, and each letter is cited on its own. What belongs here is <em>real</em>: every
+        genus is screened against <i>Shinners &amp; Mahler's Illustrated Flora of North Central
+        Texas</i> (Diggs, Lipscomb &amp; O'Kennon 1999) with the page cited, and every larval host
+        is from that flora's own Appendix Ten. Where I have made a judgement call rather than
+        quoted a source, the row says so and says it is mine. I expect some of it to be wrong.
+        Telling me which parts is the entire point of showing it to you.
       </div>
 
-      <!-- ================= PART ONE ================= -->
+      <!-- ================= PLANTS SPINE ================= -->
       <section class="pn-section">
-        <p class="pn-eyebrow">Part one &middot; Geometry (schematic)</p>
-        <h2>The same number of yards, arranged two ways</h2>
+        <p class="pn-eyebrow">Start here &middot; Six letters, one yard</p>
+        <h2>PLANTS: what a Blackland Prairie yard needs, in order</h2>
         <p class="pn-lede">
-          Most yard-habitat programs accept whoever signs up, so the resulting pattern is
-          effectively random. But the scale that matters for an insectivorous bird is a
-          <em>territory</em> — one to two hectares, several adjacent lots. Each hexagon below is
-          roughly that size. Move the slider, then flip the arrangement.
+          An acronym is not evidence — it is a way to hold six separately-sourced pieces of advice
+          in your head at once. Two of these are things you plant; the rest are things you do
+          once something is in the ground. Where the site can already check a letter against your
+          own yard, the card says where.
         </p>
 
-        <div class="pn-controls">
-          <div class="pn-ctl">
-            <label for="pnRange">Participating yards</label>
-            <input type="range" id="pnRange" min="8" max="120" step="4" value="44" />
+        <div class="pn-asks pn-spine">
+          <div class="pn-ask">
+            <span class="n">P</span>
+            <h3>Plant natives that fit your site</h3>
+            <p>
+              Not just native — native to a spot with your light, soil and drainage. Wasting water
+              on a species that will not thrive here helps nobody.
+              <a href="design.html">Check a yard</a> against this, or see which genera clear the
+              flora screen <a href="#belongs-here">below</a>.
+            </p>
           </div>
-          <div class="pn-ctl">
-            <label for="pnScatter">Arrangement</label>
-            <div class="pn-seg" role="group" aria-label="Arrangement">
-              <button id="pnScatter" type="button" aria-pressed="true">Opt-in (scattered)</button>
-              <button id="pnCluster" type="button" aria-pressed="false">Targeted (clustered)</button>
-            </div>
+          <div class="pn-ask">
+            <span class="n">L</span>
+            <h3>Leave the leaves, stems, and seed heads</h3>
+            <p>
+              Leaf litter, standing stems and winter seed heads are overwinter habitat for
+              cavity- and stem-nesting bees, not mess. Texas Property Code &sect;202.007(a)(1)
+              protects composting vegetation and grass clippings — an HOA cannot ban this outright.
+            </p>
           </div>
-          <div class="pn-ctl">
-            <label for="pnThreshold">Territory threshold</label>
-            <select id="pnThreshold">
-              <option value="0.3">30% of lots</option>
-              <option value="0.4" selected>40% of lots</option>
-              <option value="0.5">50% of lots</option>
-            </select>
+          <div class="pn-ask">
+            <span class="n">A</span>
+            <h3>Avoid pesticides</h3>
+            <p>
+              Broad-spectrum insecticides do not distinguish the caterpillar you planted for from
+              anything else eating a leaf. Spot-treat a named problem; do not spray on a schedule.
+            </p>
           </div>
-        </div>
-
-        <div class="pn-map-grid">
-          <div>
-            <div class="pn-stage">
-              <svg id="pnHexMap" viewBox="0 0 496 344" role="img"
-                   aria-label="Schematic hex grid showing participating yards and which territories cross the habitat threshold"></svg>
-            </div>
-            <div class="pn-legend">
-              <span><span class="pn-sw" style="background:#4d6b8a"></span>Participating yard</span>
-              <span><span class="pn-sw" style="background:#e4dfd3;border:1px solid #c3bdae"></span>Unconverted lot</span>
-              <span><span class="pn-sw" style="background:#dbe3ec;border:1px solid #4d6b8a"></span>Territory above threshold</span>
-              <span><span class="pn-sw" style="background:#7d9c68"></span>Source habitat (creek corridor)</span>
-            </div>
+          <div class="pn-ask">
+            <span class="n">N</span>
+            <h3>No invasives</h3>
+            <p>
+              Some of what garden centers sell here escapes cultivation and displaces the natives
+              above. A confirmed avoid-list for this area exists; it is not yet linked from here.
+            </p>
           </div>
-          <div>
-            <div class="pn-readouts">
-              <div class="pn-ro">
-                <span class="k">Territories above threshold</span>
-                <span class="v hi" id="pnRoHex">0</span>
-                <span class="sub" id="pnRoHexSub"></span>
-              </div>
-              <div class="pn-ro">
-                <span class="k">Effort inside a working cluster</span>
-                <span class="v" id="pnRoEff">0%</span>
-                <span class="sub" id="pnRoEffSub"></span>
-              </div>
-              <div class="pn-ro">
-                <span class="k">Contiguous with source habitat</span>
-                <span class="v" id="pnRoSrc">0</span>
-                <span class="sub">above-threshold territories touching the corridor</span>
-              </div>
-            </div>
-            <p class="pn-verdict" id="pnVerdict"></p>
+          <div class="pn-ask">
+            <span class="n">T</span>
+            <h3>Trees first, especially native oaks</h3>
+            <p>
+              Canopy is the layer a yard is slowest to grow back and the one the keystone genera
+              below lean on hardest &mdash; <i>Quercus</i> is the single strongest card in the
+              comparison <a href="#belongs-here">below</a>. <a href="design.html">Check a yard</a>
+              for which vertical layers it is missing.
+            </p>
+          </div>
+          <div class="pn-ask">
+            <span class="n">S</span>
+            <h3>Something blooming or fruiting every season</h3>
+            <p>
+              A single spring flush leaves pollinators and birds with nothing the rest of the year.
+              <a href="design.html">Check a yard</a> for gaps in bloom and fruit continuity across
+              the seasons.
+            </p>
           </div>
         </div>
 
         <div class="pn-caveat">
-          <strong>The assumption I'd most like challenged.</strong> Narango, Tallamy &amp; Marra
-          (2018, PNAS) found Carolina chickadee populations fail below roughly 70% native plant
-          <em>biomass</em> within a territory. I am treating "40% of lots converted" as a stand-in
-          for that. Those are not the same measurement and the conversion between them is a guess.
-          The geometric point survives a wrong threshold; any specific number here does not.
-          Redundancy also only buffers <em>uncorrelated</em> risk — drought, a hard freeze,
-          citywide mosquito fogging and owner turnover hit every yard in a cluster at once.
+          <strong>Two things you do, not plant.</strong> These left the acronym but not the site —
+          they are the best-evidenced items here, just not things that grow. Loss, Will &amp;
+          Marra (2013, <i>Nature Communications</i> 4:1396) estimate free-ranging cats kill
+          1.3&ndash;4.0 billion birds a year in the US, very likely the single largest
+          human-linked cause of bird death; on that aggregate, one outdoor housecat plausibly does
+          more damage to birds than everything else on this page put together &mdash; that
+          per-yard read is my arithmetic, not the paper's headline number. Loss, Loss, Will &amp;
+          Marra (2014, <i>The Condor</i> 116(1)) put building-collision deaths at 365&ndash;988
+          million a year, 44% of it at houses one to three stories tall — the plainest fix there is
+          <a href="https://www.abcbirds.org/glass-collisions/stop-birds-hitting-windows/" target="_blank" rel="noopener">marking glass</a>
+          the birds can't tell is there. Keep the cat indoors first; it outweighs the window.
         </div>
       </section>
 
-      <!-- ================= PART TWO ================= -->
-      <section class="pn-section">
+      <!-- ================= WHAT BELONGS HERE ================= -->
+      <section class="pn-section" id="belongs-here">
         <p class="pn-eyebrow">What belongs here &middot; and what eats it</p>
         <h2>Where the continental keystone list and the regional flora disagree</h2>
         <p class="pn-lede">
