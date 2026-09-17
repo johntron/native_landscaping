@@ -70,6 +70,32 @@ async function runPersistenceTest() {
   assert.strictEqual(mismatchResult.cursor, -1);
   assert.ok(mismatchStatus.some((entry) => entry.msg && entry.msg.includes('diverged')));
 
+  // Removing the last plant is a legitimate layout (nl-a7g), and buildLayoutCsv
+  // always writes the header row, so an emptied layout's CSV is never a blank
+  // string — the match against history's own last-entry-emptied state must
+  // still succeed, not report a false divergence and discard the stack.
+  const emptyCsv = buildLayoutCsv([]);
+  const emptyStatus = [];
+  const emptyResult = await loadLayoutHistory(
+    (msg, state) => emptyStatus.push({ msg, state }),
+    {
+      layoutCsv: emptyCsv,
+      fetchFn: async () => ({
+        ok: true,
+        json: async () => ({
+          entries: [
+            { id: 'seed', timestamp: '2024-01-01T00:00:00Z', description: 'seed', plants: earlierPlants },
+            { id: 'removed', timestamp: '2024-01-02T00:00:00Z', description: 'removed last plant', plants: [] },
+          ],
+          cursor: 1,
+        }),
+      }),
+    }
+  );
+  assert.strictEqual(emptyResult.entries.length, 2);
+  assert.strictEqual(emptyResult.cursor, 1);
+  assert.ok(!emptyStatus.some((entry) => entry.msg && entry.msg.includes('diverged')));
+
   const persistCalls = [];
   let persistStatusMessage = '';
   const persistFetch = async (url, opts) => {
