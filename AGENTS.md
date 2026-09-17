@@ -583,7 +583,12 @@ Each species row contains:
 - `flowering_season_months`
 - `flower_color`
 - `foliage_color_spring/summer/fall/winter`
-- `sun_pref`, `water_pref`, `soil_pref`
+- `sun_pref`, `water_pref` – single values.
+- `soil_pref` – an accepted-soil SET, comma-separated (e.g. `sandy,loamy,clay`);
+  `checkSoil` in `src/analysis/rules/siteMatch.js` splits on `[,/|]` and tests
+  membership. `plants.csv` still holds single values today, which is what the
+  migration in the soil-tolerance stopgap bead (`nl-9a6`) is for — the column's
+  shape is already a set, only this catalog's data isn't yet.
 - Optional `dormant_color`, `flowerColor`, or alias fields handled by `plantParser`.
 
 When changing behavior, **extend the CSV schema and parsing** (see `src/data/plantParser.js`) instead of hard-coding plant properties inside rendering logic.
@@ -833,7 +838,9 @@ blanda, inland sea oats). So rule 8's comparison is **asymmetric, not a distance
 | wants more water than the site gives | droughts out |
 | wants less water than the site gives | rots |
 
-Soil is set membership, not a scale. Both directions on both scales are covered in
+Soil is set membership, not a scale: `soil_pref` holds a comma-separated list of
+accepted soils, and a site's declared soil only has to appear in that list, not
+match it exactly. Both directions on both scales are covered in
 `tests/ecology.test.js`; keep them covered.
 
 ### Two results that look like bugs and are not
