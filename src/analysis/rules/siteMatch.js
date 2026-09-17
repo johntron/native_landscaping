@@ -186,18 +186,30 @@ function checkWater(plant, siteWater) {
   };
 }
 
+/**
+ * A compound soil texture sits between its named components, so a plant
+ * listed against one also takes a site declared as either half (nl-5c8):
+ * 'clay-loam' read as one token never matched a 'clay' site, raising a
+ * caution against a plant that is fine there. SITE_VOCABULARY's soil list is
+ * short; add here as regional CSVs bring more compound textures.
+ */
+const SOIL_COMPOUND_EQUIVALENTS = Object.freeze({
+  'clay-loam': Object.freeze(['clay', 'loamy']),
+});
+
 /** Soil is set membership: a plant lists the soils it will take, comma separated. */
 function checkSoil(plant, siteSoil) {
   if (!siteSoil) return null;
-  const accepted = String(plant.soilPref || '')
+  const listed = String(plant.soilPref || '')
     .toLowerCase()
     .split(/[,/|]/)
     .map((value) => value.trim())
     .filter(Boolean);
+  const accepted = listed.flatMap((value) => [value, ...(SOIL_COMPOUND_EQUIVALENTS[value] || [])]);
   if (!accepted.length || accepted.includes(siteSoil)) return null;
   return {
     severity: 'caution',
-    text: `prefers ${accepted.join(' or ')} soil on a ${siteSoil} site — many natives take a wider range than the catalog records, so expect a smaller or shorter-lived plant rather than a failure, and give it sharper drainage if you can.`,
+    text: `prefers ${listed.join(' or ')} soil on a ${siteSoil} site — many natives take a wider range than the catalog records, so expect a smaller or shorter-lived plant rather than a failure, and give it sharper drainage if you can.`,
   };
 }
 

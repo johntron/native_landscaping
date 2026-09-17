@@ -551,6 +551,20 @@ test('site match: a soil mismatch is a caution and does NOT drive the status', (
   assert.equal(siteResult(planted({ soilPref: 'sandy, clay' }), { soil: 'clay' }).status, STATUSES.OK);
 });
 
+test('site match: a compound soil texture also takes its named halves (nl-5c8)', () => {
+  // 'clay-loam' is one token (the hyphen is the texture name, not a separator),
+  // but it sits between clay and loam, so a site declared as either should not
+  // raise a caution against a plant that lists only the compound.
+  const clayLoam = { soilPref: 'clay-loam' };
+  assert.equal(siteResult(planted(clayLoam), { soil: 'clay-loam' }).status, STATUSES.OK);
+  assert.equal(siteResult(planted(clayLoam), { soil: 'clay' }).status, STATUSES.OK);
+  assert.equal(siteResult(planted(clayLoam), { soil: 'loamy' }).status, STATUSES.OK);
+
+  // Sandy is neither half, so the caution still fires.
+  const sandySite = siteResult(planted(clayLoam), { soil: 'sandy' });
+  assert.ok(sandySite.findings.some((f) => /prefers clay-loam soil on a sandy site/.test(f)));
+});
+
 test('site match: an undeclared axis is skipped, not guessed', () => {
   const result = siteResult(planted({ sunPref: 'shade', waterPref: 'high', soilPref: 'sandy' }), {
     soil: 'sandy',

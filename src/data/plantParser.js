@@ -296,7 +296,7 @@ function normalizeGrowthShape(value) {
 function normalizeFruitLoad(value) {
   const v = (value || '').toLowerCase();
   if (v === 'none') return 'none';
-  if (v === 'sparse' || v === 'light') return 'sparse';
+  if (v === 'sparse' || v === 'light' || v === 'low') return 'sparse';
   if (v === 'moderate' || v === 'medium') return 'moderate';
   if (v === 'heavy' || v === 'abundant') return 'heavy';
   return '';

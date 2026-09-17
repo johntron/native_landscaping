@@ -134,6 +134,15 @@ test('parses fruit metadata and carries it through plant instances', () => {
   assert.equal(plants[1].fruitLoad, 'moderate');
 });
 
+test('"low" fruit_load is a sparse synonym, not a fall-through to blank (nl-5c8)', () => {
+  const speciesCsv = `${speciesHeader},fruit_color,fruit_season_months,fruit_load\n`
+    + 'k,Rock rose,Pavonia lasiopetala,3-11,5-11,,,,,red,3.5,3,mound,#a35c4a,8-10,low\n';
+  const layoutCsv = 'id,botanical_name,x_ft,y_ft\nrose,Pavonia lasiopetala,1,1';
+
+  const plants = buildPlantsFromCsv(speciesCsv, layoutCsv);
+  assert.equal(plants[0].fruitLoad, 'sparse');
+});
+
 test('rejects layouts that reuse a plant id', () => {
   const layoutCsv = 'id,botanical_name,x_ft,y_ft\n'
     + 'daisy,Tetraneuris scaposa,1,1\n'
