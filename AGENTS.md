@@ -137,6 +137,7 @@ plants.csv                       shared species catalog (all projects)
 ecology/host-genera.csv          keystone/larval-host genera per ecoregion (all projects)
 ecology/plant-animal-interactions.csv  genus-keyed animal interactions (all projects)
 ecology/nearby-fauna.csv         animal species reported nearby, keyed by place
+ecology/anchors.csv              streams and green space near the site, keyed by place
 projects/index.json              { defaultProject, projects: [{ id, name }] }
 projects/<slug>/project.json     the yard in feet, plus views[]: labels, photos
                                  (and optional ecoregion + site + place, for the ecology check)
@@ -654,6 +655,8 @@ src/analysis/rules/*.js          one file per rule: { id, title, evaluate(ctx) }
 src/render/ecologyPanel.js       the panel above the species table — presentation only
 tools/fetch-plant-animal-interactions.mjs  offline fetch for the interactions CSV
 tools/fetch-nearby-fauna.mjs      offline fetch for the nearby-fauna CSV
+tools/fetch-nhd-creeks.mjs        offline fetch for anchors.csv streams (NHD)
+tools/fetch-osm-greenspace.mjs    offline fetch for anchors.csv green space (OSM/Overpass)
 ```
 
 **`src/analysis/` is pure.** No DOM, no fetch, no judgement made outside it. Every
@@ -767,6 +770,41 @@ or `{ "lat": 32.81, "lng": -96.79 }` directly. A project with no `place` (or a
 `location.json` nobody has created yet) reports `not-declared` on this one
 dimension, the same "absent means undeclared, never guessed" contract as
 `ecoregion`.
+
+### Habitat anchors: `ecology/anchors.csv`
+
+Part of the pivot away from a per-parcel habitat score (nl-3hi) toward
+observable facts: what real corridors and green space sit near the site, and
+how far away — never a connectivity score or gradient. One table for every
+anchor kind (not one file per source), because stage 5 of the epic is a
+human promoting a row from `candidate` to `anchor`, which is a `status` edit,
+not a file merge. Columns: `place, kind, name, status, distance_mi, detail,
+fetched_on, source`. `kind` is `stream`, `park`, `cemetery`, `forest`,
+`nature_reserve`, or `golf_course`; `status` is `anchor` (NHD hydrology —
+the epic's "best ecological signal", a fact) or `candidate` (OSM
+leisure/landuse tags — administrative, not ecological: a live test returned
+"Texas State Fair Grounds" and "Old East Dallas Work Yard" as `leisure=park`,
+so nothing from OSM is ever written as `anchor`). `distance_mi` is straight-line
+distance to the nearest point on the actual feature geometry — not a
+centroid, and rounded to the nearest quarter mile as a privacy floor, since a
+named creek plus an exact distance is more locating than the coarse distance
+*bands* `nearby-fauna.csv` gets away with.
+
+Regenerate with `node tools/fetch-nhd-creeks.mjs --project <id>` (streams,
+via USGS NHD's `hydro.nationalmap.gov` flowline layer) and
+`node tools/fetch-osm-greenspace.mjs --project <id>` (green space, via
+OpenStreetMap/Overpass, with a `MIN_ACRES` size floor so pocket-park- and
+traffic-island-scale features don't pollute the candidate list — an
+authored judgment call, like `AMPLE_SHARE` in `rules/keystoneGenera.js`, not
+a sourced fact). Both take `--smoke` to print without writing and `--force`
+to bypass the probe cache. Same offline-fetch/checked-in-CSV/gitignored-coords
+pattern as `nearby-fauna.csv` above; geometry math (point-to-line distance,
+polygon area) lives in `tools/geoShared.mjs`, tested in
+`tests/geoShared.test.js`.
+
+**Not yet built**: no `src/analysis/` rule reads this table and no UI
+surfaces it — nl-3hi.7.6 (verification debt) gates that, and stages 3/4
+(PAD-US protection status, named barriers) add more rows first.
 
 ### `project.json`: `ecoregion` and `site`
 
