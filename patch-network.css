@@ -80,7 +80,7 @@
 /* Provenance badges. The whole point is that these must NOT look alike: a
    page citation in the flora and a Wikipedia link are different claims. */
 .pn-tier { display: inline-block; font-size: 0.68rem; letter-spacing: 0.05em; text-transform: uppercase; padding: 0.12rem 0.4rem; border-radius: 2px; white-space: nowrap; }
-.pn-tier--primary-flora { background: var(--green-wash); color: var(--green-deep); border: 1px solid var(--green); font-weight: 600; }
+.pn-tier--primary-flora { background: var(--green-wash); color: var(--green); border: 1px solid var(--green); font-weight: 600; }
 .pn-tier--agency-database { background: var(--accent-wash); color: var(--accent); border: 1px solid var(--accent); }
 .pn-tier--aggregator { background: var(--surface-sunken); color: var(--ink-muted); border: 1px dashed var(--rule-strong); }
 .pn-tier--tertiary { background: var(--danger-wash); color: var(--danger); border: 1px dotted var(--danger); }
@@ -100,7 +100,7 @@
 .pn-rejected .pn-genus { text-decoration: line-through; text-decoration-color: var(--danger-soft); }
 
 .pn-verdict-chip { display: inline-block; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.12rem 0.4rem; border-radius: 2px; }
-.pn-v-confirmed-local { background: var(--green-wash); color: var(--green-deep); border: 1px solid var(--green); }
+.pn-v-confirmed-local { background: var(--green-wash); color: var(--green); border: 1px solid var(--green); }
 .pn-v-flora-hosts { background: var(--green-wash); color: var(--green); border: 1px solid var(--green); }
 .pn-v-in-flora { background: var(--surface-sunken); color: var(--ink-muted); border: 1px solid var(--rule-strong); }
 .pn-v-rejected { background: var(--warn-wash); color: var(--warn); border: 1px solid var(--warn); }
@@ -129,7 +129,13 @@
 .pn-ask p { margin: 0; font-size: 0.86rem; color: var(--ink-muted); line-height: 1.5; }
 .pn-ask .n { font-size: 0.7rem; letter-spacing: 0.1em; color: var(--accent-cool); }
 
-/* Six-letter mnemonic reuses the .pn-asks/.pn-ask grid; only the big initial differs. */
+/* Six-letter mnemonic reuses the .pn-asks/.pn-ask grid; only the big initial differs.
+   A fixed 3-column grid (not auto-fit) so six cards always resolve to two even rows —
+   auto-fit on a wide screen fit 4 across, leaving an orphaned two-card row with an
+   empty cell beside it. */
+.pn-spine { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 720px) { .pn-spine { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 480px) { .pn-spine { grid-template-columns: 1fr; } }
 .pn-spine .n { font-size: 1.7rem; font-weight: 700; letter-spacing: 0; line-height: 1; }
 
 /* ---------- The handoff: neighbourhood scale to one lot ---------- */

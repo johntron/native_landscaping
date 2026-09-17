@@ -47,7 +47,7 @@ function tierBadge(tier) {
 
 function renderTierKey() {
   $('pnTierKey').innerHTML = [
-    '<strong style="color:#5a5548">Provenance:</strong>',
+    '<strong style="color:var(--ink-muted)">Provenance:</strong>',
     ...Object.keys(TIERS).map((key) => `${tierBadge(key)} ${escapeHtml(TIERS[key].label)}`),
   ].join(' ');
 }
@@ -154,7 +154,7 @@ function renderDetail() {
   $('pnDetail').innerHTML = `
     <h3>${escapeHtml(row.genus)}${genusCommonSuffix(row.genus)}</h3>
     <p><span class="pn-verdict-chip pn-v-${escapeHtml(row.verdict)}">${escapeHtml(verdict.label)}</span> ${tierBadge(row.tier)}</p>
-    <p style="font-size:0.86rem;color:#4a4a44;margin:0.4rem 0 0">${escapeHtml(verdict.note)}</p>
+    <p style="font-size:0.86rem;color:var(--ink-muted);margin:0.4rem 0 0">${escapeHtml(verdict.note)}</p>
     <dl>
       <dt>In the flora</dt><dd>${
         row.fnctTreated
@@ -175,7 +175,7 @@ function renderDetail() {
     ${row.renamedNote ? `<p class="pn-mine"><strong>Renamed since 1999.</strong> ${escapeHtml(row.renamedNote)}<br><span style="font-size:0.76rem">${escapeHtml(row.renamedSource)}</span></p>` : ''}
     ${row.habitConflict ? `<p class="pn-mine"><strong>My call, not the source's.</strong> ${escapeHtml(row.habitConflict)}</p>` : ''}
     ${row.curatedLarvalHosts ? `<p class="pn-mine"><strong>Hand-added, weaker provenance.</strong> ${escapeHtml(row.curatedLarvalHosts)}</p>` : ''}
-    <p style="margin:0.7rem 0 0;font-size:0.78rem;letter-spacing:0.06em;text-transform:uppercase;color:#7a7566">
+    <p style="margin:0.7rem 0 0;font-size:0.78rem;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-muted)">
       Larval hosts in the flora (${hosts.length})${nearSet.size ? ` — ${nearSet.size} confirmed nearby` : ''}
     </p>
     ${hostList}
