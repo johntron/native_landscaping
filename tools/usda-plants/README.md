@@ -107,9 +107,10 @@ result counts, no login needed) — then feed those names in.
 Separately: even when location search works, USDA's own native-status data
 (`NativeStatuses` on `/api/PlantProfile/{id}`) is **regional**, not
 state-specific — buckets like `L48` (the entire Lower 48), `AK`, `HI`, `PR`,
-`VI`, `CAN`. True county-level presence/absence lives only in the site's
-interactive Esri map layer and per-species distribution download, not in a
-queryable "which species are in county X" API.
+`VI`, `CAN`. County-level presence data does exist behind a queryable
+endpoint (see below), but it is presence, not nativity — it does not answer
+"which species are native to county X," only "which species have been
+recorded there."
 
 ## What's in the intermediate CSV
 
@@ -141,14 +142,13 @@ treat these as a starting point, not ground truth.
 ## Narrowing a fetch to one region
 
 A statewide fetch is far too big to hand to the app — Texas yields 903 species
-with characteristics. Narrowing it needs a source USDA does not have:
+with characteristics. Narrowing it by native status or by the endpoints below
+still doesn't work:
 
 - Native status is **regional** (`L48`, `AK`, `HI`, `PR`, `VI`, `CAN`) — never
   state or county.
 - `POST /api/plants-search-results` and its `/download` sibling both return a
   server-side SQL timeout for a county payload.
-- There is **no distribution endpoint** in the API (all 42 paths checked);
-  `PlantsDistributionResults` on a profile comes back `null`.
 - `/api/NoxiousInvasiveSearch/GetInvasiveByState?state=Texas` returns zero rows,
   so USDA cannot flag Texas invasives either. Per-plant
   `GET /api/PlantInvasiveStatus/{id}` does work, reporting other states' listings.
@@ -158,7 +158,18 @@ the Blackland Prairie is alkaline clay, but so is much of West Texas, so
 desertbroom (Sonoran) and desert ceanothus (Trans-Pecos) pass a filter built to
 select for Dallas.
 
-So bring the geography from a regional planting list and match by name:
+There **is** a county-level endpoint, just not one that reads as data — this
+README used to say there wasn't one: `POST
+/api/PlantProfile/getDownloadDistributionDocumentation` with `{"masterId":
+<id>}` returns a CSV (`Symbol,Country,State,State FIP,County,County FIP`) when
+the profile's `HasDistributionData` is `true` — `masterId` is the working key,
+`{"unfilteredPlantIds": [id]}` returns headers only. Quercus shumardii returns
+682 rows including 27 Texas counties (Dallas, FIPS 48113). But it is
+**presence, not nativity**: the CSV carries no native/adventive flag, so
+desert willow shows up in Dallas County exactly as Mexican plum does — it
+narrows candidates, it does not replace a nativity check. So bringing the
+geography from a regional planting list (below) is no longer the *only* way to
+narrow a fetch, just still the only way to narrow by nativity:
 
 ```bash
 node tools/usda-plants/regionFilter.js texas-usda-plants.csv names.txt --out=dfw.csv
