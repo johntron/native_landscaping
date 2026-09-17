@@ -907,29 +907,36 @@ async function init() {
    *   distort the spacing between plants, which is most of what a planting plan
    *   is, and growing a design to fill a yard is not a repair.
    * - **clamp** is the "that ground is gone" correction, and touches only what
-   *   is stranded.
+   *   is stranded. A plant is clamped point-by-point; a feature is translated
+   *   as a whole instead (nl-1ug) — clamping its points independently would
+   *   deform the shape a bed or wall is supposed to keep.
    *
-   * @param {{ action: 'scale'|'clamp', ids?: Array<string> }} request
+   * @param {{ action: 'scale'|'clamp', plantIds?: Array<string>, featureIds?: Array<string> }} request
    */
-  function resolveStrandedPlants({ action, ids }) {
+  function resolveStrandedPlants({ action, plantIds, featureIds }) {
     const yardFt = project.yardFt;
     if (!(yardFt?.width > 0) || !(yardFt?.depth > 0)) return;
 
     if (action === 'clamp') {
-      const wanted = new Set(ids || []);
-      appState.plants = appState.plants.map((plant) =>
-        wanted.has(plant.id)
-          ? { ...plant, x: clamp(plant.x, 0, yardFt.width), y: clamp(plant.y, 0, yardFt.depth) }
-          : plant
-      );
-      commitLayoutChange(
-        wanted.size === 1 ? 'Moved a plant inside the yard' : 'Moved plants inside the yard'
-      );
+      const wantedPlants = new Set(plantIds || []);
+      const wantedFeatures = new Set(featureIds || []);
+      if (wantedPlants.size) {
+        appState.plants = appState.plants.map((plant) =>
+          wantedPlants.has(plant.id)
+            ? { ...plant, x: clamp(plant.x, 0, yardFt.width), y: clamp(plant.y, 0, yardFt.depth) }
+            : plant
+        );
+      }
+      let featuresChanged = false;
+      if (wantedFeatures.size) {
+        const translated = translateFeaturesInside(appState.features, wantedFeatures, yardFt);
+        featuresChanged = translated !== appState.features && applyFeatureEdit(translated);
+      }
+      const movedCount = wantedPlants.size + wantedFeatures.size;
+      commitLayoutChange(movedCount === 1 ? 'Moved an item inside the yard' : 'Moved items inside the yard');
+      if (featuresChanged) saveFeatures();
       setupPanel.render(project);
-      setupPanel.setStatus(
-        `Moved ${wanted.size} inside the boundary.`,
-        'success'
-      );
+      setupPanel.setStatus(`Moved ${movedCount} inside the boundary.`, 'success');
       render();
       return;
     }
@@ -1120,6 +1127,7 @@ async function init() {
     onShowChange: () => syncSetupOverlay(),
     onResolveConflicts: (request) => resolveStrandedPlants(request),
     getPlants: () => appState.plants,
+    getFeatures: () => appState.features,
     /**
      * Picked photo to live background: compress, upload, then commit the path
      * the server chose. The view is only patched after the bytes are on disk —
@@ -1873,6 +1881,37 @@ function scaleFeatures(features, factor) {
     if (Number.isFinite(feature.style?.strokeWidthFt)) {
       next.style = { ...feature.style, strokeWidthFt: round2(feature.style.strokeWidthFt * factor) };
     }
+    return next;
+  });
+}
+
+/**
+ * Shift the whole feature — never just the points that fall outside — back
+ * within the yard (nl-1ug). Clamping each point independently would deform a
+ * bed or wall's shape; a translation keeps it, at the cost of not always
+ * fully fitting a feature that is itself bigger than the yard on one axis
+ * (best effort: the near edge wins, so it is still reported afterward).
+ */
+function translateFeaturesInside(features, ids, yardFt) {
+  if (!Array.isArray(features) || !features.length || !ids?.size) return features;
+  const axisShift = (min, max, extent) => {
+    if (min < 0) return -min;
+    if (max > extent) return extent - max;
+    return 0;
+  };
+  return features.map((feature) => {
+    if (!ids.has(feature.id)) return feature;
+    const points = featurePoints([feature]);
+    if (!points.length) return feature;
+    const xs = points.map((p) => p.x);
+    const ys = points.map((p) => p.y);
+    const dx = axisShift(Math.min(...xs), Math.max(...xs), yardFt.width);
+    const dy = axisShift(Math.min(...ys), Math.max(...ys), yardFt.depth);
+    if (!dx && !dy) return feature;
+    const shift = (p) => ({ ...p, x: round2(p.x + dx), y: round2(p.y + dy) });
+    const next = { ...feature };
+    if (Array.isArray(feature.footprintFt)) next.footprintFt = feature.footprintFt.map(shift);
+    if (Array.isArray(feature.pathFt)) next.pathFt = feature.pathFt.map(shift);
     return next;
   });
 }

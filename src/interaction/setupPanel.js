@@ -38,6 +38,7 @@ export function createSetupPanel({
   onShowChange,
   onResolveConflicts,
   getPlants,
+  getFeatures,
 }) {
   if (!root) {
     return {
@@ -431,16 +432,17 @@ export function createSetupPanel({
    */
   function buildShowToggles() {
     const wrap = el('div', 'setup-panel__toggles');
-    const stranded = outOfBounds().length > 0;
+    const strandedPlants = outOfBounds().length > 0;
+    const strandedFeatures = outOfBoundsFeatures().length > 0;
     wrap.appendChild(
-      checkboxField('Show plants', state.show.plants || stranded, stranded, (value) => {
+      checkboxField('Show plants', state.show.plants || strandedPlants, strandedPlants, (value) => {
         state.show.plants = value;
         onShowChange?.();
         rerender();
       })
     );
     wrap.appendChild(
-      checkboxField('Show features', state.show.features, false, (value) => {
+      checkboxField('Show features', state.show.features || strandedFeatures, strandedFeatures, (value) => {
         state.show.features = value;
         onShowChange?.();
         rerender();
@@ -475,14 +477,30 @@ export function createSetupPanel({
     );
   }
 
+  /**
+   * Features a shrunken yard has left outside it (nl-1ug) — the same
+   * reachable-only-by-resize situation as outOfBounds, checked against every
+   * authored point rather than a single position.
+   */
+  function outOfBoundsFeatures() {
+    const { yardFt } = state.project;
+    if (!(yardFt?.width > 0) || !(yardFt?.depth > 0)) return [];
+    const features = getFeatures?.() || [];
+    return features.filter((feature) =>
+      (feature.footprintFt || feature.pathFt || []).some(
+        (point) => point.x < 0 || point.x > yardFt.width || point.y < 0 || point.y > yardFt.depth
+      )
+    );
+  }
+
   function buildConflicts() {
     const wrap = el('div', 'setup-panel__section setup-panel__conflicts');
-    const stranded = outOfBounds();
-    if (!stranded.length) return wrap;
+    const strandedPlants = outOfBounds();
+    const strandedFeatures = outOfBoundsFeatures();
+    const total = strandedPlants.length + strandedFeatures.length;
+    if (!total) return wrap;
 
-    wrap.appendChild(
-      el('h3', 'setup-panel__heading', `${stranded.length} outside the yard`)
-    );
+    wrap.appendChild(el('h3', 'setup-panel__heading', `${total} outside the yard`));
     wrap.appendChild(
       el(
         'p',
@@ -493,7 +511,7 @@ export function createSetupPanel({
     );
 
     const list = el('ul', 'setup-panel__list setup-panel__strays');
-    stranded.forEach((plant) => {
+    strandedPlants.forEach((plant) => {
       const item = el('li', 'setup-panel__item');
       const name = el('span', 'setup-panel__stray-name', plant.commonName || plant.id);
       const at = el(
@@ -506,7 +524,23 @@ export function createSetupPanel({
       item.appendChild(text);
       item.appendChild(
         button('Move inside', 'setup-panel__stray-action', () =>
-          onResolveConflicts?.({ action: 'clamp', ids: [plant.id] })
+          onResolveConflicts?.({ action: 'clamp', plantIds: [plant.id] })
+        )
+      );
+      list.appendChild(item);
+    });
+    // A feature is translated whole rather than clamped point-by-point, which
+    // would deform the shape a bed or wall is supposed to keep.
+    strandedFeatures.forEach((feature) => {
+      const item = el('li', 'setup-panel__item');
+      const name = el('span', 'setup-panel__stray-name', feature.label || feature.type || feature.id);
+      const at = el('span', 'setup-panel__stray-at', 'reaches past the yard boundary');
+      const text = el('div', 'setup-panel__stray-text');
+      text.append(name, at);
+      item.appendChild(text);
+      item.appendChild(
+        button('Move inside', 'setup-panel__stray-action', () =>
+          onResolveConflicts?.({ action: 'clamp', featureIds: [feature.id] })
         )
       );
       list.appendChild(item);
@@ -516,7 +550,11 @@ export function createSetupPanel({
     const actions = el('div', 'setup-panel__stray-bulk');
     actions.appendChild(
       button('Move all inside the boundary', 'button pill-button', () =>
-        onResolveConflicts?.({ action: 'clamp', ids: stranded.map((p) => p.id) })
+        onResolveConflicts?.({
+          action: 'clamp',
+          plantIds: strandedPlants.map((p) => p.id),
+          featureIds: strandedFeatures.map((f) => f.id),
+        })
       )
     );
     actions.appendChild(
@@ -532,7 +570,9 @@ export function createSetupPanel({
         'Scaling moves every plant and feature together about the yard corner, so ' +
           'the design keeps its shape — that is the fix for a yard that was ' +
           'mis-measured. Moving inside touches only what is stranded, which is the ' +
-          'fix for ground that is genuinely gone.'
+          'fix for ground that is genuinely gone. A feature moves as a whole rather ' +
+          'than clamping each point, so it may still reach past a yard that shrank ' +
+          'below the feature itself — reshape that one in Features mode.'
       )
     );
     return wrap;
@@ -564,10 +604,10 @@ export function createSetupPanel({
   return {
     render,
     getSelectedId: () => state.selectedId,
-    /** Plants are forced on while something is stranded; see buildConflicts. */
+    /** Plants/features are forced on while stranded; see buildConflicts. */
     getShow: () => ({
       plants: state.show.plants || outOfBounds().length > 0,
-      features: state.show.features,
+      features: state.show.features || outOfBoundsFeatures().length > 0,
     }),
     setStatus: (message, stateName) => {
       state.status = message ? { message, state: stateName || 'info' } : null;

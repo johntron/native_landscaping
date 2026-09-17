@@ -63,6 +63,20 @@ export async function readScratchLayout(projectId) {
   });
 }
 
+/** Read a scratch project's saved features.json, or [] if it has none. */
+export async function readScratchFeatures(projectId) {
+  try {
+    const raw = await readFile(
+      path.join(SCRATCH_DIR, 'projects', projectId, 'features.json'),
+      'utf8'
+    );
+    return JSON.parse(raw).features || [];
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    throw err;
+  }
+}
+
 /**
  * Point at a plant the way the app's own hit test will find it.
  *
