@@ -21,6 +21,7 @@ import {
   GROWTH_TIERS,
   VERDICTS,
 } from '../analysis/keystoneScreen.js';
+import { genusCommonName } from '../analysis/genusCommonNames.js';
 import { initDisclosures } from '../ui/disclosure.js';
 import { initHandoff } from './handoff.js';
 
@@ -33,6 +34,11 @@ const escapeHtml = (value) =>
   String(value ?? '').replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])
   );
+
+function genusCommonSuffix(genus) {
+  const common = genusCommonName(genus);
+  return common ? ` <span class="pn-genus-common">(${escapeHtml(common)})</span>` : '';
+}
 
 function tierBadge(tier) {
   const info = tierInfo(tier);
@@ -79,7 +85,7 @@ function renderTable() {
         const verdict = VERDICTS[row.verdict] || { label: row.verdict };
         const tierClass = row.verdict === 'rejected' ? ' class="pn-rejected"' : '';
         return `<tr${tierClass} data-genus="${escapeHtml(row.genus)}">
-        <td><span class="pn-genus">${escapeHtml(row.genus)}</span> ${tierBadge(row.tier)}${
+        <td><span class="pn-genus">${escapeHtml(row.genus)}</span>${genusCommonSuffix(row.genus)} ${tierBadge(row.tier)}${
           row.inCatalog
             ? ''
             : ' <span class="pn-hostonly" title="FNCT records Lepidoptera using this genus. That is not a recommendation to plant it — the genus is not in the Blackland natives catalog and may include introduced species.">host record only</span>'
@@ -146,7 +152,7 @@ function renderDetail() {
   if (row.nwfSource) cites.push(`NWF: ${escapeHtml(row.nwfSource)}`);
 
   $('pnDetail').innerHTML = `
-    <h3>${escapeHtml(row.genus)}</h3>
+    <h3>${escapeHtml(row.genus)}${genusCommonSuffix(row.genus)}</h3>
     <p><span class="pn-verdict-chip pn-v-${escapeHtml(row.verdict)}">${escapeHtml(verdict.label)}</span> ${tierBadge(row.tier)}</p>
     <p style="font-size:0.86rem;color:#4a4a44;margin:0.4rem 0 0">${escapeHtml(verdict.note)}</p>
     <dl>
@@ -207,7 +213,7 @@ function renderCompare() {
           : `${row.confirmedCount ? `<span class="pn-near">${row.confirmedCount} of them recorded near here.</span> ` : ''}Cited to FNCT p. ${escapeHtml(row.fnctPage)}.`;
 
     return `<div class="pn-card${reject ? ' pn-card--reject' : ''}">
-      <span class="g">${escapeHtml(genus)}</span>
+      <span class="g">${escapeHtml(genus)}${genusCommonSuffix(genus)}</span>
       <span class="room">${escapeHtml(row.growthTier ? row.growthTier.room : 'Not in the natives catalog')}</span>
       <span class="pn-pair">
         <span class="pn-stat"><b class="no">${nwf}</b><i>NWF claim</i></span>

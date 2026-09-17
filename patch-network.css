@@ -95,6 +95,7 @@
 .pn-table tbody tr:hover { background: var(--surface-header); }
 .pn-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .pn-genus { font-style: italic; font-weight: 600; }
+.pn-genus-common { font-style: normal; font-weight: 400; color: var(--ink-muted); font-size: 0.88em; }
 .pn-rejected td { color: var(--ink-faint); background: var(--danger-wash); }
 .pn-rejected .pn-genus { text-decoration: line-through; text-decoration-color: var(--danger-soft); }
 
