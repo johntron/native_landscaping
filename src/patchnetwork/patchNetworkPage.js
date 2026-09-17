@@ -7,7 +7,7 @@
  * font CDN, no remote asset — because the meeting wifi is unreliable and a demo
  * that degrades on stage is worse than no demo.
  */
-import { fetchCsv } from '../data/csvLoader.js';
+import { fetchCsv, parseCsv } from '../data/csvLoader.js';
 import { loadProjectConfig, resolveActiveProjectId } from '../data/projectConfig.js';
 import { buildHostGeneraIndex } from '../analysis/hostGenera.js';
 import { buildNearbyFaunaIndex } from '../analysis/faunaMatches.js';
@@ -262,14 +262,19 @@ async function main() {
   }
 
   const url = (path) => new URL(path, document.baseURI);
-  const [hostGeneraCsv, screenCsv, lepCsv, catalogCsv, faunaCsv, nameChangeCsv] = await Promise.all([
+  const [hostGeneraCsv, screenCsv, lepCsv, catalogCsv, faunaCsv, nameChangeCsv, avoidCsv] = await Promise.all([
     fetchCsv(url('ecology/host-genera.csv')),
     fetchCsv(url('ecology/fnct-genus-screen.csv')),
     fetchCsv(url('ecology/fnct-lepidoptera-hosts.csv')),
     fetchCsv(url('blackland-prairie-natives.csv')),
     fetchCsv(url('ecology/nearby-fauna.csv')),
     fetchCsv(url('ecology/fnct-name-changes.csv')),
+    fetchCsv(url('dfw-avoid-non-natives.csv')),
   ]);
+
+  $('pnAvoidList').innerHTML = parseCsv(avoidCsv)
+    .map((row) => `<li>${escapeHtml(row.common_name)} <span class="sci">${escapeHtml(row.botanical_name)}</span></li>`)
+    .join('');
 
   allRows = screenKeystoneGenera({
     hostGenera: buildHostGeneraIndex(hostGeneraCsv, { ecoregion: project.ecoregion || '9' }),
