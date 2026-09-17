@@ -205,7 +205,11 @@ export function createFeatureController({
     state.pointerId = null;
     state.pending = null;
     state.moved = false;
-    svg.style.cursor = restingCursor();
+    // Resting cursor comes from is-features-enabled in styles.css, not from
+    // here: this element can have several controllers, and whichever last
+    // wrote svg.style.cursor used to decide it for all of them (nl-jfm).
+    // Clearing the inline value drops back to whatever the class rule says.
+    svg.style.removeProperty('cursor');
   }
 
   function restingCursor() {
@@ -218,7 +222,6 @@ export function createFeatureController({
     // See dragController: this element has several controllers, so touch-action
     // is expressed as a class rather than an inline property they overwrite.
     svg.classList.toggle('is-features-enabled', !state.locked);
-    svg.style.cursor = restingCursor();
   }
 
   function destroy() {

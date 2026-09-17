@@ -2116,6 +2116,22 @@ select {
   touch-action: none;
 }
 
+/*
+ * Resting cursor, same sharing problem as touch-action above (nl-jfm): three
+ * controllers can own one SVG, and whichever's setLocked ran last used to
+ * decide the cursor for all of them via svg.style.cursor. A class per
+ * controller lets CSS pick the right resting cursor regardless of call order;
+ * each controller still sets its own inline cursor for transient states
+ * (grabbing mid-drag, a resize handle, hover feedback) and clears it with
+ * removeProperty when the gesture ends, which falls back to the rule below.
+ */
+.view svg.is-drag-enabled {
+  cursor: grab;
+}
+.view svg.is-features-enabled {
+  cursor: crosshair;
+}
+
 /* Features mode: one add button per primitive, and the read-only kind field. */
 .feature-panel__adders {
   display: flex;

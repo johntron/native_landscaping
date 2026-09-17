@@ -230,14 +230,16 @@ export function createSetupController({
     state.gesture = null;
     state.pointerId = null;
     state.pending = null;
-    svg.style.cursor = restingCursor();
+    svg.style.removeProperty('cursor');
   }
 
   /**
    * Nothing here claims the resting cursor. Three controllers share this
    * element and the last writer wins (nl-jfm), so the only cursors this one
    * sets are the ones it owns outright: a resize over a camera, a grab while
-   * dragging one.
+   * dragging one. Locking clears this controller's own inline value instead
+   * of asserting 'default', which used to stomp is-drag-enabled/
+   * is-features-enabled's cursor whenever setLocked ran after theirs.
    */
   function restingCursor() {
     return 'default';
@@ -249,7 +251,6 @@ export function createSetupController({
     // See dragController: this element has two controllers, so touch-action is
     // expressed as a class rather than an inline property they overwrite.
     svg.classList.toggle('is-setup-enabled', !state.locked);
-    svg.style.cursor = restingCursor();
   }
 
   function destroy() {

@@ -160,7 +160,12 @@ export function createPlantDragController({
     state.pointerId = null;
     state.offsetFeet = { x: 0, y: 0 };
     state.hasMoved = false;
-    svg.style.cursor = state.locked ? 'default' : 'grab';
+    // Resting cursor comes from is-drag-enabled in styles.css, not from here:
+    // this element can have several controllers, and whichever last wrote
+    // svg.style.cursor used to decide it for all of them (nl-jfm). Clearing
+    // the inline value just drops this controller's own grabbing cursor back
+    // to whatever the class rule says.
+    svg.style.removeProperty('cursor');
   }
 
   function setLocked(locked) {
@@ -174,7 +179,6 @@ export function createPlantDragController({
     // silently won. Each controller now toggles its own class and CSS combines
     // them. See the touch rules in styles.css.
     svg.classList.toggle('is-drag-enabled', !state.locked);
-    svg.style.cursor = state.locked ? 'default' : 'grab';
   }
 
   /**
@@ -362,7 +366,10 @@ export function createElevationDragController({
     state.pointerId = null;
     state.axisOffsetFeet = 0;
     state.hasMoved = false;
-    svg.style.cursor = state.locked ? 'default' : 'grab';
+    // See createPlantDragController's cancelActive: this element can have
+    // several controllers sharing svg.style.cursor (nl-jfm), so this one only
+    // clears its own inline value and lets the is-drag-enabled rule resume.
+    svg.style.removeProperty('cursor');
   }
 
   function setLocked(locked) {
@@ -376,7 +383,6 @@ export function createElevationDragController({
     // silently won. Each controller now toggles its own class and CSS combines
     // them. See the touch rules in styles.css.
     svg.classList.toggle('is-drag-enabled', !state.locked);
-    svg.style.cursor = state.locked ? 'default' : 'grab';
   }
 
   /**
