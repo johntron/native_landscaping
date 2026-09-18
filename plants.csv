@@ -55,3 +55,8 @@ least-daisy,Least daisy,Chaetopappa asteroides,mound,3-11,3-11,#f2f2e6,#7d9a86,#
 fineleaf-fournerved-daisy,Fineleaf four-nerve daisy,Tetraneuris linearifolia,mound,3-9,3-6,#e8c941,#6f8c64,#6f8c64,#7a7a64,#707058,full-sun,low,clay,1,1,umbel/head,15,upper,none,0,none
 topeka-coneflower,Topeka purple coneflower,Echinacea atrorubens,mound,3-10,5-7,#c98ab5,#6fa06a,#57805a,#8a8a62,#6a6a55,full-sun,low,clay,1.5,2,umbel/head,12,upper,#6b5a4a,8-9,sparse
 narrowleaf-snakeherb,Narrowleaf snakeherb,Dyschoriste linearis,mound,3-11,4-10,#c9a8d9,#6f8c64,#6f8c64,#7a7a64,#707058,full-sun,low,clay,1.5,0.6,scatter,20,upper,none,0,none
+bur-oak,bur oak,Quercus macrocarpa,vase,3-8,4,#e8d24a,,#5b7a4b,,,part-sun,medium,"sandy,loamy,clay",,100,,,,#6b5a4a,6-11,light
+blackjack-oak,blackjack oak,Quercus marilandica,vase,3-8,4,#e8d24a,,,,,full-sun,low,"sandy,loamy",,25,,,,#6b5a4a,9-11,moderate
+shumard-s-oak,Shumard's oak,Quercus shumardii,vase,3-8,3,#e8d24a,,#5b7a4b,,,full-sun,medium,"sandy,loamy",,100,,,,#6b5a4a,3-11,moderate
+post-oak,post oak,Quercus stellata,tree,3-8,3,#e8d24a,,#5b7a4b,,,full-sun,medium,"sandy,loamy",,60,,,,#6b5a4a,6-11,moderate
+live-oak,live oak,Quercus virginiana,tree,3-8,3,#e8d24a,,#5b7a4b,,,part-sun,medium,"sandy,loamy,clay",,50,,,,#6b5a4a,3-11,

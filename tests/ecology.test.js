@@ -531,14 +531,19 @@ test('both shipped projects analyse without throwing, and report what the data s
       layout
     );
     const results = run(plants, { hostGenera: HOST_GENERA, ecoregion: '9' });
-    // A weak keystone score is a TRUE finding, not a bug, and the reason is
-    // structural: only six of the catalog's 42 genera are keystone in ecoregion 9
-    // and NONE are woody, so no amount of replanting from this catalog closes it.
-    // Every project must say so, whatever its area ratio works out to — the
-    // frontyard's 37% is real, and it still has no oak.
+    // A weak keystone score is a TRUE finding, not a bug: neither shipped project
+    // plants an oak (nl-41o.13 added Quercus to the catalog, but planting it is
+    // a design decision this test fixture doesn't make). The catalog still can't
+    // supply every heavy-hitting genus on its own — no Prunus, no Salix, no
+    // Betula — and every project must say so, whatever its area ratio works out
+    // to. It should also now suggest an oak, since one is finally plantable.
     assert.ok(
-      results['keystone-genera'].findings.some((f) => /Quercus \(253 caterpillar species\)/.test(f)),
-      `${id} must name the keystone genera the catalog cannot supply`
+      results['keystone-genera'].findings.some((f) => /Prunus \(222 caterpillar species\)/.test(f)),
+      `${id} must name the keystone genera the catalog still cannot supply`
+    );
+    assert.ok(
+      results['keystone-genera'].suggestions.some((s) => /Quercus/.test(s)),
+      `${id} should now be able to suggest an oak (nl-41o.13)`
     );
     assert.notEqual(results['larval-hosts'].status, STATUSES.NOT_DECLARED, id);
   });

@@ -87,6 +87,54 @@ its genus checked against `host-genera.csv`, not just its own species-level fiel
 `ecology/host-genera.csv` is a second catalog with its own completeness gap, separate from
 `plants.csv`'s.
 
+### 1.5 First oak batch promoted from `blackland-prairie-natives.csv` (nl-41o.13, this session)
+
+Closes the gap nl-41o.13 named: `index.html`'s PLANTS mnemonic tells a homeowner oaks
+qualify (via `keystoneScreen.js` reading `blackland-prairie-natives.csv`), but
+`design.html`'s placement tool only ever loaded `plants.csv`, which had zero `Quercus`.
+Promoted the 5 of the catalog's 15 oaks with `npsot_dfw_recommended = yes` (a sourced NPSOT
+DFW-chapter column already on the row, used as the selection criterion instead of a
+judgment call about range) — bur oak, blackjack oak, Shumard's oak, post oak, live oak.
+Not promoted: the other 10, including `Quercus muehlenbergii`, which is one of
+nl-41o.12's 17 still-unreviewed prose-origin hits — a real example of that open review
+gating a promotion, caught by checking the list before writing rows rather than after.
+
+The 22 base columns copied straight across unchanged, blanks included — `width_ft` was
+blank for all 15 oaks in the source (consistent with §3.1: no general source exists), and
+per nl-41o.13's own instruction this was left blank rather than defaulted or estimated.
+`Quercus` already had a row in `ecology/host-genera.csv` (253 lep-host species), so no
+§1.4-shaped gap here.
+
+**Found while verifying, not while sourcing — a rendering/data-semantics mismatch, left
+open rather than papered over:** `height_ft` was copied from `usda_height_mature_ft`
+(a real, sourced USDA field) as-is — 100 ft for bur oak and Shumard's oak. Placing bur oak
+in the 30x22 ft `backyard` project produces a ~70-100 ft estimated canopy (via
+`estimateWidthFt`'s `vase` ratio, computed from small perennials, applied here to a tree)
+that swallows the entire yard. This is not a rendering bug — verified in the browser that
+the computed radius is real, not `NaN` or mis-scaled — and arguably it's the *correct*
+answer: a full-grown bur oak's potential canopy genuinely does not fit a small residential
+lot. But it is a semantic mismatch against the rest of the catalog, whose existing tree
+rows (`yaupon-holly` 18 ft, `oklahoma-redbud` 20 ft) record realistic landscape/cultivated
+mature size, not USDA's wild/record potential. Left as the sourced USDA value rather than
+replaced with an unsourced "typical" estimate — per the epic's discipline, an honest
+oversized number beats an invented plausible one — but this discrepancy needs a decision
+(does `height_ft` mean "potential" or "expected in cultivation"?) before the full 469-row
+promotion, not just for oaks. Not filed as a new bead: it's exactly the kind of prioritization
+question nl-41o.7 exists to answer.
+
+Verified end-to-end: `npm test` catches the fixed intent directly (see
+`tests/ecology.test.js`'s "both shipped projects analyse without throwing" — updated in the
+same change, since it previously asserted, as fact, that the catalog *could not* supply
+Quercus). In the browser, all 5 oaks appear in `design.html`'s ADD PLANT list, place without
+error, and `keystoneGenera.js`'s suggestion engine now recommends them by name where it
+previously couldn't.
+
+**Pattern**: promoting a genus the ecology rules already know about (via `host-genera.csv`)
+surfaces correctly in the rules engine the moment the species exists in `plants.csv` — no
+rule code needed to change. The work is entirely in the data: picking a sourced subset
+(not judgment), copying blanks as blanks, and catching cross-references to still-open
+review beads (nl-41o.12) before publishing a row they'd invalidate.
+
 ---
 
 ## 2. Open (tracked as beads — not duplicated here, just indexed)
