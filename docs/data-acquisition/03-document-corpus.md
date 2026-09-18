@@ -340,6 +340,74 @@ those, and any future correction to a live catalog, belongs to the collection ep
 still needs the review pass §4 describes. Filed as evidence plus two narrow, verified
 corrections — not a bulk change.
 
+### 7.1 Per-taxon review of the seventeen (nl-41o.12)
+
+**MEASURED.** Re-ran the origin-phrase screen (`native (of|from|to)`) against
+`blackland-prairie-natives.csv`, re-extracting each hit's block with two additional guards
+past the §6 hazards: page-break running headers and mid-treatment plate captions (`\f`,
+`718 FAGACEAE/QUERCUS`, `Quercus muehlenbergii [SA3]`) read as a centred all-caps genus
+heading and truncated the block early — the exact failure class §6 already named, just a
+different trigger. That fix recovered `Quercus muehlenbergii` (missed) and, once applied,
+surfaced one bleed the original pass hadn't hit: `Quercus marilandica`'s "native to the e
+U.S." is `Q. muehlenbergii`'s Castanea-pumila aside spilling across the page break, not its
+own text — dropped as a false positive, the same way `Bothriochloa barbinodis`/`ischaemum`
+was in nl-41o.11. Net: **17**, matching the count filed in §7.
+
+Each row below is the flora's own treatment for the *exact* binomial the catalog carries —
+not a same-genus or same-key-couplet neighbor — read in full rather than keyword-matched.
+Citations are `Diggs, Lipscomb & O'Kennon 1999, p. N`.
+
+**Confirmed non-native to NCTX** (explicit origin statement or explicit exclusion, for this
+exact taxon):
+
+| Species | Flora says | p. |
+|---|---|---|
+| `Chilopsis linearis` | `Cultivated and long persists, planted along highways, escapes; Tarrant Co. ... Native of Mexico and sw U.S. e to wc TX` | 443 |
+| `Catalpa speciosa` | `Cultivated, roadsides, along streams; escapes in e 1/2 of TX ... Native of Mississippi Valley` | 443 |
+| `Robinia pseudoacacia` | `Sandy roadsides and fencerows; Denton, Grayson, Johnson, and Tarrant cos. ... Native of e U.S.` — occurs in core NCTX counties but by the flora's own statement as a naturalized colonizer (root sprouts, disturbed ground), not natively | 692 |
+| `Eschscholzia californica` | `subsp. californica ... Native from n Mexico through CA to s WA`; the only other subspecies the flora treats, `subsp. mexicana`, is `native to the Trans-Pecos`. Neither reaches NCTX under either reading of the catalog's unqualified name | 874 |
+| `Gymnocladus dioicus` | `Cultivated and long persisting; apparently rarely escaping into native woodland; Tarrant Co. ... Native to the e and c U.S. s to OK just n of nc TX` — range stops just short of NCTX | 663 |
+| `Taxodium distichum` | `While BALD CYPRESS does not occur naturally in nc TX (native to Edwards Plateau and e TX as far w as Upshur and Red River cos.), it is now extensively planted` — the flora states the exclusion outright | 204 |
+| `Tillandsia usneoides` | `native to se, e and c TX; known just to the s of nc TX in Travis Co. ... included because of the possibility of occurrence on extreme s or e margins of nc TX` — a possible-only marginal record, not a confirmed one | 1096 |
+
+**Native, confirmed or affirmed** (own text gives NCTX range, a Dallas-area county record, or
+an explicit affirming statement — the origin phrase was never about excluding this species):
+
+| Species | Flora says | p. |
+|---|---|---|
+| `Quercus muehlenbergii` | `Uplands, creek bottoms, ravines ...; e TX w to nc TX and s and w to Edwards Plateau and Trans-Pecos` — nc TX is in its own range; the `native to the e U.S.` phrase belongs to *Castanea pumila*, cited only as a common-name comparison | 716 |
+| `Maclura pomifera` | `mainly ne to nc TX and s to c TX; native to a relatively small area in TX and adjacent OK and AR ... apparently limited to 12 counties in nc and extreme ne TX from Dallas and Grayson cos.` — Dallas Co. is explicitly inside the native range | 831 |
+| `Heliotropium curassavicum` | `Archer, Brown, Dallas, Grayson, and Young counties, also Tarrant Co. ... considered native from the s U.S. s through the West Indies and Central America s to South America` — a Dallas Co. record and an affirming range that includes it | 450 |
+| `Impatiens capensis` | `Fannin and Lamar cos. in Red River drainage; mainly e TX ... Despite the specific epithet, this species is native to North America including e TX` — the epithet (`capensis`, "of the Cape") is the false flag, the prose affirms nativity | 434 |
+| `Phragmites australis` | `Grayson and Kaufman cos.; throughout TX ... Native of North America, South America, Eurasia, Africa, and Australia` — cosmopolitan, already named as a non-defect in §4 | 1311 |
+| `Stachys tenuifolia` | `Lamar Co. in Red River drainage; otherwise in TX known only from deep e TX` — no origin statement of its own; `This native of the Trans-Pecos` in the same paragraph describes the neighboring key couplet, *Stachys coccinea*, already named as a non-defect in §4 | 782 |
+
+**Review — marginal native, not a clean call** (own text places the species at the edge of
+NCTX or spreading from cultivation into it, not squarely in or out):
+
+| Species | Flora says | p. |
+|---|---|---|
+| `Pinus echinata` | `native to e TX as far w as Henderson ..., Red River ..., and possibly Lamar ... cos.; spreading from cultivation in Fannin Co.` — natively reaches only the eastern edge of NCTX ("possibly"), with additional occurrences that are explicitly cultivation escapes | 206 |
+| `Pinus taeda` | `native to e TX as far w as Lamar Co. in Red River drainage ... and common there; cultivated and escapes further w on sandy soils in Fannin ... and Grayson ... cos.` — same shape: native at the eastern edge, escaped further into core NCTX counties | 206 |
+
+**Review — the flora cites conflicting sources on origin** (not this project inventing a
+tie-break):
+
+| Species | Flora says | p. |
+|---|---|---|
+| `Cyperus esculentus` | `According to Mabberley (1987), native to w Asia and Africa and widely naturalized in New World; however, Tucker (1994) considered it to be cosmopolitan` — two authorities disagree, quoted as such | 1138 |
+| `Nymphaea mexicana` | `Ponds, lakes ...; Hood Co. in Lake Granbury (probably a hybrid with N. odorata) ... Native of s TX, Mexico, and Florida` — the one NCTX-area record is flagged by the flora itself as probably not the pure species, and sits in a reservoir rather than an unambiguously wild site | 845 |
+
+**Disposition.** Per the three-valued model §10 sets for nl-41o.4 (`native` / `introduced` /
+`unknown`, plus a review state), the nine in the first table are `introduced`-for-NCTX
+candidates and the six in the second are non-defects needing no correction. The four in the
+last two tables are not resolvable to either value from this source alone and should land
+as `unknown`/`review`, not be forced to a side — same discipline as the `unresolved` cells
+elsewhere in this project. **No CSV write happens here**: as with nl-41o.11, there is still
+no field on `blackland-prairie-natives.csv` to carry a verdict, and nl-41o.5 has not yet
+decided the manual-corrections-file format. This table is the reviewed input nl-41o.5's
+correction pass should consume.
+
 ---
 
 ## 8. Correction: the flora does not supply mature width
