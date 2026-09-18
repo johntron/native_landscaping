@@ -303,18 +303,37 @@ test('keystone genera: a design with none reports a gap, and says so as a gap to
 });
 
 test('keystone genera suggestions rank a clean site fit ahead of a mismatch, and say what does not match', () => {
+  // Synthetic candidates, not real catalog species: the ranking behavior under
+  // test must hold regardless of how many clean-fitting keystone genera the
+  // catalog happens to carry, so this does not drift as it grows.
+  const hostGenera = buildHostGeneraIndex(
+    'genus,ecoregion,lep_host_species,bee_specialist_species,larval_hosts,synonym_of,source\n' +
+      'Cleanhostus,9,20,,,,test\n' +
+      'Mismatchus,9,80,,,,test\n', // ecologically stronger, but wants full sun on a part-sun site
+    { ecoregion: '9' }
+  );
+  const cleanFit = { ...synthetic('Cleanhostus fitus'), sunPref: 'part-sun', waterPref: 'medium', soilPref: 'clay' };
+  const mismatch = {
+    ...synthetic('Mismatchus badus'),
+    sunPref: 'full-sun',
+    waterPref: 'medium',
+    soilPref: 'clay',
+  };
   const site = { sun: 'part-sun', water: 'medium', soil: 'clay' };
-  const result = runWithGenera(place('Passiflora incarnata', 'Calyptocarpus vialis'), { site })[
-    'keystone-genera'
-  ];
+  const result = run(place('Passiflora incarnata'), {
+    hostGenera,
+    ecoregion: '9',
+    site,
+    species: CATALOG.concat([cleanFit, mismatch]),
+  })['keystone-genera'];
   const bySpecies = (name) => result.suggestions.findIndex((s) => s.includes(name));
-  const ironweedIdx = bySpecies('Vernonia gigantea'); // part-sun: a clean fit on this site
-  const sunflowerIdx = bySpecies('Helianthus maximiliani'); // full-sun: wants more light than this site gives
-  assert.ok(ironweedIdx !== -1 && sunflowerIdx !== -1, 'both candidates are offered');
-  assert.ok(ironweedIdx < sunflowerIdx, 'the clean fit outranks the ecologically stronger mismatch');
-  assert.match(result.suggestions[sunflowerIdx], /partial match/);
-  assert.match(result.suggestions[sunflowerIdx], /wants full sun but this site gives part sun/);
-  assert.doesNotMatch(result.suggestions[ironweedIdx], /partial match/);
+  const cleanIdx = bySpecies('Cleanhostus fitus');
+  const mismatchIdx = bySpecies('Mismatchus badus');
+  assert.ok(cleanIdx !== -1 && mismatchIdx !== -1, 'both candidates are offered');
+  assert.ok(cleanIdx < mismatchIdx, 'the clean fit outranks the ecologically stronger mismatch');
+  assert.match(result.suggestions[mismatchIdx], /partial match/);
+  assert.match(result.suggestions[mismatchIdx], /wants full sun but this site gives part sun/);
+  assert.doesNotMatch(result.suggestions[cleanIdx], /partial match/);
 });
 
 test('keystone genera measures footprint area, not head-count', () => {
@@ -386,16 +405,38 @@ test('larval hosts: none planted is a gap with named replacements', () => {
 });
 
 test('larval hosts suggestions rank a clean site fit ahead of a mismatch, and say what does not match', () => {
+  // Synthetic candidates, not real catalog species: the ranking behavior under
+  // test must hold regardless of how many clean-fitting hosts the catalog
+  // happens to carry, so this does not drift as host-genera.csv grows.
+  const hostGenera = buildHostGeneraIndex(
+    'genus,ecoregion,lep_host_species,bee_specialist_species,larval_hosts,synonym_of,source\n' +
+      'Cleanhostus,9,,,test skipper,,test\n' +
+      'Mismatchus,9,,,test hairstreak,,test\n',
+    { ecoregion: '9' }
+  );
+  const cleanFit = { ...synthetic('Cleanhostus fitus'), sunPref: 'part-sun', waterPref: 'medium', soilPref: 'clay' };
+  const mismatch = {
+    ...synthetic('Mismatchus badus'),
+    sunPref: 'full-sun',
+    waterPref: 'low',
+    soilPref: 'clay',
+  };
   const site = { sun: 'part-sun', water: 'medium', soil: 'clay' };
-  const result = runWithGenera(place('Salvia farinacea'), { site })['larval-hosts'];
+  const result = run(place('Salvia farinacea'), {
+    hostGenera,
+    ecoregion: '9',
+    site,
+    species: CATALOG.concat([cleanFit, mismatch]),
+  })['larval-hosts'];
   const bySpecies = (name) => result.suggestions.findIndex((s) => s.includes(name));
-  const turkscapIdx = bySpecies("Malvaviscus arboreus"); // part-sun/medium: a clean fit here
-  const goldenrodIdx = bySpecies('Solidago rigida'); // full-sun/low-water: two mismatches
-  assert.ok(turkscapIdx !== -1 && goldenrodIdx !== -1, 'both candidates are offered');
-  assert.ok(turkscapIdx < goldenrodIdx, 'the clean fit outranks the ecologically stronger mismatch');
-  assert.match(result.suggestions[goldenrodIdx], /partial match/);
-  assert.match(result.suggestions[goldenrodIdx], /full sun.*part sun/);
-  assert.match(result.suggestions[goldenrodIdx], /low water on a medium-water site/);
+  const cleanIdx = bySpecies('Cleanhostus fitus');
+  const mismatchIdx = bySpecies('Mismatchus badus');
+  assert.ok(cleanIdx !== -1 && mismatchIdx !== -1, 'both candidates are offered');
+  assert.ok(cleanIdx < mismatchIdx, 'the clean fit outranks the mismatch');
+  assert.match(result.suggestions[mismatchIdx], /partial match/);
+  assert.match(result.suggestions[mismatchIdx], /full sun.*part sun/);
+  assert.match(result.suggestions[mismatchIdx], /low water on a medium-water site/);
+  assert.doesNotMatch(result.suggestions[cleanIdx], /partial match/);
 });
 
 test('larval hosts: one genus is partial, two or more is ok', () => {
