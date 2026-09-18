@@ -1,5 +1,6 @@
 import { STATUSES } from '../ecology.js';
 import { getGenus } from '../../utils/speciesKey.js';
+import { siteFitProblems, pickSiteAware, describeSiteFit } from './siteMatch.js';
 
 /**
  * Rule 5 — something here has to be food for a caterpillar.
@@ -60,15 +61,14 @@ export default {
 function suggest(ctx, hosts, limit = 3) {
   if (hosts.length > 1) return [];
   const have = new Set(hosts.map(({ genus }) => genus));
-  return ctx.unplacedSpecies
+  const candidates = ctx.unplacedSpecies
     .map((entry) => ({ entry, genus: getGenus(entry), row: ctx.hostGenera.lookup(getGenus(entry)) }))
     .filter(({ genus, row }) => row && !have.has(genus) && (row.larvalHosts || row.lepHostSpecies !== null))
-    .sort((a, b) => (b.row.lepHostSpecies ?? 0) - (a.row.lepHostSpecies ?? 0))
-    .slice(0, limit)
-    .map(
-      ({ entry, genus, row }) =>
-        `${entry.commonName} (${entry.botanicalName}) would add ${genus}, host to ${
-          row.larvalHosts || `${row.lepHostSpecies} caterpillar species`
-        }.`
-    );
+    .map((candidate) => ({ ...candidate, problems: siteFitProblems(candidate.entry, ctx.site) }));
+  return pickSiteAware(candidates, (c) => c.row.lepHostSpecies ?? 0, limit).map(
+    ({ entry, genus, row, problems }) =>
+      `${entry.commonName} (${entry.botanicalName}) would add ${genus}, host to ${
+        row.larvalHosts || `${row.lepHostSpecies} caterpillar species`
+      }.${describeSiteFit(problems)}`
+  );
 }

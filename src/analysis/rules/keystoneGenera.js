@@ -1,6 +1,7 @@
 import { STATUSES } from '../ecology.js';
 import { getGenus } from '../../utils/speciesKey.js';
 import { describeHostGeneraRow } from '../hostGenera.js';
+import { siteFitProblems, pickSiteAware, describeSiteFit } from './siteMatch.js';
 
 /**
  * Rules 4 and 10 — plant the keystone genera for this ecoregion, and give them
@@ -153,18 +154,17 @@ function measureArea(ctx, keystoneNames) {
 }
 
 function suggest(ctx, keystoneNames, limit = 4) {
-  return ctx.unplacedSpecies
+  const candidates = ctx.unplacedSpecies
     .map((entry) => ({ entry, genus: getGenus(entry), row: ctx.hostGenera.lookup(getGenus(entry)) }))
     .filter(
       ({ genus, row }) =>
         row && !keystoneNames.has(genus) && (row.lepHostSpecies !== null || row.beeSpecialistSpecies !== null)
     )
-    .sort((a, b) => rank(b.row) - rank(a.row))
-    .slice(0, limit)
-    .map(
-      ({ entry, genus, row }) =>
-        `${entry.commonName} (${entry.botanicalName}) brings the keystone genus ${genus} — ${describeHostGeneraRow(row)}.`
-    );
+    .map((candidate) => ({ ...candidate, problems: siteFitProblems(candidate.entry, ctx.site) }));
+  return pickSiteAware(candidates, (c) => rank(c.row), limit).map(
+    ({ entry, genus, row, problems }) =>
+      `${entry.commonName} (${entry.botanicalName}) brings the keystone genus ${genus} — ${describeHostGeneraRow(row)}.${describeSiteFit(problems)}`
+  );
 }
 
 /**

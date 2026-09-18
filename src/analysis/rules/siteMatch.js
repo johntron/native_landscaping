@@ -238,3 +238,41 @@ function describeSite(site) {
     .map((key) => `${site[key]} ${key === 'sun' ? '' : key}`.trim())
     .join(', ');
 }
+
+/**
+ * The same sun/water/soil comparators this rule grades placed plants with,
+ * exposed so a SUGGESTION (rule 4's keystone genera, rule 5's larval hosts)
+ * can be graded before it is ever offered — recommending a plant this site
+ * will scorch or drought is not a smaller version of the mistake, it is the
+ * same mistake one step earlier. Returns the raw problem list (empty when
+ * the candidate is a clean fit, or when the project declares no site).
+ */
+export function siteFitProblems(plant, site) {
+  if (!site) return [];
+  return [checkSun(plant, site.sun), checkWater(plant, site.water), checkSoil(plant, site.soil)].filter(
+    Boolean
+  );
+}
+
+/**
+ * Rank candidates so a clean site fit always beats a mismatch, however good
+ * the ecological number on the mismatch is — a recommendation panel that
+ * ranks a full-sun plant above a part-sun one on a part-sun site teaches the
+ * reader to ignore the site-match check entirely. Only when there are not
+ * enough clean candidates to fill `limit` do flawed ones fill the rest, so a
+ * genus the catalog can only offer through a mismatched species still gets
+ * surfaced — with the caveat attached — rather than silently dropped.
+ */
+export function pickSiteAware(candidates, rank, limit) {
+  const bySeverity = (list) => [...list].sort((a, b) => rank(b) - rank(a));
+  const clean = bySeverity(candidates.filter((c) => !c.problems.length));
+  const flawed = bySeverity(candidates.filter((c) => c.problems.length));
+  return [...clean, ...flawed].slice(0, limit);
+}
+
+/** " This is a partial match: it wants full sun but this site gives part sun — ..." or '' for a clean fit. */
+export function describeSiteFit(problems) {
+  if (!problems.length) return '';
+  const joined = problems.map((problem) => `it ${problem.text}`).join('; ');
+  return ` This is a partial match: ${joined}`;
+}

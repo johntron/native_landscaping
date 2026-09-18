@@ -302,6 +302,21 @@ test('keystone genera: a design with none reports a gap, and says so as a gap to
   );
 });
 
+test('keystone genera suggestions rank a clean site fit ahead of a mismatch, and say what does not match', () => {
+  const site = { sun: 'part-sun', water: 'medium', soil: 'clay' };
+  const result = runWithGenera(place('Passiflora incarnata', 'Calyptocarpus vialis'), { site })[
+    'keystone-genera'
+  ];
+  const bySpecies = (name) => result.suggestions.findIndex((s) => s.includes(name));
+  const ironweedIdx = bySpecies('Vernonia gigantea'); // part-sun: a clean fit on this site
+  const sunflowerIdx = bySpecies('Helianthus maximiliani'); // full-sun: wants more light than this site gives
+  assert.ok(ironweedIdx !== -1 && sunflowerIdx !== -1, 'both candidates are offered');
+  assert.ok(ironweedIdx < sunflowerIdx, 'the clean fit outranks the ecologically stronger mismatch');
+  assert.match(result.suggestions[sunflowerIdx], /partial match/);
+  assert.match(result.suggestions[sunflowerIdx], /wants full sun but this site gives part sun/);
+  assert.doesNotMatch(result.suggestions[ironweedIdx], /partial match/);
+});
+
 test('keystone genera measures footprint area, not head-count', () => {
   // One wide keystone plant against many narrow non-keystone ones: a head-count
   // would call this a rounding error, an area ratio would not.
@@ -368,6 +383,19 @@ test('larval hosts: none planted is a gap with named replacements', () => {
   assert.equal(result.status, STATUSES.GAP);
   assert.ok(result.suggestions.length);
   assert.ok(result.suggestions.every((s) => /host to/.test(s)));
+});
+
+test('larval hosts suggestions rank a clean site fit ahead of a mismatch, and say what does not match', () => {
+  const site = { sun: 'part-sun', water: 'medium', soil: 'clay' };
+  const result = runWithGenera(place('Salvia farinacea'), { site })['larval-hosts'];
+  const bySpecies = (name) => result.suggestions.findIndex((s) => s.includes(name));
+  const turkscapIdx = bySpecies("Malvaviscus arboreus"); // part-sun/medium: a clean fit here
+  const goldenrodIdx = bySpecies('Solidago rigida'); // full-sun/low-water: two mismatches
+  assert.ok(turkscapIdx !== -1 && goldenrodIdx !== -1, 'both candidates are offered');
+  assert.ok(turkscapIdx < goldenrodIdx, 'the clean fit outranks the ecologically stronger mismatch');
+  assert.match(result.suggestions[goldenrodIdx], /partial match/);
+  assert.match(result.suggestions[goldenrodIdx], /full sun.*part sun/);
+  assert.match(result.suggestions[goldenrodIdx], /low water on a medium-water site/);
 });
 
 test('larval hosts: one genus is partial, two or more is ok', () => {
