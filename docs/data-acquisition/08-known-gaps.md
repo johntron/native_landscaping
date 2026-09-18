@@ -146,7 +146,7 @@ review beads (nl-41o.12) before publishing a row they'd invalidate.
 | nl-clm | AGENTS.md still describes `soil_pref` as a single value; the code (and regional CSVs) have treated it as a comma-separated set for a while. |
 | nl-5c8 | Two `plants.csv` values fall outside the vocabulary the code accepts (`fruit_load: 'low'`, `soil_pref: 'clay-loam'`) — both silently drop to `''`/no-match rather than erroring, so they grade as absent instead of as unrecognized. |
 | nl-41o.11 | 22 catalog rows (21 in `blackland-prairie-natives.csv`, 1 in `plants.csv`) contradict the NCTX flora's nativity verdict — measured, not yet corrected. |
-| nl-41o.5 | No conflict-resolution/manual-correction mechanism yet — a re-run of any future crawl would silently erase a hand-researched correction like §1.2 or §1.3 above. |
+| nl-41o.5 | Designed — [09-conflict-resolution.md](09-conflict-resolution.md): per-field precedence, `manual-corrections.tsv` format, replay-last ordering so a re-crawl can't erase a correction like §1.2 or §1.3 above. Not yet implemented. |
 | nl-41o.7 | No stated prioritization for which species/fields get collected next. |
 | nl-jsm.7 | Rules 9 (drift/clumping) and 12 (mature-size spacing) are deferred; 12 specifically needs `width_ft`, which §3.1 says has no general source. |
 
