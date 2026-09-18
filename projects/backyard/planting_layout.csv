@@ -2,7 +2,6 @@ id,botanical_name,x_ft,y_ft
 beautyberry-east,Callicarpa americana,11.825,16.566
 turkscap-shade,Malvaviscus arboreus var. drummondii,6.732,11.391
 turkscap-kitchen,Malvaviscus arboreus var. drummondii,6.401,8.505
-frostweed-drift,Verbesina virginica,15.482,15.985
 honeysuckle-obelisk,Lonicera sempervirens,3.344,4.065
 passionflower-trellis,Passiflora incarnata,5.237,9.776
 carex-glade,Carex blanda,5.111,12.836
@@ -12,13 +11,13 @@ carex-glade4,Carex blanda,3.494,7.778
 carex-glade5,Carex blanda,5.288,5.545
 carex-glade6,Carex blanda,6.920,3.520
 horseherb-carpet,Calyptocarpus vialis,4.101,14.061
-horseherb-carpet2,Calyptocarpus vialis,15.859,16.321
+horseherb-carpet2,Calyptocarpus vialis,16.303,16.535
 horseherb-carpet3,Calyptocarpus vialis,2.998,4.701
 horseherb-carpet4,Calyptocarpus vialis,4.715,16.705
 horseherb-carpet5,Calyptocarpus vialis,4.790,14.385
 horseherb-carpet6,Calyptocarpus vialis,8.389,16.821
 horseherb-carpet7,Calyptocarpus vialis,7.781,14.652
-winecup-edge,Callirhoe involucrata,8.051,13.348
+winecup-edge,Callirhoe involucrata,6.705,13.134
 winecup-edge2,Callirhoe involucrata,12.803,14.503
 winecup-edge3,Callirhoe involucrata,6.603,7.907
 winecup-edge4,Callirhoe involucrata,9.790,14.094
@@ -57,9 +56,15 @@ winecup-edge4-copy,Callirhoe involucrata,10.126,16.026
 carex-glade3-copy-2,Carex blanda,10.740,17.587
 winecup-edge2-copy-copy,Callirhoe involucrata,12.713,16.550
 winecup-edge2-copy-copy-copy,Callirhoe involucrata,12.758,15.428
-horseherb-carpet2-copy,Calyptocarpus vialis,15.650,18.435
-carex-glade3-copy-2-copy,Carex blanda,14.457,16.756
+horseherb-carpet2-copy,Calyptocarpus vialis,15.339,17.377
+carex-glade3-copy-2-copy,Carex blanda,14.246,16.113
 carex-glade3-copy-2-copy-2,Carex blanda,12.749,17.774
-coralberry,Symphoricarpos orbiculatus,3.959,6.691
+coralberry,Symphoricarpos orbiculatus,4.870,5.854
 mistflower,Conoclinium greggii,5.952,4.131
-mistflower-copy,Conoclinium greggii,10.142,14.484
+mistflower-copy,Conoclinium greggii,9.332,13.915
+vernonia-gigantea-1,Vernonia gigantea,14.393,17.998
+vernonia-gigantea-1-copy,Vernonia gigantea,15.654,16.576
+vernonia-gigantea-1-copy-copy,Vernonia gigantea,16.476,18.304
+verbesina-virginica-1,Verbesina virginica,8.139,13.927
+verbesina-virginica-1-copy,Verbesina virginica,7.437,13.221
+verbesina-virginica-1-copy-2,Verbesina virginica,8.934,15.226
