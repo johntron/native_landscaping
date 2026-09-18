@@ -551,6 +551,19 @@ test('site match: a soil mismatch is a caution and does NOT drive the status', (
   assert.equal(siteResult(planted({ soilPref: 'sandy, clay' }), { soil: 'clay' }).status, STATUSES.OK);
 });
 
+test('site match: a mismatch against a MEASURED soil set (nl-9a6) is a real gap, not a caution', () => {
+  // A comma-separated soil_pref came from USDA's soil_coarse/medium/fine
+  // triple, not a bare preference, so a site outside that set is a known
+  // failure and should drive the status like sun/water do.
+  const off = siteResult(planted({ soilPref: 'sandy,loamy' }), { soil: 'clay' });
+  assert.equal(off.status, STATUSES.PARTIAL, 'a measured mismatch counts against the design');
+  assert.ok(off.findings.some((f) => /takes sandy or loamy soil, not the clay this site has/.test(f)));
+  assert.ok(
+    !off.findings.some((f) => /not counted against the design/.test(f)),
+    'a measured mismatch is not filed under the unknowns list'
+  );
+});
+
 test('site match: a compound soil texture also takes its named halves (nl-5c8)', () => {
   // 'clay-loam' is one token (the hyphen is the texture name, not a separator),
   // but it sits between clay and loam, so a site declared as either should not

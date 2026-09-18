@@ -26,14 +26,19 @@ import { SITE_VOCABULARY } from '../../data/projectConfig.js';
  *
  * Soil is set membership, not a scale — clay is not "more" than sandy.
  *
- * **Soil mismatches are CAUTIONS, not failures, and deliberately do not drive
- * the status.** `soil_pref` holds one PREFERRED soil; the catalog records no
- * tolerance at all. Most North Central Texas natives grow across a range, so a
- * plant that prefers sandy on a clay site is very often fine — just shorter-lived,
- * or wanting sharper drainage. Reporting that at the same weight as a real
- * failure made this check punitive and taught the reader to ignore it. Until the
- * catalog carries tolerance (USDA's soil_coarse/medium/fine triple would give it;
- * see the data-collection epic), an unknown is reported as an unknown.
+ * **A mismatch against a single-value `soil_pref` is a CAUTION, not a
+ * failure, and deliberately does not drive the status.** `nl-9a6` measured
+ * that USDA's soil_coarse/medium/fine triple exists for only 23 of
+ * `plants.csv`'s 56 species (the rest have no USDA characteristics record at
+ * all, not a fetch failure — USDA covers ~2,200 species nationwide). For
+ * those 23, `soil_pref` is a real measured accepted SET and a mismatch against
+ * it is reported at the same weight as sun/water (see below). For everything
+ * else, `soil_pref` still holds one PREFERRED soil with no tolerance data —
+ * most North Central Texas natives grow across a range, so a plant that
+ * prefers sandy on a clay site is very often fine, just shorter-lived or
+ * wanting sharper drainage. Reporting that at real-failure weight made this
+ * check punitive and taught the reader to ignore it, so an unknown is still
+ * reported as an unknown until more of the catalog gets measured data.
  */
 
 const SUN = SITE_VOCABULARY.sun; // shade < part-sun < full-sun
@@ -197,7 +202,14 @@ const SOIL_COMPOUND_EQUIVALENTS = Object.freeze({
   'clay-loam': Object.freeze(['clay', 'loamy']),
 });
 
-/** Soil is set membership: a plant lists the soils it will take, comma separated. */
+/**
+ * Soil is set membership: a plant lists the soils it will take, comma
+ * separated. A comma-separated `soil_pref` is a MEASURED accepted set
+ * (nl-9a6: USDA's soil_coarse/medium/fine triple) — a mismatch against it is
+ * a real gap, same weight as sun/water. A single value is still just a
+ * preference with no tolerance data behind it, so a mismatch there stays a
+ * caution (see the comment atop this file).
+ */
 function checkSoil(plant, siteSoil) {
   if (!siteSoil) return null;
   const listed = String(plant.soilPref || '')
@@ -205,8 +217,15 @@ function checkSoil(plant, siteSoil) {
     .split(/[,/|]/)
     .map((value) => value.trim())
     .filter(Boolean);
+  const measured = listed.length > 1;
   const accepted = listed.flatMap((value) => [value, ...(SOIL_COMPOUND_EQUIVALENTS[value] || [])]);
   if (!accepted.length || accepted.includes(siteSoil)) return null;
+  if (measured) {
+    return {
+      severity: 'real',
+      text: `takes ${listed.join(' or ')} soil, not the ${siteSoil} this site has — expect it to struggle.`,
+    };
+  }
   return {
     severity: 'caution',
     text: `prefers ${listed.join(' or ')} soil on a ${siteSoil} site — many natives take a wider range than the catalog records, so expect a smaller or shorter-lived plant rather than a failure, and give it sharper drainage if you can.`,

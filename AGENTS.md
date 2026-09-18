@@ -586,9 +586,12 @@ Each species row contains:
 - `sun_pref`, `water_pref` – single values.
 - `soil_pref` – an accepted-soil SET, comma-separated (e.g. `sandy,loamy,clay`);
   `checkSoil` in `src/analysis/rules/siteMatch.js` splits on `[,/|]` and tests
-  membership. `plants.csv` still holds single values today, which is what the
-  migration in the soil-tolerance stopgap bead (`nl-9a6`) is for — the column's
-  shape is already a set, only this catalog's data isn't yet.
+  membership. `nl-9a6` migrated the rows USDA's characteristics endpoint
+  actually has a soil_coarse/medium/fine triple for — 23 of 56 species — to a
+  real accepted set. The other 33 have no USDA characteristics record at all
+  (not a fetch failure — USDA covers only ~2,200 species nationwide) and still
+  hold one PREFERRED soil with no tolerance data, so rule 8's soil stopgap
+  (see the comment atop `siteMatch.js`) stays in place for those.
 - Optional `dormant_color`, `flowerColor`, or alias fields handled by `plantParser`.
 
 When changing behavior, **extend the CSV schema and parsing** (see `src/data/plantParser.js`) instead of hard-coding plant properties inside rendering logic.
