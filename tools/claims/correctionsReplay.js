@@ -1,0 +1,105 @@
+// Replay of manual-corrections.tsv (09 §2/§2.1). Runs LAST in a rebuild, after
+// every sourced claim is ingested — replaying first would let a fresh crawl
+// re-claim the top of the precedence order and silently undo a correction.
+//
+// File format (09 §2), tab-separated, header row, one correction per physical
+// line, no embedded newlines in any field:
+//   usda_symbol  field  value  reason  author  date  supersedes_source
+// A cultivar correction keys on "SYMBOL 'CultivarName'" (04 §2.3's pairing).
+import { existsSync, readFileSync } from 'node:fs';
+
+const REQUIRED_COLUMNS = ['usda_symbol', 'field', 'value', 'reason', 'author', 'date', 'supersedes_source'];
+
+function parseTsv(text) {
+  const lines = text.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  if (!lines.length) return [];
+  const header = lines[0].split('\t');
+  return lines.slice(1).map((line, i) => {
+    const cells = line.split('\t');
+    const row = {};
+    header.forEach((key, idx) => (row[key] = (cells[idx] ?? '').trim()));
+    row.__line = i + 2; // 1-indexed, plus the header row
+    return row;
+  });
+}
+
+/** Resolve a manual-correction's usda_symbol column to a taxa row. Rejects, never guesses. */
+function resolveTaxon(db, usdaSymbol) {
+  const cultivarMatch = usdaSymbol.match(/^(\S+)\s+'([^']+)'$/);
+  if (cultivarMatch) {
+    const [, symbol, cultivarName] = cultivarMatch;
+    return db
+      .prepare("SELECT id FROM taxa WHERE usda_symbol = ? AND rank = 'cultivar' AND scientific_name LIKE ?")
+      .get(symbol, `% '${cultivarName}'`);
+  }
+  return db.prepare('SELECT id FROM taxa WHERE usda_symbol = ?').get(usdaSymbol);
+}
+
+/**
+ * Replay manual-corrections.tsv into `claims`. A missing file is a no-op (the
+ * file doesn't exist yet in this repo — nl-scx.1 wires the ordering, it does
+ * not author the file). Any invalid row throws with every problem found,
+ * rather than importing an unattributed or unresolvable edit (09 §2).
+ */
+export function replayManualCorrections(db, correctionsPath) {
+  if (!existsSync(correctionsPath)) return { applied: 0 };
+
+  const rows = parseTsv(readFileSync(correctionsPath, 'utf8'));
+  const errors = [];
+  const retrievedAt = new Date().toISOString();
+
+  db.exec('BEGIN');
+  try {
+    let applied = 0;
+    for (const row of rows) {
+      for (const col of REQUIRED_COLUMNS) {
+        if (col === 'supersedes_source') continue; // optional: a field with no prior claim has nothing to supersede
+        if (col === 'date') continue; // provenance only, not load-bearing
+        if (!row[col]) errors.push(`line ${row.__line}: missing required column "${col}"`);
+      }
+      if (errors.length) continue;
+
+      const taxon = resolveTaxon(db, row.usda_symbol);
+      if (!taxon) {
+        errors.push(`line ${row.__line}: usda_symbol "${row.usda_symbol}" does not resolve to any taxa row`);
+        continue;
+      }
+
+      let targetClaim = null;
+      if (row.supersedes_source) {
+        targetClaim = db
+          .prepare(
+            'SELECT id FROM claims WHERE species_id = ? AND field = ? AND source = ? AND superseded_by IS NULL',
+          )
+          .get(taxon.id, row.field, row.supersedes_source);
+        if (!targetClaim) {
+          errors.push(
+            `line ${row.__line}: supersedes_source "${row.supersedes_source}" names no un-superseded claim for ` +
+              `(${row.usda_symbol}, ${row.field})`,
+          );
+          continue;
+        }
+      }
+
+      const inserted = db
+        .prepare(
+          `INSERT INTO claims (species_id, field, value, status, source, citation, retrieved_at)
+           VALUES (?, ?, ?, 'asserted', 'manual-correction', ?, ?)`,
+        )
+        .run(taxon.id, row.field, row.value, `${row.reason} — ${row.author}`, retrievedAt);
+
+      if (targetClaim) {
+        db.prepare('UPDATE claims SET superseded_by = ? WHERE id = ?').run(Number(inserted.lastInsertRowid), targetClaim.id);
+      }
+      applied += 1;
+    }
+
+    if (errors.length) throw new Error(`manual-corrections.tsv is invalid:\n${errors.join('\n')}`);
+
+    db.exec('COMMIT');
+    return { applied };
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
