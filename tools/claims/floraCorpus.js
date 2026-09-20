@@ -20,6 +20,25 @@ export function loadCorpusText(dir = DEFAULT_CORPUS_DIR) {
   return files.map((f) => readFileSync(join(dir, f), 'utf8')).join('\n\n');
 }
 
+const VOLUME_FILENAME_RE = /^FNCT_(\d+)-(\d+)-/;
+
+/**
+ * Load each volume separately, keeping the filename's first-page number (03
+ * §2: `page = first_page_in_filename + formfeed_index`) — needed for
+ * floraNativity's citation, which loadCorpusText's single joined string
+ * throws away.
+ */
+export function loadCorpusVolumes(dir = DEFAULT_CORPUS_DIR) {
+  const files = readdirSync(dir)
+    .filter((f) => f.endsWith('.txt'))
+    .sort();
+  return files.map((f) => {
+    const match = VOLUME_FILENAME_RE.exec(f);
+    if (!match) throw new Error(`corpus file ${f} does not match the FNCT_<first>-<last>-... naming convention`);
+    return { filename: f, firstPage: Number(match[1]), text: readFileSync(join(dir, f), 'utf8') };
+  });
+}
+
 /** A heading key is rank-aware and case/whitespace-normalized for lookup. */
 export function headingKey(genus, species, rank, infraEpithet) {
   const base = `${genus} ${species}`.toLowerCase();
@@ -114,6 +133,21 @@ function extractSynonyms(blockText, headingGenus, genusDictionary) {
 }
 
 /**
+ * Test whether `blockText` opens a treatment (03 §6's heading rule, applied
+ * to a blank-line-delimited block). Shared by buildFloraIndex (06 §3 step 1)
+ * and floraNativity's span builder (03 §4/§6) so the two never drift apart
+ * on what counts as a heading.
+ */
+export function matchHeadingBlock(blockText) {
+  const flatStart = blockText.slice(0, 400).replace(/\s+/g, ' ').trim();
+  const match = HEADING_RE.exec(flatStart);
+  if (!match) return null;
+  const [, genus, species, rankToken, infraEpithet] = match;
+  const rank = classifyRank(rankToken);
+  return { genus, species, rank, infraEpithet: infraEpithet ?? null, key: headingKey(genus, species, rank, infraEpithet) };
+}
+
+/**
  * Parse the corpus into { headingIndex, synonymIndex }, both
  * Map<headingKey, { key, genus, species, rank, infraEpithet }> — the
  * treatment's own key. headingIndex is the direct-match index (06 §3 step
@@ -126,13 +160,10 @@ export function buildFloraIndex(text, genusDictionary) {
   const blocks = text.split(/\n\s*\n+/);
 
   for (const block of blocks) {
-    const flatStart = block.slice(0, 400).replace(/\s+/g, ' ').trim();
-    const match = HEADING_RE.exec(flatStart);
-    if (!match) continue;
-    const [, genus, species, rankToken, infraEpithet] = match;
-    const rank = classifyRank(rankToken);
-    const key = headingKey(genus, species, rank, infraEpithet);
-    const record = { key, genus, species, rank, infraEpithet: infraEpithet ?? null };
+    const heading = matchHeadingBlock(block);
+    if (!heading) continue;
+    const { key, genus } = heading;
+    const record = { key, genus: heading.genus, species: heading.species, rank: heading.rank, infraEpithet: heading.infraEpithet };
     // First heading wins on a duplicate key (e.g. running headers reprinted) —
     // do not let a later false-positive block clobber a real treatment.
     if (!headingIndex.has(key)) headingIndex.set(key, record);
