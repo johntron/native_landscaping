@@ -99,6 +99,49 @@ export const USDA_TARGET_FIELDS = [
     label: "Commercial availability",
     read: (_profile, c) => c.get("Commercial Availability") ?? null,
   },
+  // nl-yud: sampled populated on one species (Quercus shumardii) only — this
+  // is the broad-population check its own caveat calls for before any of
+  // these are relied on.
+  {
+    key: "fruit_seed_persistence",
+    label: "Fruit/seed persistence",
+    read: (_profile, c) => c.get("Fruit/Seed Persistence") ?? null,
+  },
+  {
+    key: "toxicity",
+    label: "Toxicity",
+    read: (_profile, c) => c.get("Toxicity") ?? null,
+  },
+  {
+    key: "lifespan",
+    label: "Lifespan",
+    read: (_profile, c) => c.get("Lifespan") ?? null,
+  },
+  {
+    key: "vegetative_spread_rate",
+    label: "Vegetative spread rate",
+    read: (_profile, c) => c.get("Vegetative Spread Rate") ?? null,
+  },
+  {
+    key: "seed_spread_rate",
+    label: "Seed spread rate",
+    read: (_profile, c) => c.get("Seed Spread Rate") ?? null,
+  },
+  {
+    key: "resprout_ability",
+    label: "Resprout ability",
+    read: (_profile, c) => c.get("Resprout Ability") ?? null,
+  },
+  {
+    key: "growth_rate",
+    label: "Growth rate",
+    read: (_profile, c) => c.get("Growth Rate") ?? null,
+  },
+  {
+    key: "height_20yr_max",
+    label: "Height at 20 years, maximum",
+    read: (_profile, c) => c.get("Height at 20 Years, Maximum") ?? null,
+  },
 ];
 
 function toCharMap(characteristics) {

@@ -59,6 +59,16 @@ export const USDA_RAW_COLUMNS = [
   "usda_soil_fine",
   "usda_ph_min",
   "usda_ph_max",
+  // nl-yud: already in the 81-characteristic response, previously discarded.
+  "usda_commercial_availability",
+  "usda_toxicity",
+  "usda_lifespan",
+  "usda_vegetative_spread_rate",
+  "usda_seed_spread_rate",
+  "usda_resprout_ability",
+  "usda_fruit_seed_persistence",
+  "usda_growth_rate",
+  "usda_height_20yr_max_ft",
 ];
 
 export const INTERMEDIATE_CSV_COLUMNS = [...PLANTS_CSV_COLUMNS, ...USDA_RAW_COLUMNS];
@@ -169,8 +179,15 @@ export function mapPlantToIntermediateRow(profile, characteristics) {
     sun_pref: shadeTolerance
       ? SHADE_TOLERANCE_TO_SUN_PREF[shadeTolerance.toLowerCase()] || null
       : null,
+    // nl-yud: Moisture Use (an optimum) and Drought Tolerance (a lower bound)
+    // are not the same scale — falling back to Drought Tolerance when
+    // Moisture Use is absent can invert the value (high drought tolerance
+    // reads as low water need, not high), the same failure mode as the Shade
+    // Tolerance inversion above. water_pref is Moisture Use only; Drought
+    // Tolerance survives as its own raw column (usda_drought_tolerance) for
+    // the claim store to carry as the separate lower-bound field it is.
     water_pref: (() => {
-      const v = c.get("Moisture Use") || c.get("Drought Tolerance");
+      const v = c.get("Moisture Use");
       return v ? WATER_LEVEL[v.toLowerCase()] || null : null;
     })(),
     soil_pref: soilPref({
@@ -224,6 +241,15 @@ export function mapPlantToIntermediateRow(profile, characteristics) {
     usda_soil_fine: c.get("Adapted to Fine Textured Soils"),
     usda_ph_min: c.get("pH, Minimum"),
     usda_ph_max: c.get("pH, Maximum"),
+    usda_commercial_availability: c.get("Commercial Availability"),
+    usda_toxicity: c.get("Toxicity"),
+    usda_lifespan: c.get("Lifespan"),
+    usda_vegetative_spread_rate: c.get("Vegetative Spread Rate"),
+    usda_seed_spread_rate: c.get("Seed Spread Rate"),
+    usda_resprout_ability: c.get("Resprout Ability"),
+    usda_fruit_seed_persistence: c.get("Fruit/Seed Persistence"),
+    usda_growth_rate: c.get("Growth Rate"),
+    usda_height_20yr_max_ft: c.get("Height at 20 Years, Maximum"),
   };
   return row;
 }

@@ -82,6 +82,34 @@ test('mapPlantToIntermediateRow derives plants.csv fields from USDA data', () =>
   assert.equal(row.usda_native_status, 'L48:N');
 });
 
+test('mapPlantToIntermediateRow carries the previously-discarded characteristics as raw columns', () => {
+  // nl-yud: these were already in every USDA characteristics response and
+  // discarded by the mapper — recovering them costs no new request.
+  const row = mapPlantToIntermediateRow(
+    { Symbol: 'QUSH', ScientificName: '<i>Quercus shumardii</i> Buckland', GrowthHabits: ['Tree'], NativeStatuses: [] },
+    [
+      { PlantCharacteristicName: 'Commercial Availability', PlantCharacteristicValue: 'Routinely Available' },
+      { PlantCharacteristicName: 'Toxicity', PlantCharacteristicValue: 'None' },
+      { PlantCharacteristicName: 'Lifespan', PlantCharacteristicValue: 'Long' },
+      { PlantCharacteristicName: 'Vegetative Spread Rate', PlantCharacteristicValue: 'None' },
+      { PlantCharacteristicName: 'Seed Spread Rate', PlantCharacteristicValue: 'Slow' },
+      { PlantCharacteristicName: 'Resprout Ability', PlantCharacteristicValue: 'No' },
+      { PlantCharacteristicName: 'Fruit/Seed Persistence', PlantCharacteristicValue: 'No' },
+      { PlantCharacteristicName: 'Growth Rate', PlantCharacteristicValue: 'Moderate' },
+      { PlantCharacteristicName: 'Height at 20 Years, Maximum', PlantCharacteristicValue: '35' },
+    ],
+  );
+  assert.equal(row.usda_commercial_availability, 'Routinely Available');
+  assert.equal(row.usda_toxicity, 'None');
+  assert.equal(row.usda_lifespan, 'Long');
+  assert.equal(row.usda_vegetative_spread_rate, 'None');
+  assert.equal(row.usda_seed_spread_rate, 'Slow');
+  assert.equal(row.usda_resprout_ability, 'No');
+  assert.equal(row.usda_fruit_seed_persistence, 'No');
+  assert.equal(row.usda_growth_rate, 'Moderate');
+  assert.equal(row.usda_height_20yr_max_ft, '35');
+});
+
 test('mapPlantToIntermediateRow keeps the infraspecific epithet in botanical_name', () => {
   // Without the rank + second epithet, a variety and its parent species share
   // one botanical_name, and getSpeciesKey (which ignores species_epithet when a
@@ -98,6 +126,21 @@ test('mapPlantToIntermediateRow keeps the infraspecific epithet in botanical_nam
   );
   assert.equal(row.botanical_name, 'Achillea millefolium var. occidentalis');
   assert.equal(row.usda_scientific_name_full, 'Achillea millefolium L. var. occidentalis DC.');
+});
+
+test('water_pref reads Moisture Use only — Drought Tolerance is a different scale and must not backfill it', () => {
+  // nl-yud: Drought Tolerance is a lower bound, Moisture Use an optimum.
+  // Falling back to Drought Tolerance when Moisture Use is absent can
+  // invert the answer (High drought tolerance means the plant wants LESS
+  // water, not more) — the same class of bug as the documented Shade
+  // Tolerance inversion. High drought tolerance with no Moisture Use must
+  // read as unknown, not as "high" water_pref.
+  const profile = { Symbol: 'X', ScientificName: '<i>Testus plantus</i>', GrowthHabits: [], NativeStatuses: [] };
+  const row = mapPlantToIntermediateRow(profile, [
+    { PlantCharacteristicName: 'Drought Tolerance', PlantCharacteristicValue: 'High' },
+  ]);
+  assert.equal(row.water_pref, null);
+  assert.equal(row.usda_drought_tolerance, 'High');
 });
 
 test('rowsToCsv escapes commas and quotes', () => {
@@ -202,6 +245,35 @@ test('sniffFields reports population from RAW USDA shapes, not a normalized view
 
   // A field not present in this response's characteristics list at all.
   assert.equal(byKey.soil_tolerance_coarse.populated, false);
+
+  // nl-yud's newly-probed fields: unpopulated in this response, which is the
+  // point of probing them across species before relying on the QUSH sample.
+  assert.equal(byKey.fruit_seed_persistence.populated, false);
+  assert.equal(byKey.toxicity.populated, false);
+});
+
+test('sniffFields reads the nl-yud fields when present in the response', () => {
+  const characteristics = [
+    { PlantCharacteristicName: 'Fruit/Seed Persistence', PlantCharacteristicValue: 'No' },
+    { PlantCharacteristicName: 'Toxicity', PlantCharacteristicValue: 'None' },
+    { PlantCharacteristicName: 'Lifespan', PlantCharacteristicValue: 'Long' },
+    { PlantCharacteristicName: 'Vegetative Spread Rate', PlantCharacteristicValue: 'None' },
+    { PlantCharacteristicName: 'Seed Spread Rate', PlantCharacteristicValue: 'Slow' },
+    { PlantCharacteristicName: 'Resprout Ability', PlantCharacteristicValue: 'No' },
+    { PlantCharacteristicName: 'Growth Rate', PlantCharacteristicValue: 'Moderate' },
+    { PlantCharacteristicName: 'Height at 20 Years, Maximum', PlantCharacteristicValue: '35' },
+  ];
+  const byKey = Object.fromEntries(
+    sniffFields(USDA_TARGET_FIELDS, {}, characteristics).map((r) => [r.key, r]),
+  );
+  assert.equal(byKey.fruit_seed_persistence.value, 'No');
+  assert.equal(byKey.toxicity.value, 'None');
+  assert.equal(byKey.lifespan.value, 'Long');
+  assert.equal(byKey.vegetative_spread_rate.value, 'None');
+  assert.equal(byKey.seed_spread_rate.value, 'Slow');
+  assert.equal(byKey.resprout_ability.value, 'No');
+  assert.equal(byKey.growth_rate.value, 'Moderate');
+  assert.equal(byKey.height_20yr_max.value, '35');
 });
 
 test('sniffFields treats an empty NativeStatuses array as unpopulated', () => {
