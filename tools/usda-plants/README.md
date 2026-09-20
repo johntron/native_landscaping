@@ -5,6 +5,12 @@ into an intermediate CSV, ready for an LLM (or a human) to fill in the
 fields USDA doesn't have before merging into the repo's `plants.csv`. See
 `AGENTS.md` "Plant Data (CSV)" for the target schema.
 
+For the claim store (`data/claims.db`, docs/data-acquisition/04-data-model.md),
+this module's client/search/mapping code is reused by
+`tools/claims/usdaIngest.js` (nl-scx.2), which writes claim rows instead of
+CSV columns — county presence and characteristics land as `claims`, not as
+`usda_*` columns on a row. Run it via `node tools/claims/rebuildWithUsda.js`.
+
 Talks to `plantsservices.sc.egov.usda.gov`, USDA's own unauthenticated
 backend API (confirmed against its public Swagger spec at
 `/swagger/v1/swagger.json`). No API key. Requests are rate-limited
