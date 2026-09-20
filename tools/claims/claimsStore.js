@@ -68,14 +68,21 @@ export function createSchema(db) {
       )
     `);
 
-    // 06 §5 — one row per taxa_id+corpus
+    // 06 §5 — one row per taxa_id+corpus. flora_taxa_id is the taxa row whose
+    // heading actually matched (nl-scx.3): usually taxa_id itself for a
+    // 'direct' match, a separate old-name taxa row (resolves_to = taxa_id)
+    // for 'flora-synonym', and null for 'unmatched'. Comparing its rank
+    // against taxa_id's own rank is how a consumer detects §4's partial
+    // rank match (a variety reconciled only at its parent species' heading)
+    // without a dedicated column.
     db.exec(`
       CREATE TABLE name_reconciliations (
-        id          INTEGER PRIMARY KEY AUTOINCREMENT,
-        taxa_id     INTEGER NOT NULL REFERENCES taxa(id),
-        corpus      TEXT NOT NULL,
-        matched_via TEXT NOT NULL,
-        reviewed    INTEGER NOT NULL DEFAULT 0,
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        taxa_id       INTEGER NOT NULL REFERENCES taxa(id),
+        corpus        TEXT NOT NULL,
+        matched_via   TEXT NOT NULL,
+        flora_taxa_id INTEGER REFERENCES taxa(id),
+        reviewed      INTEGER NOT NULL DEFAULT 0,
         UNIQUE (taxa_id, corpus)
       )
     `);

@@ -51,7 +51,7 @@ export async function searchByLocationCriteria(client, criteria) {
 // binomial/trinomial, e.g. "<i>Abies concolor</i> (Gord. & Glend.) Lindl. ex
 // Hildebr." — extract just the italic part so a plain "Abies concolor" query
 // can match without the caller needing to know the author citation.
-function binomialOf(scientificName) {
+export function binomialOf(scientificName) {
   const italic = scientificName?.match(/<i>(.*?)<\/i>/);
   return (italic ? italic[1] : scientificName?.replace(/<[^>]+>/g, "")) ?? "";
 }
