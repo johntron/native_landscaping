@@ -29,6 +29,7 @@ import {
   updateSavedArea,
   deleteSavedArea,
 } from './tools/savedAreas/savedAreasDb.js';
+import { openObservationEventsDb, listEvents } from './tools/observationEventsDb.js';
 
 const envPort = Number(process.env.PORT);
 const PORT = Number.isFinite(envPort) ? envPort : 8000;
@@ -377,6 +378,36 @@ const server = http.createServer(async (req, res) => {
       console.error(err);
       const notFound = /^No saved area with id/.test(err.message);
       res.writeHead(notFound ? 404 : 400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // Read-only window onto the observation event log (nl-1qy.1.1) populated
+  // offline by tools/fetch-observation-events.mjs. Deliberately thin: no
+  // read/unread state (nl-1qy.1.3) and no saved-area CRUD (nl-1qy.1.2, being
+  // built in parallel) — this just makes the event log reachable over HTTP
+  // so those later routes, and any earlier manual checking, have something
+  // to build on rather than the data being CLI/SQLite-only.
+  if (pathname === '/api/observation-events' && req.method === 'GET') {
+    try {
+      const areaId = url.searchParams.get('area_id');
+      if (!areaId) {
+        throw new Error('Missing required area_id query param');
+      }
+      const taxonIdParam = url.searchParams.get('taxon_id');
+      const db = openObservationEventsDb();
+      const rows = listEvents(db, {
+        areaId,
+        taxonId: taxonIdParam != null ? Number(taxonIdParam) : undefined,
+        sinceObservedOn: url.searchParams.get('since_observed_on') || undefined,
+        sinceIngestedAt: url.searchParams.get('since_ingested_at') || undefined,
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ area_id: areaId, rows }));
+    } catch (err) {
+      console.error(err);
+      res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: err.message }));
     }
     return;
