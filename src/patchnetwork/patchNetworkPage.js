@@ -53,7 +53,8 @@ function renderTierKey() {
 }
 
 function matchesFilters(row, { verdict, habit, search }) {
-  if (verdict === 'recommendable' && !(row.inCatalog && row.verdict === 'confirmed-local')) return false;
+  if (verdict === 'recommendable' && !(row.inCatalog && !['rejected', 'unscreened'].includes(row.verdict)))
+    return false;
   if (verdict === 'confirmed-local' && row.verdict !== 'confirmed-local') return false;
   if (verdict === 'flora-cited' && !row.lepHostCount) return false;
   if (verdict === 'rejected' && row.verdict !== 'rejected') return false;

@@ -342,7 +342,7 @@ export const VERDICTS = Object.freeze({
   },
   'in-flora': {
     label: 'In the flora',
-    note: 'The flora treats it, but its host-plant appendix names no Lepidoptera for it.',
+    note: 'The flora treats it, but its host-plant appendix records no Lepidoptera for it — unrecorded, not confirmed absent.',
   },
   renamed: {
     label: 'Renamed since 1999',
