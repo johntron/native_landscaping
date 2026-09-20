@@ -7,6 +7,7 @@ import {
   resolveBackgroundTarget,
   sniffImageType,
   supersededBackgrounds,
+  orphanedBackgrounds,
 } from '../src/data/backgroundStore.js';
 
 const PROJECT_DIR = '/srv/yard/projects/backyard';
@@ -138,6 +139,23 @@ test('supersedes only this view’s earlier uploads', () => {
   ];
   const stale = supersededBackgrounds(entries, 'south', `south-${HASH}.webp`);
   assert.deepEqual(stale.sort(), ['south-888888888888.jpg', 'south-999999999999.webp']);
+});
+
+test('orphans an upload no view still references, across every view', () => {
+  const entries = [
+    `south-${HASH}.webp`,
+    'south-999999999999.webp',
+    'southwest-777777777777.webp',
+    'south.xcf',
+    'top.webp',
+  ];
+  const orphaned = orphanedBackgrounds(entries, [`south-${HASH}.webp`]);
+  assert.deepEqual(orphaned.sort(), ['south-999999999999.webp', 'southwest-777777777777.webp']);
+});
+
+test('orphans nothing that is still referenced or not an upload at all', () => {
+  const entries = [`south-${HASH}.webp`, 'top.webp', 'south.xcf'];
+  assert.deepEqual(orphanedBackgrounds(entries, [`south-${HASH}.webp`, 'top.webp']), []);
 });
 
 test('supersedes nothing for an invalid view id', () => {

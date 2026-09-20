@@ -120,6 +120,28 @@ export function supersededBackgrounds(entries, viewId, keepFileName) {
   );
 }
 
+/** Matches any view's content-addressed upload, not just one view's. */
+const ANY_BACKGROUND_PATTERN = /^[a-z0-9][a-z0-9_-]*-[0-9a-f]{8,64}\.(webp|jpg|png)$/;
+
+/**
+ * Uploaded backgrounds that no view's `background` path references any more.
+ *
+ * Content-addressed names make this safe: a file this pattern matches was
+ * only ever written by the upload handler, and if the current project config
+ * does not name it, nothing else can be pointing at it either — including an
+ * upload the user made and then abandoned by closing the tab before Setup
+ * mode's Save views ran.
+ *
+ * @param {string[]} entries directory listing of the project's img/
+ * @param {string[]} referencedFileNames basenames of every view's `background`
+ */
+export function orphanedBackgrounds(entries, referencedFileNames) {
+  const referenced = new Set(referencedFileNames);
+  return (Array.isArray(entries) ? entries : []).filter(
+    (name) => ANY_BACKGROUND_PATTERN.test(name) && !referenced.has(name)
+  );
+}
+
 function isWebp(buffer) {
   return (
     buffer.toString('latin1', 0, 4) === 'RIFF' && buffer.toString('latin1', 8, 12) === 'WEBP'

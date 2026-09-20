@@ -18,6 +18,8 @@ import {
   resolveBackgroundTarget,
   sniffImageType,
   supersededBackgrounds,
+  orphanedBackgrounds,
+  BACKGROUND_DIR,
 } from './src/data/backgroundStore.js';
 import { openEcosystemDb, listSpeciesObservations } from './tools/ecosystemIndexDb.js';
 import { excludeNonNative } from './src/analysis/establishmentMeans.js';
@@ -97,7 +99,7 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/api/project' && req.method === 'POST') {
     try {
-      const { configFile, projectId } = resolveProjectPaths(projectIdFromUrl(url), PUBLIC_DIR);
+      const { configFile, projectDir, projectId } = resolveProjectPaths(projectIdFromUrl(url), PUBLIC_DIR);
       const body = await collectPayload(req, { requirePlants: false });
       // The legacy {plan, elevations[]} reader exists for files already on disk,
       // not for request bodies: without this, a body missing views[] migrates
@@ -114,6 +116,7 @@ const server = http.createServer(async (req, res) => {
       // so a name edited here would otherwise sit unread until someone
       // hand-edits the index too.
       const index = await syncProjectIndexName(projectId, config.name);
+      await removeOrphanedBackgrounds(projectDir, config);
       console.log(`Project config saved for '${projectId}' (${config.views.length} views)`);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ config: serializeProjectConfig(config), index }));
@@ -653,6 +656,30 @@ async function removeSupersededBackgrounds(dir, viewId, keepFileName) {
     );
   } catch (err) {
     console.warn(`Could not remove superseded backgrounds in ${dir}:`, err.message);
+  }
+}
+
+/**
+ * Delete uploaded backgrounds no view in the just-saved config references any
+ * more — the cleanup point for an upload the user abandoned by never running
+ * Save views. Best effort: the config write already succeeded, so a failure
+ * to tidy up img/ must not fail the request.
+ */
+async function removeOrphanedBackgrounds(projectDir, config) {
+  const dir = path.join(projectDir, BACKGROUND_DIR);
+  try {
+    const referenced = config.views
+      .map((view) => view.background)
+      .filter(Boolean)
+      .map((background) => path.basename(background));
+    const entries = await fs.readdir(dir);
+    await Promise.all(
+      orphanedBackgrounds(entries, referenced).map((name) =>
+        fs.rm(path.join(dir, name), { force: true })
+      )
+    );
+  } catch (err) {
+    if (err.code !== 'ENOENT') console.warn(`Could not sweep orphaned backgrounds in ${dir}:`, err.message);
   }
 }
 
