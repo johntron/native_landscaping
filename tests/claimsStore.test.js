@@ -210,6 +210,70 @@ test('replayManualCorrections rejects an unresolvable usda_symbol', () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
+test('replayManualCorrections creates a taxa row from the wider catalog for a species outside plantable_core, and it takes effect in plantable_set', () => {
+  const db = openClaimsStore(tempDbPath());
+  createSchema(db);
+  seedPlantableCore(db, {
+    plantsCsvPath: `${REPO_ROOT}plants.csv`,
+    blacklandCsvPath: `${REPO_ROOT}blackland-prairie-natives.csv`,
+  });
+
+  // CHLI2 (Chilopsis linearis) is npsot_dfw_recommended='yes' so it IS in
+  // plantable_core already; this proves the real nl-scx.6 seed row's shape —
+  // a correction on a species already in the core.
+  const before = db.prepare("SELECT id FROM taxa WHERE usda_symbol = 'CHLI2'").get();
+  assert.ok(before, 'Chilopsis linearis should already have a taxa row from seedPlantableCore');
+
+  const dir = mkdtempSync(join(tmpdir(), 'claims-corrections-catalog-'));
+  const correctionsPath = join(dir, 'manual-corrections.tsv');
+  writeFileSync(
+    correctionsPath,
+    [
+      'usda_symbol\tfield\tvalue\treason\tauthor\tdate\tsupersedes_source',
+      'CHLI2\tnativity_nctx\tintroduced\tFlora: cultivated and escapes, native of Mexico and sw U.S.\tjohn.syrinek@gmail.com\t2026-09-19\t',
+    ].join('\n'),
+  );
+
+  const { applied } = replayManualCorrections(db, correctionsPath);
+  assert.equal(applied, 1);
+
+  const excluded = db.prepare('SELECT 1 FROM plantable_set WHERE taxa_id = ?').get(before.id);
+  assert.equal(excluded, undefined, 'the corrected species should now be excluded from plantable_set');
+
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('replayManualCorrections auto-vivifies a taxa row from blackland-prairie-natives.csv for a symbol outside plantable_core', () => {
+  const db = openClaimsStore(tempDbPath());
+  createSchema(db);
+  seedPlantableCore(db, {
+    plantsCsvPath: `${REPO_ROOT}plants.csv`,
+    blacklandCsvPath: `${REPO_ROOT}blackland-prairie-natives.csv`,
+  });
+
+  // Robinia pseudoacacia (ROPS) is npsot_dfw_recommended='no', so it has no
+  // taxa row yet — exactly the shape of 5 of nl-scx.6's 7 seed corrections.
+  assert.equal(db.prepare("SELECT id FROM taxa WHERE usda_symbol = 'ROPS'").get(), undefined);
+
+  const dir = mkdtempSync(join(tmpdir(), 'claims-corrections-vivify-'));
+  const correctionsPath = join(dir, 'manual-corrections.tsv');
+  writeFileSync(
+    correctionsPath,
+    [
+      'usda_symbol\tfield\tvalue\treason\tauthor\tdate\tsupersedes_source',
+      'ROPS\tnativity_nctx\tintroduced\tFlora: naturalized colonizer, native of e U.S.\tjohn.syrinek@gmail.com\t2026-09-19\t',
+    ].join('\n'),
+  );
+
+  const { applied } = replayManualCorrections(db, correctionsPath);
+  assert.equal(applied, 1);
+
+  const taxon = db.prepare("SELECT scientific_name, rank FROM taxa WHERE usda_symbol = 'ROPS'").get();
+  assert.deepEqual({ ...taxon }, { scientific_name: 'Robinia pseudoacacia', rank: 'species' });
+
+  rmSync(dir, { recursive: true, force: true });
+});
+
 test('rebuildClaimsStore is idempotent: running it twice produces the same plantable_set content', () => {
   const dbPath = tempDbPath();
   const first = rebuildClaimsStore({ dbPath, correctionsPath: '/nonexistent/manual-corrections.tsv' });
@@ -232,4 +296,38 @@ test('rebuildClaimsStore is idempotent: running it twice produces the same plant
 
   assert.deepEqual(secondNames, firstNames);
   assert.equal(first.plantableCoreSize, second.plantableCoreSize);
+});
+
+test('the committed manual-corrections.tsv replays its 7 seed corrections and excludes the 2 species already in plantable_core', () => {
+  const { db, correctionsApplied } = rebuildClaimsStore({ dbPath: tempDbPath() });
+  assert.equal(correctionsApplied, 7);
+
+  const corrected = db
+    .prepare(
+      `SELECT t.scientific_name FROM claims c
+       JOIN taxa t ON t.id = c.species_id
+       WHERE c.source = 'manual-correction' AND c.field = 'nativity_nctx' AND c.value = 'introduced'
+       ORDER BY t.scientific_name`,
+    )
+    .all()
+    .map((r) => r.scientific_name);
+  assert.deepEqual(corrected, [
+    'Catalpa speciosa',
+    'Chilopsis linearis',
+    'Eschscholzia californica',
+    'Gymnocladus dioicus',
+    'Robinia pseudoacacia',
+    'Taxodium distichum',
+    'Tillandsia usneoides',
+  ]);
+
+  const stillInSet = db
+    .prepare(
+      `SELECT t.scientific_name FROM plantable_set ps
+       JOIN taxa t ON t.id = ps.taxa_id
+       WHERE t.scientific_name IN ('Chilopsis linearis', 'Taxodium distichum')`,
+    )
+    .all();
+  assert.deepEqual(stillInSet, [], 'both species were npsot-recommended into plantable_core but must not survive the correction');
+  db.close();
 });

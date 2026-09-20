@@ -33,7 +33,7 @@ export function classifyName(botanicalName) {
 }
 
 /** Ensure a taxa row exists for `scientificName`, creating parent rows first as needed. Returns the taxa id. */
-function ensureTaxon(db, scientificName, usdaSymbolByName) {
+export function ensureTaxon(db, scientificName, usdaSymbolByName) {
   const existing = db.prepare('SELECT id FROM taxa WHERE scientific_name = ?').get(scientificName);
   if (existing) return existing.id;
 
