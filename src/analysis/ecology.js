@@ -8,6 +8,8 @@ import keystoneGenera from './rules/keystoneGenera.js';
 import larvalHosts from './rules/larvalHosts.js';
 import siteMatch from './rules/siteMatch.js';
 import localFaunaSupport from './rules/localFaunaSupport.js';
+import drifts from './rules/drifts.js';
+import matureSpacing from './rules/matureSpacing.js';
 
 /**
  * Grade a planting design against ecological rules, **per dimension with no
@@ -41,6 +43,8 @@ export const RULES = [
   larvalHosts,
   siteMatch,
   localFaunaSupport,
+  drifts,
+  matureSpacing,
 ];
 
 /**

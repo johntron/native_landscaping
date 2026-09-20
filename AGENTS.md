@@ -646,10 +646,10 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
 
 The app grades a planting against ecological rules and reports **per dimension with
 no composite score** — a 0–100 roll-up would need weights nobody can justify, so
-each dimension reports for itself and the reader decides what to fix first. Seven
+each dimension reports for itself and the reader decides what to fix first. Nine
 dimensions ship: bloom succession (6), fall/winter bird food (7), vertical layers
-(11), keystone genera (4/10), larval hosts (5), site match (8), and local fauna
-support (below).
+(11), keystone genera (4/10), larval hosts (5), site match (8), local fauna
+support (below), drifts (9), and mature-size spacing (12).
 
 ```
 ecology/host-genera.csv          one genus-keyed table, shared by rules 4, 5, 10

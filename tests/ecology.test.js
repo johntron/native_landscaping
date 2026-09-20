@@ -546,6 +546,11 @@ test('both shipped projects analyse without throwing, and report what the data s
       `${id} should now be able to suggest an oak (nl-41o.13)`
     );
     assert.notEqual(results['larval-hosts'].status, STATUSES.NOT_DECLARED, id);
+    // The plan's own survey (see src/analysis/rules/drifts.js) found this exact
+    // shape waiting: frontyard is nearly one-of-everything, backyard concentrates
+    // properly. Locking both in as a regression check on the real fixtures.
+    if (id === 'example-frontyard') assert.equal(results['drifts'].status, STATUSES.GAP, id);
+    if (id === 'backyard') assert.equal(results['drifts'].status, STATUSES.OK, id);
   });
 });
 
@@ -710,4 +715,102 @@ test('site match: only the axes the plant leaves blank are reported as undeclare
   assert.ok(result.findings.some((f) => /1 planted species declares no water preference/.test(f)));
   assert.ok(!result.findings.some((f) => /declares no sun preference/.test(f)));
   assert.ok(!result.findings.some((f) => /declares no soil preference/.test(f)));
+});
+
+/** A synthetic species with an explicit width_ft, for controlled clumping/spacing fixtures. */
+function widthSpecies(botanicalName, width) {
+  return { ...synthetic(botanicalName), width };
+}
+
+/** Place count plants of one species entry along the x axis, spacing ft apart, starting at startX. */
+function placeSpaced(entry, count, spacing, startX = 0) {
+  return Array.from({ length: count }, (_, i) =>
+    createPlantFromSpecies(entry, { id: `${entry.botanicalKey}-${i}`, x: startX + i * spacing, y: 0 })
+  );
+}
+
+test('drifts: fewer than 5 plants is not-declared, too few to judge', () => {
+  const entry = widthSpecies('Aaa aaa', 2);
+  const result = run(placeSpaced(entry, 4, 0.5), { species: [entry] })['drifts'];
+  assert.equal(result.status, STATUSES.NOT_DECLARED);
+});
+
+test('drifts: one-of-everything reads as a gap, and singles are named', () => {
+  const species = ['Aaa aaa', 'Bbb bbb', 'Ccc ccc'].map((name) => widthSpecies(name, 2));
+  // Two individuals per species, 100 ft apart -- nowhere near the ~3 ft clump
+  // threshold for width 2, so every species' largest clump is 1.
+  const plants = species.flatMap((entry) => placeSpaced(entry, 2, 100));
+  const result = run(plants, { species })['drifts'];
+  assert.equal(result.status, STATUSES.GAP);
+  assert.ok(result.findings.some((f) => /3 species are planted as isolated singles/.test(f)));
+  assert.deepEqual(result.suggestions, []);
+});
+
+test('drifts: a clump of 5-9 is a real but modest drift (partial)', () => {
+  const entry = widthSpecies('Aaa aaa', 2);
+  // Spaced 0.5 ft apart, well under the (1+1)*1.5 = 3 ft clump threshold, so
+  // all 6 individuals merge into one clump via the union-find chain.
+  const result = run(placeSpaced(entry, 6, 0.5), { species: [entry] })['drifts'];
+  assert.equal(result.status, STATUSES.PARTIAL);
+  assert.match(result.summary, /thin side of the 5-10\+/);
+});
+
+test('drifts: a clump of 10+ reads as a real drift (ok)', () => {
+  const entry = widthSpecies('Aaa aaa', 2);
+  const result = run(placeSpaced(entry, 10, 0.5), { species: [entry] })['drifts'];
+  assert.equal(result.status, STATUSES.OK);
+  assert.match(result.findings[0], /Largest drift: Aaa aaa, 10 plants/);
+});
+
+/** Two plants of given species/width, `distance` ft apart on the x axis. */
+function pairAt(entryA, entryB, distance) {
+  return [
+    createPlantFromSpecies(entryA, { id: 'a', x: 0, y: 0 }),
+    createPlantFromSpecies(entryB, { id: 'b', x: distance, y: 0 }),
+  ];
+}
+
+test('mature spacing: fewer than 2 plants is not-declared', () => {
+  const entry = widthSpecies('Aaa aaa', 4);
+  const result = run(placeSpaced(entry, 1, 0), { species: [entry] })['mature-spacing'];
+  assert.equal(result.status, STATUSES.NOT_DECLARED);
+});
+
+test('mature spacing: a same-species pair planted close is drifts.js territory, not this rule\'s', () => {
+  const same = widthSpecies('Aaa aaa', 4);
+  const other = widthSpecies('Bbb bbb', 4);
+  const plants = [
+    ...pairAt(same, same, 0.1), // same species, nearly on top of each other -- ignored here
+    createPlantFromSpecies(other, { id: 'c', x: 100, y: 0 }), // far from everything
+  ];
+  const result = run(plants, { species: [same, other] })['mature-spacing'];
+  assert.equal(result.status, STATUSES.OK);
+  assert.ok(!result.findings.some((f) => /Aaa aaa and Aaa aaa/.test(f)));
+});
+
+test('mature spacing: cross-species overlap severities are mild, real, and hard', () => {
+  const a = widthSpecies('Aaa aaa', 4);
+  const b = widthSpecies('Bbb bbb', 4); // combinedRadius = 4 for every a/b pair below
+
+  const mild = run(pairAt(a, b, 3.6), { species: [a, b] })['mature-spacing']; // overlap 0.4, ratio 0.1
+  assert.equal(mild.status, STATUSES.PARTIAL);
+  assert.ok(mild.findings.some((f) => /\(mild\)/.test(f)));
+
+  const real = run(pairAt(a, b, 2), { species: [a, b] })['mature-spacing']; // overlap 2, ratio 0.5
+  assert.equal(real.status, STATUSES.PARTIAL);
+  assert.ok(real.findings.some((f) => /\(real\)/.test(f)));
+
+  const hard = run(pairAt(a, b, 0.4), { species: [a, b] })['mature-spacing']; // overlap 3.6, ratio 0.9
+  assert.equal(hard.status, STATUSES.GAP);
+  assert.ok(hard.findings.some((f) => /\(hard\)/.test(f)));
+});
+
+test('mature spacing: a pair missing declared width is excluded, not silently passed', () => {
+  const declared = widthSpecies('Aaa aaa', 4);
+  const undeclared = widthSpecies('Bbb bbb', undefined);
+  const result = run(pairAt(declared, undeclared, 0.1), { species: [declared, undeclared] })[
+    'mature-spacing'
+  ];
+  assert.equal(result.status, STATUSES.NOT_DECLARED);
+  assert.match(result.summary, /1 pair excluded/);
 });
