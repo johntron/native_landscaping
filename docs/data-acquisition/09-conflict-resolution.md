@@ -27,8 +27,18 @@ rather than deriving a new mechanism:
 | County distribution, the 81 characteristics (sun/water/soil ordinals, height, bloom/fruit timing, fruit load, toxicity, lifespan, commercial availability) | USDA PLANTS | — | [02 §2.1](02-source-inventory.md): public-domain, cleanest terms, broadest coverage |
 | Month-precision bloom timing, light requirement as a set, deer resistance, species-level larval host, soil/water description | NPIN | USDA (coarser) | [02 §2.3](02-source-inventory.md): NPIN's Texas-regional editorial slant beats USDA's coarser ordinal for these specific fields, nothing else |
 | Keystone counts (genus-level) | NWF | — | [02 §2.6](02-source-inventory.md), decided on the epic |
-| County nativity (`nativity_nctx`) | The flora ([03](03-document-corpus.md)), reviewed per-taxon | USDA's `L48:N` (continental) | [03 §10](03-document-corpus.md): "these disagree *by design*; the flora is more specific and should win at NCTX scale" — not a source-quality ranking, a granularity one. [02 §1](02-source-inventory.md) separately rules out BONAP as a source at all (terms forbid storing the value) |
+| County nativity (`nativity_nctx`) | The flora ([03](03-document-corpus.md)), reviewed per-taxon | *(retired — see note)* | [03 §10](03-document-corpus.md): "these disagree *by design*; the flora is more specific and should win at NCTX scale" — not a source-quality ranking, a granularity one. [02 §1](02-source-inventory.md) separately rules out BONAP as a source at all (terms forbid storing the value) |
 | Local occurrence / naturalization signal | *(not admissible as a value source)* | — | [02 §2.4](02-source-inventory.md): iNaturalist's wild:captive ratio measures a different question and cannot be thresholded into nativity |
+
+**Note on `nativity_nctx`'s retired USDA fallback (nl-scx.14, owner decision 2026-09-20):**
+[nl-scx.2](02-source-inventory.md)'s USDA ingest deliberately never writes USDA's
+`NativeStatuses` field as a `nativity_nctx` claim — it is stored as its own field,
+`usda_native_status`, and stops there. `plantable_set` has no source filter on
+`nativity_nctx='introduced'`, so an unscoped USDA fallback claim could silently shrink
+the plantable set outside what this table intends, and USDA's own data is not reliably
+single-valued at its L48 granularity anyway (*Achillea millefolium*'s own record carries
+`L48:I|L48:N`). The fallback slot is retired, not pending: nothing will ever populate it.
+`tools/claims/precedence.js`'s `nativity_nctx` order is `[NCTX_FLORA]` only.
 
 **The rule, stated generally:** precedence is decided once per field, by which source [02](02-source-inventory.md)
 already named primary for it, not computed per-claim (no confidence-weighting, no "newest

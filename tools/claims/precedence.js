@@ -39,9 +39,14 @@ const FIELD_ORDER = {
   lep_host_species: [SOURCE.NWF_KEYSTONE],
   bee_specialist_species: [SOURCE.NWF_KEYSTONE],
 
-  // County nativity: the flora is primary, reviewed per-taxon; USDA's
-  // continental L48:N is the fallback (09 §1 row 4).
-  nativity_nctx: [SOURCE.NCTX_FLORA, SOURCE.USDA_COUNTY],
+  // County nativity: the flora is primary, reviewed per-taxon (09 §1 row 4).
+  // No USDA fallback — retired by owner decision (nl-scx.14, 2026-09-20).
+  // USDA's NativeStatuses is L48-scope, not county-scope, and can be
+  // dual-valued at that granularity (Achillea millefolium: L48:I|L48:N);
+  // an unscoped fallback claim could silently shrink plantable_set in ways
+  // this precedence table never intended. usdaIngest.js stores the raw
+  // value as usda_native_status instead, never as a nativity_nctx claim.
+  nativity_nctx: [SOURCE.NCTX_FLORA],
 };
 
 function orderFor(field) {
