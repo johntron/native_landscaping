@@ -35,6 +35,16 @@ export class UsdaClient {
   }
 
   async _request(path, { method = "GET", body } = {}) {
+    return this._send(path, { method, body, parse: (res) => res.json() });
+  }
+
+  // Same throttle/retry machinery as _request, but for an endpoint that
+  // returns text/csv rather than JSON — getDistributionCsv below.
+  async _requestText(path, { method = "GET", body } = {}) {
+    return this._send(path, { method, body, parse: (res) => res.text() });
+  }
+
+  async _send(path, { method = "GET", body, parse } = {}) {
     let lastError;
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       await this._throttle();
@@ -52,7 +62,7 @@ export class UsdaClient {
           const text = await res.text().catch(() => "");
           throw new Error(`USDA API ${method} ${path} -> ${res.status}: ${text.slice(0, 300)}`);
         }
-        return await res.json();
+        return await parse(res);
       } catch (err) {
         clearTimeout(timer);
         lastError = err;
@@ -129,5 +139,20 @@ export class UsdaClient {
   // coarse (region-level, not state/county) native status.
   async getProfile(plantId) {
     return this._request(`/PlantProfile/${plantId}`);
+  }
+
+  // County-level distribution — the "misleadingly named" dedicated endpoint
+  // measured in docs/data-acquisition/01-goals-and-required-fields.md §3.1.
+  // Despite the name, it returns text/csv, not documentation:
+  //   Distribution Data
+  //   Symbol,Country,State,State FIP,County,County FIP
+  //   QUSH,United States,Texas,48,Dallas,113
+  // The first line is a title, not a header — callers must drop it before
+  // parsing. `masterId` is the same numeric plant Id used elsewhere.
+  async getDistributionCsv(masterId) {
+    return this._requestText("/PlantProfile/getDownloadDistributionDocumentation", {
+      method: "POST",
+      body: { masterId },
+    });
   }
 }
