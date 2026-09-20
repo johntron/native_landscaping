@@ -21,6 +21,14 @@ import {
 } from './src/data/backgroundStore.js';
 import { openEcosystemDb, listSpeciesObservations } from './tools/ecosystemIndexDb.js';
 import { excludeNonNative } from './src/analysis/establishmentMeans.js';
+import {
+  openSavedAreasDb,
+  listSavedAreas,
+  getSavedArea,
+  createSavedArea,
+  updateSavedArea,
+  deleteSavedArea,
+} from './tools/savedAreas/savedAreasDb.js';
 
 const envPort = Number(process.env.PORT);
 const PORT = Number.isFinite(envPort) ? envPort : 8000;
@@ -304,6 +312,71 @@ const server = http.createServer(async (req, res) => {
     } catch (err) {
       console.error(err);
       res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // Saved monitoring areas (nl-1qy.1.2) — arbitrary center+radius areas for the
+  // observation feed, independent of any yard project, so these live behind
+  // their own SQLite-backed CRUD routes rather than a per-project file.
+  const savedAreaMatch = pathname.match(/^\/api\/saved-areas(?:\/([^/]+))?$/);
+  if (savedAreaMatch && ['GET', 'POST', 'PUT', 'DELETE'].includes(req.method)) {
+    const areaId = savedAreaMatch[1] ? decodeURIComponent(savedAreaMatch[1]) : null;
+    try {
+      const db = openSavedAreasDb();
+      if (req.method === 'GET' && !areaId) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ areas: listSavedAreas(db) }));
+        return;
+      }
+      if (req.method === 'GET' && areaId) {
+        const area = getSavedArea(db, areaId);
+        if (!area) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: `No saved area with id "${areaId}"` }));
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ area }));
+        return;
+      }
+      if (req.method === 'POST' && !areaId) {
+        const body = await collectPayload(req, { requirePlants: false });
+        const area = createSavedArea(db, body);
+        console.log(`Saved area '${area.id}' created ('${area.name}')`);
+        res.writeHead(201, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ area }));
+        return;
+      }
+      if (req.method === 'PUT' && areaId) {
+        const body = await collectPayload(req, { requirePlants: false });
+        const area = updateSavedArea(db, areaId, body);
+        console.log(`Saved area '${area.id}' updated`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ area }));
+        return;
+      }
+      if (req.method === 'DELETE' && areaId) {
+        const deleted = deleteSavedArea(db, areaId);
+        if (!deleted) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: `No saved area with id "${areaId}"` }));
+          return;
+        }
+        console.log(`Saved area '${areaId}' deleted`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ id: areaId, deleted: true }));
+        return;
+      }
+      // POST with an id, PUT/DELETE without one, etc. — no route matches this
+      // method+id combination.
+      res.writeHead(405, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: `Method ${req.method} not allowed on ${pathname}` }));
+    } catch (err) {
+      console.error(err);
+      const notFound = /^No saved area with id/.test(err.message);
+      res.writeHead(notFound ? 404 : 400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: err.message }));
     }
     return;
