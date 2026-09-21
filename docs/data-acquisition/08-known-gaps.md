@@ -167,6 +167,12 @@ silent (angularfruit milkvine's estimate). `estimateWidthFt`'s per-shape ratio t
 (§1.3) is a rendering fallback, not a substitute for a real value — it should never be
 read as "this species' width is known."
 
+Machine-readable per nl-scx.12: `tools/claims/unsourceableRegister.js` carries this same
+finding as a `field: 'width_ft'` entry, citing the measurements above, so
+`tools/claims/stoppingCondition.js`'s query (10 §4) counts a plantable-set species with no
+`width_ft` claim as *explained*, not outstanding, without this doc's prose being the only
+place the fact lives.
+
 ### 3.2 County-level nativity has no redistributable source
 
 BONAP's terms require advance written permission for reuse of "distribution maps,
@@ -185,3 +191,91 @@ oblongifolius*), not absent data (`fa98521`, resolved by `06-name-reconciliation
 §1.4's `Matelea`/`Gonolobus` fix is the same failure mode surfacing in a hand-maintained
 CSV rather than the flora corpus — any lookup table keyed on a genus or species name that
 predates a taxonomic revision is exposed to this, not just the flora-matching pipeline.
+
+### 3.4 Species-level insect associations — no API publishes them
+
+**MEASURED** (`01-goals-and-required-fields.md` §3.6): `/api/PlantPollinator/{plantId}`
+exists and is unpopulated. It returned `[]` for every species tried, including the
+strongest possible positive controls — both milkweeds and a passionflower (*Asclepias
+asperula* 43487, *Asclepias viridis* 43632, *Passiflora incarnata* 69379, plus *Salix
+nigra* 68068 and *Quercus shumardii* 70468). If milkweed has no recorded pollinator, no
+species does; no further API re-crawl will produce this field.
+
+**Not the same finding as "nothing exists anywhere"**, and the doc corrects itself on this
+point (`01` §3.6's nl-41o.2 correction): NPIN curates a species-level larval-host
+relationship as unstructured prose on some species pages (*Ilex vomitoria* → "Larval Host:
+Henrys Elfin butterfly"), and `tools/claims/npinIngest.js` (nl-scx.8) already writes an
+asserted `larval_host_species` claim when that prose exists. So this gap is real only for a
+species NPIN's own pages do not curate it for either — a species *with* an NPIN claim for
+this field is explained the ordinary way (04 §5's missing lookup), not through this entry.
+
+Machine-readable per nl-scx.12: `tools/claims/unsourceableRegister.js` carries a
+`field: 'larval_host_species'` entry with this same caveat, so `stoppingCondition.js`'s
+query only treats a species as *explained* here when it genuinely has no claim for the
+field at all — a species NPIN already covers is sourced, not register-explained.
+
+---
+
+## 4. Stopping condition, measured (nl-scx.12, 2026-09-21)
+
+`node tools/claims/stoppingCondition.js` run against a full rebuild
+(`rebuildWithNpin.js`: USDA + NPIN + flora + manual corrections) of `data/claims.db`.
+10 §4's query — plantable set × 01 §2's blocking fields, partitioned into sourced /
+register-explained / outstanding:
+
+```
+plantable set:  73 species (10 §2.1's gate/exclude view over the 102-row plantable_core —
+                 see below for why it is smaller)
+blocking fields: fruit_load, height_ft, growth_shape, width_ft, sun_pref, water_pref,
+                 soil_pref, county_presence_48113, nativity_nctx  (9 fields)
+total cells:    657
+  sourced:      574  (any claim, any status)
+  explained:    73   (all 73 — every plantable-set species' width_ft, §3.1's register entry)
+  outstanding:  10   (2 species, detailed below)
+met:            false
+```
+
+**Why 73, not 102**: `plantable_core`'s 102 rows are the §2.2 measured core
+(`plants.csv` ∪ `npsot_dfw_recommended=yes`); `plantable_set` narrows that by the gate
+(county presence) and exclusion (flora nativity) layers once real claims exist for them,
+which they now do post-rebuild. 28 of the 102 lost county presence (USDA's distribution
+CSV does not list Dallas Co. FIPS 48113 for them) and 1 is excluded by the flora's
+nativity screen — that is the gate/exclude structure (10 §2.1) doing exactly its
+documented job, not a bug in this bead's query.
+
+**The 10 outstanding cells, both real, neither register-eligible**:
+
+- *Frangula caroliniana* (Carolina buckthorn) — `fruit_load`, `water_pref` only. USDA
+  resolved this species (symbol `FRCA13`) and asserted several other fields for it, but
+  neither USDA's characteristics record nor NPIN's page (it was among NPIN's 87 resolved
+  pages) carries a value for these two — a genuine per-species collection gap, not a
+  structural one; a future targeted lookup (08 §1.3's pattern) can close it.
+- *Muhlenbergia reverchonii* 'Undaunted' — **all 9 blocking fields**, a pipeline gap this
+  bead's query surfaced rather than one it caused: `usdaIngest.js` skips cultivars
+  outright (`taxon.rank === 'cultivar'` → `continue`, no claims written), and 04 §2.3's
+  inheritance is supposed to give it the parent species' (`Muhlenbergia reverchonii`)
+  claims instead — but the parent is not itself a `plantable_core` row (only the cultivar
+  is, from `plants.csv`), so it was never ingested either and has zero claims of its own.
+  Not a register case — this is exactly the kind of gap the register must NOT paper over
+  (nothing here says the fields are unsourceable, only that nobody has fetched them yet).
+  **Filed as a real finding, not fixed by this bead**: ingesting a cultivar's parent
+  species even when only the cultivar is in `plantable_core` is pipeline work for a
+  future bead, not a register entry.
+
+**The dfw-needs-manual-data.txt checkpoint (10 §4's reserved test case), all 15 species**:
+
+| Species | Result |
+|---|---|
+| Salvia farinacea, Asclepias viridis, Asclepias asperula, Anisacanthus quadrifidus var. wrightii, Echinacea angustifolia, Capsicum annuum var. glabriusculum, Lupinus texensis, Ipomopsis rubra, Penstemon cobaea, Eryngium leavenworthii | In the plantable set; every blocking field sourced or register-explained. **10 of 15.** |
+| Muhlenbergia reverchonii 'Undaunted' | In the plantable set; all 9 blocking fields outstanding — the cultivar-inheritance pipeline gap above. **1 of 15.** |
+| Mimosa nuttallii, Symphyotrichum oblongifolium, Solidago rigida, Liatris mucronata | **Not in the plantable set at all**: each has an asserted `nativity_nctx = native` claim but an asserted `county_presence_48113 = absent` claim — USDA's Dallas Co. distribution data does not list them, despite being NPSOT DFW-recommended and flora-confirmed native to the region. The county gate excludes them before the blocking-field question is ever asked. **4 of 15.** |
+
+The real finding the checkpoint was reserved to surface: **the built pipeline (USDA +
+NPIN + flora) does fill the blocking fields for the great majority of this checkpoint
+(10/15 cleanly, 1/15 blocked by a named pipeline gap) — but 4/15 never reach the query at
+all**, gated out by a county-presence signal that disagrees with two independent
+native-range judgments (NPSOT's curated recommendation list and the NCTX flora). That
+disagreement is evidence about source coverage (10 §2.1 already names county presence as
+county-grained against a region-grained nativity question — §2.1 above), not a chore this
+bead skipped; whether to soften the gate for a flora-confirmed-native species is a
+decision for whoever owns 10 §2.1's structure next, not this bead.
