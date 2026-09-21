@@ -49,6 +49,17 @@
   margin-bottom: 1rem;
 }
 
+.feed-controls__field {
+  /* A label and its control as one flex unit, so a narrow viewport wraps
+     the pair together onto the next line rather than splitting the label
+     from a select/input that ends up alone at the start of the next row
+     (confirmed on a real Pixel 10 — see nl-1qy feed page). */
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: nowrap;
+}
+
 .feed-controls__check {
   display: flex;
   align-items: center;

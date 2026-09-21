@@ -21,20 +21,23 @@
         <h1>Observation Feed</h1>
         <p class="data-note">
           Individual iNaturalist observations logged for a saved area, newest first, with per-item
-          read/dismiss state kept server-side. This is the foundational "all new observations"
-          slice (nl-1qy.1) — invasive/rarity/yard-relevance filtering lands as separate lanes on top
-          of this once it's validated. Run
-          <code>docker compose exec web node tools/fetch-observation-events.mjs --areas-file &lt;path.json&gt;</code>
-          to poll saved areas for new observations.
+          read/dismiss state kept server-side. The <code>feed-poller</code> compose service polls
+          every saved area automatically (default every 30 minutes,
+          <code>FEED_POLL_INTERVAL_MINUTES</code> to change it) — use "Fetch new observations" below
+          to check one area right now instead of waiting for the next tick.
         </p>
       </div>
     </header>
     <main class="feed-page">
       <section class="feed-areas">
         <div class="feed-areas__row">
-          <label for="areaSelect">Area</label>
-          <select id="areaSelect"><option value="">Loading areas…</option></select>
+          <span class="feed-controls__field">
+            <label for="areaSelect">Area</label>
+            <select id="areaSelect"><option value="">Loading areas…</option></select>
+          </span>
           <button type="button" class="pill-button" id="newAreaToggle">+ New area</button>
+          <button type="button" class="pill-button" id="pollAreaNow">Fetch new observations</button>
+          <span class="data-note" id="pollAreaNote"></span>
         </div>
         <form class="feed-areas__new" id="newAreaForm" hidden>
           <input type="text" id="newAreaName" placeholder="Name" required />
@@ -46,8 +49,10 @@
           <button type="button" class="pill-button pill-button--danger" id="newAreaCancel">Cancel</button>
         </form>
         <div class="feed-areas__row" id="areaEcoregionRow">
-          <label for="areaEcoregion">Ecoregion</label>
-          <input type="text" id="areaEcoregion" placeholder="e.g. 9" size="4" />
+          <span class="feed-controls__field">
+            <label for="areaEcoregion">Ecoregion</label>
+            <input type="text" id="areaEcoregion" placeholder="e.g. 9" size="4" />
+          </span>
           <button type="button" class="pill-button" id="areaEcoregionSave">Save</button>
           <span class="data-note" id="areaEcoregionNote">Needed for the yard-relevance lane below.</span>
         </div>
@@ -55,14 +60,18 @@
       </section>
 
       <section class="feed-controls">
-        <label for="taxonFilter">Taxon</label>
-        <select id="taxonFilter"><option value="">All</option></select>
-        <label for="laneFilter">Lane</label>
-        <select id="laneFilter">
-          <option value="">All observations</option>
-          <option value="yard-relevance">Yard-relevant only</option>
-          <option value="invasive-monitor">Invasive watchlist</option>
-        </select>
+        <span class="feed-controls__field">
+          <label for="taxonFilter">Taxon</label>
+          <select id="taxonFilter"><option value="">All</option></select>
+        </span>
+        <span class="feed-controls__field">
+          <label for="laneFilter">Lane</label>
+          <select id="laneFilter">
+            <option value="">All observations</option>
+            <option value="yard-relevance">Yard-relevant only</option>
+            <option value="invasive-monitor">Invasive watchlist</option>
+          </select>
+        </span>
         <label class="feed-controls__check">
           <input type="checkbox" id="unreadOnly" checked />
           Unread only

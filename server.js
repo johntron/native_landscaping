@@ -35,6 +35,7 @@ import {
 import { openObservationEventsDb, listEvents } from './tools/observationEventsDb.js';
 import { openFeedStateDb, setFeedState } from './tools/feedState/feedStateDb.js';
 import { queryFeed } from './tools/feedState/feed.js';
+import { pollSavedAreas } from './tools/feedState/pollAreas.js';
 
 const envPort = Number(process.env.PORT);
 const PORT = Number.isFinite(envPort) ? envPort : 8000;
@@ -462,6 +463,37 @@ const server = http.createServer(async (req, res) => {
       });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
+    } catch (err) {
+      console.error(err);
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // Manual "Refresh now" (nl-1qy follow-up): polls ONE saved area against
+  // iNaturalist synchronously and returns before responding, rather than
+  // just re-querying the local event log like /api/feed does. Reuses the
+  // same in-process pollArea the feed-poller service loop calls (see
+  // tools/feedState/pollAreas.js) — never --backfill, and a page cap well
+  // under fetch-observation-events.mjs's own default so a button click
+  // resolves quickly rather than potentially crawling a well-established
+  // area's full incremental backlog in one request.
+  if (pathname === '/api/feed/refresh' && req.method === 'POST') {
+    try {
+      const body = await collectPayload(req, { requirePlants: false });
+      const { areaId } = body;
+      if (!areaId) {
+        throw new Error('Body requires "areaId"');
+      }
+      const { results } = await pollSavedAreas({ areaIds: [areaId], maxPages: 3 });
+      if (!results.length) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: `No saved area with id "${areaId}"` }));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ result: results[0] }));
     } catch (err) {
       console.error(err);
       res.writeHead(400, { 'Content-Type': 'application/json' });

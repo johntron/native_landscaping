@@ -37,21 +37,24 @@
 # project's compose network, so RENAMING THIS SERVICE BREAKS THE TUNNEL unless
 # the dashboard route is changed to match.
 
+x-app-build: &app-build
+  build:
+    context: .
+    dockerfile_inline: |
+      FROM node:22-slim
+      # Deps install at / rather than /app on purpose: the bind mount below
+      # covers /app, which would shadow an /app/node_modules baked into the
+      # image. Node's resolver walks parent directories, so /node_modules is
+      # found from /app and survives the mount.
+      WORKDIR /
+      COPY package.json package-lock.json ./
+      RUN npm ci --omit=dev
+      WORKDIR /app
+      CMD ["node", "server.js"]
+
 services:
   web:
-    build:
-      context: .
-      dockerfile_inline: |
-        FROM node:22-slim
-        # Deps install at / rather than /app on purpose: the bind mount below
-        # covers /app, which would shadow an /app/node_modules baked into the
-        # image. Node's resolver walks parent directories, so /node_modules is
-        # found from /app and survives the mount.
-        WORKDIR /
-        COPY package.json package-lock.json ./
-        RUN npm ci --omit=dev
-        WORKDIR /app
-        CMD ["node", "server.js"]
+    <<: *app-build
     environment:
       # server.js defaults to 8000; the tunnel route expects 8080. It calls
       # server.listen(PORT) with no host arg, so it binds all interfaces and
@@ -68,6 +71,24 @@ services:
     # SSO in front of it — defeating the point of the Access policy.
     ports:
       - "127.0.0.1:8080:8080"
+    restart: unless-stopped
+
+  # Polls every saved area (tools/savedAreas/savedAreasDb.js) against
+  # iNaturalist on a timer (tools/schedule-feed-poll.mjs), so the observation
+  # feed (nl-1qy) fills in without anyone remembering to run
+  # tools/fetch-observation-events.mjs by hand. Same image and bind mount as
+  # `web` (via the &app-build anchor) so it reads/writes the identical
+  # data/*.db files over the same host directory — SQLite's WAL mode allows
+  # that from two processes just as it already does across `web`'s own
+  # concurrent per-request db opens. No published port: this service makes
+  # only outbound calls to iNaturalist, nothing listens.
+  feed-poller:
+    <<: *app-build
+    command: ["node", "tools/schedule-feed-poll.mjs"]
+    environment:
+      FEED_POLL_INTERVAL_MINUTES: "30"
+    volumes:
+      - .:/app
     restart: unless-stopped
 
   cloudflared:

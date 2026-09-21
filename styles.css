@@ -246,7 +246,11 @@ h1 {
 
 .site-nav {
   display: flex;
-  gap: 1rem;
+  flex-wrap: wrap;
+  /* Row gap separate from column gap: when a narrow viewport forces a
+     second line, this is the space between the two lines — the 1rem column
+     gap alone reads as cramped once links stack rather than run side by side. */
+  gap: 0.5rem 1rem;
   margin-bottom: 0.5rem;
 }
 
@@ -259,6 +263,10 @@ h1 {
   text-transform: uppercase;
   padding-bottom: 0.15rem;
   border-bottom: 2px solid transparent;
+  /* Without this, a flex item this narrow shrinks before wrapping, breaking
+     "THE ARGUMENT" onto two lines mid-label instead of wrapping the row —
+     confirmed on a real phone viewport (390px). Wrap whole links, never a word. */
+  white-space: nowrap;
 }
 
 .site-nav__link:hover {
@@ -1762,6 +1770,18 @@ select {
 }
 
 @media (max-width: 600px) {
+  .header-inner {
+    padding: 0.75rem 0.6rem 0.6rem;
+  }
+
+  .site-nav {
+    gap: 0.4rem 0.75rem;
+  }
+
+  .site-nav__link {
+    font-size: 0.78rem;
+  }
+
   .view-toolbar__actions,
   .view-toolbar__control-group {
     min-width: 0;

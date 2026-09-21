@@ -84,6 +84,110 @@ const REQUEST_DELAY_MS = 1500;
 // actually reached, not from what was written.
 const MAX_PAGES_PER_AREA = 25;
 
+/**
+ * The rate-limited, cached iNaturalist JSON fetcher every call in this
+ * module goes through. Factored out so a caller that isn't this file's own
+ * CLI — the scheduler service, the feed page's "Refresh now" button — can
+ * poll areas in-process without re-deriving this plumbing.
+ */
+export function createFetchJson(probeCache, { force = false } = {}) {
+  return async function fetchJson(endpoint, url) {
+    const { raw, cached: fromCache } = await cached(
+      probeCache,
+      'inaturalist',
+      endpoint,
+      url.toString(),
+      async () => {
+        const response = await fetchWithBackoff(url, { headers: { 'User-Agent': USER_AGENT } });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+      },
+      { force }
+    );
+    if (!fromCache) await sleep(REQUEST_DELAY_MS);
+    return raw;
+  };
+}
+
+/**
+ * Poll one area and (unless `smoke`) write whatever's new to `db`. This is
+ * the per-area body `main()` below loops over; factored out so the scheduler
+ * service and the manual "Refresh now" route can poll a single saved area
+ * without going through the CLI's argv/file plumbing. Logs exactly what the
+ * CLI always has, and also returns a plain summary for a caller that wants
+ * the count without scraping stdout.
+ * @returns {Promise<{areaId: string, fetched: number, written: number}>}
+ */
+export async function pollArea({ area, db, fetchJson, smoke = false, backfill = false, maxPages = MAX_PAGES_PER_AREA }) {
+  console.log(`\n[${area.name || area.id}] lat=${area.lat}, lng=${area.lng}, radius_mi=${area.radius_mi}`);
+
+  const placeId = await resolvePlaceId(area.lat, area.lng, { fetchJson });
+  if (placeId) {
+    console.log(`  establishment_means will be checked against place_id=${placeId}`);
+  } else {
+    console.warn('  no state/country place_id resolved — establishment_means left blank for every row.');
+  }
+
+  const priorCursor = smoke ? null : getAreaCursor(db, area.id);
+  let idAbove = priorCursor ?? 0;
+  let coldStartSeeded = false;
+  if (priorCursor == null && !backfill) {
+    const currentMaxId = await fetchCurrentMaxObservationId({ area, fetchJson });
+    if (currentMaxId != null) {
+      idAbove = currentMaxId;
+      coldStartSeeded = true;
+    }
+  }
+  console.log(
+    `  polling from id_above=${idAbove}` +
+      (coldStartSeeded
+        ? ' (cold start: seeded at the current max id — pass --backfill to walk full history instead)'
+        : priorCursor == null
+          ? ' (backfill: walking full history from 0)'
+          : '')
+  );
+
+  const { entries, nextCursor } = await fetchAreaObservations({
+    area,
+    idAbove,
+    fetchJson,
+    maxPages: smoke ? 1 : maxPages,
+    perPage: PER_PAGE,
+  });
+  console.log(`  fetched ${entries.length} new observation(s)`);
+
+  if (entries.length && placeId) {
+    const meansById = await fetchEstablishmentMeans(
+      entries.map((e) => e.taxon_id),
+      placeId,
+      { fetchJson }
+    );
+    entries.forEach((e) => {
+      e.establishment_means = meansById.get(e.taxon_id) || null;
+    });
+  }
+
+  if (smoke) {
+    console.log(`  --smoke: NOT writing to data/observation-events.db, cursor untouched`);
+    entries.slice(0, 10).forEach((r) => {
+      console.log(`    #${r.observation_id} ${r.taxon_name} (${r.common_name}) observed_on=${r.observed_on} quality=${r.quality_grade}`);
+    });
+    return { areaId: area.id, fetched: entries.length, written: 0 };
+  }
+
+  if (entries.length) {
+    const ingestedAt = new Date().toISOString();
+    const rows = entries.map((e) => ({ ...e, area_id: area.id, ingested_at: ingestedAt }));
+    upsertEvents(db, rows);
+    console.log(`  wrote ${rows.length} row(s); area now has ${countEvents(db, area.id)} total`);
+  }
+  // Persisted even when nothing new was found: "checked up through id X,
+  // nothing there" still has to move the cursor, or the next poll re-checks
+  // (and, on a cold-started area, re-seeds) the same ground forever.
+  setAreaCursor(db, area.id, nextCursor);
+  return { areaId: area.id, fetched: entries.length, written: entries.length };
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const areasFile = argAfter(args, '--areas-file');
@@ -108,92 +212,11 @@ async function main() {
   }
 
   const probeCache = openProbeCache();
-  const fetchJson = async (endpoint, url) => {
-    const { raw, cached: fromCache } = await cached(
-      probeCache,
-      'inaturalist',
-      endpoint,
-      url.toString(),
-      async () => {
-        const response = await fetchWithBackoff(url, { headers: { 'User-Agent': USER_AGENT } });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
-      },
-      { force }
-    );
-    if (!fromCache) await sleep(REQUEST_DELAY_MS);
-    return raw;
-  };
-
+  const fetchJson = createFetchJson(probeCache, { force });
   const db = smoke ? null : openObservationEventsDb();
 
   for (const area of areas) {
-    console.log(`\n[${area.name || area.id}] lat=${area.lat}, lng=${area.lng}, radius_mi=${area.radius_mi}`);
-
-    const placeId = await resolvePlaceId(area.lat, area.lng, { fetchJson });
-    if (placeId) {
-      console.log(`  establishment_means will be checked against place_id=${placeId}`);
-    } else {
-      console.warn('  no state/country place_id resolved — establishment_means left blank for every row.');
-    }
-
-    const priorCursor = smoke ? null : getAreaCursor(db, area.id);
-    let idAbove = priorCursor ?? 0;
-    let coldStartSeeded = false;
-    if (priorCursor == null && !backfill) {
-      const currentMaxId = await fetchCurrentMaxObservationId({ area, fetchJson });
-      if (currentMaxId != null) {
-        idAbove = currentMaxId;
-        coldStartSeeded = true;
-      }
-    }
-    console.log(
-      `  polling from id_above=${idAbove}` +
-        (coldStartSeeded
-          ? ' (cold start: seeded at the current max id — pass --backfill to walk full history instead)'
-          : priorCursor == null
-            ? ' (backfill: walking full history from 0)'
-            : '')
-    );
-
-    const { entries, nextCursor } = await fetchAreaObservations({
-      area,
-      idAbove,
-      fetchJson,
-      maxPages: smoke ? 1 : maxPages,
-      perPage: PER_PAGE,
-    });
-    console.log(`  fetched ${entries.length} new observation(s)`);
-
-    if (entries.length && placeId) {
-      const meansById = await fetchEstablishmentMeans(
-        entries.map((e) => e.taxon_id),
-        placeId,
-        { fetchJson }
-      );
-      entries.forEach((e) => {
-        e.establishment_means = meansById.get(e.taxon_id) || null;
-      });
-    }
-
-    if (smoke) {
-      console.log(`  --smoke: NOT writing to data/observation-events.db, cursor untouched`);
-      entries.slice(0, 10).forEach((r) => {
-        console.log(`    #${r.observation_id} ${r.taxon_name} (${r.common_name}) observed_on=${r.observed_on} quality=${r.quality_grade}`);
-      });
-      continue;
-    }
-
-    if (entries.length) {
-      const ingestedAt = new Date().toISOString();
-      const rows = entries.map((e) => ({ ...e, area_id: area.id, ingested_at: ingestedAt }));
-      upsertEvents(db, rows);
-      console.log(`  wrote ${rows.length} row(s); area now has ${countEvents(db, area.id)} total`);
-    }
-    // Persisted even when nothing new was found: "checked up through id X,
-    // nothing there" still has to move the cursor, or the next poll re-checks
-    // (and, on a cold-started area, re-seeds) the same ground forever.
-    setAreaCursor(db, area.id, nextCursor);
+    await pollArea({ area, db, fetchJson, smoke, backfill, maxPages });
   }
 }
 

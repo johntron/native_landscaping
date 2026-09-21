@@ -14,6 +14,8 @@ const PAGE_SIZE = 25;
 
 const areaSelect = document.getElementById('areaSelect');
 const newAreaToggle = document.getElementById('newAreaToggle');
+const pollAreaNowBtn = document.getElementById('pollAreaNow');
+const pollAreaNote = document.getElementById('pollAreaNote');
 const newAreaForm = document.getElementById('newAreaForm');
 const newAreaCancel = document.getElementById('newAreaCancel');
 const newAreaEcoregion = document.getElementById('newAreaEcoregion');
@@ -101,6 +103,7 @@ function wireControls() {
   });
   newAreaForm.addEventListener('submit', onCreateArea);
   areaEcoregionSaveBtn.addEventListener('click', onSaveEcoregion);
+  pollAreaNowBtn.addEventListener('click', onPollAreaNow);
 
   taxonFilter.addEventListener('change', renderItems);
   laneFilter.addEventListener('change', () => loadFeed({ reset: true }));
@@ -108,6 +111,30 @@ function wireControls() {
   includeDismissedEl.addEventListener('change', () => loadFeed({ reset: true }));
   refreshBtn.addEventListener('click', () => loadFeed({ reset: true }));
   loadMoreBtn.addEventListener('click', () => loadFeed({ reset: false }));
+}
+
+async function onPollAreaNow() {
+  if (!selectedAreaId) return;
+  pollAreaNowBtn.disabled = true;
+  pollAreaNote.textContent = 'Checking iNaturalist…';
+  try {
+    const response = await fetch('/api/feed/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ areaId: selectedAreaId }),
+    });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
+    const { fetched } = body.result;
+    pollAreaNote.textContent = fetched
+      ? `Found ${fetched} new observation${fetched === 1 ? '' : 's'}.`
+      : 'No new observations.';
+    if (fetched) await loadFeed({ reset: true });
+  } catch (err) {
+    pollAreaNote.textContent = `Could not fetch: ${err.message}`;
+  } finally {
+    pollAreaNowBtn.disabled = false;
+  }
 }
 
 async function onSaveEcoregion() {
