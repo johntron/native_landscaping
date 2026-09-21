@@ -17,3 +17,17 @@ export function matchesFnctQuery(row, query) {
 export function filterFnctRows(rows, query) {
   return rows.filter((row) => matchesFnctQuery(row, query));
 }
+
+/**
+ * Combined genus + species results, genus rows first (each already sorted
+ * alphabetically within its kind — see fnctGenus.js). A genus row is shaped
+ * like a species row (scientific_name = genus, common_names aggregated), so
+ * matchesFnctQuery works on it unchanged: "Quercus" matches the genus row
+ * and every Quercus species; a common name matches whichever rows list it.
+ */
+export function searchFnctResults(genusRows, speciesRows, query) {
+  return [
+    ...filterFnctRows(genusRows, query),
+    ...filterFnctRows(speciesRows, query),
+  ];
+}

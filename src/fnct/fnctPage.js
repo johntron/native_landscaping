@@ -1,7 +1,8 @@
 import { fetchCsv, parseCsv } from '../data/csvLoader.js';
-import { filterFnctRows } from './fnctSearch.js';
+import { searchFnctResults } from './fnctSearch.js';
 import { matchCatalogRow } from './fnctCatalog.js';
 import { findKeystoneRow, lepidopteraHostsForGenus, interactionsForGenus } from './fnctEcology.js';
+import { aggregateGenusRows, filterGenusSpecies } from './fnctGenus.js';
 
 const INDEX_CSV = 'ecology/fnct-species-index.csv';
 const CATALOG_CSV = 'plants.csv';
@@ -41,6 +42,7 @@ const countEl = document.getElementById('fnctCount');
 const emptyEl = document.getElementById('fnctEmpty');
 const detailEl = document.getElementById('fnctDetail');
 const detailCloseEl = document.getElementById('fnctDetailClose');
+const speciesDetailEl = document.getElementById('fnctSpeciesDetail');
 const detailNameEl = document.getElementById('fnctDetailName');
 const detailCommonEl = document.getElementById('fnctDetailCommon');
 const detailFactsEl = document.getElementById('fnctDetailFacts');
@@ -54,7 +56,18 @@ const lepListEl = document.getElementById('fnctDetailLepList');
 const interactionsSectionEl = document.getElementById('fnctDetailInteractionsSection');
 const interactionsEl = document.getElementById('fnctDetailInteractions');
 
+const genusDetailEl = document.getElementById('fnctGenusDetail');
+const genusNameEl = document.getElementById('fnctGenusName');
+const genusSummaryEl = document.getElementById('fnctGenusSummary');
+const genusCitationEl = document.getElementById('fnctGenusCitation');
+const genusFilterLifeFormEl = document.getElementById('fnctGenusFilterLifeForm');
+const genusFilterDurationEl = document.getElementById('fnctGenusFilterDuration');
+const genusFilterHabitatEl = document.getElementById('fnctGenusFilterHabitat');
+const genusSpeciesCountEl = document.getElementById('fnctGenusSpeciesCount');
+const genusSpeciesListEl = document.getElementById('fnctGenusSpeciesList');
+
 let rows = [];
+let genusRows = [];
 let catalogRows = [];
 let ecologyData = null; // lazy-loaded: { hostGenera, lepHosts, interactions }
 
@@ -64,6 +77,7 @@ async function init() {
       fetchCsv(INDEX_CSV).then(parseCsv),
       fetchCsv(CATALOG_CSV).then(parseCsv).catch(() => []),
     ]);
+    genusRows = aggregateGenusRows(rows);
   } catch (err) {
     countEl.textContent = 'Failed to load flora index.';
     console.error(err);
@@ -75,20 +89,25 @@ async function init() {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !detailEl.hidden) closeDetail();
   });
+  [genusFilterLifeFormEl, genusFilterDurationEl, genusFilterHabitatEl].forEach((el) =>
+    el.addEventListener('change', renderGenusSpeciesList),
+  );
   window.addEventListener('hashchange', openFromHash);
   openFromHash();
 }
 
 function render(query) {
-  const matches = filterFnctRows(rows, query);
-  countEl.textContent = `${matches.length} of ${rows.length}`;
+  const matches = searchFnctResults(genusRows, rows, query);
+  countEl.textContent = `${matches.length} of ${genusRows.length + rows.length}`;
   emptyEl.hidden = matches.length > 0;
   bodyEl.replaceChildren(...matches.map(rowToTr));
 }
 
 function rowToTr(row) {
+  const isGenus = row.kind === 'genus';
   const tr = document.createElement('tr');
   tr.tabIndex = 0;
+  if (isGenus) tr.className = 'fnct-table__row--genus';
   tr.addEventListener('click', () => selectRow(row));
   tr.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -98,33 +117,44 @@ function rowToTr(row) {
   });
 
   const nameTd = document.createElement('td');
-  nameTd.className = 'fnct-table__name';
+  nameTd.className = isGenus ? 'fnct-table__genus-name' : 'fnct-table__name';
   nameTd.textContent = row.scientific_name;
+  if (isGenus) {
+    const badge = document.createElement('span');
+    badge.className = 'fnct-table__genus-badge';
+    badge.textContent = `GENUS · ${row.species_count}`;
+    nameTd.appendChild(badge);
+  }
   tr.appendChild(nameTd);
 
   const commonTd = document.createElement('td');
-  commonTd.textContent = row.common_names.split('; ').join(', ') || '—';
+  commonTd.textContent = row.common_names.split('; ').slice(0, isGenus ? 6 : undefined).join(', ') || '—';
   tr.appendChild(commonTd);
 
   const pageTd = document.createElement('td');
   pageTd.className = 'fnct-table__page';
-  pageTd.textContent = row.fnct_page;
+  pageTd.textContent = isGenus ? (row.min_page ?? '') : row.fnct_page;
   tr.appendChild(pageTd);
 
   return tr;
 }
 
 function selectRow(row) {
-  window.location.hash = encodeURIComponent(row.scientific_name);
+  window.location.hash = row.kind === 'genus' ? `genus:${encodeURIComponent(row.genus)}` : encodeURIComponent(row.scientific_name);
 }
 
 function openFromHash() {
-  const name = decodeURIComponent(window.location.hash.replace(/^#/, ''));
-  if (!name) {
+  const raw = decodeURIComponent(window.location.hash.replace(/^#/, ''));
+  if (!raw) {
     closeDetail();
     return;
   }
-  const row = rows.find((r) => r.scientific_name === name);
+  if (raw.startsWith('genus:')) {
+    const genusRow = genusRows.find((g) => g.genus === raw.slice('genus:'.length));
+    if (genusRow) showGenusDetail(genusRow);
+    return;
+  }
+  const row = rows.find((r) => r.scientific_name === raw);
   if (row) showDetail(row);
 }
 
@@ -147,6 +177,8 @@ async function loadEcologyData() {
 
 async function showDetail(row) {
   detailEl.hidden = false;
+  speciesDetailEl.hidden = false;
+  genusDetailEl.hidden = true;
   document.body.style.overflow = 'hidden';
   detailEl.scrollTop = 0;
   detailEl.querySelector('.fnct-overlay__content').scrollTop = 0;
@@ -235,6 +267,74 @@ async function showDetail(row) {
       return wrap;
     }));
   }
+}
+
+let currentGenus = null;
+
+function showGenusDetail(genusRow) {
+  detailEl.hidden = false;
+  speciesDetailEl.hidden = true;
+  genusDetailEl.hidden = false;
+  document.body.style.overflow = 'hidden';
+  detailEl.scrollTop = 0;
+  detailEl.querySelector('.fnct-overlay__content').scrollTop = 0;
+
+  currentGenus = genusRow.genus;
+  genusNameEl.textContent = genusRow.genus;
+  genusSummaryEl.textContent = genusRow.common_names
+    ? `${genusRow.species_count} species in this flora — ${genusRow.common_names.split('; ').join(', ')}`
+    : `${genusRow.species_count} species in this flora`;
+  genusCitationEl.textContent = genusRow.min_page
+    ? `${genusRow.source} — the flora's own entries for this genus, including its key to species, begin near p. ${genusRow.min_page}.`
+    : genusRow.source;
+
+  fillGenusFilterSelect(genusFilterLifeFormEl, genusRow.life_forms);
+  fillGenusFilterSelect(genusFilterDurationEl, genusRow.durations);
+  fillGenusFilterSelect(genusFilterHabitatEl, genusRow.habitat_tags);
+
+  renderGenusSpeciesList();
+}
+
+function fillGenusFilterSelect(selectEl, values) {
+  const previous = selectEl.value;
+  selectEl.replaceChildren(...['', ...values].map((v) => {
+    const option = document.createElement('option');
+    option.value = v;
+    option.textContent = v ? titleCaseWords(v) : 'Any';
+    return option;
+  }));
+  selectEl.value = values.includes(previous) ? previous : '';
+}
+
+function renderGenusSpeciesList() {
+  if (!currentGenus) return;
+  const species = filterGenusSpecies(currentGenus, rows, {
+    lifeForm: genusFilterLifeFormEl.value || undefined,
+    duration: genusFilterDurationEl.value || undefined,
+    habitatTag: genusFilterHabitatEl.value || undefined,
+  }).sort((a, b) => a.scientific_name.localeCompare(b.scientific_name));
+
+  genusSpeciesCountEl.textContent = species.length;
+  genusSpeciesListEl.replaceChildren(...species.map((s) => {
+    const li = document.createElement('li');
+    li.tabIndex = 0;
+    li.textContent = s.scientific_name;
+    if (s.common_names) {
+      const span = document.createElement('span');
+      span.className = 'fnct-detail__list-common';
+      span.textContent = ` — ${s.common_names.split('; ').join(', ')}`;
+      li.appendChild(span);
+    }
+    const open = () => selectRow(s);
+    li.addEventListener('click', open);
+    li.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        open();
+      }
+    });
+    return li;
+  }));
 }
 
 const INTERACTION_LABELS = {

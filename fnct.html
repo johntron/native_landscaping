@@ -60,31 +60,58 @@
         </button>
       </div>
       <div class="fnct-overlay__content">
-        <h2 class="fnct-detail__name" id="fnctDetailName"></h2>
-        <p class="fnct-detail__common" id="fnctDetailCommon"></p>
-        <dl class="fnct-detail__facts" id="fnctDetailFacts"></dl>
-        <p class="data-note" id="fnctDetailSource"></p>
+        <div id="fnctSpeciesDetail">
+          <h2 class="fnct-detail__name" id="fnctDetailName"></h2>
+          <p class="fnct-detail__common" id="fnctDetailCommon"></p>
+          <dl class="fnct-detail__facts" id="fnctDetailFacts"></dl>
+          <p class="data-note" id="fnctDetailSource"></p>
 
-        <section class="fnct-detail__section">
-          <h3>In your plant catalog</h3>
-          <p class="data-note" id="fnctDetailCatalogNote"></p>
-          <dl class="fnct-detail__facts" id="fnctDetailCatalogFacts"></dl>
-        </section>
+          <section class="fnct-detail__section">
+            <h3>In your plant catalog</h3>
+            <p class="data-note" id="fnctDetailCatalogNote"></p>
+            <dl class="fnct-detail__facts" id="fnctDetailCatalogFacts"></dl>
+          </section>
 
-        <section class="fnct-detail__section" id="fnctDetailKeystoneSection" hidden>
-          <h3>Keystone genus (EPA ecoregion 9 — continental, not nc-TX-specific)</h3>
-          <p id="fnctDetailKeystoneText"></p>
-        </section>
+          <section class="fnct-detail__section" id="fnctDetailKeystoneSection" hidden>
+            <h3>Keystone genus (EPA ecoregion 9 — continental, not nc-TX-specific)</h3>
+            <p id="fnctDetailKeystoneText"></p>
+          </section>
 
-        <section class="fnct-detail__section" id="fnctDetailLepSection" hidden>
-          <h3>Larval hosts recorded in the flora (Appendix Ten)</h3>
-          <ul class="fnct-detail__list" id="fnctDetailLepList"></ul>
-        </section>
+          <section class="fnct-detail__section" id="fnctDetailLepSection" hidden>
+            <h3>Larval hosts recorded in the flora (Appendix Ten)</h3>
+            <ul class="fnct-detail__list" id="fnctDetailLepList"></ul>
+          </section>
 
-        <section class="fnct-detail__section" id="fnctDetailInteractionsSection" hidden>
-          <h3>Animal interactions (GlobalBioticInteractions, genus-level)</h3>
-          <div id="fnctDetailInteractions"></div>
-        </section>
+          <section class="fnct-detail__section" id="fnctDetailInteractionsSection" hidden>
+            <h3>Animal interactions (GlobalBioticInteractions, genus-level)</h3>
+            <div id="fnctDetailInteractions"></div>
+          </section>
+        </div>
+
+        <div id="fnctGenusDetail" hidden>
+          <h2 class="fnct-detail__name" id="fnctGenusName"></h2>
+          <p class="fnct-detail__common" id="fnctGenusSummary"></p>
+          <p class="data-note" id="fnctGenusCitation"></p>
+
+          <section class="fnct-detail__section">
+            <h3>Narrow by what we know</h3>
+            <p class="data-note">
+              Not the flora's own key — its dichotomous keys are the author's copyrighted text and
+              this app never reproduces them (see the citation above for where to find the real
+              one). This filters by the facts this index already extracts for each species.
+            </p>
+            <div class="fnct-genus-filters" id="fnctGenusFilters">
+              <label>Life form <select id="fnctGenusFilterLifeForm"><option value="">Any</option></select></label>
+              <label>Duration <select id="fnctGenusFilterDuration"><option value="">Any</option></select></label>
+              <label>Habitat <select id="fnctGenusFilterHabitat"><option value="">Any</option></select></label>
+            </div>
+          </section>
+
+          <section class="fnct-detail__section">
+            <h3>Species (<span id="fnctGenusSpeciesCount"></span>)</h3>
+            <ul class="fnct-detail__list fnct-genus-species-list" id="fnctGenusSpeciesList"></ul>
+          </section>
+        </div>
       </div>
     </div>
 
