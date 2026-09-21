@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Flora Index</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="fnct.css" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  </head>
+  <body>
+    <header class="page-header">
+      <div class="header-inner">
+        <nav class="site-nav">
+          <a href="index.html" class="site-nav__link">The argument</a>
+          <a href="design.html" class="site-nav__link" id="navDesignLink">Your yard</a>
+          <a href="rights.html" class="site-nav__link">Your rights</a>
+          <a href="feed.html" class="site-nav__link">Feed</a>
+          <a href="fnct.html" class="site-nav__link site-nav__link--active">Flora Index</a>
+        </nav>
+        <h1>Flora of North Central Texas</h1>
+        <p class="data-note">
+          Every species, variety and subspecies treated by Diggs, Lipscomb &amp; O'Kennon's
+          <em>Shinners &amp; Mahler's Illustrated Flora of North Central Texas</em> (1999), with its
+          common name(s) and a page citation. Search by genus, genus and species, or common name.
+          See <a href="tools/fnct-species-index.mjs">tools/fnct-species-index.mjs</a> for how the
+          index is built from <a href="docs/data-acquisition/corpus/NOTICE.md">the corpus</a>.
+        </p>
+      </div>
+    </header>
+    <main class="fnct-page">
+      <div class="fnct-search">
+        <input
+          type="search"
+          id="fnctSearch"
+          placeholder="Search genus, genus species, or common name…"
+          autocomplete="off"
+        />
+        <span class="fnct-count" id="fnctCount"></span>
+      </div>
+      <table class="fnct-table">
+        <thead>
+          <tr>
+            <th>Scientific name</th>
+            <th>Common name(s)</th>
+            <th>Page</th>
+          </tr>
+        </thead>
+        <tbody id="fnctBody"></tbody>
+      </table>
+      <p class="data-note" id="fnctEmpty" hidden>No matches.</p>
+    </main>
+    <script type="module" src="src/fnct/fnctPage.js"></script>
+  </body>
+</html>

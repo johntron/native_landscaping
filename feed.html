@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Observation Feed</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="feed.css" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  </head>
+  <body>
+    <header class="page-header">
+      <div class="header-inner">
+        <nav class="site-nav">
+          <a href="index.html" class="site-nav__link">The argument</a>
+          <a href="design.html" class="site-nav__link" id="navDesignLink">Your yard</a>
+          <a href="rights.html" class="site-nav__link">Your rights</a>
+          <a href="feed.html" class="site-nav__link site-nav__link--active">Feed</a>
+          <a href="fnct.html" class="site-nav__link">Flora Index</a>
+        </nav>
+        <h1>Observation Feed</h1>
+        <p class="data-note">
+          Individual iNaturalist observations logged for a saved area, newest first, with per-item
+          read/dismiss state kept server-side. This is the foundational "all new observations"
+          slice (nl-1qy.1) — invasive/rarity/yard-relevance filtering lands as separate lanes on top
+          of this once it's validated. Run
+          <code>docker compose exec web node tools/fetch-observation-events.mjs --areas-file &lt;path.json&gt;</code>
+          to poll saved areas for new observations.
+        </p>
+      </div>
+    </header>
+    <main class="feed-page">
+      <section class="feed-areas">
+        <div class="feed-areas__row">
+          <label for="areaSelect">Area</label>
+          <select id="areaSelect"><option value="">Loading areas…</option></select>
+          <button type="button" class="pill-button" id="newAreaToggle">+ New area</button>
+        </div>
+        <form class="feed-areas__new" id="newAreaForm" hidden>
+          <input type="text" id="newAreaName" placeholder="Name" required />
+          <input type="number" id="newAreaLat" placeholder="Lat" step="any" min="-90" max="90" required />
+          <input type="number" id="newAreaLng" placeholder="Lng" step="any" min="-180" max="180" required />
+          <input type="number" id="newAreaRadius" placeholder="Radius (mi)" step="any" min="0.1" required />
+          <button type="submit" class="pill-button">Save area</button>
+          <button type="button" class="pill-button pill-button--danger" id="newAreaCancel">Cancel</button>
+        </form>
+        <p class="data-note" id="areaNote"></p>
+      </section>
+
+      <section class="feed-controls">
+        <label for="taxonFilter">Taxon</label>
+        <select id="taxonFilter"><option value="">All</option></select>
+        <label class="feed-controls__check">
+          <input type="checkbox" id="unreadOnly" checked />
+          Unread only
+        </label>
+        <label class="feed-controls__check">
+          <input type="checkbox" id="includeDismissed" />
+          Show dismissed
+        </label>
+        <button type="button" class="pill-button" id="refreshFeed">Refresh</button>
+        <span class="feed-count" id="feedCount"></span>
+      </section>
+
+      <ul class="feed-list" id="feedList"></ul>
+      <div class="feed-footer">
+        <button type="button" class="button" id="loadMore" hidden>Load more</button>
+      </div>
+    </main>
+    <script type="module" src="src/feed/feedPage.js"></script>
+  </body>
+</html>
