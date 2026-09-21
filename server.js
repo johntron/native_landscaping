@@ -36,6 +36,9 @@ import { openObservationEventsDb, listEvents } from './tools/observationEventsDb
 import { openFeedStateDb, setFeedState } from './tools/feedState/feedStateDb.js';
 import { queryFeed } from './tools/feedState/feed.js';
 import { pollSavedAreas } from './tools/feedState/pollAreas.js';
+import { openClaimsStore } from './tools/claims/claimsStore.js';
+import { coverageView, conflictsView } from './tools/claims/humanViews.js';
+import { claimsCorrect } from './tools/claims/claimsTools.js';
 
 const envPort = Number(process.env.PORT);
 const PORT = Number.isFinite(envPort) ? envPort : 8000;
@@ -541,6 +544,72 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Two human-facing views over the plant-data claim store (nl-scx.10),
+  // implementing docs/data-acquisition/07-mcp-introspection.md §5. Both GET
+  // routes reshape the existing claims_* tool output (tools/claims/humanViews.js)
+  // rather than querying data/claims.db directly — one data source for the
+  // agent tools and the app views. Catalog-wide, not per-project: species and
+  // fields have no yard/project scope, unlike every other route above.
+  if (pathname === '/api/claims-coverage' && req.method === 'GET') {
+    try {
+      const db = openClaimsStoreForViews();
+      const rows = coverageView(db, {
+        field: url.searchParams.get('field') || undefined,
+        species: url.searchParams.get('species') || undefined,
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ rows }));
+    } catch (err) {
+      console.error(err);
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  if (pathname === '/api/claims-conflicts' && req.method === 'GET') {
+    try {
+      const db = openClaimsStoreForViews();
+      const rows = conflictsView(db, { field: url.searchParams.get('field') || undefined });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ rows }));
+    } catch (err) {
+      console.error(err);
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // The conflicts queue's submit action. Same tool the claims_correct MCP
+  // tool calls (07 §3.5/§4, 09 §4) — one write path, two callers — so this
+  // route is a thin body-parse wrapper, not a second implementation.
+  // `author` and `reason` come from the request body only: nothing on this
+  // server authenticates a caller, so defaulting `author` to anything the
+  // server already knows would fabricate attribution, exactly what 09 §2
+  // requires a human to supply. `correctionsPath` is never accepted from the
+  // request — the write target is fixed to the repo's own manual-corrections.tsv.
+  if (pathname === '/api/claims-correct' && req.method === 'POST') {
+    try {
+      const body = await collectPayload(req, { requirePlants: false });
+      const db = openClaimsStoreForViews();
+      const result = claimsCorrect(db, {
+        species: body.species,
+        field: body.field,
+        value: body.value,
+        reason: body.reason,
+        author: body.author,
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+    } catch (err) {
+      console.error(err);
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
   // Links to the pre-rename layout. The argument page is the one built to be
   // sent to a room, so its old URL is the one most likely to be sitting in
   // somebody's email; and an old design-tool bookmark carries ?project=, which
@@ -596,6 +665,22 @@ function makeEntry(plants, description, id) {
     description: description || 'Manual layout update',
     plants,
   };
+}
+
+/**
+ * Opens data/claims.db for the claims_coverage/claims_conflicts/claims_correct
+ * routes above, turning the raw "no such table: taxa" a missing/unbuilt store
+ * throws into a message that names the fix, rather than leaking a schema
+ * detail to the browser.
+ */
+function openClaimsStoreForViews() {
+  const db = openClaimsStore();
+  try {
+    db.prepare('SELECT 1 FROM taxa LIMIT 1').get();
+  } catch {
+    throw new Error('Claim store not built — run tools/claims/rebuild.js to create data/claims.db');
+  }
+  return db;
 }
 
 async function pathExists(target) {

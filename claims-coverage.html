@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Plant Data Coverage</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="claims-review.css" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  </head>
+  <body>
+    <header class="page-header">
+      <div class="header-inner">
+        <nav class="site-nav">
+          <a href="claims-coverage.html" class="site-nav__link site-nav__link--active">Data coverage</a>
+          <a href="claims-conflicts.html" class="site-nav__link">Conflicts queue</a>
+        </nav>
+        <h1>Plant Data Coverage</h1>
+        <p class="data-note">
+          Per-species, per-field completeness from the plant-data claim store
+          (<code>claims_coverage</code>) — how many fields have an <strong>asserted</strong> claim
+          out of every field any source has ever been asked about. <code>review</code> and
+          <code>unknown</code> both mean a field still needs work, same as a field no source has
+          checked at all (<code>missing</code>); none of the three count toward "sourced" below.
+        </p>
+      </div>
+    </header>
+    <main class="claims-page">
+      <section class="claims-controls">
+        <label class="claims-controls__field">
+          <span>Species contains</span>
+          <input type="text" id="speciesFilter" placeholder="e.g. Salvia" />
+        </label>
+        <label class="claims-controls__field">
+          <span>Field</span>
+          <input type="text" id="fieldFilter" placeholder="e.g. sun_pref" />
+        </label>
+        <button type="button" class="pill-button" id="refreshCoverage">Refresh</button>
+        <span class="claims-count" id="coverageCount"></span>
+      </section>
+      <div id="coverageError" class="claims-error" hidden></div>
+      <div id="coverageList" class="coverage-list"></div>
+    </main>
+    <script type="module" src="src/claims/claimsCoveragePage.js"></script>
+  </body>
+</html>

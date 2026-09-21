@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Plant Data Conflicts Queue</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="claims-review.css" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  </head>
+  <body>
+    <header class="page-header">
+      <div class="header-inner">
+        <nav class="site-nav">
+          <a href="claims-coverage.html" class="site-nav__link">Data coverage</a>
+          <a href="claims-conflicts.html" class="site-nav__link site-nav__link--active">Conflicts queue</a>
+        </nav>
+        <h1>Plant Data Conflicts Queue</h1>
+        <p class="data-note">
+          Unadjudicated fields from the plant-data claim store (<code>claims_conflicts</code>) —
+          either a source disagreement or a claim already flagged for review. Per
+          <a href="docs/data-acquisition/09-conflict-resolution.md">09 §4</a>, neither disputed
+          value shows as a fact anywhere else in this app until you resolve it here: pick a value,
+          give a reason, and submit. Submitting only records the correction — it is replayed into
+          the claim store on the next rebuild, so this row will keep appearing here until then.
+        </p>
+      </div>
+    </header>
+    <main class="claims-page">
+      <section class="claims-controls">
+        <label class="claims-controls__field">
+          <span>Field</span>
+          <input type="text" id="fieldFilter" placeholder="e.g. sun_pref" />
+        </label>
+        <button type="button" class="pill-button" id="refreshConflicts">Refresh</button>
+        <span class="claims-count" id="conflictsCount"></span>
+      </section>
+      <div id="conflictsError" class="claims-error" hidden></div>
+      <ul class="conflicts-list" id="conflictsList"></ul>
+    </main>
+    <script type="module" src="src/claims/claimsConflictsPage.js"></script>
+  </body>
+</html>
