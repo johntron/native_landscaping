@@ -75,8 +75,32 @@ const TAXA_IDS_PER_REQUEST = 30;
  * @returns {Promise<Map<number, string>>}
  */
 export async function fetchEstablishmentMeans(taxonIds, placeId, { fetchJson }) {
+  const { establishmentMeansById } = await fetchTaxaFacts(taxonIds, placeId, { fetchJson });
+  return establishmentMeansById;
+}
+
+/**
+ * Batched /v1/taxa/{ids} lookup (nl-1qy.4.2) that pulls BOTH facts the
+ * response already carries in one request per chunk — preferred_establishment_
+ * means (what fetchEstablishmentMeans always returned) and conservation_status
+ * (added for the rarity feed's conservation-status fact). Splitting these into
+ * two functions would mean two separate batched requests against the same
+ * ids, doubling the network/cache traffic for no reason; fetchEstablishmentMeans
+ * above stays as a thin wrapper so existing callers that only want the means
+ * map are unaffected.
+ *
+ * conservation_status, when `preferred_place_id` is set, reflects the
+ * place-specific listing when iNaturalist has one and falls back to the
+ * global IUCN-style status otherwise — same "unassessed is not the same as
+ * secure" reasoning as establishment_means: a taxon with no status here is
+ * left out of the map rather than treated as "not of concern."
+ *
+ * @returns {Promise<{establishmentMeansById: Map<number, string>, conservationStatusById: Map<number, {status: string, statusName: string, authority: string}>}>}
+ */
+export async function fetchTaxaFacts(taxonIds, placeId, { fetchJson }) {
   const uniqueIds = [...new Set(taxonIds)].filter((id) => Number.isFinite(id));
-  const meansById = new Map();
+  const establishmentMeansById = new Map();
+  const conservationStatusById = new Map();
   for (let i = 0; i < uniqueIds.length; i += TAXA_IDS_PER_REQUEST) {
     const chunk = uniqueIds.slice(i, i + TAXA_IDS_PER_REQUEST);
     const url = new URL(`https://api.inaturalist.org/v1/taxa/${chunk.join(',')}`);
@@ -85,12 +109,20 @@ export async function fetchEstablishmentMeans(taxonIds, placeId, { fetchJson }) 
       const body = await fetchJson('taxa/preferred_establishment_means', url);
       (body.results || []).forEach((taxon) => {
         if (taxon.preferred_establishment_means) {
-          meansById.set(taxon.id, taxon.preferred_establishment_means);
+          establishmentMeansById.set(taxon.id, taxon.preferred_establishment_means);
+        }
+        const status = taxon.conservation_status;
+        if (status && status.status) {
+          conservationStatusById.set(taxon.id, {
+            status: status.status,
+            statusName: status.status_name || '',
+            authority: status.authority || '',
+          });
         }
       });
     } catch (err) {
-      console.warn(`  establishment_means lookup FAILED for a batch of ${chunk.length} taxa — ${err.message}`);
+      console.warn(`  taxa lookup FAILED for a batch of ${chunk.length} taxa — ${err.message}`);
     }
   }
-  return meansById;
+  return { establishmentMeansById, conservationStatusById };
 }

@@ -220,6 +220,48 @@ test('queryFeed lane=rarity honors rarityThreshold', () => {
   }
 });
 
+test('queryFeed lane=rarity surfaces conservation-status and protected-species facts only when their toggles are on', () => {
+  const { eventsDb, feedStateDb, dir } = tmpDbs();
+  try {
+    const ecosystemDbPath = join(dir, 'ecosystem.db');
+    const ecosystemDb = openEcosystemDb(ecosystemDbPath);
+    // Needs at least one row so loadRarityTables treats the place as indexed;
+    // neither event below matches it on taxon_name, so local-scarcity never fires.
+    replaceTaxonRows(ecosystemDb, 'Dallas, TX', 'Plantae', [
+      { taxon_name: 'Asclepias tuberosa', genus: 'Asclepias', radius_mi: 10, observation_count: 3, fetched_on: '2026-01-01', source: 'test' },
+    ]);
+    upsertEvents(eventsDb, [
+      { observation_id: 50, area_id: 'area-rare3', taxon_name: 'Rare Thing', observed_on: '2026-01-01', ingested_at: 't1', conservation_status: 'G2', conservation_status_name: 'Imperiled' },
+      { observation_id: 51, area_id: 'area-rare3', taxon_name: 'Protected Thing', observed_on: '2026-01-02', ingested_at: 't1', taxon_geoprivacy: 'obscured' },
+    ]);
+
+    const offResult = queryFeed(eventsDb, feedStateDb, {
+      areaId: 'area-rare3',
+      lane: 'rarity',
+      place: 'Dallas, TX',
+      ecosystemDbPath,
+    });
+    assert.equal(offResult.total, 0, 'both facts stay hidden until their toggles are on');
+
+    const onResult = queryFeed(eventsDb, feedStateDb, {
+      areaId: 'area-rare3',
+      lane: 'rarity',
+      place: 'Dallas, TX',
+      ecosystemDbPath,
+      rarityIncludeConservationStatus: true,
+      rarityIncludeProtectedSpecies: true,
+    });
+    assert.equal(onResult.total, 2);
+    const byId = new Map(onResult.items.map((i) => [i.observation_id, i]));
+    assert.equal(byId.get(50).relevance.kind, 'conservation-status');
+    assert.equal(byId.get(50).relevance.status, 'G2');
+    assert.equal(byId.get(51).relevance.kind, 'protected-species');
+    assert.equal(byId.get(51).relevance.taxonGeoprivacy, 'obscured');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('queryFeed lane=rarity returns a warning when the area has no place', () => {
   const { eventsDb, feedStateDb, dir } = tmpDbs();
   try {

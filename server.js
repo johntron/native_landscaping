@@ -455,6 +455,8 @@ const server = http.createServer(async (req, res) => {
         place = area?.filters?.place;
       }
       const rarityThresholdParam = url.searchParams.get('rarity_threshold');
+      const rarityIncludeConservationStatus = url.searchParams.get('rarity_conservation_status') === 'true';
+      const rarityIncludeProtectedSpecies = url.searchParams.get('rarity_protected_species') === 'true';
       const eventsDb = openObservationEventsDb();
       const feedStateDb = openFeedStateDb();
       const result = queryFeed(eventsDb, feedStateDb, {
@@ -470,6 +472,8 @@ const server = http.createServer(async (req, res) => {
         ecoregion,
         place,
         rarityThreshold: rarityThresholdParam != null ? Number(rarityThresholdParam) : undefined,
+        rarityIncludeConservationStatus,
+        rarityIncludeProtectedSpecies,
       });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));

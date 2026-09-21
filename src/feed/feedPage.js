@@ -30,6 +30,10 @@ const taxonFilter = document.getElementById('taxonFilter');
 const laneFilter = document.getElementById('laneFilter');
 const rarityThresholdField = document.getElementById('rarityThresholdField');
 const rarityThresholdEl = document.getElementById('rarityThreshold');
+const rarityConservationStatusField = document.getElementById('rarityConservationStatusField');
+const rarityConservationStatusEl = document.getElementById('rarityConservationStatus');
+const rarityProtectedSpeciesField = document.getElementById('rarityProtectedSpeciesField');
+const rarityProtectedSpeciesEl = document.getElementById('rarityProtectedSpecies');
 const unreadOnlyEl = document.getElementById('unreadOnly');
 const includeDismissedEl = document.getElementById('includeDismissed');
 const refreshBtn = document.getElementById('refreshFeed');
@@ -122,10 +126,15 @@ function wireControls() {
 
   taxonFilter.addEventListener('change', renderItems);
   laneFilter.addEventListener('change', () => {
-    rarityThresholdField.hidden = laneFilter.value !== 'rarity';
+    const isRarity = laneFilter.value === 'rarity';
+    rarityThresholdField.hidden = !isRarity;
+    rarityConservationStatusField.hidden = !isRarity;
+    rarityProtectedSpeciesField.hidden = !isRarity;
     loadFeed({ reset: true });
   });
   rarityThresholdEl.addEventListener('change', () => loadFeed({ reset: true }));
+  rarityConservationStatusEl.addEventListener('change', () => loadFeed({ reset: true }));
+  rarityProtectedSpeciesEl.addEventListener('change', () => loadFeed({ reset: true }));
   unreadOnlyEl.addEventListener('change', () => loadFeed({ reset: true }));
   includeDismissedEl.addEventListener('change', () => loadFeed({ reset: true }));
   refreshBtn.addEventListener('click', () => loadFeed({ reset: true }));
@@ -249,8 +258,12 @@ async function loadFeed({ reset }) {
     include_dismissed: String(includeDismissedEl.checked),
   });
   if (laneFilter.value) params.set('lane', laneFilter.value);
-  if (laneFilter.value === 'rarity' && rarityThresholdEl.value.trim() !== '') {
-    params.set('rarity_threshold', rarityThresholdEl.value.trim());
+  if (laneFilter.value === 'rarity') {
+    if (rarityThresholdEl.value.trim() !== '') {
+      params.set('rarity_threshold', rarityThresholdEl.value.trim());
+    }
+    if (rarityConservationStatusEl.checked) params.set('rarity_conservation_status', 'true');
+    if (rarityProtectedSpeciesEl.checked) params.set('rarity_protected_species', 'true');
   }
 
   let body;
@@ -356,6 +369,13 @@ function describeRelevance(relevance) {
   if (relevance.kind === 'local-scarcity') {
     const count = relevance.observationCount;
     return `Locally scarce: ${count} observation${count === 1 ? '' : 's'} recorded nearby.`;
+  }
+  if (relevance.kind === 'conservation-status') {
+    const name = relevance.statusName ? ` (${escapeHtml(relevance.statusName)})` : '';
+    return `Conservation status: ${escapeHtml(relevance.status)}${name}.`;
+  }
+  if (relevance.kind === 'protected-species') {
+    return `Protected/obscured species — iNaturalist ${escapeHtml(relevance.taxonGeoprivacy)}s its location.`;
   }
   return '';
 }

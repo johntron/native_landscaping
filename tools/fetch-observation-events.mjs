@@ -60,7 +60,7 @@ import { openProbeCache, cached } from './usda-plants/probeCache.js';
 import {
   MI_TO_KM,
   USER_AGENT,
-  fetchEstablishmentMeans,
+  fetchTaxaFacts,
   fetchWithBackoff,
   resolvePlaceId,
   sleep,
@@ -157,13 +157,16 @@ export async function pollArea({ area, db, fetchJson, smoke = false, backfill = 
   console.log(`  fetched ${entries.length} new observation(s)`);
 
   if (entries.length && placeId) {
-    const meansById = await fetchEstablishmentMeans(
+    const { establishmentMeansById, conservationStatusById } = await fetchTaxaFacts(
       entries.map((e) => e.taxon_id),
       placeId,
       { fetchJson }
     );
     entries.forEach((e) => {
-      e.establishment_means = meansById.get(e.taxon_id) || null;
+      e.establishment_means = establishmentMeansById.get(e.taxon_id) || null;
+      const status = conservationStatusById.get(e.taxon_id);
+      e.conservation_status = status?.status || null;
+      e.conservation_status_name = status?.statusName || null;
     });
   }
 
@@ -188,19 +191,98 @@ export async function pollArea({ area, db, fetchJson, smoke = false, backfill = 
   return { areaId: area.id, fetched: entries.length, written: entries.length };
 }
 
+/** Separate area_cursor row for the protected-species pass (nl-1qy.4.3), keyed off area.id so it advances independently of the regular poll's cursor — the two passes walk different id ranges per run (the protected pass sees every id in range, not just the ones the regular pass's taxon_geoprivacy=open filter admits) and would otherwise clobber each other. */
+function protectedCursorAreaId(areaId) {
+  return `${areaId}:protected`;
+}
+
+/**
+ * A separate, explicitly opted-into fetch pass (nl-1qy.4.3) that walks the
+ * SAME area without the taxon_geoprivacy=open filter, keeping only rows
+ * whose taxon_geoprivacy is obscured/private, and writes them into the same
+ * observation_events table (same area_id) so the rarity lane's protected-
+ * species fact can query them like any other row — they're just
+ * self-describing via the taxon_geoprivacy column rather than silently
+ * absent. Never touches the regular poll's cursor or its filtered fetch
+ * (see baseObservationsUrl and pollArea above) — every existing lane keeps
+ * excluding these by predicate, not by the accident of never having been
+ * fetched.
+ * @returns {Promise<{areaId: string, fetched: number, written: number}>}
+ */
+export async function pollAreaProtectedSpecies({ area, db, fetchJson, smoke = false, maxPages = MAX_PAGES_PER_AREA }) {
+  console.log(`\n[${area.name || area.id}] protected-species pass — lat=${area.lat}, lng=${area.lng}, radius_mi=${area.radius_mi}`);
+
+  const placeId = await resolvePlaceId(area.lat, area.lng, { fetchJson });
+  const cursorAreaId = protectedCursorAreaId(area.id);
+  const priorCursor = smoke ? null : getAreaCursor(db, cursorAreaId);
+  let idAbove = priorCursor ?? 0;
+  let coldStartSeeded = false;
+  if (priorCursor == null) {
+    const currentMaxId = await fetchCurrentMaxObservationId({ area, fetchJson, includeProtected: true });
+    if (currentMaxId != null) {
+      idAbove = currentMaxId;
+      coldStartSeeded = true;
+    }
+  }
+  console.log(`  polling from id_above=${idAbove}${coldStartSeeded ? ' (cold start: seeded at the current max id)' : ''}`);
+
+  const { entries, nextCursor } = await fetchAreaObservations({
+    area,
+    idAbove,
+    fetchJson,
+    maxPages: smoke ? 1 : maxPages,
+    perPage: PER_PAGE,
+    includeProtected: true,
+  });
+  console.log(`  found ${entries.length} protected/obscured observation(s)`);
+
+  if (entries.length && placeId) {
+    const { establishmentMeansById, conservationStatusById } = await fetchTaxaFacts(
+      entries.map((e) => e.taxon_id),
+      placeId,
+      { fetchJson }
+    );
+    entries.forEach((e) => {
+      e.establishment_means = establishmentMeansById.get(e.taxon_id) || null;
+      const status = conservationStatusById.get(e.taxon_id);
+      e.conservation_status = status?.status || null;
+      e.conservation_status_name = status?.statusName || null;
+    });
+  }
+
+  if (smoke) {
+    console.log(`  --smoke: NOT writing, cursor untouched`);
+    entries.slice(0, 10).forEach((r) => {
+      console.log(`    #${r.observation_id} ${r.taxon_name} taxon_geoprivacy=${r.taxon_geoprivacy}`);
+    });
+    return { areaId: area.id, fetched: entries.length, written: 0 };
+  }
+
+  if (entries.length) {
+    const ingestedAt = new Date().toISOString();
+    const rows = entries.map((e) => ({ ...e, area_id: area.id, ingested_at: ingestedAt }));
+    upsertEvents(db, rows);
+    console.log(`  wrote ${rows.length} protected row(s)`);
+  }
+  setAreaCursor(db, cursorAreaId, nextCursor);
+  return { areaId: area.id, fetched: entries.length, written: entries.length };
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const areasFile = argAfter(args, '--areas-file');
   const smoke = args.includes('--smoke');
   const force = args.includes('--force');
   const backfill = args.includes('--backfill');
+  const protectedSpecies = args.includes('--protected-species');
   const maxPagesArg = argAfter(args, '--max-pages');
   const maxPages = maxPagesArg ? Number(maxPagesArg) : MAX_PAGES_PER_AREA;
   if (!areasFile) {
     console.error(
       'Usage: node tools/fetch-observation-events.mjs --areas-file <path.json> ' +
-        '[--smoke] [--force] [--backfill] [--max-pages N]\n' +
-        '  areas.json: [{ "id": "...", "name": "...", "lat": 0, "lng": 0, "radius_mi": 0 }, ...]'
+        '[--smoke] [--force] [--backfill] [--max-pages N] [--protected-species]\n' +
+        '  areas.json: [{ "id": "...", "name": "...", "lat": 0, "lng": 0, "radius_mi": 0 }, ...]\n' +
+        '  --protected-species: run the separate obscured/private-taxa pass (nl-1qy.4.3) instead of the regular poll'
     );
     process.exit(1);
   }
@@ -216,7 +298,11 @@ async function main() {
   const db = smoke ? null : openObservationEventsDb();
 
   for (const area of areas) {
-    await pollArea({ area, db, fetchJson, smoke, backfill, maxPages });
+    if (protectedSpecies) {
+      await pollAreaProtectedSpecies({ area, db, fetchJson, smoke, maxPages });
+    } else {
+      await pollArea({ area, db, fetchJson, smoke, backfill, maxPages });
+    }
   }
 }
 
@@ -233,27 +319,34 @@ function loadAreas(path) {
   }));
 }
 
-function baseObservationsUrl(area) {
+function baseObservationsUrl(area, { includeProtected = false } = {}) {
   const url = new URL('https://api.inaturalist.org/v1/observations');
   url.searchParams.set('lat', String(area.lat));
   url.searchParams.set('lng', String(area.lng));
   url.searchParams.set('radius', (area.radius_mi * MI_TO_KM).toFixed(3));
-  // Same captive/quality/geoprivacy filters as fetch-ecosystem-index.mjs's
-  // species_counts calls, for the same reason: exclude pet-store/cultivated
-  // records, anything not vetted to species, and both geoprivacy-obscuring
-  // mechanisms (see that script's comment for the empirical detail on why
-  // both taxon_geoprivacy=open AND geoprivacy=open are needed — neither
-  // alone catches everything the other does).
   url.searchParams.set('captive', 'false');
   url.searchParams.set('quality_grade', 'research');
-  url.searchParams.set('taxon_geoprivacy', 'open');
+  // includeProtected (nl-1qy.4.3) is a SEPARATE, explicitly-opted-into fetch
+  // mode (see pollAreaProtectedSpecies below) — every other caller of this
+  // function (every existing lane's regular poll) keeps both geoprivacy
+  // filters, for the same reason fetch-ecosystem-index.mjs's species_counts
+  // calls do: excludes pet-store/cultivated records, anything not vetted to
+  // species, and both independent geoprivacy-obscuring mechanisms (see that
+  // script's comment for the empirical detail on why both taxon_geoprivacy=
+  // open AND geoprivacy=open are needed — neither alone catches everything
+  // the other does). Dropping taxon_geoprivacy=open here on purpose is what
+  // lets the protected pass actually see the obscured/private taxa the
+  // regular pass is built to exclude.
+  if (!includeProtected) {
+    url.searchParams.set('taxon_geoprivacy', 'open');
+  }
   url.searchParams.set('geoprivacy', 'open');
   return url;
 }
 
 /** One request: the current highest observation_id matching an area's filters, or null if it has none. Used only to seed a fresh area's cursor at "now" instead of "the beginning of time" — see the header comment. */
-export async function fetchCurrentMaxObservationId({ area, fetchJson }) {
-  const url = baseObservationsUrl(area);
+export async function fetchCurrentMaxObservationId({ area, fetchJson, includeProtected = false }) {
+  const url = baseObservationsUrl(area, { includeProtected });
   url.searchParams.set('order_by', 'id');
   url.searchParams.set('order', 'desc');
   url.searchParams.set('per_page', '1');
@@ -271,11 +364,11 @@ export async function fetchCurrentMaxObservationId({ area, fetchJson }) {
  * reached, whether or not that page was full — so the caller can persist the
  * cursor even on a page that returned zero or partial results.
  */
-export async function fetchAreaObservations({ area, idAbove, fetchJson, maxPages = MAX_PAGES_PER_AREA, perPage = PER_PAGE }) {
+export async function fetchAreaObservations({ area, idAbove, fetchJson, maxPages = MAX_PAGES_PER_AREA, perPage = PER_PAGE, includeProtected = false }) {
   const entries = [];
   let cursor = idAbove;
   for (let page = 0; page < maxPages; page += 1) {
-    const url = baseObservationsUrl(area);
+    const url = baseObservationsUrl(area, { includeProtected });
     url.searchParams.set('id_above', String(cursor));
     url.searchParams.set('order_by', 'id');
     url.searchParams.set('order', 'asc');
@@ -283,7 +376,17 @@ export async function fetchAreaObservations({ area, idAbove, fetchJson, maxPages
 
     const body = await fetchJson('observations', url);
     const results = body.results || [];
-    results.forEach((entry) => entries.push(mapObservationEntry(entry)));
+    results.forEach((entry) => {
+      const mapped = mapObservationEntry(entry);
+      // includeProtected pulls the broader, unfiltered page (see
+      // baseObservationsUrl) so the cursor still advances past every
+      // observation in range, but only the actually-protected rows (nl-
+      // 1qy.4.3's predicate: taxon_geoprivacy obscured/private, full stop —
+      // NOT gated on the observer's own geoprivacy choice) get logged.
+      if (!includeProtected || PROTECTED_TAXON_GEOPRIVACY.has(mapped.taxon_geoprivacy)) {
+        entries.push(mapped);
+      }
+    });
     if (results.length) cursor = results[results.length - 1].id;
 
     if (results.length < perPage) break; // fewer than a full page: no more to page through
@@ -294,10 +397,14 @@ export async function fetchAreaObservations({ area, idAbove, fetchJson, maxPages
   return { entries, nextCursor: cursor };
 }
 
+/** nl-1qy.4.3's protected-species predicate — see fetch-observation-events.mjs's header comment on the empirical Bald Eagle / Phyllanthus polygonoides findings baseObservationsUrl links to. */
+export const PROTECTED_TAXON_GEOPRIVACY = new Set(['obscured', 'private']);
+
 /** Raw /v1/observations result -> the flat shape observationEventsDb.upsertEvents expects. */
 export function mapObservationEntry(entry) {
   return {
     observation_id: entry.id,
+    taxon_geoprivacy: entry.taxon_geoprivacy || null,
     taxon_id: entry.taxon?.id ?? null,
     taxon_name: entry.taxon?.name || '',
     common_name: entry.taxon?.preferred_common_name || '',

@@ -57,6 +57,13 @@ function firstObservedOnByTaxon(eventsDb, areaId) {
  * @param {number} [options.rarityThreshold] when lane is 'rarity', drop events whose local
  *   observation_count exceeds this; omitted, every event with a known local count is surfaced
  *   (a facet, not an invented cutoff — see src/analysis/rarity.js).
+ * @param {boolean} [options.rarityIncludeConservationStatus] when lane is 'rarity', also surface
+ *   events with a known conservation_status (nl-1qy.4.2) that didn't already match on local
+ *   scarcity. Off by default — a reader who only wants local-scarcity facts isn't shown these.
+ * @param {boolean} [options.rarityIncludeProtectedSpecies] when lane is 'rarity', also surface
+ *   events with taxon_geoprivacy obscured/private (nl-1qy.4.3) that didn't already match on
+ *   local scarcity or conservation status. Off by default, and only ever finds rows the separate
+ *   protected-species fetch pass logged (see tools/fetch-observation-events.mjs).
  * @param {string} [options.ecosystemDbPath] test-only override for which data/ecosystem.db
  *   file the 'rarity' lane reads (see tools/feedState/rarityTables.js).
  */
@@ -122,6 +129,8 @@ export function queryFeed(eventsDb, feedStateDb, options) {
           relevance: classifyRarity(event, {
             speciesObservations: tables.speciesObservations,
             maxObservationCount: options.rarityThreshold,
+            includeConservationStatus: options.rarityIncludeConservationStatus,
+            includeProtectedSpecies: options.rarityIncludeProtectedSpecies,
           }),
         }))
         .filter((row) => row.relevance)

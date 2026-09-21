@@ -85,6 +85,14 @@
           <label for="rarityThreshold">Max local count</label>
           <input type="number" id="rarityThreshold" placeholder="any" min="0" step="1" size="4" />
         </span>
+        <label class="feed-controls__check" id="rarityConservationStatusField" hidden>
+          <input type="checkbox" id="rarityConservationStatus" />
+          Include conservation status
+        </label>
+        <label class="feed-controls__check" id="rarityProtectedSpeciesField" hidden>
+          <input type="checkbox" id="rarityProtectedSpecies" />
+          Include protected/obscured species
+        </label>
         <label class="feed-controls__check">
           <input type="checkbox" id="unreadOnly" checked />
           Unread only

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import {
   openObservationEventsDb,
   upsertEvents,
@@ -35,6 +36,69 @@ test('upsertEvents writes rows, scoped per area', () => {
     assert.equal(countEvents(db, 'area-1'), 2);
     assert.equal(countEvents(db, 'area-2'), 1);
     assert.equal(countEvents(db, 'area-unknown'), 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('upsertEvents round-trips conservation_status and taxon_geoprivacy (nl-1qy.4.2/.4.3)', () => {
+  const { db, dir } = tmpDb();
+  try {
+    upsertEvents(db, [
+      {
+        observation_id: 10,
+        area_id: 'area-1',
+        taxon_name: 'Haliaeetus leucocephalus',
+        observed_on: '2026-01-01',
+        ingested_at: 't1',
+        conservation_status: 'G4',
+        conservation_status_name: 'Apparently Secure',
+        taxon_geoprivacy: 'obscured',
+      },
+    ]);
+    const [row] = listEvents(db, { areaId: 'area-1' });
+    assert.equal(row.conservation_status, 'G4');
+    assert.equal(row.conservation_status_name, 'Apparently Secure');
+    assert.equal(row.taxon_geoprivacy, 'obscured');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('opening an existing db file that predates the conservation_status/taxon_geoprivacy columns migrates it in place', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'observation-events-migrate-test-'));
+  try {
+    const path = join(dir, 'events.db');
+    // Simulate a pre-nl-1qy.4.2/.4.3 db: the table exists but lacks the new columns.
+    const legacy = new DatabaseSync(path);
+    legacy.exec(`
+      CREATE TABLE observation_events (
+        observation_id INTEGER NOT NULL,
+        area_id TEXT NOT NULL,
+        taxon_id INTEGER,
+        taxon_name TEXT,
+        common_name TEXT,
+        iconic_taxon TEXT,
+        observed_on TEXT,
+        lat REAL,
+        lng REAL,
+        quality_grade TEXT,
+        establishment_means TEXT,
+        photo_url TEXT,
+        photo_attribution TEXT,
+        url TEXT,
+        ingested_at TEXT NOT NULL,
+        PRIMARY KEY (observation_id, area_id)
+      )
+    `);
+    legacy.close();
+
+    const db = openObservationEventsDb(path);
+    upsertEvents(db, [
+      { observation_id: 1, area_id: 'area-1', taxon_name: 'X', observed_on: '2026-01-01', ingested_at: 't1', conservation_status: 'G2' },
+    ]);
+    const [row] = listEvents(db, { areaId: 'area-1' });
+    assert.equal(row.conservation_status, 'G2');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -201,6 +265,37 @@ test('fetchAreaObservations keeps the prior cursor when a page finds nothing new
   const { entries, nextCursor } = await fetchAreaObservations({ area, idAbove: 777, fetchJson, maxPages: 5, perPage: 200 });
   assert.deepEqual(entries, []);
   assert.equal(nextCursor, 777, 'nextCursor must still be returned so the caller can persist it even on an empty poll');
+});
+
+test('fetchAreaObservations with includeProtected drops the taxon_geoprivacy=open filter and keeps only obscured/private rows (nl-1qy.4.3)', async () => {
+  const area = { id: 'area-1', name: 'Area 1', lat: 0, lng: 0, radius_mi: 1 };
+  let requestUrl;
+  const fetchJson = async (endpoint, url) => {
+    requestUrl = url;
+    return {
+      results: [
+        { id: 1, taxon_geoprivacy: 'open' },
+        { id: 2, taxon_geoprivacy: 'obscured' },
+        { id: 3, taxon_geoprivacy: 'private' },
+        { id: 4 }, // no taxon_geoprivacy at all — must not be treated as protected
+      ],
+    };
+  };
+  const { entries } = await fetchAreaObservations({ area, idAbove: 0, fetchJson, maxPages: 1, perPage: 200, includeProtected: true });
+  assert.equal(requestUrl.searchParams.has('taxon_geoprivacy'), false, 'the protected pass must not filter to taxon_geoprivacy=open');
+  assert.deepEqual(entries.map((e) => e.observation_id), [2, 3]);
+});
+
+test('fetchAreaObservations without includeProtected keeps the taxon_geoprivacy=open filter and returns everything the API sends back', async () => {
+  const area = { id: 'area-1', name: 'Area 1', lat: 0, lng: 0, radius_mi: 1 };
+  let requestUrl;
+  const fetchJson = async (endpoint, url) => {
+    requestUrl = url;
+    return { results: [{ id: 1, taxon_geoprivacy: 'open' }] };
+  };
+  const { entries } = await fetchAreaObservations({ area, idAbove: 0, fetchJson, maxPages: 1, perPage: 200 });
+  assert.equal(requestUrl.searchParams.get('taxon_geoprivacy'), 'open');
+  assert.deepEqual(entries.map((e) => e.observation_id), [1]);
 });
 
 test('fetchCurrentMaxObservationId issues one descending, per_page=1 request for the seed value', async () => {

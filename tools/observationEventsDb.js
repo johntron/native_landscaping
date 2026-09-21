@@ -23,6 +23,12 @@ import { fileURLToPath } from 'node:url';
 
 const DEFAULT_PATH = fileURLToPath(new URL('../data/observation-events.db', import.meta.url));
 
+function addColumnIfMissing(db, table, column, type) {
+  const existing = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (existing.some((c) => c.name === column)) return;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+}
+
 export function openObservationEventsDb(path = DEFAULT_PATH) {
   mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
@@ -47,6 +53,12 @@ export function openObservationEventsDb(path = DEFAULT_PATH) {
       PRIMARY KEY (observation_id, area_id)
     )
   `);
+  // Added after the table's initial ship (nl-1qy.4.2/.4.3) — SQLite has no
+  // "ADD COLUMN IF NOT EXISTS", so an existing data/observation-events.db is
+  // migrated in place here rather than requiring a manual rebuild.
+  addColumnIfMissing(db, 'observation_events', 'conservation_status', 'TEXT');
+  addColumnIfMissing(db, 'observation_events', 'conservation_status_name', 'TEXT');
+  addColumnIfMissing(db, 'observation_events', 'taxon_geoprivacy', 'TEXT');
   // Supports both directions of "what's new" lookup: by area+taxon
   // (yard-relevance/invasive-monitor lanes filter to specific taxa) and by
   // area+date (a plain chronological feed, nl-1qy.1's "trivial all-new-
@@ -108,8 +120,9 @@ export function upsertEvents(db, rows) {
       INSERT OR REPLACE INTO observation_events
         (observation_id, area_id, taxon_id, taxon_name, common_name, iconic_taxon,
          observed_on, lat, lng, quality_grade, establishment_means, photo_url,
-         photo_attribution, url, ingested_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         photo_attribution, url, ingested_at, conservation_status,
+         conservation_status_name, taxon_geoprivacy)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     for (const row of rows) {
       insert.run(
@@ -127,7 +140,10 @@ export function upsertEvents(db, rows) {
         row.photo_url || '',
         row.photo_attribution || '',
         row.url || '',
-        row.ingested_at
+        row.ingested_at,
+        row.conservation_status || null,
+        row.conservation_status_name || null,
+        row.taxon_geoprivacy || null
       );
     }
     db.exec('COMMIT');
