@@ -107,3 +107,38 @@ test('queryFeed requires areaId', () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// lane='yard-relevance' against the real, checked-in ecology tables (nl-1qy.2)
+// — Betula is a real ecoregion-9 keystone genus absent from plants.csv (see
+// tools/feedState/yardRelevanceTables.js for how the tables load).
+test('queryFeed lane=yard-relevance narrows to classified events and attaches relevance', () => {
+  const { eventsDb, feedStateDb, dir } = tmpDbs();
+  try {
+    upsertEvents(eventsDb, [
+      { observation_id: 10, area_id: 'area-yr', taxon_name: 'Betula nigra', iconic_taxon: 'Plantae', observed_on: '2026-01-01', ingested_at: 't1' },
+      { observation_id: 11, area_id: 'area-yr', taxon_name: 'Agelaius phoeniceus', iconic_taxon: 'Aves', observed_on: '2026-01-02', ingested_at: 't1' },
+      { observation_id: 12, area_id: 'area-yr', taxon_name: 'Bouteloua curtipendula', iconic_taxon: 'Plantae', observed_on: '2026-01-03', ingested_at: 't1' },
+    ]);
+    const result = queryFeed(eventsDb, feedStateDb, { areaId: 'area-yr', lane: 'yard-relevance', ecoregion: '9' });
+    assert.equal(result.total, 2);
+    assert.deepEqual(result.items.map((i) => i.observation_id).sort(), [10, 11]);
+    const plant = result.items.find((i) => i.observation_id === 10);
+    assert.equal(plant.relevance.kind, 'missing-genus');
+    const animal = result.items.find((i) => i.observation_id === 11);
+    assert.equal(animal.relevance.kind, 'associated-fauna');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('queryFeed lane=yard-relevance returns a warning when the area has no ecoregion', () => {
+  const { eventsDb, feedStateDb, dir } = tmpDbs();
+  try {
+    seedEvents(eventsDb);
+    const result = queryFeed(eventsDb, feedStateDb, { areaId: 'area-1', lane: 'yard-relevance' });
+    assert.equal(result.total, 0);
+    assert.match(result.warning, /ecoregion/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

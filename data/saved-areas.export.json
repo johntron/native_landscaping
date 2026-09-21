@@ -1,3 +1,26 @@
 {
-  "areas": []
+  "areas": [
+    {
+      "id": "2826d9e2-bf8b-4ff2-9e00-f5948b4ad966",
+      "name": "Frankford Reaerve",
+      "lat": 33,
+      "lng": -96.8,
+      "radiusMi": 0.3,
+      "filters": {
+        "ecoregion": "9"
+      },
+      "createdAt": "2026-09-21T01:51:01.076Z",
+      "updatedAt": "2026-09-21T02:03:26.339Z"
+    },
+    {
+      "id": "2df60bd4-dfb5-40a0-b90d-c7548fc81956",
+      "name": "Home",
+      "lat": 32.8,
+      "lng": -96.8,
+      "radiusMi": 0.5,
+      "filters": {},
+      "createdAt": "2026-09-21T01:52:14.207Z",
+      "updatedAt": "2026-09-21T01:52:14.207Z"
+    }
+  ]
 }

@@ -436,6 +436,16 @@ const server = http.createServer(async (req, res) => {
       const taxonIdParam = url.searchParams.get('taxon_id');
       const pageParam = url.searchParams.get('page');
       const pageSizeParam = url.searchParams.get('page_size');
+      const lane = url.searchParams.get('lane') || undefined;
+      // The yard-relevance lane (nl-1qy.2) classifies against the saved
+      // area's own ecoregion, not a project's — saved areas have no project
+      // link (see savedAreasDb.js) — so it's looked up here rather than
+      // threaded through as a query param the client could spoof or omit.
+      let ecoregion;
+      if (lane === 'yard-relevance') {
+        const area = getSavedArea(openSavedAreasDb(), areaId);
+        ecoregion = area?.filters?.ecoregion;
+      }
       const eventsDb = openObservationEventsDb();
       const feedStateDb = openFeedStateDb();
       const result = queryFeed(eventsDb, feedStateDb, {
@@ -447,6 +457,8 @@ const server = http.createServer(async (req, res) => {
         includeDismissed: url.searchParams.get('include_dismissed') === 'true',
         page: pageParam != null ? Number(pageParam) : undefined,
         pageSize: pageSizeParam != null ? Number(pageSizeParam) : undefined,
+        lane,
+        ecoregion,
       });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));

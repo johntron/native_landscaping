@@ -122,6 +122,12 @@
   color: inherit;
 }
 
+.feed-item__relevance {
+  color: var(--ink);
+  font-size: 0.85rem;
+  margin-top: 0.3rem;
+}
+
 .feed-item__actions {
   display: flex;
   flex-direction: column;

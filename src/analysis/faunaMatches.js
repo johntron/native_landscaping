@@ -218,7 +218,7 @@ export function matchesForGenus(
 }
 
 /** Scientific names sometimes carry a trinomial subspecies on one side and not the other. */
-function animalKey(name) {
+export function animalKey(name) {
   return String(name || '')
     .trim()
     .toLowerCase()

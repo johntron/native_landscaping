@@ -12,6 +12,8 @@
 // and just as cheap at this scale.
 import { listEvents } from '../observationEventsDb.js';
 import { listFeedStates } from './feedStateDb.js';
+import { classifyYardRelevance } from '../../src/analysis/yardRelevance.js';
+import { loadYardRelevanceTables } from './yardRelevanceTables.js';
 
 /**
  * @param {object} eventsDb open handle from openObservationEventsDb
@@ -25,17 +27,48 @@ import { listFeedStates } from './feedStateDb.js';
  * @param {boolean} [options.includeDismissed] when false (default), drop dismissed items
  * @param {number} [options.page] 1-based, default 1
  * @param {number} [options.pageSize] default 50
+ * @param {string} [options.lane] 'yard-relevance' narrows to events classifyYardRelevance
+ *   finds relevant (see src/analysis/yardRelevance.js) and attaches `.relevance` to each
+ *   item; omitted/other values return the plain all-observations feed.
+ * @param {string} [options.ecoregion] required when lane is 'yard-relevance' — the saved
+ *   area's `filters.ecoregion`. Missing/unmatched ecoregion returns zero items plus `warning`
+ *   rather than throwing, matching computePlantMatches' "report, don't guess" bail-out.
  */
 export function queryFeed(eventsDb, feedStateDb, options) {
-  const { areaId, taxonId, sinceObservedOn, sinceIngestedAt, unreadOnly = false, includeDismissed = false } = options;
+  const {
+    areaId,
+    taxonId,
+    sinceObservedOn,
+    sinceIngestedAt,
+    unreadOnly = false,
+    includeDismissed = false,
+    lane,
+  } = options;
   if (!areaId) {
     throw new Error('"areaId" is required');
   }
   const page = Number.isFinite(options.page) && options.page > 0 ? Math.floor(options.page) : 1;
   const pageSize = Number.isFinite(options.pageSize) && options.pageSize > 0 ? Math.floor(options.pageSize) : 50;
 
-  const events = listEvents(eventsDb, { areaId, taxonId, sinceObservedOn, sinceIngestedAt });
+  let events = listEvents(eventsDb, { areaId, taxonId, sinceObservedOn, sinceIngestedAt });
   const states = listFeedStates(feedStateDb, areaId);
+
+  let warning;
+  if (lane === 'yard-relevance') {
+    const tables = loadYardRelevanceTables({ ecoregion: options.ecoregion });
+    if (!tables.ok) {
+      warning = tables.reason;
+      events = [];
+    } else {
+      // Classify (and drop non-matches) BEFORE pagination — otherwise page 2
+      // would slice a different candidate set than page 1's classification
+      // implied, since listEvents returns the whole area unpaginated.
+      events = events
+        .map((event) => ({ event, relevance: classifyYardRelevance(event, tables) }))
+        .filter((row) => row.relevance)
+        .map(({ event, relevance }) => ({ ...event, relevance }));
+    }
+  }
 
   const joined = events
     .map((event) => {
@@ -49,5 +82,5 @@ export function queryFeed(eventsDb, feedStateDb, options) {
   const start = (page - 1) * pageSize;
   const items = joined.slice(start, start + pageSize);
 
-  return { areaId, page, pageSize, total, items };
+  return { areaId, page, pageSize, total, items, ...(warning ? { warning } : {}) };
 }

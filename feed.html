@@ -41,15 +41,27 @@
           <input type="number" id="newAreaLat" placeholder="Lat" step="any" min="-90" max="90" required />
           <input type="number" id="newAreaLng" placeholder="Lng" step="any" min="-180" max="180" required />
           <input type="number" id="newAreaRadius" placeholder="Radius (mi)" step="any" min="0.1" required />
+          <input type="text" id="newAreaEcoregion" placeholder="Ecoregion (e.g. 9)" />
           <button type="submit" class="pill-button">Save area</button>
           <button type="button" class="pill-button pill-button--danger" id="newAreaCancel">Cancel</button>
         </form>
+        <div class="feed-areas__row" id="areaEcoregionRow">
+          <label for="areaEcoregion">Ecoregion</label>
+          <input type="text" id="areaEcoregion" placeholder="e.g. 9" size="4" />
+          <button type="button" class="pill-button" id="areaEcoregionSave">Save</button>
+          <span class="data-note" id="areaEcoregionNote">Needed for the yard-relevance lane below.</span>
+        </div>
         <p class="data-note" id="areaNote"></p>
       </section>
 
       <section class="feed-controls">
         <label for="taxonFilter">Taxon</label>
         <select id="taxonFilter"><option value="">All</option></select>
+        <label for="laneFilter">Lane</label>
+        <select id="laneFilter">
+          <option value="">All observations</option>
+          <option value="yard-relevance">Yard-relevant only</option>
+        </select>
         <label class="feed-controls__check">
           <input type="checkbox" id="unreadOnly" checked />
           Unread only

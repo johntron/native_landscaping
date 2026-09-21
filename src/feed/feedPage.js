@@ -16,8 +16,13 @@ const areaSelect = document.getElementById('areaSelect');
 const newAreaToggle = document.getElementById('newAreaToggle');
 const newAreaForm = document.getElementById('newAreaForm');
 const newAreaCancel = document.getElementById('newAreaCancel');
+const newAreaEcoregion = document.getElementById('newAreaEcoregion');
+const areaEcoregionEl = document.getElementById('areaEcoregion');
+const areaEcoregionSaveBtn = document.getElementById('areaEcoregionSave');
+const areaEcoregionNote = document.getElementById('areaEcoregionNote');
 const areaNote = document.getElementById('areaNote');
 const taxonFilter = document.getElementById('taxonFilter');
+const laneFilter = document.getElementById('laneFilter');
 const unreadOnlyEl = document.getElementById('unreadOnly');
 const includeDismissedEl = document.getElementById('includeDismissed');
 const refreshBtn = document.getElementById('refreshFeed');
@@ -66,8 +71,16 @@ async function loadAreas() {
   selectedAreaId = candidate || areas[0].id;
   areaSelect.value = selectedAreaId;
   areaNote.textContent = '';
+  syncEcoregionInput();
 
   await loadFeed({ reset: true });
+}
+
+/** Reflect the selected area's `filters.ecoregion` into the standalone editor field. */
+function syncEcoregionInput() {
+  const area = areas.find((a) => a.id === selectedAreaId);
+  areaEcoregionEl.value = area?.filters?.ecoregion || '';
+  areaEcoregionNote.textContent = 'Needed for the yard-relevance lane below.';
 }
 
 function wireControls() {
@@ -75,6 +88,7 @@ function wireControls() {
     selectedAreaId = areaSelect.value || null;
     safeLocalStorageSet(AREA_STORAGE_KEY, selectedAreaId);
     updateAreaQueryParam();
+    syncEcoregionInput();
     if (selectedAreaId) loadFeed({ reset: true });
   });
 
@@ -86,12 +100,34 @@ function wireControls() {
     newAreaForm.hidden = true;
   });
   newAreaForm.addEventListener('submit', onCreateArea);
+  areaEcoregionSaveBtn.addEventListener('click', onSaveEcoregion);
 
   taxonFilter.addEventListener('change', renderItems);
+  laneFilter.addEventListener('change', () => loadFeed({ reset: true }));
   unreadOnlyEl.addEventListener('change', () => loadFeed({ reset: true }));
   includeDismissedEl.addEventListener('change', () => loadFeed({ reset: true }));
   refreshBtn.addEventListener('click', () => loadFeed({ reset: true }));
   loadMoreBtn.addEventListener('click', () => loadFeed({ reset: false }));
+}
+
+async function onSaveEcoregion() {
+  if (!selectedAreaId) return;
+  const area = areas.find((a) => a.id === selectedAreaId);
+  const ecoregion = areaEcoregionEl.value.trim();
+  try {
+    const response = await fetch(`/api/saved-areas/${encodeURIComponent(selectedAreaId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filters: { ...(area?.filters || {}), ecoregion } }),
+    });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
+    if (area) area.filters = body.area.filters;
+    areaEcoregionNote.textContent = 'Saved.';
+    if (laneFilter.value === 'yard-relevance') await loadFeed({ reset: true });
+  } catch (err) {
+    areaEcoregionNote.textContent = `Could not save ecoregion: ${err.message}`;
+  }
 }
 
 async function onCreateArea(evt) {
@@ -100,11 +136,12 @@ async function onCreateArea(evt) {
   const lat = Number(document.getElementById('newAreaLat').value);
   const lng = Number(document.getElementById('newAreaLng').value);
   const radiusMi = Number(document.getElementById('newAreaRadius').value);
+  const ecoregion = newAreaEcoregion.value.trim();
   try {
     const response = await fetch('/api/saved-areas', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, lat, lng, radiusMi }),
+      body: JSON.stringify({ name, lat, lng, radiusMi, filters: ecoregion ? { ecoregion } : {} }),
     });
     const body = await response.json();
     if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
@@ -145,6 +182,7 @@ async function loadFeed({ reset }) {
     unread_only: String(unreadOnlyEl.checked),
     include_dismissed: String(includeDismissedEl.checked),
   });
+  if (laneFilter.value) params.set('lane', laneFilter.value);
 
   let body;
   try {
@@ -160,6 +198,12 @@ async function loadFeed({ reset }) {
   total = body.total;
   items = reset ? body.items : items.concat(body.items);
   refreshTaxonOptions();
+  if (body.warning) {
+    feedListEl.innerHTML = `<li class="feed-empty">${escapeHtml(body.warning)}</li>`;
+    feedCountEl.textContent = '';
+    loadMoreBtn.hidden = true;
+    return;
+  }
   renderItems();
   loadMoreBtn.hidden = items.length >= total;
 }
@@ -202,6 +246,7 @@ function renderItem(item) {
   const title = escapeHtml(item.taxon_name || 'Unknown species');
   const common = item.common_name ? ` <span class="feed-item__common">(${escapeHtml(item.common_name)})</span>` : '';
   const link = item.url ? `<a href="${escapeHtml(item.url)}" target="_blank" rel="noopener">iNaturalist</a>` : '';
+  const relevance = item.relevance ? `<div class="feed-item__relevance">${describeRelevance(item.relevance)}</div>` : '';
 
   return `
     <li class="${classes.join(' ')}" data-observation-id="${item.observation_id}">
@@ -212,6 +257,7 @@ function renderItem(item) {
           ${escapeHtml(item.iconic_taxon || '')} · ${escapeHtml(item.observed_on || 'unknown date')}
           · ${escapeHtml(item.quality_grade || '')} ${link}
         </div>
+        ${relevance}
       </div>
       <div class="feed-item__actions">
         <button type="button" class="pill-button" data-action="toggle-read">
@@ -223,6 +269,18 @@ function renderItem(item) {
       </div>
     </li>
   `;
+}
+
+/** Facts only, no invented score — matches the yard-relevance lane's classifier (src/analysis/yardRelevance.js). */
+function describeRelevance(relevance) {
+  if (relevance.kind === 'missing-genus') {
+    return `Keystone genus <em>${escapeHtml(relevance.genus)}</em> — missing from the catalog.`;
+  }
+  if (relevance.kind === 'associated-fauna') {
+    const genera = relevance.matches.map((m) => `<em>${escapeHtml(m.genus)}</em> (missing)`).join(', ');
+    return `Documented to use: ${genera}.`;
+  }
+  return '';
 }
 
 async function onItemAction(evt) {
