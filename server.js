@@ -443,10 +443,18 @@ const server = http.createServer(async (req, res) => {
       // link (see savedAreasDb.js) — so it's looked up here rather than
       // threaded through as a query param the client could spoof or omit.
       let ecoregion;
+      let place;
       if (lane === 'yard-relevance') {
         const area = getSavedArea(openSavedAreasDb(), areaId);
         ecoregion = area?.filters?.ecoregion;
+      } else if (lane === 'rarity') {
+        // Same "look it up server-side" reasoning as ecoregion above — place
+        // is a per-saved-area fact (filters.place), not something the client
+        // should be trusted to pass directly.
+        const area = getSavedArea(openSavedAreasDb(), areaId);
+        place = area?.filters?.place;
       }
+      const rarityThresholdParam = url.searchParams.get('rarity_threshold');
       const eventsDb = openObservationEventsDb();
       const feedStateDb = openFeedStateDb();
       const result = queryFeed(eventsDb, feedStateDb, {
@@ -460,6 +468,8 @@ const server = http.createServer(async (req, res) => {
         pageSize: pageSizeParam != null ? Number(pageSizeParam) : undefined,
         lane,
         ecoregion,
+        place,
+        rarityThreshold: rarityThresholdParam != null ? Number(rarityThresholdParam) : undefined,
       });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));

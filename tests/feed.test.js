@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { openObservationEventsDb, upsertEvents } from '../tools/observationEventsDb.js';
 import { openFeedStateDb, setFeedState } from '../tools/feedState/feedStateDb.js';
 import { queryFeed } from '../tools/feedState/feed.js';
+import { openEcosystemDb, replaceTaxonRows } from '../tools/ecosystemIndexDb.js';
 
 function tmpDbs() {
   const dir = mkdtempSync(join(tmpdir(), 'feed-test-'));
@@ -162,6 +163,89 @@ test('queryFeed lane=invasive-monitor narrows to watchlist matches and flags fir
     assert.equal(first.relevance.kind, 'invasive-watchlist');
     assert.equal(first.relevance.firstSeenHere, true);
     assert.equal(later.relevance.firstSeenHere, false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('queryFeed lane=rarity narrows to events with a known local count and attaches it', () => {
+  const { eventsDb, feedStateDb, dir } = tmpDbs();
+  try {
+    const ecosystemDbPath = join(dir, 'ecosystem.db');
+    const ecosystemDb = openEcosystemDb(ecosystemDbPath);
+    replaceTaxonRows(ecosystemDb, 'Dallas, TX', 'Plantae', [
+      { taxon_name: 'Asclepias tuberosa', genus: 'Asclepias', radius_mi: 10, observation_count: 3, fetched_on: '2026-01-01', source: 'test' },
+    ]);
+
+    upsertEvents(eventsDb, [
+      { observation_id: 30, area_id: 'area-rare', taxon_name: 'Asclepias tuberosa', observed_on: '2026-01-01', ingested_at: 't1' },
+      { observation_id: 31, area_id: 'area-rare', taxon_name: 'Lupinus texensis', observed_on: '2026-01-02', ingested_at: 't1' },
+    ]);
+    const result = queryFeed(eventsDb, feedStateDb, {
+      areaId: 'area-rare',
+      lane: 'rarity',
+      place: 'Dallas, TX',
+      ecosystemDbPath,
+    });
+    assert.equal(result.total, 1);
+    assert.equal(result.items[0].observation_id, 30);
+    assert.equal(result.items[0].relevance.kind, 'local-scarcity');
+    assert.equal(result.items[0].relevance.observationCount, 3);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('queryFeed lane=rarity honors rarityThreshold', () => {
+  const { eventsDb, feedStateDb, dir } = tmpDbs();
+  try {
+    const ecosystemDbPath = join(dir, 'ecosystem.db');
+    const ecosystemDb = openEcosystemDb(ecosystemDbPath);
+    replaceTaxonRows(ecosystemDb, 'Dallas, TX', 'Plantae', [
+      { taxon_name: 'Asclepias tuberosa', genus: 'Asclepias', radius_mi: 10, observation_count: 50, fetched_on: '2026-01-01', source: 'test' },
+    ]);
+    upsertEvents(eventsDb, [
+      { observation_id: 40, area_id: 'area-rare2', taxon_name: 'Asclepias tuberosa', observed_on: '2026-01-01', ingested_at: 't1' },
+    ]);
+    const result = queryFeed(eventsDb, feedStateDb, {
+      areaId: 'area-rare2',
+      lane: 'rarity',
+      place: 'Dallas, TX',
+      ecosystemDbPath,
+      rarityThreshold: 10,
+    });
+    assert.equal(result.total, 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('queryFeed lane=rarity returns a warning when the area has no place', () => {
+  const { eventsDb, feedStateDb, dir } = tmpDbs();
+  try {
+    seedEvents(eventsDb);
+    const result = queryFeed(eventsDb, feedStateDb, { areaId: 'area-1', lane: 'rarity' });
+    assert.equal(result.total, 0);
+    assert.match(result.warning, /place/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('queryFeed lane=rarity returns a warning when the place has no local index', () => {
+  const { eventsDb, feedStateDb, dir } = tmpDbs();
+  try {
+    const ecosystemDbPath = join(dir, 'ecosystem-empty.db');
+    openEcosystemDb(ecosystemDbPath); // create empty file, no rows
+    seedEvents(eventsDb);
+    const result = queryFeed(eventsDb, feedStateDb, {
+      areaId: 'area-1',
+      lane: 'rarity',
+      place: 'Nowhere, TX',
+      ecosystemDbPath,
+    });
+    assert.equal(result.total, 0);
+    assert.match(result.warning, /No local species index/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

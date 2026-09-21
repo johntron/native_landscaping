@@ -56,6 +56,14 @@
           <button type="button" class="pill-button" id="areaEcoregionSave">Save</button>
           <span class="data-note" id="areaEcoregionNote">Needed for the yard-relevance lane below.</span>
         </div>
+        <div class="feed-areas__row" id="areaPlaceRow">
+          <span class="feed-controls__field">
+            <label for="areaPlace">Place</label>
+            <input type="text" id="areaPlace" placeholder="e.g. Dallas, TX" size="14" />
+          </span>
+          <button type="button" class="pill-button" id="areaPlaceSave">Save</button>
+          <span class="data-note" id="areaPlaceNote">Needed for the rarity lane below — must match a place already indexed by tools/fetch-ecosystem-index.mjs.</span>
+        </div>
         <p class="data-note" id="areaNote"></p>
       </section>
 
@@ -70,7 +78,12 @@
             <option value="">All observations</option>
             <option value="yard-relevance">Yard-relevant only</option>
             <option value="invasive-monitor">Invasive watchlist</option>
+            <option value="rarity">Rarity (local scarcity)</option>
           </select>
+        </span>
+        <span class="feed-controls__field" id="rarityThresholdField" hidden>
+          <label for="rarityThreshold">Max local count</label>
+          <input type="number" id="rarityThreshold" placeholder="any" min="0" step="1" size="4" />
         </span>
         <label class="feed-controls__check">
           <input type="checkbox" id="unreadOnly" checked />

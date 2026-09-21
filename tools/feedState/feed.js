@@ -16,6 +16,8 @@ import { classifyYardRelevance } from '../../src/analysis/yardRelevance.js';
 import { loadYardRelevanceTables } from './yardRelevanceTables.js';
 import { classifyInvasive } from '../../src/analysis/invasiveWatchlist.js';
 import { loadInvasiveWatchlist } from './invasiveWatchlistTable.js';
+import { classifyRarity } from '../../src/analysis/rarity.js';
+import { loadRarityTables } from './rarityTables.js';
 
 /** Earliest observed_on already logged for this area, per taxon_id — the fact backing "first seen here" on an invasive-monitor item. Built once per request from the area's full (unfiltered) event log, not per matched row. */
 function firstObservedOnByTaxon(eventsDb, areaId) {
@@ -49,6 +51,14 @@ function firstObservedOnByTaxon(eventsDb, areaId) {
  * @param {string} [options.ecoregion] required when lane is 'yard-relevance' — the saved
  *   area's `filters.ecoregion`. Missing/unmatched ecoregion returns zero items plus `warning`
  *   rather than throwing, matching computePlantMatches' "report, don't guess" bail-out.
+ * @param {string} [options.place] required when lane is 'rarity' — the saved area's
+ *   `filters.place`, matched against data/ecosystem.db's species_observations.place. Missing
+ *   place, or no local index for it, returns zero items plus `warning` the same way.
+ * @param {number} [options.rarityThreshold] when lane is 'rarity', drop events whose local
+ *   observation_count exceeds this; omitted, every event with a known local count is surfaced
+ *   (a facet, not an invented cutoff — see src/analysis/rarity.js).
+ * @param {string} [options.ecosystemDbPath] test-only override for which data/ecosystem.db
+ *   file the 'rarity' lane reads (see tools/feedState/rarityTables.js).
  */
 export function queryFeed(eventsDb, feedStateDb, options) {
   const {
@@ -98,6 +108,24 @@ export function queryFeed(eventsDb, feedStateDb, options) {
           const firstObservedOn = firstSeen.get(event.taxon_id) ?? null;
           return { ...event, relevance: { ...relevance, firstObservedOn, firstSeenHere: firstObservedOn === event.observed_on } };
         });
+    }
+  } else if (lane === 'rarity') {
+    // ecosystemDbPath is test-only — see rarityTables.js's dbPath override.
+    const tables = loadRarityTables({ place: options.place, dbPath: options.ecosystemDbPath });
+    if (!tables.ok) {
+      warning = tables.reason;
+      events = [];
+    } else {
+      events = events
+        .map((event) => ({
+          event,
+          relevance: classifyRarity(event, {
+            speciesObservations: tables.speciesObservations,
+            maxObservationCount: options.rarityThreshold,
+          }),
+        }))
+        .filter((row) => row.relevance)
+        .map(({ event, relevance }) => ({ ...event, relevance }));
     }
   }
 

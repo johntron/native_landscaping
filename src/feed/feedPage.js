@@ -22,9 +22,14 @@ const newAreaEcoregion = document.getElementById('newAreaEcoregion');
 const areaEcoregionEl = document.getElementById('areaEcoregion');
 const areaEcoregionSaveBtn = document.getElementById('areaEcoregionSave');
 const areaEcoregionNote = document.getElementById('areaEcoregionNote');
+const areaPlaceEl = document.getElementById('areaPlace');
+const areaPlaceSaveBtn = document.getElementById('areaPlaceSave');
+const areaPlaceNote = document.getElementById('areaPlaceNote');
 const areaNote = document.getElementById('areaNote');
 const taxonFilter = document.getElementById('taxonFilter');
 const laneFilter = document.getElementById('laneFilter');
+const rarityThresholdField = document.getElementById('rarityThresholdField');
+const rarityThresholdEl = document.getElementById('rarityThreshold');
 const unreadOnlyEl = document.getElementById('unreadOnly');
 const includeDismissedEl = document.getElementById('includeDismissed');
 const refreshBtn = document.getElementById('refreshFeed');
@@ -74,6 +79,7 @@ async function loadAreas() {
   areaSelect.value = selectedAreaId;
   areaNote.textContent = '';
   syncEcoregionInput();
+  syncPlaceInput();
 
   await loadFeed({ reset: true });
 }
@@ -85,12 +91,20 @@ function syncEcoregionInput() {
   areaEcoregionNote.textContent = 'Needed for the yard-relevance lane below.';
 }
 
+/** Reflect the selected area's `filters.place` into the standalone editor field. */
+function syncPlaceInput() {
+  const area = areas.find((a) => a.id === selectedAreaId);
+  areaPlaceEl.value = area?.filters?.place || '';
+  areaPlaceNote.textContent = 'Needed for the rarity lane below — must match a place already indexed by tools/fetch-ecosystem-index.mjs.';
+}
+
 function wireControls() {
   areaSelect.addEventListener('change', () => {
     selectedAreaId = areaSelect.value || null;
     safeLocalStorageSet(AREA_STORAGE_KEY, selectedAreaId);
     updateAreaQueryParam();
     syncEcoregionInput();
+    syncPlaceInput();
     if (selectedAreaId) loadFeed({ reset: true });
   });
 
@@ -103,10 +117,15 @@ function wireControls() {
   });
   newAreaForm.addEventListener('submit', onCreateArea);
   areaEcoregionSaveBtn.addEventListener('click', onSaveEcoregion);
+  areaPlaceSaveBtn.addEventListener('click', onSavePlace);
   pollAreaNowBtn.addEventListener('click', onPollAreaNow);
 
   taxonFilter.addEventListener('change', renderItems);
-  laneFilter.addEventListener('change', () => loadFeed({ reset: true }));
+  laneFilter.addEventListener('change', () => {
+    rarityThresholdField.hidden = laneFilter.value !== 'rarity';
+    loadFeed({ reset: true });
+  });
+  rarityThresholdEl.addEventListener('change', () => loadFeed({ reset: true }));
   unreadOnlyEl.addEventListener('change', () => loadFeed({ reset: true }));
   includeDismissedEl.addEventListener('change', () => loadFeed({ reset: true }));
   refreshBtn.addEventListener('click', () => loadFeed({ reset: true }));
@@ -154,6 +173,26 @@ async function onSaveEcoregion() {
     if (laneFilter.value === 'yard-relevance') await loadFeed({ reset: true });
   } catch (err) {
     areaEcoregionNote.textContent = `Could not save ecoregion: ${err.message}`;
+  }
+}
+
+async function onSavePlace() {
+  if (!selectedAreaId) return;
+  const area = areas.find((a) => a.id === selectedAreaId);
+  const place = areaPlaceEl.value.trim();
+  try {
+    const response = await fetch(`/api/saved-areas/${encodeURIComponent(selectedAreaId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filters: { ...(area?.filters || {}), place } }),
+    });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
+    if (area) area.filters = body.area.filters;
+    areaPlaceNote.textContent = 'Saved.';
+    if (laneFilter.value === 'rarity') await loadFeed({ reset: true });
+  } catch (err) {
+    areaPlaceNote.textContent = `Could not save place: ${err.message}`;
   }
 }
 
@@ -210,6 +249,9 @@ async function loadFeed({ reset }) {
     include_dismissed: String(includeDismissedEl.checked),
   });
   if (laneFilter.value) params.set('lane', laneFilter.value);
+  if (laneFilter.value === 'rarity' && rarityThresholdEl.value.trim() !== '') {
+    params.set('rarity_threshold', rarityThresholdEl.value.trim());
+  }
 
   let body;
   try {
@@ -310,6 +352,10 @@ function describeRelevance(relevance) {
   if (relevance.kind === 'invasive-watchlist') {
     const firstSeen = relevance.firstSeenHere ? ' — first time this area has logged it.' : '';
     return `On the invasive watchlist: ${escapeHtml(relevance.commonName)}.${firstSeen}`;
+  }
+  if (relevance.kind === 'local-scarcity') {
+    const count = relevance.observationCount;
+    return `Locally scarce: ${count} observation${count === 1 ? '' : 's'} recorded nearby.`;
   }
   return '';
 }
