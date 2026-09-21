@@ -27,6 +27,61 @@
   white-space: nowrap;
 }
 
+.fnct-detail {
+  position: relative;
+  margin-bottom: 1rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--rule-strong);
+  border-radius: 6px;
+  background: var(--surface-raised);
+}
+
+.fnct-detail__close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.6rem;
+  border: none;
+  background: none;
+  color: var(--ink-muted);
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.15rem 0.4rem;
+}
+
+.fnct-detail__close:hover {
+  color: var(--ink);
+}
+
+.fnct-detail__name {
+  font-style: italic;
+  font-size: 1.3rem;
+  margin: 0 1.5rem 0.2rem 0;
+  color: var(--ink-deep);
+}
+
+.fnct-detail__common {
+  margin: 0 0 0.75rem;
+  color: var(--ink-soft);
+}
+
+.fnct-detail__facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.15rem 0.75rem;
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+}
+
+.fnct-detail__facts dt {
+  color: var(--ink-muted);
+}
+
+.fnct-detail__facts dd {
+  margin: 0;
+  color: var(--ink);
+}
+
 .fnct-table {
   width: 100%;
   border-collapse: collapse;
@@ -48,6 +103,16 @@
   padding: 0.4rem 0.6rem;
   border-bottom: 1px solid var(--rule);
   vertical-align: top;
+}
+
+.fnct-table tbody tr {
+  cursor: pointer;
+}
+
+.fnct-table tbody tr:hover,
+.fnct-table tbody tr:focus {
+  background: var(--accent-wash);
+  outline: none;
 }
 
 .fnct-table__name {
