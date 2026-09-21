@@ -142,3 +142,27 @@ test('queryFeed lane=yard-relevance returns a warning when the area has no ecore
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// lane='invasive-monitor' against the real, checked-in ecology/invasive-watchlist.csv
+// (nl-1qy.3) — Pyrus calleryana (Callery pear) is a real watchlist entry; Ulmus
+// crassifolia (Cedar Elm, a North Texas native) is not.
+test('queryFeed lane=invasive-monitor narrows to watchlist matches and flags first-seen', () => {
+  const { eventsDb, feedStateDb, dir } = tmpDbs();
+  try {
+    upsertEvents(eventsDb, [
+      { observation_id: 20, area_id: 'area-inv', taxon_id: 501, taxon_name: 'Pyrus calleryana', observed_on: '2026-01-01', ingested_at: 't1' },
+      { observation_id: 21, area_id: 'area-inv', taxon_id: 501, taxon_name: 'Pyrus calleryana', observed_on: '2026-02-01', ingested_at: 't1' },
+      { observation_id: 22, area_id: 'area-inv', taxon_id: 900, taxon_name: 'Ulmus crassifolia', observed_on: '2026-01-15', ingested_at: 't1' },
+    ]);
+    const result = queryFeed(eventsDb, feedStateDb, { areaId: 'area-inv', lane: 'invasive-monitor' });
+    assert.equal(result.total, 2);
+    assert.deepEqual(result.items.map((i) => i.observation_id).sort(), [20, 21]);
+    const first = result.items.find((i) => i.observation_id === 20);
+    const later = result.items.find((i) => i.observation_id === 21);
+    assert.equal(first.relevance.kind, 'invasive-watchlist');
+    assert.equal(first.relevance.firstSeenHere, true);
+    assert.equal(later.relevance.firstSeenHere, false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

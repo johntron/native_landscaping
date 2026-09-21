@@ -10,7 +10,7 @@
         "ecoregion": "9"
       },
       "createdAt": "2026-09-21T01:51:01.076Z",
-      "updatedAt": "2026-09-21T02:03:26.339Z"
+      "updatedAt": "2026-09-21T02:20:36.310Z"
     },
     {
       "id": "2df60bd4-dfb5-40a0-b90d-c7548fc81956",
@@ -18,9 +18,11 @@
       "lat": 32.8,
       "lng": -96.8,
       "radiusMi": 0.5,
-      "filters": {},
+      "filters": {
+        "ecoregion": "9"
+      },
       "createdAt": "2026-09-21T01:52:14.207Z",
-      "updatedAt": "2026-09-21T01:52:14.207Z"
+      "updatedAt": "2026-09-21T02:20:32.466Z"
     }
   ]
 }

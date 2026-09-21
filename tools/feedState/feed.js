@@ -14,6 +14,19 @@ import { listEvents } from '../observationEventsDb.js';
 import { listFeedStates } from './feedStateDb.js';
 import { classifyYardRelevance } from '../../src/analysis/yardRelevance.js';
 import { loadYardRelevanceTables } from './yardRelevanceTables.js';
+import { classifyInvasive } from '../../src/analysis/invasiveWatchlist.js';
+import { loadInvasiveWatchlist } from './invasiveWatchlistTable.js';
+
+/** Earliest observed_on already logged for this area, per taxon_id — the fact backing "first seen here" on an invasive-monitor item. Built once per request from the area's full (unfiltered) event log, not per matched row. */
+function firstObservedOnByTaxon(eventsDb, areaId) {
+  const byTaxon = new Map();
+  for (const event of listEvents(eventsDb, { areaId })) {
+    if (event.taxon_id == null || !event.observed_on) continue;
+    const current = byTaxon.get(event.taxon_id);
+    if (!current || event.observed_on < current) byTaxon.set(event.taxon_id, event.observed_on);
+  }
+  return byTaxon;
+}
 
 /**
  * @param {object} eventsDb open handle from openObservationEventsDb
@@ -28,8 +41,11 @@ import { loadYardRelevanceTables } from './yardRelevanceTables.js';
  * @param {number} [options.page] 1-based, default 1
  * @param {number} [options.pageSize] default 50
  * @param {string} [options.lane] 'yard-relevance' narrows to events classifyYardRelevance
- *   finds relevant (see src/analysis/yardRelevance.js) and attaches `.relevance` to each
- *   item; omitted/other values return the plain all-observations feed.
+ *   finds relevant (see src/analysis/yardRelevance.js); 'invasive-monitor' narrows to events
+ *   matching ecology/invasive-watchlist.csv (see src/analysis/invasiveWatchlist.js), each
+ *   tagged with whether this is the first time that taxon was logged in this area. Either way
+ *   `.relevance` is attached to each surviving item; omitted/other values return the plain
+ *   all-observations feed.
  * @param {string} [options.ecoregion] required when lane is 'yard-relevance' — the saved
  *   area's `filters.ecoregion`. Missing/unmatched ecoregion returns zero items plus `warning`
  *   rather than throwing, matching computePlantMatches' "report, don't guess" bail-out.
@@ -67,6 +83,21 @@ export function queryFeed(eventsDb, feedStateDb, options) {
         .map((event) => ({ event, relevance: classifyYardRelevance(event, tables) }))
         .filter((row) => row.relevance)
         .map(({ event, relevance }) => ({ ...event, relevance }));
+    }
+  } else if (lane === 'invasive-monitor') {
+    const watchlist = loadInvasiveWatchlist();
+    if (!watchlist.size) {
+      warning = 'No invasive watchlist configured (ecology/invasive-watchlist.csv is missing or empty).';
+      events = [];
+    } else {
+      const firstSeen = firstObservedOnByTaxon(eventsDb, areaId);
+      events = events
+        .map((event) => ({ event, relevance: classifyInvasive(event, { watchlist }) }))
+        .filter((row) => row.relevance)
+        .map(({ event, relevance }) => {
+          const firstObservedOn = firstSeen.get(event.taxon_id) ?? null;
+          return { ...event, relevance: { ...relevance, firstObservedOn, firstSeenHere: firstObservedOn === event.observed_on } };
+        });
     }
   }
 

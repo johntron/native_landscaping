@@ -280,6 +280,10 @@ function describeRelevance(relevance) {
     const genera = relevance.matches.map((m) => `<em>${escapeHtml(m.genus)}</em> (missing)`).join(', ');
     return `Documented to use: ${genera}.`;
   }
+  if (relevance.kind === 'invasive-watchlist') {
+    const firstSeen = relevance.firstSeenHere ? ' — first time this area has logged it.' : '';
+    return `On the invasive watchlist: ${escapeHtml(relevance.commonName)}.${firstSeen}`;
+  }
   return '';
 }
 
