@@ -53,6 +53,20 @@ function orderFor(field) {
   return FIELD_ORDER[field] ?? DEFAULT_ORDER;
 }
 
+/**
+ * Whether `source` is named primary or fallback for `field`, per FIELD_ORDER
+ * above — falling through to DEFAULT_ORDER for a field with no explicit row,
+ * the same lookup resolveField itself uses via orderFor. Used by
+ * claims_dry_run's recrawl mode (07 §3.6) to answer "which currently-missing
+ * (species, field) pairs is this source eligible to fill" against a caller-
+ * supplied field set (claims_coverage's allClaimedFields — the field
+ * universe lives there, not here), without exposing FIELD_ORDER itself as
+ * mutable module state.
+ */
+export function isSourceEligibleForField(source, field) {
+  return orderFor(field).includes(source);
+}
+
 // A manual correction outranks every source in the table by construction
 // (09 §2.1) — it is what a human already applied this rule to and decided
 // the table's default answer was wrong for this one species. iNaturalist is

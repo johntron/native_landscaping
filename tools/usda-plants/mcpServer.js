@@ -19,6 +19,15 @@ import { rowsToCsv } from "./csvWriter.js";
 import { INTERMEDIATE_CSV_COLUMNS } from "./mapCharacteristics.js";
 import { probeUsda, USDA_TARGET_FIELDS } from "./probe.js";
 import { openProbeCache } from "./probeCache.js";
+import { openClaimsStore } from "../claims/claimsStore.js";
+import {
+  claimsCoverage,
+  claimsProvenance,
+  claimsConflicts,
+  claimsSources,
+  claimsCorrect,
+  claimsDryRun,
+} from "../claims/claimsTools.js";
 
 const client = new UsdaClient({ requestDelayMs: 1000 });
 
@@ -28,6 +37,16 @@ let probeCache = null;
 function getProbeCache() {
   if (!probeCache) probeCache = openProbeCache();
   return probeCache;
+}
+
+// Opened lazily on the first claims_* call, same reasoning as probeCache
+// above — a server start that never queries the claim store shouldn't touch
+// data/claims.db (which may not exist yet in a fresh checkout: nl-scx.1's
+// rebuild.js is what creates it).
+let claimsDb = null;
+function getClaimsDb() {
+  if (!claimsDb) claimsDb = openClaimsStore();
+  return claimsDb;
 }
 
 const server = new McpServer({ name: "usda-plants", version: "1.0.0" });
@@ -190,6 +209,169 @@ server.registerTool(
     inputSchema: {},
   },
   async () => textResult(USDA_TARGET_FIELDS.map(({ key, label, note }) => ({ key, label, note }))),
+);
+
+// ---------------------------------------------------------------------------
+// Phase 2 (nl-scx.9): six claims_* tools querying data/claims.db, per
+// docs/data-acquisition/07-mcp-introspection.md §3. Extending this server
+// rather than adding a second one is §1's explicit decision — the server
+// keeps the name "usda-plants" even though these tools have nothing
+// USDA-specific about them (see §1's reasoning). Five read tools, one write
+// tool (claims_correct) — see 07 §4.
+// ---------------------------------------------------------------------------
+
+server.registerTool(
+  "claims_coverage",
+  {
+    title: "Claim coverage: asserted / review / unknown / missing, per species and field",
+    description:
+      "Coverage over the claim store (07 §3.1 / 05 §4's completeness and Missing queries in one " +
+      "tool). For each (species, field) in scope: status is 'asserted' (a real, usable value), " +
+      "'review' (a claim exists but needs a human), 'unknown' (a source was checked and had " +
+      "nothing), or 'missing' (no source has been checked at all) — 'unknown' and 'missing' are " +
+      "kept distinct on purpose, they mean different next actions. A cultivar with no own claim " +
+      "reports its parent species' status, not 'missing' (04 §2.3). Omit both arguments for a " +
+      "full coverage sweep across every species and every field any claim has ever been written " +
+      "for (there is no separate 'required fields' list to scope against yet).",
+    inputSchema: {
+      field: z.string().optional().describe("Limit to one field; omit for every field ever claimed"),
+      species: z.string().optional().describe("USDA symbol or taxa.id; omit for every species"),
+    },
+  },
+  async ({ field, species }) => {
+    try {
+      return textResult(claimsCoverage(getClaimsDb(), { field, species }));
+    } catch (err) {
+      return { ...textResult(`Error: ${err.message}`), isError: true };
+    }
+  },
+);
+
+server.registerTool(
+  "claims_provenance",
+  {
+    title: "Every claim for one (species, field), and which one wins",
+    description:
+      "Answers 'what did each source actually say for this field, and why did one win' (07 §3.2). " +
+      "Returns every claim row ever written for (species, field) — including superseded ones, so " +
+      "the full history is visible — plus the precedence resolution over the currently-active " +
+      "claims (nl-scx.5's rule) and the reason it won. resolved is null when there is nothing " +
+      "active to resolve, or when the active claims are tied and routed to review.",
+    inputSchema: {
+      species: z.string().describe("USDA symbol or taxa.id"),
+      field: z.string().describe("Claim field, e.g. sun_pref"),
+    },
+  },
+  async ({ species, field }) => {
+    try {
+      return textResult(claimsProvenance(getClaimsDb(), { species, field }));
+    } catch (err) {
+      return { ...textResult(`Error: ${err.message}`), isError: true };
+    }
+  },
+);
+
+server.registerTool(
+  "claims_conflicts",
+  {
+    title: "The adjudication queue: review rows and disagreeing sources",
+    description:
+      "The human review queue (07 §3.3 / 05 §4's Adjudication metric): every (species, field) with " +
+      "either a status='review' claim or two or more active asserted claims that disagree in " +
+      "value. Both causes are bucketed together deliberately — both need a human, whether the " +
+      "disagreement is source-vs-source or a screen that already fired on one source. Read-only: " +
+      "this only surfaces conflicts, it never resolves one — call claims_correct for that.",
+    inputSchema: {
+      field: z.string().optional().describe("Limit to one field; omit for every field"),
+    },
+  },
+  async ({ field }) => {
+    try {
+      return textResult(claimsConflicts(getClaimsDb(), { field }));
+    } catch (err) {
+      return { ...textResult(`Error: ${err.message}`), isError: true };
+    }
+  },
+);
+
+server.registerTool(
+  "claims_sources",
+  {
+    title: "Per-source health: claim counts, freshness, and license grant",
+    description:
+      "Per source (07 §3.4): claimCount, claimCountByField (also answers 'what would re-crawling " +
+      "source X touch' without the dry-run machinery), retrievedAtMin/Max and avgAgeDays (05 §4's " +
+      "freshness query), and the license grant that source's claims were extracted under " +
+      "(grant/condition/citationRequired) — null when the source carries no license row (e.g. " +
+      "manual-correction).",
+    inputSchema: {
+      source: z.string().optional().describe("Limit to one source, e.g. npin; omit for every source"),
+    },
+  },
+  async ({ source }) => {
+    try {
+      return textResult(claimsSources(getClaimsDb(), { source }));
+    } catch (err) {
+      return { ...textResult(`Error: ${err.message}`), isError: true };
+    }
+  },
+);
+
+server.registerTool(
+  "claims_correct",
+  {
+    title: "Write a manual correction (the only write tool in this surface)",
+    description:
+      "Appends a correction to manual-corrections.tsv at the repo root (07 §3.5) — it does NOT " +
+      "write data/claims.db directly, so the effect is only visible after the next rebuild " +
+      "(tools/claims/rebuild.js); claims_provenance will not reflect this correction immediately. " +
+      "reason and author are required with no optional path around either — a correction without " +
+      "both is indistinguishable from a silent edit (04 §3.4). A manual correction outranks every " +
+      "other source by construction (09 §2.1), so it takes effect on the next rebuild regardless " +
+      "of what else exists for this (species, field).",
+    inputSchema: {
+      species: z.string().describe("USDA symbol or taxa.id"),
+      field: z.string().describe("Claim field, e.g. sun_pref"),
+      value: z.string().describe("The corrected value"),
+      reason: z.string().describe("Required. Why the correction is right — this becomes the claim's citation."),
+      author: z.string().describe("Required. Who is making this correction."),
+    },
+  },
+  async ({ species, field, value, reason, author }) => {
+    try {
+      return textResult(claimsCorrect(getClaimsDb(), { species, field, value, reason, author }));
+    } catch (err) {
+      return { ...textResult(`Error: ${err.message}`), isError: true };
+    }
+  },
+);
+
+server.registerTool(
+  "claims_dry_run",
+  {
+    title: "Preview an export or a re-crawl without writing anything",
+    description:
+      "Two modes (07 §3.6). 'export': diffs what a plants.csv export would produce right now " +
+      "against the committed file — added (a field newly populated), changed ({species, field, " +
+      "from, to}), newlyExcluded (a value that would drop out because its license grant no longer " +
+      "covers it). 'recrawl' (requires source): does NOT perform a live fetch — no per-source " +
+      "fetch pipeline is wired into this tool, and fabricating what a fresh value would say would " +
+      "violate this store's invent-nothing rule. It reports only the subset 07 §3.6 itself calls " +
+      "answerable without a live fetch: currently-missing (species, field) pairs this source is " +
+      "eligible to fill, per precedence.js. 'changed' and 'newlyExcluded' are always empty in " +
+      "recrawl mode, with a note explaining why. Read-only either way — this never writes.",
+    inputSchema: {
+      mode: z.enum(["export", "recrawl"]).describe('"export" or "recrawl"'),
+      source: z.string().optional().describe('Required when mode is "recrawl", e.g. npin'),
+    },
+  },
+  async ({ mode, source }) => {
+    try {
+      return textResult(claimsDryRun(getClaimsDb(), { mode, source }));
+    } catch (err) {
+      return { ...textResult(`Error: ${err.message}`), isError: true };
+    }
+  },
 );
 
 const transport = new StdioServerTransport();
