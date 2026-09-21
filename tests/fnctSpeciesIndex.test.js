@@ -54,6 +54,32 @@ test('known false-positive headings from ordinary prose are filtered out', () =>
   });
 });
 
+test('life form, duration and nativity are controlled-vocabulary tags, not excerpts', () => {
+  const alba = byName('Quercus alba');
+  assert.equal(alba.life_form, 'tree');
+  assert.equal(alba.nativity_status, 'asserted');
+  assert.equal(alba.nativity_value, 'native');
+
+  const ragweed = byName('Ambrosia artemisiifolia');
+  assert.equal(ragweed.duration, 'annual');
+
+  const validLifeForms = new Set(['', 'subshrub', 'tree', 'shrub', 'vine', 'grass', 'sedge', 'fern', 'herb']);
+  const validDurations = new Set(['', 'annual', 'biennial', 'perennial']);
+  const validStatuses = new Set(['asserted', 'review']);
+  rows.forEach((r) => {
+    assert.ok(validLifeForms.has(r.life_form), `unexpected life_form "${r.life_form}" on ${r.scientific_name}`);
+    assert.ok(validDurations.has(r.duration), `unexpected duration "${r.duration}" on ${r.scientific_name}`);
+    assert.ok(validStatuses.has(r.nativity_status), `unexpected nativity_status "${r.nativity_status}" on ${r.scientific_name}`);
+  });
+});
+
+test('a known introduced species is flagged introduced, not silently native', () => {
+  const okra = byName('Abelmoschus esculentus');
+  assert.ok(okra, 'Abelmoschus esculentus missing');
+  assert.equal(okra.nativity_status, 'asserted');
+  assert.equal(okra.nativity_value, 'introduced');
+});
+
 test('genus, species and scientific_name stay consistent', () => {
   rows.forEach((r) => {
     const expected =

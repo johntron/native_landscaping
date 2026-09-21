@@ -36,7 +36,7 @@
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { loadCorpusVolumes, matchHeadingBlock, DEFAULT_CORPUS_DIR } from './claims/floraCorpus.js';
-import { buildTreatmentIndex } from './claims/floraNativity.js';
+import { buildTreatmentIndex, classifyNativity } from './claims/floraNativity.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const OUT_CSV = `${ROOT}ecology/fnct-species-index.csv`;
@@ -134,6 +134,83 @@ function titleCase(s) {
   return s.toLowerCase().replace(/(^|[\s-])([a-zà-ÿ])/g, (_, sep, ch) => sep + ch.toUpperCase());
 }
 
+// The heading clause ("Genus species Author, (etymology), COMMON NAMES.")
+// ends at the same period-then-Title-Case boundary COMMON_NAME_RE looks for
+// — reuse that boundary to find where the flora's *description* starts, so
+// life-form/duration/habitat scanning never reads the name/author/common-name
+// clause as if it were descriptive prose.
+const DESCRIPTION_START_RE = /\.\s+(?=[A-ZÀ-Þ][a-zà-ÿ])/;
+function descriptionBody(flatText) {
+  const match = DESCRIPTION_START_RE.exec(flatText);
+  return match ? flatText.slice(match.index + match[0].length) : flatText;
+}
+
+// LICENSING NOTE (NOTICE.md): every function below reduces the flora's prose
+// to a controlled-vocabulary TAG plus a page citation — it never stores or
+// emits the sentence it found the tag in. A "tree" or "perennial" flag is a
+// fact about the plant, the same as the nativity classification below; the
+// words the flora used to say so stay in the flora.
+
+const LIFE_FORM_TERMS = [
+  ['subshrub', /\bsubshrubs?\b/i],
+  ['tree', /\btrees?\b/i],
+  ['shrub', /\bshrubs?\b/i],
+  ['vine', /\bvines?\b/i],
+  ['grass', /\bgrass(es)?\b/i],
+  ['sedge', /\bsedges?\b/i],
+  ['fern', /\bferns?\b/i],
+  ['herb', /\bherbs?\b|\bherbaceous\b/i],
+];
+
+const DURATION_TERMS = [
+  ['annual', /\bannuals?\b/i],
+  ['biennial', /\bbiennials?\b/i],
+  ['perennial', /\bperennials?\b/i],
+];
+
+// Life form and duration are almost always stated in the treatment's opening
+// sentence ("Perennial vine...", "Unarmed shrub or tree to ca. 5 m..."), so
+// bound the scan there — an unbounded scan would occasionally pick up an
+// unrelated later mention (e.g. a range note comparing this species to a
+// "shrubby" relative) and misattribute it as this species' own form.
+const FORM_SCAN_WINDOW = 400;
+
+function earliestTermMatch(text, terms) {
+  let best = null;
+  for (const [label, re] of terms) {
+    const match = re.exec(text);
+    if (match && (!best || match.index < best.index)) best = { label, index: match.index };
+  }
+  return best?.label ?? '';
+}
+
+function extractLifeForm(descriptionText) {
+  return earliestTermMatch(descriptionText.slice(0, FORM_SCAN_WINDOW), LIFE_FORM_TERMS);
+}
+
+function extractDuration(descriptionText) {
+  return earliestTermMatch(descriptionText.slice(0, FORM_SCAN_WINDOW), DURATION_TERMS);
+}
+
+// Habitat, unlike life form, is often stated well into the treatment (after
+// the physical description, range and flowering time), so these tags scan
+// the whole description — a coarse, fixed vocabulary of habitat categories,
+// not the habitat sentence itself. A treatment can and often does carry more
+// than one (e.g. "woods" and "streamside").
+const HABITAT_TAGS = [
+  ['woods', /\bwood(?:s|land)?s?\b/i],
+  ['prairie', /\bprairies?\b/i],
+  ['wetland', /\b(?:marsh|swamp|bog|wetland)/i],
+  ['streamside', /\b(?:stream|creek|river|pond|lake)/i],
+  ['rocky-limestone', /\b(?:rocky|limestone|granite|bluff)/i],
+  ['sandy', /\bsand(?:y)?\b/i],
+  ['disturbed-ground', /\b(?:disturbed|roadsides?|waste ground|cultivated|fields?)\b/i],
+];
+
+function extractHabitatTags(descriptionText) {
+  return HABITAT_TAGS.filter(([, re]) => re.test(descriptionText)).map(([label]) => label);
+}
+
 function escapeCell(value) {
   const str = String(value ?? '');
   return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
@@ -150,6 +227,9 @@ function main() {
     if (!parsed) continue;
     if (!looksLikeAuthorCitation(treatment.text, parsed)) continue;
     const commonNames = extractCommonNames(treatment.text);
+    const flat = treatment.text.replace(/([A-ZÀ-Þa-zà-ÿ])-\n([A-ZÀ-Þa-zà-ÿ])/g, '$1$2').replace(/\s+/g, ' ').trim();
+    const description = descriptionBody(flat);
+    const nativity = classifyNativity(treatment.text);
     rows.push({
       genus: parsed.genus,
       species: parsed.species,
@@ -157,6 +237,11 @@ function main() {
       infra_epithet: parsed.infraEpithet ?? '',
       scientific_name: scientificName(parsed),
       common_names: commonNames.join('; '),
+      life_form: extractLifeForm(description),
+      duration: extractDuration(description),
+      habitat_tags: extractHabitatTags(description).join('; '),
+      nativity_status: nativity.status,
+      nativity_value: nativity.value ?? '',
       fnct_page: treatment.page,
       source: `${CITATION_AUTHORS}, p. ${treatment.page}`,
     });
@@ -169,12 +254,20 @@ function main() {
   if (check) {
     ['Quercus alba', 'Ambrosia artemisiifolia', 'Quercus sinuata var. breviloba', 'Quercus sinuata'].forEach((name) => {
       const row = rows.find((r) => r.scientific_name === name);
-      console.log(`  ${name}: ${row ? row.common_names || '(no common name)' : '(not found)'}`);
+      console.log(
+        row
+          ? `  ${name}: ${row.common_names || '(no common name)'} | ${row.life_form || '?'}/${row.duration || '?'} | ${row.nativity_status}/${row.nativity_value} | habitat: ${row.habitat_tags || '(none)'}`
+          : `  ${name}: (not found)`,
+      );
     });
     return;
   }
 
-  const header = ['genus', 'species', 'rank', 'infra_epithet', 'scientific_name', 'common_names', 'fnct_page', 'source'];
+  const header = [
+    'genus', 'species', 'rank', 'infra_epithet', 'scientific_name', 'common_names',
+    'life_form', 'duration', 'habitat_tags', 'nativity_status', 'nativity_value',
+    'fnct_page', 'source',
+  ];
   const out = [header.join(',')];
   rows.forEach((r) => out.push(header.map((k) => escapeCell(r[k])).join(',')));
   writeFileSync(OUT_CSV, out.join('\n') + '\n');

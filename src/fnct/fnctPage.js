@@ -159,6 +159,10 @@ async function showDetail(row) {
     ['Rank', row.rank === 'species' ? 'Species' : row.rank === 'variety' ? 'Variety' : 'Subspecies'],
     ['Genus', row.genus],
     row.infra_epithet ? ['Infraspecific epithet', row.infra_epithet] : null,
+    row.life_form ? ['Life form', titleCaseWords(row.life_form)] : null,
+    row.duration ? ['Duration', titleCaseWords(row.duration)] : null,
+    row.habitat_tags ? ['Habitat', row.habitat_tags.split('; ').map(titleCaseWords).join(', ')] : null,
+    ['Native/introduced', nativityLabel(row)],
     ['Flora page', row.fnct_page],
   ].filter(Boolean)));
   detailSourceEl.textContent = row.source;
@@ -245,6 +249,12 @@ const INTERACTION_LABELS = {
 
 function interactionLabel(type) {
   return INTERACTION_LABELS[type] || type;
+}
+
+function nativityLabel(row) {
+  if (row.nativity_status === 'asserted' && row.nativity_value === 'introduced') return 'Introduced';
+  if (row.nativity_status === 'asserted' && row.nativity_value === 'native') return 'Native';
+  return 'Review flagged by the flora (mixed origin language) — see the flora page';
 }
 
 function titleCaseWords(s) {
