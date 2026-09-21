@@ -108,6 +108,18 @@
 .fnct-detail__facts dd {
   margin: 0;
   color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.fnct-color-swatch {
+  display: inline-block;
+  width: 0.85em;
+  height: 0.85em;
+  border-radius: 3px;
+  border: 1px solid var(--rule-strong);
+  flex: none;
 }
 
 .fnct-detail__section {

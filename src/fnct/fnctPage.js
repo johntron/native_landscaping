@@ -3,38 +3,13 @@ import { searchFnctResults } from './fnctSearch.js';
 import { matchCatalogRow } from './fnctCatalog.js';
 import { findKeystoneRow, lepidopteraHostsForGenus, interactionsForGenus } from './fnctEcology.js';
 import { aggregateGenusRows, filterGenusSpecies } from './fnctGenus.js';
+import { CATALOG_FIELD_LABELS, isEmptyCatalogValue, formatCatalogValue } from './fnctFormat.js';
 
 const INDEX_CSV = 'ecology/fnct-species-index.csv';
 const CATALOG_CSV = 'plants.csv';
 const HOST_GENERA_CSV = 'ecology/host-genera.csv';
 const LEP_HOSTS_CSV = 'ecology/fnct-lepidoptera-hosts.csv';
 const INTERACTIONS_CSV = 'ecology/plant-animal-interactions.csv';
-
-// Every plants.csv column worth showing verbatim, in display order. `id` and
-// `botanical_name` are covered elsewhere in the panel (the row link / the
-// scientific name heading) so they're left out here.
-const CATALOG_FIELD_LABELS = [
-  ['common_name', 'Catalog name'],
-  ['growth_shape', 'Growth shape'],
-  ['growing_season_months', 'Growing season'],
-  ['flowering_season_months', 'Bloom season'],
-  ['flower_color', 'Flower color'],
-  ['foliage_color_spring', 'Foliage (spring)'],
-  ['foliage_color_summer', 'Foliage (summer)'],
-  ['foliage_color_fall', 'Foliage (fall)'],
-  ['foliage_color_winter', 'Foliage (winter)'],
-  ['sun_pref', 'Sun'],
-  ['water_pref', 'Water'],
-  ['soil_pref', 'Soil'],
-  ['width_ft', 'Width (ft)'],
-  ['height_ft', 'Height (ft)'],
-  ['inflorescence', 'Inflorescence'],
-  ['flower_count_hint', 'Flower count'],
-  ['flower_zone', 'Flower zone'],
-  ['fruit_color', 'Fruit color'],
-  ['fruit_season_months', 'Fruit season'],
-  ['fruit_load', 'Fruit load'],
-];
 
 const searchEl = document.getElementById('fnctSearch');
 const bodyEl = document.getElementById('fnctBody');
@@ -201,8 +176,10 @@ async function showDetail(row) {
 
   const catalogMatch = matchCatalogRow(row, catalogRows);
   if (catalogMatch) {
-    catalogNoteEl.textContent = `Already in this project's plant catalog (id: ${catalogMatch.id}).`;
-    const facts = CATALOG_FIELD_LABELS.filter(([field]) => catalogMatch[field]).map(([field, label]) => [label, catalogMatch[field]]);
+    catalogNoteEl.textContent = `Already in this project's plant catalog as "${catalogMatch.common_name}".`;
+    const facts = CATALOG_FIELD_LABELS
+      .filter(([field]) => field !== 'common_name' && !isEmptyCatalogValue(catalogMatch[field] ?? ''))
+      .map(([field, label, kind]) => [label, formatCatalogValue(kind, catalogMatch[field])]);
     catalogFactsEl.replaceChildren(...factRows(facts));
   } else {
     catalogNoteEl.textContent = "Not in this project's plant catalog yet.";
@@ -260,7 +237,7 @@ async function showDetail(row) {
       ul.className = 'fnct-detail__list';
       ul.replaceChildren(...group.animals.map((a) => {
         const li = document.createElement('li');
-        li.textContent = a.common ? `${a.species} — ${a.common}` : a.species;
+        li.textContent = a.common ? `${a.species} — ${titleCaseWords(a.common)}` : a.species;
         return li;
       }));
       wrap.appendChild(ul);
@@ -366,7 +343,15 @@ function factRows(pairs) {
     const dt = document.createElement('dt');
     dt.textContent = label;
     const dd = document.createElement('dd');
-    dd.textContent = value;
+    if (value && typeof value === 'object' && 'swatch' in value) {
+      const swatch = document.createElement('span');
+      swatch.className = 'fnct-color-swatch';
+      swatch.style.backgroundColor = value.swatch;
+      dd.appendChild(swatch);
+      dd.appendChild(document.createTextNode(value.text));
+    } else {
+      dd.textContent = value;
+    }
     return [dt, dd];
   });
 }
