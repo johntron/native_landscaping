@@ -10,6 +10,17 @@
         ],
         "matcher": ""
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cmd=$(jq -r '.tool_input.command // empty'); if printf '%s' \"$cmd\" | grep -Eq '(^|[;&|]|[[:space:]])rm([[:space:]]|$)' && printf '%s' \"$cmd\" | grep -q 'data/'; then jq -n --arg reason \"Blocked: this Bash command runs rm and references data/, which holds hand-curated SQLite state (e.g. data/saved-areas.db) that is not fully rebuildable from code. Inspect the file (e.g. sqlite3 <file> 'select count(*) from <table>') and confirm with the user before deleting anything there; prefer moving it aside (mv to a scratch dir) over rm.\" '{hookSpecificOutput:{hookEventName:\"PreToolUse\",permissionDecision:\"deny\",permissionDecisionReason:$reason}}'; fi"
+          }
+        ]
+      }
     ]
   },
   "enabledMcpjsonServers": ["codegraph"],

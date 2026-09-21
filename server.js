@@ -30,6 +30,7 @@ import {
   createSavedArea,
   updateSavedArea,
   deleteSavedArea,
+  exportSavedAreasJson,
 } from './tools/savedAreas/savedAreasDb.js';
 import { openObservationEventsDb, listEvents } from './tools/observationEventsDb.js';
 import { openFeedStateDb, setFeedState } from './tools/feedState/feedStateDb.js';
@@ -350,6 +351,7 @@ const server = http.createServer(async (req, res) => {
       if (req.method === 'POST' && !areaId) {
         const body = await collectPayload(req, { requirePlants: false });
         const area = createSavedArea(db, body);
+        exportSavedAreasJson(db);
         console.log(`Saved area '${area.id}' created ('${area.name}')`);
         res.writeHead(201, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ area }));
@@ -358,6 +360,7 @@ const server = http.createServer(async (req, res) => {
       if (req.method === 'PUT' && areaId) {
         const body = await collectPayload(req, { requirePlants: false });
         const area = updateSavedArea(db, areaId, body);
+        exportSavedAreasJson(db);
         console.log(`Saved area '${area.id}' updated`);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ area }));
@@ -370,6 +373,7 @@ const server = http.createServer(async (req, res) => {
           res.end(JSON.stringify({ error: `No saved area with id "${areaId}"` }));
           return;
         }
+        exportSavedAreasJson(db);
         console.log(`Saved area '${areaId}' deleted`);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ id: areaId, deleted: true }));

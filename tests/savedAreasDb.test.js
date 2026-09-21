@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -11,11 +11,16 @@ import {
   updateSavedArea,
   deleteSavedArea,
   validateSavedAreaInput,
+  exportSavedAreasJson,
+  restoreSavedAreasFromExport,
 } from '../tools/savedAreas/savedAreasDb.js';
 
+function tempDir() {
+  return mkdtempSync(join(tmpdir(), 'saved-areas-test-'));
+}
+
 function tempDbPath() {
-  const dir = mkdtempSync(join(tmpdir(), 'saved-areas-test-'));
-  return join(dir, 'saved-areas.db');
+  return join(tempDir(), 'saved-areas.db');
 }
 
 function openTempDb() {
@@ -157,4 +162,57 @@ test('createSavedArea surfaces validation errors rather than inserting a bad row
   const db = openTempDb();
   assert.throws(() => createSavedArea(db, { name: '', lat: 0, lng: 0, radiusMi: 1 }), /non-empty "name"/);
   assert.deepEqual(listSavedAreas(db), []);
+});
+
+test('exportSavedAreasJson writes every area with coordinates rounded to 1 decimal', () => {
+  const db = openTempDb();
+  const exportPath = join(tempDir(), 'saved-areas.export.json');
+  createSavedArea(db, { name: 'Backyard', lat: 32.78412, lng: -96.79961, radiusMi: 5 });
+
+  exportSavedAreasJson(db, exportPath);
+
+  const written = JSON.parse(readFileSync(exportPath, 'utf8'));
+  assert.equal(written.areas.length, 1);
+  assert.equal(written.areas[0].name, 'Backyard');
+  // Rounded to ~11km precision — not the full address-level lat/lng, since
+  // this file is meant to be safe to commit in a public repo.
+  assert.equal(written.areas[0].lat, 32.8);
+  assert.equal(written.areas[0].lng, -96.8);
+});
+
+test('exportSavedAreasJson on an empty db writes an empty areas array', () => {
+  const db = openTempDb();
+  const exportPath = join(tempDir(), 'saved-areas.export.json');
+  exportSavedAreasJson(db, exportPath);
+  assert.deepEqual(JSON.parse(readFileSync(exportPath, 'utf8')), { areas: [] });
+});
+
+test('restoreSavedAreasFromExport re-inserts rows by id, at rounded precision', () => {
+  const sourceDb = openTempDb();
+  const exportPath = join(tempDir(), 'saved-areas.export.json');
+  const created = createSavedArea(sourceDb, { name: 'Backyard', lat: 32.78412, lng: -96.79961, radiusMi: 5 });
+  exportSavedAreasJson(sourceDb, exportPath);
+
+  const freshDb = openTempDb();
+  const result = restoreSavedAreasFromExport(freshDb, exportPath);
+
+  assert.deepEqual(result, { total: 1, restored: 1 });
+  const restored = getSavedArea(freshDb, created.id);
+  assert.equal(restored.name, 'Backyard');
+  assert.equal(restored.lat, 32.8);
+  assert.equal(restored.lng, -96.8);
+});
+
+test('restoreSavedAreasFromExport does not clobber a row already present for that id', () => {
+  const db = openTempDb();
+  const exportPath = join(tempDir(), 'saved-areas.export.json');
+  const created = createSavedArea(db, { name: 'Original', lat: 1, lng: 1, radiusMi: 1 });
+  exportSavedAreasJson(db, exportPath);
+
+  // Simulate the row having moved on since the snapshot was taken.
+  updateSavedArea(db, created.id, { name: 'Renamed since snapshot' });
+
+  const result = restoreSavedAreasFromExport(db, exportPath);
+  assert.deepEqual(result, { total: 1, restored: 0 });
+  assert.equal(getSavedArea(db, created.id).name, 'Renamed since snapshot');
 });

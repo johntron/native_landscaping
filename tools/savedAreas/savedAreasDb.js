@@ -26,12 +26,25 @@
 //   created_at    TEXT    ISO 8601, set on insert, never changed
 //   updated_at    TEXT    ISO 8601, set on insert and every update
 import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 
 export const DEFAULT_PATH = fileURLToPath(new URL('../../data/saved-areas.db', import.meta.url));
+
+// This project's git repo is PUBLIC (see the .gitignore note on
+// projects/*/location.json), so unlike that file, this export is safe to
+// commit only because lat/lng are rounded to 1 decimal place (~11km) before
+// they're written — enough to recover which region an area covered, not
+// enough to pinpoint a specific address. `id` is included since it's the
+// join key the observation-event log's area_id column depends on, and
+// losing it on restore would silently orphan any already-fetched events.
+export const EXPORT_PATH = fileURLToPath(new URL('../../data/saved-areas.export.json', import.meta.url));
+
+function roundCoord(n) {
+  return Math.round(n * 10) / 10;
+}
 
 export function openSavedAreasDb(path = DEFAULT_PATH) {
   mkdirSync(dirname(path), { recursive: true });
@@ -185,4 +198,63 @@ export function updateSavedArea(db, id, patch) {
 export function deleteSavedArea(db, id) {
   const result = db.prepare('DELETE FROM saved_areas WHERE id = ?').run(id);
   return result.changes > 0;
+}
+
+/**
+ * Snapshot every saved area to a git-trackable JSON file (coordinates
+ * rounded per EXPORT_PATH's note above), so an accidental loss of
+ * saved-areas.db — a bad `rm`, a corrupted WAL file, a wiped disk — has a
+ * recoverable record of what areas existed, even though restoring from it
+ * loses exact placement and re-adopts existing observation-event history
+ * only because `id` round-trips. Callers decide when this runs (the
+ * /api/saved-areas route calls it after every create/update/delete); it is
+ * NOT wired into the CRUD functions themselves so tests using a scratch db
+ * never write to the real project path.
+ */
+export function exportSavedAreasJson(db, path = EXPORT_PATH) {
+  const areas = listSavedAreas(db).map((a) => ({
+    id: a.id,
+    name: a.name,
+    lat: roundCoord(a.lat),
+    lng: roundCoord(a.lng),
+    radiusMi: a.radiusMi,
+    filters: a.filters,
+    createdAt: a.createdAt,
+    updatedAt: a.updatedAt,
+  }));
+  writeFileSync(path, `${JSON.stringify({ areas }, null, 2)}\n`);
+}
+
+/**
+ * Manual recovery path for exportSavedAreasJson's snapshot — not called
+ * automatically anywhere (an unattended silent restore could clobber
+ * changes made after the snapshot without anyone noticing). Run by hand
+ * after a real loss, e.g. `node -e "..."` or a future CLI wrapper.
+ * INSERT OR IGNORE keyed on id: an id already present in `db` (including
+ * one re-created with different lat/lng since the snapshot) is left alone
+ * rather than overwritten, so this is safe to run against a db that still
+ * has some rows. Recovered rows keep only ~11km-precision coordinates —
+ * exportSavedAreasJson never had the exact ones to begin with.
+ */
+export function restoreSavedAreasFromExport(db, path = EXPORT_PATH) {
+  const { areas } = JSON.parse(readFileSync(path, 'utf8'));
+  const insert = db.prepare(
+    `INSERT OR IGNORE INTO saved_areas (id, name, lat, lng, radius_mi, filters_json, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  let restored = 0;
+  for (const a of areas) {
+    const result = insert.run(
+      a.id,
+      a.name,
+      a.lat,
+      a.lng,
+      a.radiusMi,
+      JSON.stringify(a.filters || {}),
+      a.createdAt,
+      a.updatedAt
+    );
+    if (result.changes > 0) restored += 1;
+  }
+  return { total: areas.length, restored };
 }

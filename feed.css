@@ -1,0 +1,146 @@
+.feed-page {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 1rem 1.5rem 3rem;
+}
+
+.feed-areas {
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.feed-areas__row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.feed-areas__new[hidden] {
+  display: none;
+}
+
+.feed-areas__new {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.6rem;
+}
+
+.feed-areas__new input {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--rule-strong);
+  border-radius: 4px;
+  background: var(--surface-card);
+  color: var(--ink);
+}
+
+.feed-areas__new input[type="number"] {
+  width: 9rem;
+}
+
+.feed-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.feed-controls__check {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.9rem;
+  color: var(--ink-muted);
+}
+
+.feed-count {
+  margin-left: auto;
+  color: var(--ink-faint);
+  font-size: 0.9rem;
+}
+
+.feed-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.feed-item {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--surface-card);
+}
+
+.feed-item--read {
+  opacity: 0.6;
+}
+
+.feed-item--dismissed {
+  border-style: dashed;
+}
+
+.feed-item__thumb {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex: none;
+  background: var(--rule-cool);
+}
+
+.feed-item__body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.feed-item__title {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.feed-item__common {
+  color: var(--ink-muted);
+  font-weight: 400;
+}
+
+.feed-item__meta {
+  color: var(--ink-faint);
+  font-size: 0.85rem;
+  margin-top: 0.15rem;
+}
+
+.feed-item__meta a {
+  color: inherit;
+}
+
+.feed-item__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex: none;
+}
+
+.feed-item__actions .pill-button {
+  font-size: 0.8rem;
+  padding: 0.3rem 0.7rem;
+}
+
+.feed-empty {
+  color: var(--ink-faint);
+  padding: 1rem 0;
+}
+
+.feed-footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 1rem;
+}
