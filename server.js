@@ -32,6 +32,8 @@ import {
   deleteSavedArea,
 } from './tools/savedAreas/savedAreasDb.js';
 import { openObservationEventsDb, listEvents } from './tools/observationEventsDb.js';
+import { openFeedStateDb, setFeedState } from './tools/feedState/feedStateDb.js';
+import { queryFeed } from './tools/feedState/feed.js';
 
 const envPort = Number(process.env.PORT);
 const PORT = Number.isFinite(envPort) ? envPort : 8000;
@@ -408,6 +410,67 @@ const server = http.createServer(async (req, res) => {
       });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ area_id: areaId, rows }));
+    } catch (err) {
+      console.error(err);
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // Paginated, filterable observation feed joined with per-item read/dismissed
+  // state (nl-1qy.1.3) — what nl-1qy.1.4's feed UI reads from. Built on top of
+  // the same event log as /api/observation-events above, but that route stays
+  // as the thin raw-log window; this one adds the read-state join and paging
+  // the UI actually needs.
+  if (pathname === '/api/feed' && req.method === 'GET') {
+    try {
+      const areaId = url.searchParams.get('area_id');
+      if (!areaId) {
+        throw new Error('Missing required area_id query param');
+      }
+      const taxonIdParam = url.searchParams.get('taxon_id');
+      const pageParam = url.searchParams.get('page');
+      const pageSizeParam = url.searchParams.get('page_size');
+      const eventsDb = openObservationEventsDb();
+      const feedStateDb = openFeedStateDb();
+      const result = queryFeed(eventsDb, feedStateDb, {
+        areaId,
+        taxonId: taxonIdParam != null ? Number(taxonIdParam) : undefined,
+        sinceObservedOn: url.searchParams.get('since_observed_on') || undefined,
+        sinceIngestedAt: url.searchParams.get('since_ingested_at') || undefined,
+        unreadOnly: url.searchParams.get('unread_only') === 'true',
+        includeDismissed: url.searchParams.get('include_dismissed') === 'true',
+        page: pageParam != null ? Number(pageParam) : undefined,
+        pageSize: pageSizeParam != null ? Number(pageSizeParam) : undefined,
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+    } catch (err) {
+      console.error(err);
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // Mark one observation's read and/or dismissed state within one area.
+  // Body: { areaId, observationId, read?, dismissed? } — only the flags
+  // present are changed (see setFeedState's PATCH semantics).
+  if (pathname === '/api/feed/state' && req.method === 'POST') {
+    try {
+      const body = await collectPayload(req, { requirePlants: false });
+      const { areaId, observationId } = body;
+      if (!areaId || observationId == null) {
+        throw new Error('Body requires "areaId" and "observationId"');
+      }
+      const feedStateDb = openFeedStateDb();
+      const state = setFeedState(feedStateDb, observationId, areaId, {
+        read: body.read,
+        dismissed: body.dismissed,
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ state }));
     } catch (err) {
       console.error(err);
       res.writeHead(400, { 'Content-Type': 'application/json' });
