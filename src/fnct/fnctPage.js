@@ -1,9 +1,39 @@
 import { fetchCsv, parseCsv } from '../data/csvLoader.js';
 import { filterFnctRows } from './fnctSearch.js';
 import { matchCatalogRow } from './fnctCatalog.js';
+import { findKeystoneRow, lepidopteraHostsForGenus, interactionsForGenus } from './fnctEcology.js';
 
 const INDEX_CSV = 'ecology/fnct-species-index.csv';
 const CATALOG_CSV = 'plants.csv';
+const HOST_GENERA_CSV = 'ecology/host-genera.csv';
+const LEP_HOSTS_CSV = 'ecology/fnct-lepidoptera-hosts.csv';
+const INTERACTIONS_CSV = 'ecology/plant-animal-interactions.csv';
+
+// Every plants.csv column worth showing verbatim, in display order. `id` and
+// `botanical_name` are covered elsewhere in the panel (the row link / the
+// scientific name heading) so they're left out here.
+const CATALOG_FIELD_LABELS = [
+  ['common_name', 'Catalog name'],
+  ['growth_shape', 'Growth shape'],
+  ['growing_season_months', 'Growing season'],
+  ['flowering_season_months', 'Bloom season'],
+  ['flower_color', 'Flower color'],
+  ['foliage_color_spring', 'Foliage (spring)'],
+  ['foliage_color_summer', 'Foliage (summer)'],
+  ['foliage_color_fall', 'Foliage (fall)'],
+  ['foliage_color_winter', 'Foliage (winter)'],
+  ['sun_pref', 'Sun'],
+  ['water_pref', 'Water'],
+  ['soil_pref', 'Soil'],
+  ['width_ft', 'Width (ft)'],
+  ['height_ft', 'Height (ft)'],
+  ['inflorescence', 'Inflorescence'],
+  ['flower_count_hint', 'Flower count'],
+  ['flower_zone', 'Flower zone'],
+  ['fruit_color', 'Fruit color'],
+  ['fruit_season_months', 'Fruit season'],
+  ['fruit_load', 'Fruit load'],
+];
 
 const searchEl = document.getElementById('fnctSearch');
 const bodyEl = document.getElementById('fnctBody');
@@ -14,11 +44,19 @@ const detailCloseEl = document.getElementById('fnctDetailClose');
 const detailNameEl = document.getElementById('fnctDetailName');
 const detailCommonEl = document.getElementById('fnctDetailCommon');
 const detailFactsEl = document.getElementById('fnctDetailFacts');
-const detailCatalogEl = document.getElementById('fnctDetailCatalog');
 const detailSourceEl = document.getElementById('fnctDetailSource');
+const catalogNoteEl = document.getElementById('fnctDetailCatalogNote');
+const catalogFactsEl = document.getElementById('fnctDetailCatalogFacts');
+const keystoneSectionEl = document.getElementById('fnctDetailKeystoneSection');
+const keystoneTextEl = document.getElementById('fnctDetailKeystoneText');
+const lepSectionEl = document.getElementById('fnctDetailLepSection');
+const lepListEl = document.getElementById('fnctDetailLepList');
+const interactionsSectionEl = document.getElementById('fnctDetailInteractionsSection');
+const interactionsEl = document.getElementById('fnctDetailInteractions');
 
 let rows = [];
 let catalogRows = [];
+let ecologyData = null; // lazy-loaded: { hostGenera, lepHosts, interactions }
 
 async function init() {
   try {
@@ -34,6 +72,9 @@ async function init() {
   render(searchEl.value);
   searchEl.addEventListener('input', () => render(searchEl.value));
   detailCloseEl.addEventListener('click', closeDetail);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !detailEl.hidden) closeDetail();
+  });
   window.addEventListener('hashchange', openFromHash);
   openFromHash();
 }
@@ -89,11 +130,27 @@ function openFromHash() {
 
 function closeDetail() {
   detailEl.hidden = true;
+  document.body.style.overflow = '';
   if (window.location.hash) history.replaceState(null, '', window.location.pathname + window.location.search);
 }
 
-function showDetail(row) {
+async function loadEcologyData() {
+  if (ecologyData) return ecologyData;
+  const [hostGenera, lepHosts, interactions] = await Promise.all([
+    fetchCsv(HOST_GENERA_CSV).then(parseCsv).catch(() => []),
+    fetchCsv(LEP_HOSTS_CSV).then(parseCsv).catch(() => []),
+    fetchCsv(INTERACTIONS_CSV).then(parseCsv).catch(() => []),
+  ]);
+  ecologyData = { hostGenera, lepHosts, interactions };
+  return ecologyData;
+}
+
+async function showDetail(row) {
   detailEl.hidden = false;
+  document.body.style.overflow = 'hidden';
+  detailEl.scrollTop = 0;
+  detailEl.querySelector('.fnct-overlay__content').scrollTop = 0;
+
   detailNameEl.textContent = row.scientific_name;
   const names = row.common_names.split('; ').filter(Boolean);
   detailCommonEl.textContent = names.length ? names.join(', ') : 'No common name given by the flora.';
@@ -102,19 +159,96 @@ function showDetail(row) {
     ['Rank', row.rank === 'species' ? 'Species' : row.rank === 'variety' ? 'Variety' : 'Subspecies'],
     ['Genus', row.genus],
     row.infra_epithet ? ['Infraspecific epithet', row.infra_epithet] : null,
+    ['Flora page', row.fnct_page],
   ].filter(Boolean)));
+  detailSourceEl.textContent = row.source;
 
   const catalogMatch = matchCatalogRow(row, catalogRows);
-  detailCatalogEl.textContent = catalogMatch
-    ? `In this project's plant catalog as "${catalogMatch.common_name}" — ${[catalogMatch.growth_shape, catalogMatch.sun_pref, catalogMatch.water_pref].filter(Boolean).join(', ')}.`
-    : "Not in this project's plant catalog yet.";
+  if (catalogMatch) {
+    catalogNoteEl.textContent = `Already in this project's plant catalog (id: ${catalogMatch.id}).`;
+    const facts = CATALOG_FIELD_LABELS.filter(([field]) => catalogMatch[field]).map(([field, label]) => [label, catalogMatch[field]]);
+    catalogFactsEl.replaceChildren(...factRows(facts));
+  } else {
+    catalogNoteEl.textContent = "Not in this project's plant catalog yet.";
+    catalogFactsEl.replaceChildren();
+  }
 
-  detailSourceEl.innerHTML = '';
-  const link = document.createElement('span');
-  link.textContent = row.source;
-  detailSourceEl.appendChild(link);
+  keystoneSectionEl.hidden = true;
+  lepSectionEl.hidden = true;
+  interactionsSectionEl.hidden = true;
 
-  detailEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  const { hostGenera, lepHosts, interactions } = await loadEcologyData();
+  // A hash change (user clicked another row) could have fired while this
+  // fetch was in flight — bail rather than paint a stale species' ecology
+  // data onto the now-current heading.
+  if (detailNameEl.textContent !== row.scientific_name) return;
+
+  const keystoneRow = findKeystoneRow(row.genus, hostGenera);
+  if (keystoneRow) {
+    const parts = [];
+    if (keystoneRow.lep_host_species) parts.push(`${keystoneRow.lep_host_species} lepidoptera species use ${row.genus} as a larval host`);
+    if (keystoneRow.bee_specialist_species) parts.push(`${keystoneRow.bee_specialist_species} specialist bee species`);
+    if (keystoneRow.larval_hosts) parts.push(keystoneRow.larval_hosts);
+    if (parts.length) {
+      keystoneSectionEl.hidden = false;
+      keystoneTextEl.textContent = `${parts.join('; ')} (NWF, EPA Level I ecoregion 9).`;
+    }
+  }
+
+  const hosts = lepidopteraHostsForGenus(row.genus, lepHosts);
+  if (hosts.length) {
+    lepSectionEl.hidden = false;
+    lepListEl.replaceChildren(...hosts.map((h) => {
+      const li = document.createElement('li');
+      li.textContent = h.species;
+      if (h.common) {
+        const span = document.createElement('span');
+        span.className = 'fnct-detail__list-common';
+        span.textContent = ` — ${titleCaseWords(h.common)}`;
+        li.appendChild(span);
+      }
+      return li;
+    }));
+  }
+
+  const groups = interactionsForGenus(row.genus, interactions);
+  if (groups.length) {
+    interactionsSectionEl.hidden = false;
+    interactionsEl.replaceChildren(...groups.map((group) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'fnct-detail__interaction-group';
+      const h4 = document.createElement('h4');
+      h4.textContent = `${interactionLabel(group.type)} (${group.animals.length})`;
+      wrap.appendChild(h4);
+      const ul = document.createElement('ul');
+      ul.className = 'fnct-detail__list';
+      ul.replaceChildren(...group.animals.map((a) => {
+        const li = document.createElement('li');
+        li.textContent = a.common ? `${a.species} — ${a.common}` : a.species;
+        return li;
+      }));
+      wrap.appendChild(ul);
+      return wrap;
+    }));
+  }
+}
+
+const INTERACTION_LABELS = {
+  eatenBy: 'Eaten by',
+  hostOf: 'Larval host of',
+  pollinatedBy: 'Pollinated by',
+  flowersVisitedBy: 'Flowers visited by',
+  visitedBy: 'Visited by',
+  visitsFlowersOf: 'Visits flowers of',
+  pollinator: 'Pollinator of',
+};
+
+function interactionLabel(type) {
+  return INTERACTION_LABELS[type] || type;
+}
+
+function titleCaseWords(s) {
+  return s.toLowerCase().replace(/(^|\s)([a-z])/g, (_, sep, ch) => sep + ch.toUpperCase());
 }
 
 function factRows(pairs) {

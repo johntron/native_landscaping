@@ -38,14 +38,6 @@
         />
         <span class="fnct-count" id="fnctCount"></span>
       </div>
-      <aside class="fnct-detail" id="fnctDetail" hidden>
-        <button type="button" class="fnct-detail__close" id="fnctDetailClose" aria-label="Close">×</button>
-        <h2 class="fnct-detail__name" id="fnctDetailName"></h2>
-        <p class="fnct-detail__common" id="fnctDetailCommon"></p>
-        <dl class="fnct-detail__facts" id="fnctDetailFacts"></dl>
-        <p class="data-note" id="fnctDetailCatalog"></p>
-        <p class="data-note" id="fnctDetailSource"></p>
-      </aside>
       <table class="fnct-table">
         <thead>
           <tr>
@@ -58,6 +50,42 @@
       </table>
       <p class="data-note" id="fnctEmpty" hidden>No matches.</p>
     </main>
+
+    <div class="fnct-overlay" id="fnctDetail" hidden>
+      <div class="fnct-overlay__bar">
+        <button type="button" class="fnct-overlay__close" id="fnctDetailClose">
+          <span aria-hidden="true">×</span> Close
+        </button>
+      </div>
+      <div class="fnct-overlay__content">
+        <h2 class="fnct-detail__name" id="fnctDetailName"></h2>
+        <p class="fnct-detail__common" id="fnctDetailCommon"></p>
+        <dl class="fnct-detail__facts" id="fnctDetailFacts"></dl>
+        <p class="data-note" id="fnctDetailSource"></p>
+
+        <section class="fnct-detail__section">
+          <h3>In your plant catalog</h3>
+          <p class="data-note" id="fnctDetailCatalogNote"></p>
+          <dl class="fnct-detail__facts" id="fnctDetailCatalogFacts"></dl>
+        </section>
+
+        <section class="fnct-detail__section" id="fnctDetailKeystoneSection" hidden>
+          <h3>Keystone genus (EPA ecoregion 9 — continental, not nc-TX-specific)</h3>
+          <p id="fnctDetailKeystoneText"></p>
+        </section>
+
+        <section class="fnct-detail__section" id="fnctDetailLepSection" hidden>
+          <h3>Larval hosts recorded in the flora (Appendix Ten)</h3>
+          <ul class="fnct-detail__list" id="fnctDetailLepList"></ul>
+        </section>
+
+        <section class="fnct-detail__section" id="fnctDetailInteractionsSection" hidden>
+          <h3>Animal interactions (GlobalBioticInteractions, genus-level)</h3>
+          <div id="fnctDetailInteractions"></div>
+        </section>
+      </div>
+    </div>
+
     <script type="module" src="src/fnct/fnctPage.js"></script>
   </body>
 </html>
