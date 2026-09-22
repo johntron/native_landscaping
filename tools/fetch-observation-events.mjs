@@ -84,6 +84,21 @@ const REQUEST_DELAY_MS = 1500;
 // actually reached, not from what was written.
 const MAX_PAGES_PER_AREA = 25;
 
+// probeCache (tools/usda-plants/probeCache.js) has no TTL — it's built for
+// static reference data ("a probe cold-starts from nothing but the network").
+// /v1/observations is the opposite: a live, time-varying feed query, and the
+// cache key is the full URL including id_above. Caching it produced a real
+// bug (nl found 2026-09-21): the first poll after an area's cursor seed can
+// legitimately return zero results (nothing observed yet in the few seconds
+// between the seed request and this one); that empty response then gets
+// served back forever, because a zero-result page never advances the cursor,
+// so every later poll re-requests the exact same URL and replays the same
+// stale empty answer instead of ever hitting the network again — silently
+// freezing the feed for that area. So /observations always bypasses the
+// cache: fetchWithBackoff's own retry/backoff plus the inter-request sleep
+// below are the only rate-limiting it gets, same as every real network call.
+const NEVER_CACHE_ENDPOINTS = new Set(['observations']);
+
 /**
  * The rate-limited, cached iNaturalist JSON fetcher every call in this
  * module goes through. Factored out so a caller that isn't this file's own
@@ -92,6 +107,7 @@ const MAX_PAGES_PER_AREA = 25;
  */
 export function createFetchJson(probeCache, { force = false } = {}) {
   return async function fetchJson(endpoint, url) {
+    const bypassCache = force || NEVER_CACHE_ENDPOINTS.has(endpoint);
     const { raw, cached: fromCache } = await cached(
       probeCache,
       'inaturalist',
@@ -102,7 +118,7 @@ export function createFetchJson(probeCache, { force = false } = {}) {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return response.json();
       },
-      { force }
+      { force: bypassCache }
     );
     if (!fromCache) await sleep(REQUEST_DELAY_MS);
     return raw;

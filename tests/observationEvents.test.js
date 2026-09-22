@@ -16,7 +16,9 @@ import {
   mapObservationEntry,
   fetchAreaObservations,
   fetchCurrentMaxObservationId,
+  createFetchJson,
 } from '../tools/fetch-observation-events.mjs';
+import { openProbeCache } from '../tools/usda-plants/probeCache.js';
 
 function tmpDb() {
   const dir = mkdtempSync(join(tmpdir(), 'observation-events-test-'));
@@ -321,4 +323,66 @@ test('fetchCurrentMaxObservationId returns null for an area with no matching obs
   const area = { id: 'area-1', name: 'Area 1', lat: 0, lng: 0, radius_mi: 1 };
   const fetchJson = async () => ({ results: [] });
   assert.equal(await fetchCurrentMaxObservationId({ area, fetchJson }), null);
+});
+
+// Regression for the bug found 2026-09-21: a zero-result /v1/observations
+// page never advances the poll cursor, so a naive cache keyed on the request
+// URL (id_above included) would replay that same empty answer on every later
+// poll forever, silently freezing a saved area's feed even once real new
+// observations exist. createFetchJson must never cache the 'observations'
+// endpoint, no matter how many times the identical URL is requested.
+test('createFetchJson never caches the observations endpoint, even on a repeated identical URL', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'probe-cache-test-'));
+  const probeCache = openProbeCache(join(dir, 'probe-cache.db'));
+  try {
+    const originalFetch = globalThis.fetch;
+    let networkCalls = 0;
+    globalThis.fetch = async () => {
+      networkCalls += 1;
+      const body = networkCalls === 1 ? { results: [] } : { results: [{ id: 1 }] };
+      return { ok: true, status: 200, headers: new Map(), json: async () => body };
+    };
+    try {
+      const fetchJson = createFetchJson(probeCache);
+      const url = new URL('https://api.inaturalist.org/v1/observations?id_above=402170804');
+
+      const first = await fetchJson('observations', url);
+      const second = await fetchJson('observations', url);
+
+      assert.deepEqual(first.results, []);
+      assert.deepEqual(second.results, [{ id: 1 }]);
+      assert.equal(networkCalls, 2, 'the second identical request must hit the network, not a cached empty reply');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('createFetchJson still caches other iNaturalist endpoints (e.g. taxa facts / place lookups)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'probe-cache-test-'));
+  const probeCache = openProbeCache(join(dir, 'probe-cache.db'));
+  try {
+    const originalFetch = globalThis.fetch;
+    let networkCalls = 0;
+    globalThis.fetch = async () => {
+      networkCalls += 1;
+      return { ok: true, status: 200, headers: new Map(), json: async () => ({ results: [{ id: networkCalls }] }) };
+    };
+    try {
+      const fetchJson = createFetchJson(probeCache);
+      const url = new URL('https://api.inaturalist.org/v1/places/nearby?swlat=0');
+
+      const first = await fetchJson('places/nearby', url);
+      const second = await fetchJson('places/nearby', url);
+
+      assert.deepEqual(first, second);
+      assert.equal(networkCalls, 1, 'a repeated request for a non-live endpoint should be served from cache');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
