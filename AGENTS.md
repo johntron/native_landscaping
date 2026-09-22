@@ -1,5 +1,27 @@
 # Backyard Seasonal Visualization – AGENTS Guide
 
+## Mission
+
+> **Build power tools that help homeowners, landscapers, and the people who advise
+> them plant wisely: choosing, placing, and caring for plants so each yard fits its
+> site and supports the wildlife and habitat around it.**
+
+What that commits every tool to:
+
+- **Wiser decisions, not more information.** A tool earns its place when it changes
+  what someone plants, where they plant it, or how they look after it: a species to
+  choose, an invasive to skip, leaves left on the ground, a rights packet an HOA will
+  accept. Showing information that leads to no decision is not the goal.
+- **Grounded in what is observed and cited.** Local flora, nearby iNaturalist
+  records, and published sources come before models and scores. A claim the evidence
+  cannot carry does not ship, and our own judgement calls are labelled as ours.
+- **Integrate with the landscape around the yard.** A yard is one patch in a larger
+  network of neighbouring yards, creeks, parks and remnant prairie. The tools show
+  what is already nearby and what the yard is missing, without inventing a
+  connectivity score.
+- **Local first.** Start with the Blackland Prairie / North Central Texas and get it
+  right before going wider.
+
 You are working on a small web app that helps homeowners and landscapers
 visualize a **native, seasonally dynamic landscape** in a specific backyard.
 
