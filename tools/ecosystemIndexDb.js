@@ -77,6 +77,14 @@ export function replaceTaxonRows(db, place, iconicTaxon, rows) {
   }
 }
 
+/** Distinct places this index already has rows for — lets a caller (the saved-areas UI, nl-5nm) tell "indexed" from "not indexed yet" for a place name it's suggesting, before the rarity lane silently returns zero items for it. */
+export function listPlaces(db) {
+  return db
+    .prepare('SELECT DISTINCT place FROM species_observations ORDER BY place')
+    .all()
+    .map((row) => row.place);
+}
+
 export function listSpeciesObservations(db, { place, iconicTaxon } = {}) {
   const clauses = [];
   const params = [];

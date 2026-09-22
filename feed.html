@@ -36,34 +36,34 @@
             <select id="areaSelect"><option value="">Loading areas…</option></select>
           </span>
           <button type="button" class="pill-button" id="newAreaToggle">+ New area</button>
+          <button type="button" class="pill-button" id="editAreaToggle">Edit area</button>
           <button type="button" class="pill-button" id="pollAreaNow">Fetch new observations</button>
           <span class="data-note" id="pollAreaNote"></span>
         </div>
-        <form class="feed-areas__new" id="newAreaForm" hidden>
-          <input type="text" id="newAreaName" placeholder="Name" required />
-          <input type="number" id="newAreaLat" placeholder="Lat" step="any" min="-90" max="90" required />
-          <input type="number" id="newAreaLng" placeholder="Lng" step="any" min="-180" max="180" required />
-          <input type="number" id="newAreaRadius" placeholder="Radius (mi)" step="any" min="0.1" required />
-          <input type="text" id="newAreaEcoregion" placeholder="Ecoregion (e.g. 9)" />
-          <button type="submit" class="pill-button">Save area</button>
-          <button type="button" class="pill-button pill-button--danger" id="newAreaCancel">Cancel</button>
+        <p class="data-note" id="areaSummary"></p>
+        <form class="feed-areas__new" id="areaForm" hidden>
+          <input type="text" id="areaFormName" placeholder="Name" required />
+          <span class="feed-controls__field">
+            <input type="text" id="areaFormAddress" placeholder="Address, city, or ZIP" />
+            <button type="button" class="pill-button" id="areaFormGeocode">Look up</button>
+          </span>
+          <span class="data-note" id="areaFormGeocodeNote"></span>
+          <input type="number" id="areaFormLat" placeholder="Lat" step="any" min="-90" max="90" required />
+          <input type="number" id="areaFormLng" placeholder="Lng" step="any" min="-180" max="180" required />
+          <input type="number" id="areaFormRadius" placeholder="Radius (mi)" step="any" min="0.1" required />
+          <span class="feed-controls__field">
+            <label for="areaFormEcoregion">Ecoregion</label>
+            <input type="text" id="areaFormEcoregion" placeholder="e.g. 9" size="4" />
+          </span>
+          <span class="data-note" id="areaFormEcoregionNote">Needed for the yard-relevance lane below.</span>
+          <span class="feed-controls__field">
+            <label for="areaFormPlace">Place</label>
+            <input type="text" id="areaFormPlace" placeholder="e.g. Dallas, TX" size="14" />
+          </span>
+          <span class="data-note" id="areaFormPlaceNote">Needed for the rarity lane below — must match a place already indexed by tools/fetch-ecosystem-index.mjs.</span>
+          <button type="submit" class="pill-button" id="areaFormSubmit">Save area</button>
+          <button type="button" class="pill-button pill-button--danger" id="areaFormCancel">Cancel</button>
         </form>
-        <div class="feed-areas__row" id="areaEcoregionRow">
-          <span class="feed-controls__field">
-            <label for="areaEcoregion">Ecoregion</label>
-            <input type="text" id="areaEcoregion" placeholder="e.g. 9" size="4" />
-          </span>
-          <button type="button" class="pill-button" id="areaEcoregionSave">Save</button>
-          <span class="data-note" id="areaEcoregionNote">Needed for the yard-relevance lane below.</span>
-        </div>
-        <div class="feed-areas__row" id="areaPlaceRow">
-          <span class="feed-controls__field">
-            <label for="areaPlace">Place</label>
-            <input type="text" id="areaPlace" placeholder="e.g. Dallas, TX" size="14" />
-          </span>
-          <button type="button" class="pill-button" id="areaPlaceSave">Save</button>
-          <span class="data-note" id="areaPlaceNote">Needed for the rarity lane below — must match a place already indexed by tools/fetch-ecosystem-index.mjs.</span>
-        </div>
         <p class="data-note" id="areaNote"></p>
       </section>
 

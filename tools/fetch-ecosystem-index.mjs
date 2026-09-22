@@ -40,6 +40,7 @@ import { openEcosystemDb, replaceTaxonRows } from './ecosystemIndexDb.js';
 // instead of a fresh ~25-request crawl; --force bypasses it for a real refresh.
 import { openProbeCache, cached } from './usda-plants/probeCache.js';
 import { isExcludedEstablishment } from '../src/analysis/establishmentMeans.js';
+import { geocodeAddress } from './geocode.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 
@@ -209,23 +210,8 @@ async function resolveCoordinates(location, probeCache, force) {
   if (!location.address) {
     throw new Error('location.json has neither lat/lng nor an address');
   }
-  const { raw: results } = await cached(
-    probeCache,
-    'nominatim',
-    'search',
-    location.address,
-    async () => {
-      const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(location.address)}`;
-      const response = await fetch(url, {
-        headers: { 'User-Agent': 'native-landscaping-app (ecology data fetch)' },
-      });
-      if (!response.ok) throw new Error(`Geocoding failed: HTTP ${response.status}`);
-      return response.json();
-    },
-    { force }
-  );
-  if (!results.length) throw new Error(`Geocoding found nothing for "${location.address}"`);
-  return { lat: Number(results[0].lat), lng: Number(results[0].lon) };
+  const { lat, lng } = await geocodeAddress(location.address, { probeCache, force });
+  return { lat, lng };
 }
 
 // iNaturalist per-taxon "listed_taxa" (native/introduced/invasive/etc,

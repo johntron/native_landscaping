@@ -14,18 +14,29 @@ const PAGE_SIZE = 25;
 
 const areaSelect = document.getElementById('areaSelect');
 const newAreaToggle = document.getElementById('newAreaToggle');
+const editAreaToggle = document.getElementById('editAreaToggle');
 const pollAreaNowBtn = document.getElementById('pollAreaNow');
 const pollAreaNote = document.getElementById('pollAreaNote');
-const newAreaForm = document.getElementById('newAreaForm');
-const newAreaCancel = document.getElementById('newAreaCancel');
-const newAreaEcoregion = document.getElementById('newAreaEcoregion');
-const areaEcoregionEl = document.getElementById('areaEcoregion');
-const areaEcoregionSaveBtn = document.getElementById('areaEcoregionSave');
-const areaEcoregionNote = document.getElementById('areaEcoregionNote');
-const areaPlaceEl = document.getElementById('areaPlace');
-const areaPlaceSaveBtn = document.getElementById('areaPlaceSave');
-const areaPlaceNote = document.getElementById('areaPlaceNote');
+const areaSummaryEl = document.getElementById('areaSummary');
+const areaForm = document.getElementById('areaForm');
+const areaFormCancel = document.getElementById('areaFormCancel');
+const areaFormSubmit = document.getElementById('areaFormSubmit');
+const areaFormName = document.getElementById('areaFormName');
+const areaFormAddress = document.getElementById('areaFormAddress');
+const areaFormGeocodeBtn = document.getElementById('areaFormGeocode');
+const areaFormGeocodeNote = document.getElementById('areaFormGeocodeNote');
+const areaFormLat = document.getElementById('areaFormLat');
+const areaFormLng = document.getElementById('areaFormLng');
+const areaFormRadius = document.getElementById('areaFormRadius');
+const areaFormEcoregion = document.getElementById('areaFormEcoregion');
+const areaFormEcoregionNote = document.getElementById('areaFormEcoregionNote');
+const areaFormPlace = document.getElementById('areaFormPlace');
+const areaFormPlaceNote = document.getElementById('areaFormPlaceNote');
 const areaNote = document.getElementById('areaNote');
+const ECOREGION_NOTE_DEFAULT = 'Needed for the yard-relevance lane below.';
+const PLACE_NOTE_DEFAULT =
+  'Needed for the rarity lane below — must match a place already indexed by tools/fetch-ecosystem-index.mjs.';
+let formMode = null; // 'create' | 'edit' | null (form hidden)
 const taxonFilter = document.getElementById('taxonFilter');
 const laneFilter = document.getElementById('laneFilter');
 const rarityThresholdField = document.getElementById('rarityThresholdField');
@@ -82,24 +93,19 @@ async function loadAreas() {
   selectedAreaId = candidate || areas[0].id;
   areaSelect.value = selectedAreaId;
   areaNote.textContent = '';
-  syncEcoregionInput();
-  syncPlaceInput();
+  syncAreaSummary();
 
   await loadFeed({ reset: true });
 }
 
-/** Reflect the selected area's `filters.ecoregion` into the standalone editor field. */
-function syncEcoregionInput() {
+/** Read-only "ecoregion / place" line under the picker, so the current values are visible without opening the edit form. */
+function syncAreaSummary() {
   const area = areas.find((a) => a.id === selectedAreaId);
-  areaEcoregionEl.value = area?.filters?.ecoregion || '';
-  areaEcoregionNote.textContent = 'Needed for the yard-relevance lane below.';
-}
-
-/** Reflect the selected area's `filters.place` into the standalone editor field. */
-function syncPlaceInput() {
-  const area = areas.find((a) => a.id === selectedAreaId);
-  areaPlaceEl.value = area?.filters?.place || '';
-  areaPlaceNote.textContent = 'Needed for the rarity lane below — must match a place already indexed by tools/fetch-ecosystem-index.mjs.';
+  if (!area) {
+    areaSummaryEl.textContent = '';
+    return;
+  }
+  areaSummaryEl.textContent = `Ecoregion: ${area.filters?.ecoregion || 'none'} · Place: ${area.filters?.place || 'none'}`;
 }
 
 function wireControls() {
@@ -107,21 +113,17 @@ function wireControls() {
     selectedAreaId = areaSelect.value || null;
     safeLocalStorageSet(AREA_STORAGE_KEY, selectedAreaId);
     updateAreaQueryParam();
-    syncEcoregionInput();
-    syncPlaceInput();
+    syncAreaSummary();
     if (selectedAreaId) loadFeed({ reset: true });
   });
 
-  newAreaToggle.addEventListener('click', () => {
-    newAreaForm.hidden = !newAreaForm.hidden;
+  newAreaToggle.addEventListener('click', () => openAreaForm('create'));
+  editAreaToggle.addEventListener('click', () => {
+    if (selectedAreaId) openAreaForm('edit');
   });
-  newAreaCancel.addEventListener('click', () => {
-    newAreaForm.reset();
-    newAreaForm.hidden = true;
-  });
-  newAreaForm.addEventListener('submit', onCreateArea);
-  areaEcoregionSaveBtn.addEventListener('click', onSaveEcoregion);
-  areaPlaceSaveBtn.addEventListener('click', onSavePlace);
+  areaFormCancel.addEventListener('click', closeAreaForm);
+  areaForm.addEventListener('submit', onSubmitAreaForm);
+  areaFormGeocodeBtn.addEventListener('click', onGeocodeClick);
   pollAreaNowBtn.addEventListener('click', onPollAreaNow);
 
   taxonFilter.addEventListener('change', renderItems);
@@ -165,68 +167,136 @@ async function onPollAreaNow() {
   }
 }
 
-async function onSaveEcoregion() {
-  if (!selectedAreaId) return;
-  const area = areas.find((a) => a.id === selectedAreaId);
-  const ecoregion = areaEcoregionEl.value.trim();
-  try {
-    const response = await fetch(`/api/saved-areas/${encodeURIComponent(selectedAreaId)}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filters: { ...(area?.filters || {}), ecoregion } }),
-    });
-    const body = await response.json();
-    if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
-    if (area) area.filters = body.area.filters;
-    areaEcoregionNote.textContent = 'Saved.';
-    if (laneFilter.value === 'yard-relevance') await loadFeed({ reset: true });
-  } catch (err) {
-    areaEcoregionNote.textContent = `Could not save ecoregion: ${err.message}`;
+/** Open the create/edit area form. Both modes share one form and the same address-lookup/ecoregion/place-suggestion flow (nl-5nm) — only the submit target differs (POST vs PUT). */
+function openAreaForm(mode) {
+  formMode = mode;
+  areaForm.hidden = false;
+  areaFormAddress.value = '';
+  areaFormGeocodeNote.textContent = '';
+
+  if (mode === 'edit') {
+    const area = areas.find((a) => a.id === selectedAreaId);
+    if (!area) return;
+    areaFormName.value = area.name;
+    areaFormLat.value = area.lat;
+    areaFormLng.value = area.lng;
+    areaFormRadius.value = area.radiusMi;
+    areaFormEcoregion.value = area.filters?.ecoregion || '';
+    areaFormPlace.value = area.filters?.place || '';
+    areaFormSubmit.textContent = 'Save changes';
+  } else {
+    areaForm.reset();
+    areaFormSubmit.textContent = 'Save area';
   }
+  areaFormEcoregionNote.textContent = ECOREGION_NOTE_DEFAULT;
+  areaFormPlaceNote.textContent = PLACE_NOTE_DEFAULT;
 }
 
-async function onSavePlace() {
-  if (!selectedAreaId) return;
-  const area = areas.find((a) => a.id === selectedAreaId);
-  const place = areaPlaceEl.value.trim();
-  try {
-    const response = await fetch(`/api/saved-areas/${encodeURIComponent(selectedAreaId)}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filters: { ...(area?.filters || {}), place } }),
-    });
-    const body = await response.json();
-    if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
-    if (area) area.filters = body.area.filters;
-    areaPlaceNote.textContent = 'Saved.';
-    if (laneFilter.value === 'rarity') await loadFeed({ reset: true });
-  } catch (err) {
-    areaPlaceNote.textContent = `Could not save place: ${err.message}`;
-  }
+function closeAreaForm() {
+  areaForm.reset();
+  areaForm.hidden = true;
+  formMode = null;
 }
 
-async function onCreateArea(evt) {
-  evt.preventDefault();
-  const name = document.getElementById('newAreaName').value.trim();
-  const lat = Number(document.getElementById('newAreaLat').value);
-  const lng = Number(document.getElementById('newAreaLng').value);
-  const radiusMi = Number(document.getElementById('newAreaRadius').value);
-  const ecoregion = newAreaEcoregion.value.trim();
+/** Address/city/ZIP -> lat/lng (POST /api/geocode), then immediately chains the ecoregion detection and place suggestion off the result — a person shouldn't have to trigger three separate lookups for one typed location. */
+async function onGeocodeClick() {
+  const query = areaFormAddress.value.trim();
+  if (!query) return;
+  areaFormGeocodeBtn.disabled = true;
+  areaFormGeocodeNote.textContent = 'Looking up…';
   try {
-    const response = await fetch('/api/saved-areas', {
+    const response = await fetch('/api/geocode', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, lat, lng, radiusMi, filters: ecoregion ? { ecoregion } : {} }),
+      body: JSON.stringify({ query }),
     });
     const body = await response.json();
     if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
-    newAreaForm.reset();
-    newAreaForm.hidden = true;
+    areaFormLat.value = body.lat;
+    areaFormLng.value = body.lng;
+    areaFormGeocodeNote.textContent = `Found: ${body.displayName}`;
+    await Promise.all([detectEcoregion(body.lat, body.lng), suggestPlace(body.city)]);
+  } catch (err) {
+    areaFormGeocodeNote.textContent = `Could not look up "${query}": ${err.message}`;
+  } finally {
+    areaFormGeocodeBtn.disabled = false;
+  }
+}
+
+/** GET /api/ecoregion for a detected point, via the live CEC/EPA Level I FeatureServer lookup (tools/ecoregionLookup.mjs) — a real sourced answer, so it's safe to fill the field with, unlike a guess. A detected code this project has no keystone-genus data for is still filled in (it IS the ecoregion) but flagged as unusable by the yard-relevance lane, rather than silently swapped for something else. */
+async function detectEcoregion(lat, lng) {
+  try {
+    const response = await fetch(`/api/ecoregion?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`);
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
+    if (!body.code) {
+      areaFormEcoregionNote.textContent = 'No ecoregion found for this location.';
+      return;
+    }
+    areaFormEcoregion.value = body.code;
+    areaFormEcoregionNote.textContent = body.known
+      ? `Detected: ${body.code} (${body.name}).`
+      : `Detected: ${body.code} (${body.name}) — this project has no keystone-genus data for it yet, so the yard-relevance lane will report it as not declared.`;
+  } catch (err) {
+    areaFormEcoregionNote.textContent = `Could not detect ecoregion: ${err.message}`;
+  }
+}
+
+/** Suggests (never auto-applies) a place name from the geocoded city, and says whether data/ecosystem.db already has an index for it (GET /api/ecosystem/places) — the rarity lane needs a place someone has actually run tools/fetch-ecosystem-index.mjs for, not just a plausible-looking label. */
+async function suggestPlace(city) {
+  if (!city) {
+    areaFormPlaceNote.textContent = PLACE_NOTE_DEFAULT;
+    return;
+  }
+  try {
+    const response = await fetch('/api/ecosystem/places');
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
+    const indexed = (body.places || []).includes(city);
+    areaFormPlaceNote.innerHTML =
+      `Suggested place: <button type="button" class="pill-button" id="areaFormPlaceSuggestion">${escapeHtml(city)}</button> — ` +
+      (indexed ? 'indexed ✓' : 'not indexed yet (run tools/fetch-ecosystem-index.mjs for it first)');
+    document.getElementById('areaFormPlaceSuggestion')?.addEventListener('click', () => {
+      areaFormPlace.value = city;
+    });
+  } catch (err) {
+    areaFormPlaceNote.textContent = `Could not check indexed places: ${err.message}`;
+  }
+}
+
+async function onSubmitAreaForm(evt) {
+  evt.preventDefault();
+  const name = areaFormName.value.trim();
+  const lat = Number(areaFormLat.value);
+  const lng = Number(areaFormLng.value);
+  const radiusMi = Number(areaFormRadius.value);
+  const ecoregion = areaFormEcoregion.value.trim();
+  const place = areaFormPlace.value.trim();
+  const filters = {};
+  if (ecoregion) filters.ecoregion = ecoregion;
+  if (place) filters.place = place;
+
+  const isEdit = formMode === 'edit' && selectedAreaId;
+  const url = isEdit ? `/api/saved-areas/${encodeURIComponent(selectedAreaId)}` : '/api/saved-areas';
+  try {
+    const response = await fetch(url, {
+      method: isEdit ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, lat, lng, radiusMi, filters }),
+    });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
+    closeAreaForm();
+    // loadAreas() picks a selection from the query param/localStorage, which
+    // for a brand-new area point at nothing yet — refresh the list first,
+    // then force the selection to the area just saved, same order the old
+    // create-only flow used.
     await loadAreas();
     selectedAreaId = body.area.id;
     areaSelect.value = selectedAreaId;
     safeLocalStorageSet(AREA_STORAGE_KEY, selectedAreaId);
     updateAreaQueryParam();
+    syncAreaSummary();
     await loadFeed({ reset: true });
   } catch (err) {
     areaNote.textContent = `Could not save area: ${err.message}`;
