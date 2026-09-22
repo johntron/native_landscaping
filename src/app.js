@@ -62,6 +62,7 @@ import { getGenus, getSpeciesKey } from './utils/speciesKey.js';
 import { buildTooltipLines } from './render/tooltip.js';
 import { createLayoutHistory } from './history/layoutHistory.js';
 import { captureViewToPng } from './export/viewCapture.js';
+import { buildHoaCoverLetter, summarizePlacedSpecies } from './export/hoaPacket.js';
 import { resolvePhotoPlacement } from './render/photoPlacement.js';
 import { viewBoxAttribute, workingExtentFt } from './render/setupOverlay.js';
 import { resolveYardBounds } from './render/yardBounds.js';
@@ -136,6 +137,7 @@ async function init() {
   const settingsDrawer = document.getElementById('settingsDrawer');
   const viewControlsRow = document.querySelector('.view-toolbar__row--controls');
   const exportBundleButton = document.getElementById('exportBundleBtn');
+  const exportHoaButton = document.getElementById('exportHoaBtn');
   const managePlantsButton = document.getElementById('managePlantsBtn');
   const labelToggle = document.getElementById('labelToggle');
   const layerVisibilitySelect = document.getElementById('layerVisibilitySelect');
@@ -495,6 +497,75 @@ async function init() {
         },
       });
       toggleButtonBusy(exportBundleButton, false);
+      isBundleExporting = false;
+    }
+  };
+  const handleHoaExport = async () => {
+    if (isBundleExporting) return;
+    if (!viewPanels.length || viewPanels.some(({ svg }) => !svg)) return;
+    isBundleExporting = true;
+    const restoreToken = snapshotViewState({
+      monthSlider,
+      monthReadout,
+      state: appState,
+    });
+    toggleButtonBusy(exportHoaButton, true, 'Preparing packet…');
+    applyHiddenLayers(0, { shouldRender: false });
+    appState.hoveredPlantId = '';
+    appState.targetedPlantId = '';
+    appState.month = EXPORT_MONTH;
+    if (monthSlider) monthSlider.value = String(EXPORT_MONTH);
+    if (monthReadout) monthReadout.textContent = MONTH_NAMES[EXPORT_MONTH - 1] || '';
+    render();
+    await nextFrame();
+
+    try {
+      if (!JSZipLib) {
+        throw new Error('JSZip is not loaded');
+      }
+      const panels = viewPanels.map(({ view, svg }) => ({
+        view,
+        svg,
+        fileName: `${view.id}-view.png`,
+      }));
+      const pngs = await Promise.all(
+        panels.map(({ view, svg }) =>
+          captureViewToPng({
+            svg,
+            viewBox: view.viewBox,
+            ...backgroundForCapture(project, view),
+          })
+        )
+      );
+
+      const species = summarizePlacedSpecies(appState.plants);
+      const coverLetter = buildHoaCoverLetter({
+        projectName: project.name || project.id,
+        species,
+        preparedOn: new Date().toISOString().slice(0, 10),
+      });
+
+      const zip = new JSZipLib();
+      zip.file('cover-letter.txt', coverLetter);
+      pngs.forEach((png, index) => {
+        zip.file(`images/${panels[index].fileName}`, png);
+      });
+      const blob = await zip.generateAsync({ type: 'blob' });
+      triggerDownload(blob, `${project.id}-hoa-packet.zip`);
+    } catch (err) {
+      console.error('Failed to export HOA packet', err);
+      alert('Unable to export HOA packet. Check console for details.');
+    } finally {
+      restoreViewState(restoreToken, {
+        monthSlider,
+        monthReadout,
+        state: appState,
+        onRestore: () => {
+          syncLayerButtons(appState.hiddenLayerCount);
+          render();
+        },
+      });
+      toggleButtonBusy(exportHoaButton, false);
       isBundleExporting = false;
     }
   };
@@ -1289,6 +1360,9 @@ async function init() {
   if (exportBundleButton) {
     exportBundleButton.disabled = true;
   }
+  if (exportHoaButton) {
+    exportHoaButton.disabled = true;
+  }
   if (managePlantsButton) {
     managePlantsButton.disabled = false;
     managePlantsButton.addEventListener('click', () => {
@@ -1387,6 +1461,10 @@ async function init() {
     if (exportBundleButton) {
       exportBundleButton.disabled = false;
       exportBundleButton.addEventListener('click', handleBundleExport);
+    }
+    if (exportHoaButton) {
+      exportHoaButton.disabled = false;
+      exportHoaButton.addEventListener('click', handleHoaExport);
     }
   } catch (err) {
     if (err instanceof LayoutDataError) {
