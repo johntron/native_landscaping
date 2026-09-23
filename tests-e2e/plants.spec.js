@@ -83,4 +83,30 @@ test.describe('adding and removing plants', () => {
     await page.locator('#undoLayoutBtn').click();
     await expect(planPlants(page)).toHaveCount(before);
   });
+
+  test('undo and redo both move the saved layout, and the buttons track what is possible', async ({ page }) => {
+    await openScratchProject(page, 'plant-redo');
+    const saved = async () => (await readScratchLayout('plant-redo')).map((row) => row.id);
+    const before = await planPlants(page).count();
+
+    const victimId = await openDetailSheetOnAPlant(page);
+    await page.locator('#detailSheetRemoveBtn').click();
+    await expect(planPlants(page)).toHaveCount(before - 1);
+    await expect.poll(saved, { timeout: 5000 }).not.toContain(victimId);
+
+    await page.locator('[data-mode="edit"]').click();
+    const undo = page.locator('#undoLayoutBtn');
+    const redo = page.locator('#redoLayoutBtn');
+    await expect(redo).toBeDisabled();
+
+    await undo.click();
+    await expect(planPlants(page)).toHaveCount(before);
+    await expect(redo).toBeEnabled();
+    await expect.poll(saved, { timeout: 5000 }).toContain(victimId);
+
+    await redo.click();
+    await expect(planPlants(page)).toHaveCount(before - 1);
+    await expect(redo).toBeDisabled();
+    await expect.poll(saved, { timeout: 5000 }).not.toContain(victimId);
+  });
 });

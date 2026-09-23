@@ -534,6 +534,7 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
 - `src/state/seasonalState.js` – pure logic for foliage/bloom state per month.
 - `src/interaction/dragController.js` – pointer events + hit-testing for moving plants in plan view.
 - `src/history/layoutHistory.js` – the undo/redo stack; server-backed via `/api/history`.
+- `src/history/layoutHistoryController.js` – the page's side of it: undo/redo buttons, the save-status line, and `commit()` (record, persist, adopt the server's entry and cursor).
 - `src/state/plantEdits.js` – add, clone, and remove a plant; `src/state/yardEdits.js` – scale and
   shift features, patch a view. Pure, and unit-tested directly.
 - `src/render/speciesTable.js` – the species table; `src/interaction/plantMenu.js` – the plant's

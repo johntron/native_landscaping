@@ -27,6 +27,7 @@ export const SCRATCH_PROJECTS = [
   'plant-add',
   'plant-remove',
   'plant-undo',
+  'plant-redo',
   'touch-plan',
   'touch-hold',
   'touch-elevation',
