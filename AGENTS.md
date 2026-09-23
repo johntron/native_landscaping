@@ -207,7 +207,9 @@ One home per kind of fact, so copies cannot drift:
 | a hard-won gotcha no file records yet | `bd remember`: shown to every agent at session start, so keep it short and move it here once it is general |
 | a rule that must never be broken | a hook, not prose (see "Data safety") |
 
-`CLAUDE.md` is a pointer to this file and holds nothing of its own.
+`CLAUDE.md` is a pointer to this file and holds nothing of its own. `bd setup claude --check`
+warns that it has no beads section. That is intended: don't run `bd setup claude` to
+"fix" it, because the beads block below already reaches Claude through the import.
 
 ## Deep dives
 
