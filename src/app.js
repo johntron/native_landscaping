@@ -19,7 +19,6 @@ import { buildLayoutCsv } from './data/layoutExporter.js';
 import {
   loadLayoutHistory,
   loadProjectFeatures,
-  persistFeatures,
   persistLayout,
   persistProjectConfig,
   updateHistoryCursor,
@@ -30,8 +29,6 @@ import { renderViews } from './render/renderViews.js';
 import { createViewTransform } from './render/viewTransform.js';
 import { createSetupPanel } from './interaction/setupPanel.js';
 import { createSetupController } from './interaction/setupController.js';
-import { createFeaturePanel } from './interaction/featurePanel.js';
-import { normalizeFeatures } from './data/featureConfig.js';
 import { createFeatureController } from './interaction/featureController.js';
 import { analyzeEcology, buildEcologyContext } from './analysis/ecology.js';
 import { emptyHostGeneraIndex } from './analysis/hostGenera.js';
@@ -41,11 +38,6 @@ import {
 } from './analysis/faunaMatches.js';
 import { loadEcologyTables } from './data/ecologyTables.js';
 import { renderEcologyPanel } from './render/ecologyPanel.js';
-import {
-  clearFeatureOverlay,
-  createFeatureShape,
-  renderFeatureOverlay,
-} from './render/featureOverlay.js';
 import {
   clearSetupOverlay,
   renderSetupOverlay,
@@ -61,6 +53,7 @@ import { resolvePageScale } from './render/pageScale.js';
 import { pageTitle } from './ui/siteRoute.js';
 import { createExportActions } from './export/exportActions.js';
 import { createDetailSheet } from './ui/detailSheet.js';
+import { createFeaturesMode } from './interaction/featuresMode.js';
 import { featurePoints, patchView, round2, scaleFeatures, translateFeaturesInside } from './state/yardEdits.js';
 import { addPlantFromCatalog, clonePlantById, removePlantById } from './state/plantEdits.js';
 import { renderSpeciesTable } from './render/speciesTable.js';
@@ -580,12 +573,13 @@ async function init() {
             svg,
             getTransform: () => createViewTransform(liveView(view.id) || view),
             getFeatures: () => appState.features,
-            getSelectedId: () => featurePanel.getSelectedId(),
+            getSelectedId: () => featuresMode.panel.getSelectedId(),
             onSelect: (id) => {
-              featurePanel.setSelectedId(id);
-              syncFeatureOverlay();
+              featuresMode.panel.setSelectedId(id);
+              featuresMode.sync();
             },
-            onChange: (candidate) => applyFeatureEdit(replaceFeature(appState.features, candidate)),
+            onChange: (candidate) =>
+              featuresMode.apply(featuresMode.replaceFeature(appState.features, candidate)),
           })
     );
   let featureControllers = buildFeatureControllers();
@@ -750,7 +744,7 @@ async function init() {
     // over svg.style.cursor the way two controllers on one element do.
     dragControllers.forEach((controller) => controller?.setLocked?.(next !== 'edit'));
     syncSetupOverlay();
-    syncFeatureOverlay();
+    featuresMode.sync();
     persistMode(next);
   }
 
@@ -793,11 +787,11 @@ async function init() {
       let featuresChanged = false;
       if (wantedFeatures.size) {
         const translated = translateFeaturesInside(appState.features, wantedFeatures, yardFt);
-        featuresChanged = translated !== appState.features && applyFeatureEdit(translated);
+        featuresChanged = translated !== appState.features && featuresMode.apply(translated);
       }
       const movedCount = wantedPlants.size + wantedFeatures.size;
       commitLayoutChange(movedCount === 1 ? 'Moved an item inside the yard' : 'Moved items inside the yard');
-      if (featuresChanged) saveFeatures();
+      if (featuresChanged) featuresMode.save();
       setupPanel.render(project);
       setupPanel.setStatus(`Moved ${movedCount} inside the boundary.`, 'success');
       render();
@@ -835,8 +829,8 @@ async function init() {
     // leaving these to a separate Save would land a reload in exactly the state
     // this action exists to prevent: beds at one size, the plants in them at
     // another.
-    const featuresChanged = features !== appState.features && applyFeatureEdit(features);
-    if (featuresChanged) saveFeatures();
+    const featuresChanged = features !== appState.features && featuresMode.apply(features);
+    if (featuresChanged) featuresMode.save();
     setupPanel.render(project);
     setupPanel.setStatus(
       `Scaled everything to ${Math.round(factor * 100)}% about the yard corner` +
@@ -941,28 +935,6 @@ async function init() {
     applyPageScale();
   }
 
-  /**
-   * The feature handles belong to the plan alone, and only in Features mode.
-   * Rendering clears each SVG, so this runs after every render rather than once.
-   */
-  function syncFeatureOverlay() {
-    const editing = appState.mode === 'features';
-    viewPanels.forEach(({ view, svg }, index) => {
-      const active = editing && view.type === 'plan';
-      featureControllers[index]?.setLocked?.(!active);
-      if (!active) {
-        clearFeatureOverlay(svg);
-        return;
-      }
-      renderFeatureOverlay(
-        svg,
-        appState.features,
-        featurePanel.getSelectedId(),
-        createViewTransform(liveView(view.id) || view)
-      );
-    });
-  }
-
   modeButtons.forEach((button) => {
     button.addEventListener('click', () => applyMode(button.dataset.mode));
   });
@@ -975,12 +947,14 @@ async function init() {
     });
   }
 
-  const featurePanel = createFeaturePanel({
+  const featuresMode = createFeaturesMode({
     root: featureRow,
-    onCommit: (features) => applyFeatureEdit(features),
-    onSave: () => saveFeatures(),
-    onSelect: () => syncFeatureOverlay(),
-    onAdd: (type) => addFeature(type),
+    appState,
+    getProject: () => project,
+    getViewPanels: () => viewPanels,
+    getControllers: () => featureControllers,
+    liveView,
+    render: () => render(),
   });
 
   const setupPanel = createSetupPanel({
@@ -1077,78 +1051,9 @@ async function init() {
     return serializeProjectConfig({ ...project, ...candidate });
   }
 
-  /** Swap one feature for its edited candidate, keeping the list's z-order. */
-  function replaceFeature(features, candidate) {
-    return features.map((feature) => (feature.id === candidate.id ? candidate : feature));
-  }
-
-  /**
-   * Validate a candidate feature list before it becomes live.
-   *
-   * The same contract applyViewEdit has, and for the same reason: a drag that
-   * produces something normalizeFeatures refuses must leave the drawing on the
-   * last good state rather than half-applying. Nothing here mutates
-   * appState.features until the whole list has passed.
-   */
-  function applyFeatureEdit(features) {
-    let validated;
-    try {
-      // Normalized directly rather than serialized first: a freshly added shape
-      // carries no style yet, and normalizeFeatures is what supplies one.
-      validated = normalizeFeatures({ features }, project.id);
-    } catch (err) {
-      featurePanel.setStatus(err.message, 'error');
-      return false;
-    }
-    appState.features = validated.features;
-    render();
-    featurePanel.render(appState.features);
-    return true;
-  }
-
-  /**
-   * Add a shape in the middle of the yard, then select it.
-   *
-   * Not the middle of the plan panel: that includes the padding drawn around
-   * the yard, and a shape placed there would start life off the property.
-   */
-  function addFeature(type) {
-    const planView = project.views.find((view) => view.type === 'plan');
-    if (!planView) {
-      featurePanel.setStatus('Add a plan view before drawing features', 'error');
-      return;
-    }
-    const transform = createViewTransform(planView);
-    const bounds = resolveYardBounds(project) || {
-      x: { min: transform.originFt.x, max: transform.originFt.x + transform.extentFt.width },
-      y: { min: transform.originFt.y, max: transform.originFt.y + transform.extentFt.height },
-    };
-    const center = {
-      x: (bounds.x.min + bounds.x.max) / 2,
-      y: (bounds.y.min + bounds.y.max) / 2,
-    };
-    const shape = createFeatureShape(type, center, appState.features.map((f) => f.id), bounds);
-    if (!applyFeatureEdit([...appState.features, shape])) return;
-    featurePanel.setSelectedId(shape.id);
-    syncFeatureOverlay();
-  }
-
-  /**
-   * Features are setup, like the view config and unlike the layout: they save
-   * when asked rather than on every gesture, and there is no undo stack behind
-   * them. Auto-saving each drag frame would be a write per pointer release.
-   */
-  function saveFeatures() {
-    persistFeatures(
-      appState.features,
-      (message, state) => featurePanel.setStatus(message, state),
-      { projectId: project.id }
-    );
-  }
-
   applyMode(readPersistedMode());
   setupPanel.render(project);
-  featurePanel.render(appState.features);
+  featuresMode.panel.render(appState.features);
   if (exportBundleButton) {
     exportBundleButton.disabled = true;
   }
@@ -1204,7 +1109,7 @@ async function init() {
     // list the app started with. Re-render it here rather than inside render():
     // the panel rebuilds its DOM outright, and doing that on every month-slider
     // frame would take the focus out of the field being typed in.
-    featurePanel.render(appState.features);
+    featuresMode.panel.render(appState.features);
     const historyEntries = historyData.entries || [];
     const historyCursor = typeof historyData.cursor === 'number' ? historyData.cursor : -1;
     layoutHistoryInstance = createLayoutHistory(initialPlants, {
@@ -1286,7 +1191,7 @@ async function init() {
       features: appState.features,
     });
     syncSetupOverlay();
-    syncFeatureOverlay();
+    featuresMode.sync();
   };
 
   monthSlider.addEventListener('input', (e) => {

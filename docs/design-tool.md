@@ -525,6 +525,7 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
 - `src/data/backgroundStore.js` – server-side upload guards: allowed types, magic-byte
   sniff, and the filename the server (never the client) chooses.
 - `src/interaction/setupPanel.js`, `src/interaction/setupController.js`, `src/render/setupOverlay.js` – Setup mode's yard form and stranded-plant list, the camera drag, and the guides.
+- `src/interaction/featuresMode.js` – Features mode itself: the panel, the plan overlay, and edit → validate → save for features.json. The controllers stay built in `app.js`'s `rebuildViews` beside the drag and setup controllers.
 - `src/interaction/featurePanel.js`, `src/interaction/featureController.js`, `src/render/featureOverlay.js` – Features mode's list, plan-only drag handles, and selection outline.
 - `src/data/plantParser.js` – merges species/layout CSVs, normalizes month specs, aliases, and seasonal palettes.
 - `src/data/layoutExporter.js` – converts in-memory plants back to CSV with consistent precision/escaping.
