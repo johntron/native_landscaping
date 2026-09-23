@@ -1,0 +1,47 @@
+// Enforces the "every row carries a source" rule from AGENTS.md ("Evidence") on
+// the committed data tables, so the rule does not depend on anyone remembering it.
+// A value nobody has sourced stays blank; a row that exists must say where it
+// came from.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readdirSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { parseCsv } from '../src/data/csvLoader.js';
+
+const ECOLOGY_DIR = fileURLToPath(new URL('../ecology/', import.meta.url));
+const CORRECTIONS = fileURLToPath(new URL('../catalog/manual-corrections.tsv', import.meta.url));
+
+const ecologyTables = readdirSync(ECOLOGY_DIR).filter((name) => name.endsWith('.csv'));
+
+test('ecology/ has tables to check', () => {
+  assert.ok(ecologyTables.length > 0);
+});
+
+for (const name of ecologyTables) {
+  test(`ecology/${name}: has a source column and every row fills it`, () => {
+    const rows = parseCsv(readFileSync(`${ECOLOGY_DIR}${name}`, 'utf8'));
+    assert.ok(rows.length > 0, 'table is empty');
+    assert.ok('source' in rows[0], 'no source column: every ecology/ table must cite where its rows came from');
+    const unsourced = rows
+      .map((row, i) => ({ line: i + 2, row }))
+      .filter(({ row }) => !String(row.source ?? '').trim());
+    assert.deepEqual(
+      unsourced.map(({ line }) => line),
+      [],
+      `rows with an empty source (file line numbers): ${unsourced.length}`,
+    );
+  });
+}
+
+test('catalog/manual-corrections.tsv: every correction names a reason, an author, and a date', () => {
+  const [header, ...lines] = readFileSync(CORRECTIONS, 'utf8').split('\n').filter((l) => l.trim());
+  const cols = header.split('\t');
+  const required = ['reason', 'author', 'date'];
+  required.forEach((c) => assert.ok(cols.includes(c), `missing column ${c}`));
+  lines.forEach((line, i) => {
+    const cells = line.split('\t');
+    required.forEach((c) => {
+      assert.ok(cells[cols.indexOf(c)]?.trim(), `line ${i + 2}: empty ${c}`);
+    });
+  });
+});
