@@ -67,6 +67,7 @@ import { resolvePhotoPlacement } from './render/photoPlacement.js';
 import { viewBoxAttribute, workingExtentFt } from './render/setupOverlay.js';
 import { resolveYardBounds } from './render/yardBounds.js';
 import { resolvePageScale } from './render/pageScale.js';
+import { pageTitle } from './ui/siteRoute.js';
 
 const MODE_KEY = 'native-landscaping-mode';
 const LEGACY_LOCK_STATE_KEY = 'native-landscaping-positions-locked';
@@ -178,10 +179,10 @@ async function init() {
     return;
   }
   appState.project = project;
-  document.title = `${project.name} Visualization`;
+  document.title = pageTitle(`Your yard: ${project.name}`);
   const projectTitle = document.getElementById('projectTitle');
   if (projectTitle) {
-    projectTitle.textContent = `${project.name} Visualization`;
+    projectTitle.textContent = `Your yard: ${project.name}`;
   }
 
   const navEcosystemLink = document.getElementById('navEcosystemLink');
@@ -1266,9 +1267,9 @@ async function init() {
     }
     Object.assign(project, validated);
     appState.project = project;
-    document.title = `${project.name} Visualization`;
+    document.title = pageTitle(`Your yard: ${project.name}`);
     const projectTitle = document.getElementById('projectTitle');
-    if (projectTitle) projectTitle.textContent = `${project.name} Visualization`;
+    if (projectTitle) projectTitle.textContent = `Your yard: ${project.name}`;
     const activeOption = projectSelect?.querySelector(`option[value="${project.id}"]`);
     if (activeOption) activeOption.textContent = project.name;
     rebuildViews();

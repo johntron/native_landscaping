@@ -7,6 +7,7 @@
 import { loadProjectIndex, loadProjectConfig, resolveActiveProjectId } from '../data/projectConfig.js';
 import { fetchCsv, parseCsv } from '../data/csvLoader.js';
 import { computePlantMatches, renderPlantMatchItem, escapeHtml } from './plantMatches.view.js';
+import { pageTitle } from '../ui/siteRoute.js';
 
 const PROJECT_QUERY_PARAM = 'project';
 
@@ -48,7 +49,8 @@ async function load() {
   }
 
   const place = String(project.place || '').trim();
-  if (titleEl) titleEl.textContent = `Nearby Ecosystem — ${project.name}`;
+  if (titleEl) titleEl.textContent = `What’s nearby: ${project.name}`;
+  document.title = pageTitle(`What’s nearby: ${project.name}`);
   if (!place) {
     rowsEl.innerHTML = `<tr><td colspan="7">"${project.name}" declares no "place" in project.json — add one before indexing.</td></tr>`;
     return;

@@ -30,18 +30,23 @@ What that commits every tool to:
 
 ## The tools
 
-Every page is a static HTML file at the repo root with one entry module under `src/`.
-No bundler, no build step.
+The suite is called **Rewilder**. Every page is a static HTML file at the repo root
+with one entry module under `src/`; no bundler, no build step. The pages share one nav,
+in the order a homeowner walks them: learn why it matters, see what is nearby, design
+the yard, defend it. That order, the labels, and the "<page> · Rewilder" title format
+live in `src/ui/siteRoute.js`. The nav is plain HTML on each page, and
+`tests/siteNav.test.js` fails if any copy drifts from it. The table below follows the
+same order.
 
 | page | entry | what it is for |
 | --- | --- | --- |
-| `index.html` | `src/patchnetwork/` | **Rewilder**, the landing page. The homeowner-facing argument, led by the PLANTS memory aid, with the keystone-genus screen ("What belongs here") and the invasives list. Needs no project; its handoff section opens a yard in `design.html`. |
-| `design.html` | `src/app.js` | The **yard design tool**: a planting drawn month by month in a plan and compass elevations, graded by the ecological rules engine. Scoped by `?project=<slug>`. See [docs/design-tool.md](docs/design-tool.md). |
-| `ecosystem.html` | `src/ecosystem/` | The **nearby ecosystem**: plants and animals reported on iNaturalist near a site, and the plant genera that would serve them. Also available as a drawer (`src/ui/ecosystemDrawer.js`) on any page with `?project=`; both compute matches through `src/ecosystem/plantMatches.view.js`. |
-| `feed.html` | `src/feed/` | The **observation feed**: new iNaturalist records in saved monitoring areas, flagged for invasives, rarity, and yard relevance. |
-| `fnct.html` | `src/fnct/` | The **flora index**: searchable species from the *Flora of North Central Texas*. |
+| `index.html` | `src/patchnetwork/` | **Start here.** The homeowner-facing argument, led by the PLANTS memory aid, with the keystone-genus screen ("What belongs here") and the invasives list. Needs no project; its handoff section opens a yard in `design.html`. |
+| `ecosystem.html` | `src/ecosystem/` | **What's nearby**: plants and animals reported on iNaturalist near a site, and the plant genera that would serve them. Also available as a drawer (`src/ui/ecosystemDrawer.js`) on any page with `?project=`; both compute matches through `src/ecosystem/plantMatches.view.js`. |
+| `feed.html` | `src/feed/` | **New sightings**: new iNaturalist records in saved monitoring areas, flagged for invasives, rarity, and yard relevance. |
+| `design.html` | `src/app.js` | **Your yard**, the design tool: a planting drawn month by month in a plan and compass elevations, graded by the ecological rules engine. Scoped by `?project=<slug>`. See [docs/design-tool.md](docs/design-tool.md). |
 | `rights.html` | (static) | **Your rights**: Texas statutes on what an HOA can and cannot forbid. Statutory information, not legal advice. |
-| `claims-coverage.html`, `claims-conflicts.html` | `src/claims/` | Maintainer views over the plant-data claim store: field coverage, and conflicts awaiting a human correction. |
+| `fnct.html` | `src/fnct/` | **Flora index**: searchable species from the *Flora of North Central Texas*. Reference. |
+| `claims-coverage.html`, `claims-conflicts.html` | `src/claims/` | Maintainer views over the plant-data claim store (not in the nav): field coverage, and conflicts awaiting a human correction. |
 
 The **HOA submission packet** export (`src/export/hoaPacket.js`) is produced from `design.html`.
 
@@ -68,7 +73,8 @@ tests/, tests-e2e/    Node unit tests (the gate) and Playwright specs
 
 - **Don't invent plant data.** Use real botanical names. Every row in a sourced table
   carries a `source`, and a value nobody has sourced stays **blank rather than
-  guessed**. "Absent" is reported as undeclared, never filled with a default.
+  guessed**. `tests/sourcedTables.test.js` enforces the `source` column on every
+  `ecology/` table. "Absent" is reported as undeclared, never filled with a default.
 - **No composite scores.** The rules engine reports per dimension with no roll-up,
   because the weights would be invented. **Never emit a connectivity score, gradient,
   or weighted lines** either: anchor location and distance are facts, while "how

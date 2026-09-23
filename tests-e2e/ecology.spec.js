@@ -1,11 +1,13 @@
 import { test, expect } from '@playwright/test';
 import { openScratchProject } from './helpers.js';
+import { RULES } from '../src/analysis/ecology.js';
 
 // Read-only, but pointed at a scratch project all the same: a spec aimed at a
 // project missing from SCRATCH_PROJECTS does not fail, it silently falls back
 // to drag-plan and asserts against the wrong yard. `ecology-check` is a copy of
 // backyard, which declares ecoregion 9 and a part-sun / medium / clay site, so
-// all seven dimensions have the inputs they need.
+// every dimension has the inputs it needs. The row count comes from the rule
+// registry rather than a literal, which went stale at 7 when rules 8 and 9 shipped.
 
 const rows = (page) => page.locator('#ecologyCheck .ecology-check__row');
 
@@ -15,7 +17,7 @@ test.describe('the ecology check panel', () => {
 
     const panel = page.locator('#ecologyCheck');
     await expect(panel).toBeVisible();
-    await expect(rows(page)).toHaveCount(7);
+    await expect(rows(page)).toHaveCount(RULES.length);
 
     // Every row carries one of exactly the four chips the analysis emits — an
     // unrecognised status would render as an unstyled chip, not an error.

@@ -21,7 +21,7 @@ test.describe('backyard project', () => {
       await expect(page.locator(`${svgId} g[data-plant-id]`)).toHaveCount(rows.length);
     }
 
-    await expect(page.locator('#projectTitle')).toHaveText('Backyard Visualization');
+    await expect(page.locator('#projectTitle')).toHaveText('Your yard: Backyard');
     await expect(page.locator('#projectNotice')).toBeHidden();
     expect(consoleErrors).toEqual([]);
   });
