@@ -532,6 +532,12 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
 - `src/state/seasonalState.js` – pure logic for foliage/bloom state per month.
 - `src/interaction/dragController.js` – pointer events + hit-testing for moving plants in plan view.
 - `src/history/layoutHistory.js` – the undo/redo stack; server-backed via `/api/history`.
+- `src/state/plantEdits.js` – add, clone, and remove a plant; `src/state/yardEdits.js` – scale and
+  shift features, patch a view. Pure, and unit-tested directly.
+- `src/render/speciesTable.js` – the species table; `src/interaction/plantMenu.js` – the plant's
+  Clone/Remove menu.
+- `src/ui/projectPicker.js` – the project picker and new-project form; `src/ui/controls.js` – the
+  month slider, zoom controls, scale bars, and button/download helpers.
 
 Persistence routes (`/api/layout`, `/api/history`, `/api/history/cursor`, `/api/project`,
 `/api/features`, `/api/view-background`) all require `?project=<slug>` and write inside

@@ -1,4 +1,4 @@
-import { DEFAULT_ZOOM, INCHES_PER_FOOT, MONTH_NAMES, ZOOM_LIMITS } from './constants.js';
+import { DEFAULT_ZOOM, MONTH_NAMES } from './constants.js';
 import { fetchCsv } from './data/csvLoader.js';
 import {
   loadProjectConfig,
@@ -11,7 +11,6 @@ import {
 } from './data/projectConfig.js';
 import {
   buildPlantsFromCsv,
-  createPlantFromSpecies,
   parseSpeciesCsv,
   rehydratePlants,
   LayoutDataError,
@@ -54,10 +53,7 @@ import {
 } from './render/setupOverlay.js';
 import { configureViews } from './render/viewConfig.js';
 import { createPlantDragController, createElevationDragController } from './interaction/dragController.js';
-import { buildPlantLabel } from './render/labels.js';
-import { formatMonthRange } from './state/seasonalState.js';
-import { clampHiddenLayerCount, classifyPlantLayer } from './state/layers.js';
-import { buildCloneId, buildNewPlantId } from './state/plantIds.js';
+import { clampHiddenLayerCount } from './state/layers.js';
 import { getGenus, getSpeciesKey } from './utils/speciesKey.js';
 import { buildTooltipLines } from './render/tooltip.js';
 import { createLayoutHistory } from './history/layoutHistory.js';
@@ -68,13 +64,27 @@ import { viewBoxAttribute, workingExtentFt } from './render/setupOverlay.js';
 import { resolveYardBounds } from './render/yardBounds.js';
 import { resolvePageScale } from './render/pageScale.js';
 import { pageTitle } from './ui/siteRoute.js';
+import { featurePoints, patchView, round2, scaleFeatures, translateFeaturesInside } from './state/yardEdits.js';
+import { addPlantFromCatalog, clonePlantById, removePlantById } from './state/plantEdits.js';
+import { renderSpeciesTable } from './render/speciesTable.js';
+import { createPlantMenu } from './interaction/plantMenu.js';
+import { PROJECT_QUERY_PARAM, initNewProjectForm, initProjectPicker } from './ui/projectPicker.js';
+import {
+  clampMonthValue,
+  formatFileSize,
+  initMonthSlider,
+  initZoomControls,
+  nextFrame,
+  toggleButtonBusy,
+  triggerDownload,
+  updateScaleIndicator,
+} from './ui/controls.js';
 
 const MODE_KEY = 'native-landscaping-mode';
 const LEGACY_LOCK_STATE_KEY = 'native-landscaping-positions-locked';
 const MODES = ['view', 'edit', 'setup', 'features'];
 
 const EXPORT_MONTH = 6; // June
-const PROJECT_QUERY_PARAM = 'project';
 
 const appState = {
   project: null,
@@ -397,7 +407,7 @@ async function init() {
     if (appState.highlightedSpeciesKey && !stillPlaced) {
       appState.highlightedSpeciesKey = '';
     }
-    renderSpeciesTable(appState.plants, appState.hostGenera, {
+    renderSpeciesTable(document.getElementById('speciesTable'), appState.plants, appState.hostGenera, {
       onHoverStart: (speciesKey, rowEl) => setHighlightedSpecies(speciesKey, rowEl),
       onHoverEnd: (_speciesKey, rowEl) => clearHighlightedSpecies(rowEl),
     });
@@ -1561,97 +1571,6 @@ async function init() {
 }
 
 /**
- * Populate the project picker. Switching navigates to `?project=<id>` and lets the
- * page reload — the render loop, history stack, and drag controllers are all built
- * once against a single project, so a reload is both simpler and linkable.
- */
-function initProjectPicker(selectEl, projectIndex, activeId) {
-  if (!selectEl) return;
-  selectEl.innerHTML = '';
-  projectIndex.projects.forEach((entry) => {
-    const option = document.createElement('option');
-    option.value = entry.id;
-    option.textContent = entry.name;
-    option.selected = entry.id === activeId;
-    selectEl.appendChild(option);
-  });
-  selectEl.disabled = projectIndex.projects.length < 2;
-  selectEl.addEventListener('change', (event) => {
-    const nextId = event.target.value;
-    if (!nextId || nextId === activeId) return;
-    const url = new URL(window.location.href);
-    url.searchParams.set(PROJECT_QUERY_PARAM, nextId);
-    window.location.assign(url.toString());
-  });
-}
-
-/**
- * "+ New project": a name, a server-derived slug, and a reload onto it —
- * the same navigation `initProjectPicker` uses to switch, so a freshly
- * created project boots exactly like any other rather than needing its own
- * in-place initialization path.
- */
-function initNewProjectForm({ button, form, nameInput, cancelButton, status }) {
-  if (!button || !form || !nameInput) return;
-
-  const setStatus = (message, state) => {
-    if (!status) return;
-    status.textContent = message || '';
-    if (state) status.dataset.state = state;
-    else delete status.dataset.state;
-  };
-
-  const close = () => {
-    form.hidden = true;
-    nameInput.value = '';
-    setStatus('');
-  };
-
-  button.addEventListener('click', () => {
-    form.hidden = !form.hidden;
-    if (!form.hidden) nameInput.focus();
-  });
-  cancelButton?.addEventListener('click', close);
-
-  form.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const name = nameInput.value.trim();
-    const id = slugifyProjectName(name);
-    if (!id) {
-      setStatus('Enter a name first.', 'error');
-      return;
-    }
-    setStatus('Creating…');
-    try {
-      const response = await fetch('/api/projects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, name }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload.error || `Request failed (${response.status})`);
-      }
-      const url = new URL(window.location.href);
-      url.searchParams.set(PROJECT_QUERY_PARAM, id);
-      window.location.assign(url.toString());
-    } catch (err) {
-      setStatus(err.message, 'error');
-    }
-  });
-}
-
-/** A project id is a path segment — see PROJECT_ID_PATTERN in projectConfig.js. */
-function slugifyProjectName(name) {
-  return String(name || '')
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9_-]+/g, '-')
-    .replace(/^-+/, '')
-    .replace(/-+$/, '');
-}
-
-/**
  * Background to composite under a view's export: an absolute URL plus, for a
  * photo that has been placed, the rectangle of the drawing it occupies. Both
  * are null when the view has no image yet — captureViewToPng then skips the
@@ -1664,60 +1583,6 @@ function backgroundForCapture(project, view) {
     backgroundUrl: new URL(projectAssetPath(project.id, path), document.baseURI).toString(),
     destRect: rect,
   };
-}
-
-function initMonthSlider(sliderEl, readoutEl, initialMonth) {
-  if (!sliderEl) return;
-  sliderEl.min = '1';
-  sliderEl.max = '12';
-  sliderEl.step = '1';
-  const clamped = clampMonthValue(initialMonth);
-  sliderEl.value = String(clamped);
-  if (readoutEl) {
-    readoutEl.textContent = MONTH_NAMES[clamped - 1] || '';
-  }
-}
-
-function initZoomControls(inputEl, sliderEl, onChange, initialValue = DEFAULT_ZOOM) {
-  if (!inputEl || !sliderEl) return;
-
-  const { min, max, step } = ZOOM_LIMITS;
-  [inputEl, sliderEl].forEach((el) => {
-    el.min = String(min);
-    el.max = String(max);
-    el.step = String(step);
-  });
-
-  const apply = (rawValue) => {
-    const parsed = clampZoomValue(Number(rawValue));
-    if (parsed === null) return;
-    inputEl.value = formatZoomValue(parsed);
-    sliderEl.value = String(parsed);
-    onChange?.(parsed);
-  };
-
-  inputEl.addEventListener('change', (e) => apply(e.target.value));
-  sliderEl.addEventListener('input', (e) => apply(e.target.value));
-
-  apply(initialValue);
-}
-
-/**
- * The reference bars are drawn at the view's own scale, which no longer moves —
- * zoom resizes the panel around them rather than restretching the yard.
- */
-function updateScaleIndicator(container, pxPerFt) {
-  if (!container) return;
-  const items = container.querySelectorAll('.scale-indicator__item');
-  items.forEach((item) => {
-    const inches = resolveInches(item);
-    if (!inches) return;
-    const width = Math.max((inches / INCHES_PER_FOOT) * pxPerFt, 4);
-    const line = item.querySelector('.scale-indicator__line');
-    if (line) {
-      line.style.width = `${width}px`;
-    }
-  });
 }
 
 const DEFAULT_LOAD_ERROR_HINT =
@@ -1741,263 +1606,8 @@ function showLoadError(message, { hint = DEFAULT_LOAD_ERROR_HINT } = {}) {
   }
 }
 
-function clampZoomValue(value) {
-  if (!Number.isFinite(value)) return null;
-  const { min, max } = ZOOM_LIMITS;
-  if (value < min) return min;
-  if (value > max) return max;
-  return value;
-}
-
-function clampMonthValue(value) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return null;
-  if (parsed < 1) return 1;
-  if (parsed > 12) return 12;
-  return Math.round(parsed);
-}
-
-function formatZoomValue(value) {
-  return value.toFixed(2);
-}
-
-function renderSpeciesTable(plants, hostGenera, handlers = {}) {
-  const { onHoverStart, onHoverEnd } = handlers;
-  const container = document.getElementById('speciesTable');
-  if (!container) return;
-  container.innerHTML = '';
-  if (!plants?.length) return;
-
-  const speciesMap = new Map();
-  plants.forEach((plant) => {
-    const key =
-      getSpeciesKey(plant) || plant.botanicalName || plant.botanical_name || plant.commonName || plant.common_name;
-    if (!key || speciesMap.has(key)) return;
-    speciesMap.set(key, plant);
-  });
-
-  const rows = Array.from(speciesMap.values()).sort((a, b) => {
-    const labelA = buildPlantLabel(a);
-    const labelB = buildPlantLabel(b);
-    if (labelA && labelB) {
-      return labelA.localeCompare(labelB);
-    }
-    const nameA = (a.commonName || a.botanicalName || '').toLowerCase();
-    const nameB = (b.commonName || b.botanicalName || '').toLowerCase();
-    return nameA.localeCompare(nameB);
-  });
-
-  const table = document.createElement('table');
-  table.className = 'species-table__table';
-  const thead = document.createElement('thead');
-  const headers = [
-    'Label',
-    'Botanical name',
-    'Common name',
-    'Height (ft)',
-    'Width (ft)',
-    'Growth form',
-    'Sun',
-    'Water',
-    'Soil',
-    'Bloom months',
-    'Inflorescence',
-    'Fruit',
-    'Ecological fit',
-  ];
-  const headerRow = document.createElement('tr');
-  headers.forEach((title) => {
-    const th = document.createElement('th');
-    th.textContent = title;
-    headerRow.appendChild(th);
-  });
-  thead.appendChild(headerRow);
-  table.appendChild(thead);
-
-  const tbody = document.createElement('tbody');
-  rows.forEach((plant) => {
-    const tr = document.createElement('tr');
-    const speciesKey = getSpeciesKey(plant);
-    tr.dataset.speciesKey = speciesKey;
-    tr.addEventListener('mouseenter', () => onHoverStart?.(speciesKey, tr));
-    tr.addEventListener('mouseleave', () => onHoverEnd?.(speciesKey, tr));
-    const cells = [
-      { value: buildPlantLabel(plant), className: 'species-table__label' },
-      { value: plant.botanicalName || plant.botanical_name || '', italic: true },
-      { value: plant.commonName || plant.common_name || '' },
-      { value: formatFeet(plant.height) },
-      { value: formatFeet(plant.width) },
-      { value: plant.growthShape || plant.growth_shape || '' },
-      { value: plant.sunPref || plant.sun_pref || '' },
-      { value: plant.waterPref || plant.water_pref || '' },
-      { value: plant.soilPref || plant.soil_pref || '' },
-      {
-        value: formatMonthRange(
-          plant.floweringMonths ||
-            plant.flowering_season_months ||
-            plant.floweringSeasonMonths
-        ),
-      },
-      { value: formatInflorescenceCell(plant) },
-      { value: formatFruitCell(plant) },
-      buildEcologicalFitCell(plant, hostGenera),
-    ];
-
-    cells.forEach((cell, idx) => {
-      const td = document.createElement('td');
-      if (cell.italic && cell.value) {
-        const em = document.createElement('em');
-        em.textContent = cell.value;
-        td.appendChild(em);
-      } else {
-        td.textContent = cell.value ?? '';
-      }
-      td.dataset.label = headers[idx];
-      if (cell.className) td.className = cell.className;
-      if (cell.title) td.title = cell.title;
-      if (idx > 2) td.classList.add('species-table__extra');
-      tr.appendChild(td);
-    });
-
-    const toggleTd = document.createElement('td');
-    toggleTd.className = 'species-table__toggle-cell';
-    const toggleBtn = document.createElement('button');
-    toggleBtn.type = 'button';
-    toggleBtn.className = 'species-table__toggle-btn';
-    toggleBtn.setAttribute('aria-expanded', 'false');
-    toggleBtn.textContent = 'Details';
-    toggleBtn.addEventListener('click', () => {
-      const expanded = tr.classList.toggle('is-expanded');
-      toggleBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-      toggleBtn.textContent = expanded ? 'Hide details' : 'Details';
-    });
-    toggleTd.appendChild(toggleBtn);
-    tr.appendChild(toggleTd);
-
-    tbody.appendChild(tr);
-  });
-  table.appendChild(tbody);
-  container.appendChild(table);
-}
-
-function formatFeet(value) {
-  const num = Number(value);
-  if (!Number.isFinite(num)) return '';
-  return num.toFixed(1);
-}
-
-/** Species-table counterpart of tooltip.js's formatInflorescenceLine, without the current-month state. */
-function formatInflorescenceCell(plant) {
-  const type = plant.inflorescence || plant.inflorescenceType || plant.inflorescence_type;
-  const count = plant.flowerCountHint ?? plant.flower_count_hint;
-  const zone = plant.flowerZone || plant.flower_zone;
-  const pieces = [];
-  if (type) pieces.push(type);
-  if (count) pieces.push(`≈${count}`);
-  if (zone) pieces.push(`${zone} canopy`);
-  return pieces.join(', ');
-}
-
-/** Species-table counterpart of tooltip.js's formatFruitLine, without the current-month state. */
-function formatFruitCell(plant) {
-  const pieces = [];
-  if (plant.fruitColor) pieces.push(plant.fruitColor);
-  if (plant.fruitLoad) pieces.push(`${plant.fruitLoad} load`);
-  return pieces.join(', ');
-}
-
-/**
- * Same source data the keystone-genera and larval-hosts rules grade against
- * (see ecologicalFitNotes), shown as a short badge with the full sentence in
- * the cell's title so a reader can hover for the number without every row
- * growing to fit "253 caterpillar species — listed as Quercus."
- */
-function buildEcologicalFitCell(plant, hostGenera) {
-  const notes = ecologicalFitNotes(getGenus(plant), hostGenera);
-  if (!notes.length) return { value: '' };
-  const badges = [];
-  if (notes.some((note) => note.startsWith('Keystone genus'))) badges.push('Keystone');
-  if (notes.some((note) => note.startsWith('Documented larval host'))) badges.push('Larval host');
-  return { value: badges.join(', '), title: notes.join(' ') };
-}
-
-function formatFileSize(bytes) {
-  const kb = Number(bytes) / 1024;
-  return kb >= 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${Math.round(kb)} KB`;
-}
-
 function clamp(value, min, max) {
   return Math.min(Math.max(Number(value) || 0, min), max);
-}
-
-function round2(value) {
-  return Math.round(Number(value) * 100) / 100;
-}
-
-/** Every authored point in the feature model, whatever primitive holds it. */
-function featurePoints(features) {
-  return (Array.isArray(features) ? features : []).flatMap(
-    (feature) => feature.footprintFt || feature.pathFt || []
-  );
-}
-
-/**
- * Scale the feature model about the yard's corner.
- *
- * Features move with the plants or not at all: a bed scaled while the plants in
- * it stay put is worse than either alone. Heights scale too — a fence is not
- * the same fence at 60% of its footprint — and so does a stroke width in feet.
- */
-function scaleFeatures(features, factor) {
-  if (!Array.isArray(features) || !features.length) return features;
-  const point = (p) => ({ ...p, x: round2(p.x * factor), y: round2(p.y * factor) });
-  return features.map((feature) => {
-    const next = { ...feature };
-    if (Array.isArray(feature.footprintFt)) next.footprintFt = feature.footprintFt.map(point);
-    if (Array.isArray(feature.pathFt)) next.pathFt = feature.pathFt.map(point);
-    if (Number.isFinite(feature.heightFt)) next.heightFt = round2(feature.heightFt * factor);
-    if (Number.isFinite(feature.baseFt)) next.baseFt = round2(feature.baseFt * factor);
-    if (Number.isFinite(feature.style?.strokeWidthFt)) {
-      next.style = { ...feature.style, strokeWidthFt: round2(feature.style.strokeWidthFt * factor) };
-    }
-    return next;
-  });
-}
-
-/**
- * Shift the whole feature — never just the points that fall outside — back
- * within the yard (nl-1ug). Clamping each point independently would deform a
- * bed or wall's shape; a translation keeps it, at the cost of not always
- * fully fitting a feature that is itself bigger than the yard on one axis
- * (best effort: the near edge wins, so it is still reported afterward).
- */
-function translateFeaturesInside(features, ids, yardFt) {
-  if (!Array.isArray(features) || !features.length || !ids?.size) return features;
-  const axisShift = (min, max, extent) => {
-    if (min < 0) return -min;
-    if (max > extent) return extent - max;
-    return 0;
-  };
-  return features.map((feature) => {
-    if (!ids.has(feature.id)) return feature;
-    const points = featurePoints([feature]);
-    if (!points.length) return feature;
-    const xs = points.map((p) => p.x);
-    const ys = points.map((p) => p.y);
-    const dx = axisShift(Math.min(...xs), Math.max(...xs), yardFt.width);
-    const dy = axisShift(Math.min(...ys), Math.max(...ys), yardFt.depth);
-    if (!dx && !dy) return feature;
-    const shift = (p) => ({ ...p, x: round2(p.x + dx), y: round2(p.y + dy) });
-    const next = { ...feature };
-    if (Array.isArray(feature.footprintFt)) next.footprintFt = feature.footprintFt.map(shift);
-    if (Array.isArray(feature.pathFt)) next.pathFt = feature.pathFt.map(shift);
-    return next;
-  });
-}
-
-/** Replace one view in a list with a shallow-merged copy. */
-function patchView(views, viewId, patch) {
-  return views.map((view) => (view.id === viewId ? { ...view, ...patch } : view));
 }
 
 /**
@@ -2028,33 +1638,6 @@ function persistMode(mode) {
   }
 }
 
-function resolveInches(item) {
-  const inchesAttr = item.dataset.inches;
-  if (inchesAttr) {
-    const val = Number(inchesAttr);
-    return Number.isFinite(val) ? val : null;
-  }
-  const feetAttr = item.dataset.feet;
-  if (feetAttr) {
-    const val = Number(feetAttr);
-    return Number.isFinite(val) ? val * 12 : null;
-  }
-  return null;
-}
-
-function triggerDownload(blob, filename) {
-  if (!blob) return;
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = filename || 'download';
-  anchor.style.display = 'none';
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
-}
-
 function snapshotViewState({ monthSlider, monthReadout, state }) {
   return {
     month: state.month,
@@ -2081,145 +1664,6 @@ function restoreViewState(snapshot, { monthSlider, monthReadout, state, onRestor
     monthReadout.textContent = snapshot.monthReadoutText;
   }
   onRestore?.();
-}
-
-function toggleButtonBusy(button, busy, busyText) {
-  if (!button) return;
-  if (busy) {
-    if (!button.dataset.originalLabel) {
-      button.dataset.originalLabel = button.textContent || '';
-    }
-    button.disabled = true;
-    if (busyText) {
-      button.textContent = busyText;
-    }
-    return;
-  }
-  button.disabled = false;
-  if (button.dataset.originalLabel) {
-    button.textContent = button.dataset.originalLabel;
-  }
-}
-
-function nextFrame() {
-  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
-}
-
-function createPlantMenu({ onClone, onRemove, onClose }) {
-  const menu = document.createElement('div');
-  menu.className = 'context-menu';
-  const list = document.createElement('ul');
-  list.className = 'context-menu__list';
-  const addItem = (label, handler, modifier) => {
-    const item = document.createElement('li');
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = modifier ? `context-menu__item ${modifier}` : 'context-menu__item';
-    button.textContent = label;
-    button.addEventListener('click', () => {
-      const plantId = menu.dataset.plantId;
-      if (plantId) {
-        handler?.(plantId);
-      }
-    });
-    item.appendChild(button);
-    list.appendChild(item);
-  };
-  addItem('Clone plant', onClone);
-  addItem('Remove plant', onRemove, 'context-menu__item--danger');
-  menu.appendChild(list);
-  document.body.appendChild(menu);
-
-  const api = {
-    show: ({ x, y, plantId }) => {
-      if (!plantId) return;
-      const offsetX = window.scrollX || 0;
-      const offsetY = window.scrollY || 0;
-      const menuWidth = 180;
-      const menuHeight = 88; // two items
-      const maxLeft = offsetX + window.innerWidth - menuWidth - 8;
-      const maxTop = offsetY + window.innerHeight - menuHeight - 8;
-      menu.style.left = `${Math.min(x + offsetX, maxLeft)}px`;
-      menu.style.top = `${Math.min(y + offsetY, maxTop)}px`;
-      menu.dataset.plantId = plantId;
-      menu.classList.add('is-open');
-    },
-    hide: () => {
-      menu.classList.remove('is-open');
-      delete menu.dataset.plantId;
-      onClose?.();
-    },
-    contains: (node) => node instanceof Node && menu.contains(node),
-    isOpen: () => menu.classList.contains('is-open'),
-  };
-
-  return api;
-}
-
-function clonePlantById(state, plantId) {
-  if (!plantId) return null;
-  const source = state.plants.find((p) => String(p.id) === String(plantId));
-  if (!source) return null;
-  const planView = state.project.views.find((view) => view.type === 'plan');
-  const { originFt, extentFt } = createViewTransform(planView);
-  const offset = 1.1;
-  const clone = {
-    ...source,
-    id: buildCloneId(state.plants, source.id),
-    x: clampFeet(source.x + offset, originFt.x, originFt.x + extentFt.width),
-    y: clampFeet(source.y + offset * 0.6, originFt.y, originFt.y + extentFt.height),
-  };
-  clone.layer = classifyPlantLayer(clone);
-  state.plants = [...state.plants, clone];
-  return clone;
-}
-
-/**
- * Place one plant of the chosen species at the middle of the plan view — the
- * one spot guaranteed to be on the drawing, from which it can be dragged.
- * @param {typeof appState} state
- * @param {string} botanicalKey the select's value: a normalized botanical name
- * @returns {Object|null} the new plant, or null if the species or plan view is gone
- */
-function addPlantFromCatalog(state, botanicalKey) {
-  const key = String(botanicalKey || '');
-  if (!key) return null;
-  const speciesEntry = state.species.find(
-    (entry) => (entry.botanicalKey || entry.botanicalName) === key
-  );
-  // buildLayoutCsv writes botanicalName and buildPlantsFromCsv matches on it, so
-  // a species without one would write a row that cannot be read back.
-  if (!speciesEntry || !speciesEntry.botanicalName) return null;
-  const planView = state.project?.views?.find((view) => view.type === 'plan');
-  if (!planView) return null;
-  const { originFt, extentFt } = createViewTransform(planView);
-  const plant = createPlantFromSpecies(speciesEntry, {
-    id: buildNewPlantId(state.plants, speciesEntry.botanicalName),
-    x: originFt.x + extentFt.width / 2,
-    y: originFt.y + extentFt.height / 2,
-  });
-  state.plants = [...state.plants, plant];
-  return plant;
-}
-
-/**
- * Drop a plant from the layout.
- * @returns {boolean} whether a plant was actually removed
- */
-function removePlantById(state, plantId) {
-  if (!plantId) return false;
-  const id = String(plantId);
-  const remaining = state.plants.filter((plant) => String(plant.id) !== id);
-  if (remaining.length === state.plants.length) return false;
-  state.plants = remaining;
-  return true;
-}
-
-function clampFeet(value, min, max) {
-  if (!Number.isFinite(value)) return min;
-  if (value < min) return min;
-  if (value > max) return max;
-  return value;
 }
 
 if (document.readyState === 'loading') {
