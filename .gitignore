@@ -7,8 +7,8 @@ layout-history.json
 .env
 
 # Exact addresses/coordinates behind each project's `place` label. This repo
-# is public — see the note on docs/data-acquisition/corpus below. Read only by
-# tools/fetch-local-fauna.mjs; never by the app.
+# is public — see the note on docs/data-acquisition/corpus below. Read by the
+# tools/ fetch scripts and server-side by /api/ecosystem; never committed.
 projects/*/location.json
 
 # Beads / Dolt files (added by bd init)

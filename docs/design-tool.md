@@ -233,6 +233,12 @@ single project, and a reload keeps that simple and the URL linkable.
 `projects/example-frontyard/` is a sample showing a tall narrow yard,
 north/east/south elevations, and photographs placed rather than fitted.
 
+**When a photo and the drawing disagree**, overlay the one piece of hand-traced
+geometry (`features.json`) on the background photo and look: whichever placement puts
+the traced shapes on the things they trace is right. Serve a scratch HTML page (one SVG
+holding an `<image>` and a `<polygon>`) over `python -m http.server`, because the browser
+tools block `file://`. This is how example-frontyard's stale plan origin was found.
+
 ### Yard features
 
 Beds, hardscape, fences, and the house footprint are **yard geometry in feet

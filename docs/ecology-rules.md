@@ -74,6 +74,8 @@ synonym_of, source`.
   both layouts use `Packera obovata`. Without the mapping the frontyard's ragwort is
   silently missed.
 - `ecoregion` is a column, so **a second region is a data change, not a code change**.
+  Parts of DFW east of Dallas fall in EPA Level I ecoregion **8**, not 9, so a project
+  there needs its own rows.
 - **Every row carries a `source`, and a genus with nothing sourced stays blank rather
   than guessed** — see "Rules that hold everywhere" in AGENTS.md.
 
@@ -106,6 +108,15 @@ lifetimes:
   per-observation distance. Regenerate with `node tools/fetch-nearby-fauna.mjs
   --project <id>` (`--smoke` for one taxon/radius, no write).
 
+**Keep the two tables' genera in step.** `plant-animal-interactions.csv` must cover
+every `host-genera.csv` genus, not only the ones in `plants.csv`. A genus with no GloBI
+rows joins to zero animals and silently ranks last in the ecosystem plant matches. After
+adding a genus, run `node tools/fetch-plant-animal-interactions.mjs --genus X --merge`.
+Large genera (Quercus, Salix) can 500 in a batch, so retry them one at a time. Pass
+genus lists literally or from a file rather than through a shell variable, and check the
+CSV diff afterwards: the tool's echoed argument list once looked right while it fetched
+the wrong genera.
+
 **The join is genus↔species, same asymmetry as `host-genera.csv`**: interactions
 are genus-keyed because that is how the literature records them (monarch is
 documented against *Asclepias*, not *Asclepias tuberosa*), animals are
@@ -129,7 +140,10 @@ happened to have observations for.
 `"home"` — committable, and two projects on the same property share one label
 and one fetch. The address or lat/lng behind that label lives in
 `projects/<id>/location.json`, which is gitignored (this repo is public) and
-read only by `tools/fetch-nearby-fauna.mjs`, never by the app:
+read by the `tools/` fetch scripts and, server-side only, by `GET /api/ecosystem`.
+With `?project=`, that route returns the project's `{lat, lng}` so outbound iNaturalist
+links can be location-scoped (a deliberate, owner-requested exception). The
+coordinates still never reach git or a committed file:
 
 ```json
 { "address": "123 Main St, Dallas, TX 75204" }
