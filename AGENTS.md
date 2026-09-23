@@ -59,7 +59,7 @@ ecology/              sourced, genus- or place-keyed tables for the rules engine
 projects/<slug>/      one yard each; listed in projects/index.json
 src/                  browser code: one folder per page, plus shared analysis/, data/, render/, ui/
 tools/                everything that calls a third-party API, the claim store, the usda-plants MCP server
-server.js             static server + the /api persistence routes
+server.js, server/     the HTTP server: server.js dispatches to server/routes/{project,ecosystem,feed,claims}.js, then static files
 data/                 local SQLite (gitignored); see "Data safety" below
 docs/                 deep dives; docs/data-acquisition/ is the claim-store design (01-11)
 tests/, tests-e2e/    Node unit tests (the gate) and Playwright specs
@@ -165,9 +165,9 @@ must **never** be restarted (it self-heals). A second service, `feed-poller`, ru
 `tools/schedule-feed-poll.mjs` every `FEED_POLL_INTERVAL_MINUTES` (default 30). Restart
 it too if you changed `tools/feedState/` or `tools/fetch-observation-events.mjs`.
 
-Node does not hot-reload. `src/` is served fresh per request, but `server.js` keeps the
-routes it booted with, so a POST to a route added since then returns **404, not 400**.
-That 404 is the sign of a stale server. **Verify the restart instead of trusting the
+Node does not hot-reload. `src/` is served fresh per request, but `server.js` and
+`server/` keep the routes they booted with, so a POST to a route added since then
+returns **404, not 400**. That 404 is the sign of a stale server. **Verify the restart instead of trusting the
 command:**
 
 ```bash
