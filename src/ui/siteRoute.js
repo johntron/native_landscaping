@@ -1,7 +1,7 @@
 /**
  * The one route through Rewilder's tools, in the order a homeowner walks it:
- * learn why it matters, see what already lives nearby, design the yard, then
- * defend it. The flora index is reference and comes last.
+ * learn why it matters, see what already lives nearby, design the yard, buy
+ * the plants, then defend it. The flora index is reference and comes last.
  *
  * Every page's `<nav class="site-nav">` is plain HTML (so it works with no
  * script, as rights.html has none) and must list exactly these links in this
@@ -17,6 +17,7 @@ export const SITE_ROUTE = [
   { href: 'ecosystem.html', label: 'What’s nearby', id: 'navEcosystemLink' },
   { href: 'feed.html', label: 'New sightings' },
   { href: 'design.html', label: 'Your yard', id: 'navDesignLink' },
+  { href: 'sourcing.html', label: 'Buy plants' },
   { href: 'rights.html', label: 'Your rights' },
   { href: 'fnct.html', label: 'Flora index' },
 ];

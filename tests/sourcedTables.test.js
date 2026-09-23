@@ -9,19 +9,24 @@ import { fileURLToPath } from 'node:url';
 import { parseCsv } from '../src/data/csvLoader.js';
 
 const ECOLOGY_DIR = fileURLToPath(new URL('../ecology/', import.meta.url));
+const SOURCING_DIR = fileURLToPath(new URL('../sourcing/', import.meta.url));
 const CORRECTIONS = fileURLToPath(new URL('../catalog/manual-corrections.tsv', import.meta.url));
 
-const ecologyTables = readdirSync(ECOLOGY_DIR).filter((name) => name.endsWith('.csv'));
+const csvIn = (dir) => readdirSync(dir).filter((name) => name.endsWith('.csv')).map((name) => ({ dir, name }));
+const ecologyTables = csvIn(ECOLOGY_DIR);
+// sourcing/ (nurseries and plant sales) is held to the same rule.
+const sourcedTables = [...ecologyTables, ...csvIn(SOURCING_DIR)];
 
 test('ecology/ has tables to check', () => {
   assert.ok(ecologyTables.length > 0);
 });
 
-for (const name of ecologyTables) {
-  test(`ecology/${name}: has a source column and every row fills it`, () => {
-    const rows = parseCsv(readFileSync(`${ECOLOGY_DIR}${name}`, 'utf8'));
+for (const { dir, name } of sourcedTables) {
+  const label = dir === ECOLOGY_DIR ? 'ecology' : 'sourcing';
+  test(`${label}/${name}: has a source column and every row fills it`, () => {
+    const rows = parseCsv(readFileSync(`${dir}${name}`, 'utf8'));
     assert.ok(rows.length > 0, 'table is empty');
-    assert.ok('source' in rows[0], 'no source column: every ecology/ table must cite where its rows came from');
+    assert.ok('source' in rows[0], `no source column: every ${label}/ table must cite where its rows came from`);
     const unsourced = rows
       .map((row, i) => ({ line: i + 2, row }))
       .filter(({ row }) => !String(row.source ?? '').trim());

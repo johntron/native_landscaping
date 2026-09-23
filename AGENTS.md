@@ -33,7 +33,7 @@ What that commits every tool to:
 The suite is called **Rewilder**. Every page is a static HTML file at the repo root
 with one entry module under `src/`; no bundler, no build step. The pages share one nav,
 in the order a homeowner walks them: learn why it matters, see what is nearby, design
-the yard, defend it. That order, the labels, and the "<page> · Rewilder" title format
+the yard, buy the plants, defend it. That order, the labels, and the "<page> · Rewilder" title format
 live in `src/ui/siteRoute.js`. The nav is plain HTML on each page, and
 `tests/siteNav.test.js` fails if any copy drifts from it. The table below follows the
 same order.
@@ -44,6 +44,7 @@ same order.
 | `ecosystem.html` | `src/ecosystem/` | **What's nearby**: streams and green space near the site ("Habitat nearby", from `ecology/anchors.csv`: name and straight-line distance only, OSM green space marked not checked), plants and animals reported on iNaturalist nearby, and the plant genera that would serve them. Also available as a drawer (`src/ui/ecosystemDrawer.js`) on any page with `?project=`; both compute matches through `src/ecosystem/plantMatches.view.js`. |
 | `feed.html` | `src/feed/` | **New sightings**: new iNaturalist records in saved monitoring areas, flagged for invasives, rarity, and yard relevance. |
 | `design.html` | `src/app.js` | **Your yard**, the design tool: a planting drawn month by month in a plan and compass elevations, graded by the ecological rules engine. Scoped by `?project=<slug>`. See [docs/design-tool.md](docs/design-tool.md). |
+| `sourcing.html` | `src/sourcing/` | **Buy plants**: dated native plant sales around DFW (upcoming vs. recently held, split by the viewer's local date) and the NPSOT NICE! partner nurseries of the Dallas, North Central and Trinity Forks chapters, from the sourced tables in `sourcing/`. Sale dates go stale: re-check each organizer's page and bump `checked_on` each spring and fall. |
 | `rights.html` | (static) | **Your rights**: Texas statutes on what an HOA can and cannot forbid. Statutory information, not legal advice. |
 | `fnct.html` | `src/fnct/` | **Flora index**: searchable species from the *Flora of North Central Texas*. Reference. |
 | `claims-coverage.html`, `claims-conflicts.html` | `src/claims/` | Maintainer views over the plant-data claim store (not in the nav): field coverage, and conflicts awaiting a human correction. |
@@ -56,6 +57,7 @@ The **HOA submission packet** export (`src/export/hoaPacket.js`) is produced fro
 plants.csv            the species catalog every yard renders from (the single source of truth)
 catalog/              wider regional lists + manual-corrections.tsv; see catalog/README.md
 ecology/              sourced, genus- or place-keyed tables for the rules engine
+sourcing/             sourced nursery and plant-sale tables behind sourcing.html
 projects/<slug>/      one yard each; listed in projects/index.json
 src/                  browser code: one folder per page, plus shared analysis/, data/, render/, ui/
 tools/                everything that calls a third-party API, the claim store, the usda-plants MCP server
@@ -74,7 +76,7 @@ tests/, tests-e2e/    Node unit tests (the gate) and Playwright specs
 - **Don't invent plant data.** Use real botanical names. Every row in a sourced table
   carries a `source`, and a value nobody has sourced stays **blank rather than
   guessed**. `tests/sourcedTables.test.js` enforces the `source` column on every
-  `ecology/` table. "Absent" is reported as undeclared, never filled with a default.
+  `ecology/` and `sourcing/` table. "Absent" is reported as undeclared, never filled with a default.
 - **No composite scores.** The rules engine reports per dimension with no roll-up,
   because the weights would be invented. **Never emit a connectivity score, gradient,
   or weighted lines** either: anchor location and distance are facts, while "how
