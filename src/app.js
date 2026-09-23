@@ -34,11 +34,10 @@ import { createFeaturePanel } from './interaction/featurePanel.js';
 import { normalizeFeatures } from './data/featureConfig.js';
 import { createFeatureController } from './interaction/featureController.js';
 import { analyzeEcology, buildEcologyContext } from './analysis/ecology.js';
-import { emptyHostGeneraIndex, ecologicalFitNotes } from './analysis/hostGenera.js';
+import { emptyHostGeneraIndex } from './analysis/hostGenera.js';
 import {
   emptyInteractionsIndex,
   emptyNearbyFaunaIndex,
-  matchesForGenus,
 } from './analysis/faunaMatches.js';
 import { loadEcologyTables } from './data/ecologyTables.js';
 import { renderEcologyPanel } from './render/ecologyPanel.js';
@@ -54,14 +53,14 @@ import {
 import { configureViews } from './render/viewConfig.js';
 import { createPlantDragController, createElevationDragController } from './interaction/dragController.js';
 import { clampHiddenLayerCount } from './state/layers.js';
-import { getGenus, getSpeciesKey } from './utils/speciesKey.js';
-import { buildTooltipLines } from './render/tooltip.js';
+import { getSpeciesKey } from './utils/speciesKey.js';
 import { createLayoutHistory } from './history/layoutHistory.js';
 import { viewBoxAttribute, workingExtentFt } from './render/setupOverlay.js';
 import { resolveYardBounds } from './render/yardBounds.js';
 import { resolvePageScale } from './render/pageScale.js';
 import { pageTitle } from './ui/siteRoute.js';
 import { createExportActions } from './export/exportActions.js';
+import { createDetailSheet } from './ui/detailSheet.js';
 import { featurePoints, patchView, round2, scaleFeatures, translateFeaturesInside } from './state/yardEdits.js';
 import { addPlantFromCatalog, clonePlantById, removePlantById } from './state/plantEdits.js';
 import { renderSpeciesTable } from './render/speciesTable.js';
@@ -687,101 +686,19 @@ async function init() {
     });
   }
 
-  const closeDetailSheet = () => {
-    if (!detailSheet || detailSheet.hidden) return;
-    detailSheet.hidden = true;
-    delete detailSheet.dataset.plantId;
-    setTargetedPlant('');
-  };
-
-  const openDetailSheet = (plantId) => {
-    if (!detailSheet) return;
-    const plant = appState.plants.find((p) => String(p.id) === String(plantId));
-    if (!plant) return;
-    const state = computePlantState(plant, appState.month);
-    if (detailSheetTitle) {
-      detailSheetTitle.innerHTML = '';
-      if (plant.botanicalName) {
-        const em = document.createElement('em');
-        em.textContent = plant.botanicalName;
-        detailSheetTitle.appendChild(em);
-      } else {
-        detailSheetTitle.textContent = plant.commonName || 'Plant details';
-      }
-    }
-    if (detailSheetLines) {
-      detailSheetLines.innerHTML = '';
-      buildTooltipLines(plant, state)
-        .filter(Boolean)
-        .filter((line) => line !== plant.botanicalName)
-        .forEach((line) => {
-          const li = document.createElement('li');
-          li.textContent = line;
-          detailSheetLines.appendChild(li);
-        });
-    }
-    if (detailSheetEcology && detailSheetEcologyLines) {
-      renderDetailSheetEcology(plant, detailSheetEcology, detailSheetEcologyLines);
-    }
-    if (detailSheetFauna && detailSheetFaunaLines) {
-      renderDetailSheetFauna(plant, detailSheetFauna, detailSheetFaunaLines);
-    }
-    detailSheet.dataset.plantId = plantId;
-    detailSheet.hidden = false;
-    setTargetedPlant(plantId);
-  };
-
-  /**
-   * Same source data the keystone-genera and larval-hosts rules grade
-   * against (ecologicalFitNotes), so "is this a keystone genus" here can
-   * never disagree with the ecology check below the species table.
-   */
-  const renderDetailSheetEcology = (plant, container, list) => {
-    list.innerHTML = '';
-    const notes = ecologicalFitNotes(getGenus(plant), appState.hostGenera);
-    if (!notes.length) {
-      container.hidden = true;
-      return;
-    }
-    notes.forEach((note) => {
-      const li = document.createElement('li');
-      li.textContent = note;
-      list.appendChild(li);
-    });
-    container.hidden = false;
-  };
-
-  /**
-   * A separate section from buildTooltipLines on purpose: a match list can run
-   * to a dozen-plus animals, which reads as a distinct block of evidence
-   * rather than one more line among the plant's static facts.
-   */
-  const renderDetailSheetFauna = (plant, container, list) => {
-    list.innerHTML = '';
-    const place = appState.project?.place;
-    if (!place || !appState.nearbyFauna.size || !appState.interactions.size) {
-      container.hidden = true;
-      return;
-    }
-    const genus = getGenus(plant);
-    const matches = matchesForGenus(genus, {
-      interactions: appState.interactions,
-      nearbyFauna: appState.nearbyFauna,
-      place,
-    }).filter((match) => match.inRange !== false);
-    if (!matches.length) {
-      container.hidden = true;
-      return;
-    }
-    matches.forEach((match) => {
-      const li = document.createElement('li');
-      const name = match.animalCommon ? `${match.animalCommon} (${match.animalSpecies})` : match.animalSpecies;
-      const verb = match.category === 'pollinator' ? 'visits its flowers' : 'feeds on it';
-      li.textContent = `${name} — ${verb}, reported within ${match.nearestRadiusMi}mi (${match.observationCount} observation${match.observationCount === 1 ? '' : 's'})`;
-      list.appendChild(li);
-    });
-    container.hidden = false;
-  };
+  const { open: openDetailSheet, close: closeDetailSheet } = createDetailSheet({
+    elements: {
+      sheet: detailSheet,
+      title: detailSheetTitle,
+      lines: detailSheetLines,
+      ecology: detailSheetEcology,
+      ecologyLines: detailSheetEcologyLines,
+      fauna: detailSheetFauna,
+      faunaLines: detailSheetFaunaLines,
+    },
+    appState,
+    setTargetedPlant,
+  });
 
   if (detailSheetCloneBtn) {
     detailSheetCloneBtn.addEventListener('click', () => {
@@ -799,11 +716,6 @@ async function init() {
     // No confirmation: the change is undoable and the sheet closes behind it.
     detailSheetRemoveBtn.addEventListener('click', () => {
       removePlant(detailSheet?.dataset.plantId);
-    });
-  }
-  if (detailSheet) {
-    detailSheet.querySelectorAll('[data-detail-close]').forEach((el) => {
-      el.addEventListener('click', closeDetailSheet);
     });
   }
 

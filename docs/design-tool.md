@@ -538,6 +538,8 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
   Clone/Remove menu.
 - `src/export/exportActions.js` – the plan-bundle and HOA-packet downloads: render in June,
   capture every view, zip, restore the page. Covered by `tests-e2e/export.spec.js`.
+- `src/ui/detailSheet.js` – the plant detail sheet: facts for the month, keystone/larval-host
+  notes, and nearby animals that use the genus.
 - `src/ui/projectPicker.js` – the project picker and new-project form; `src/ui/controls.js` – the
   month slider, zoom controls, scale bars, and button/download helpers.
 
