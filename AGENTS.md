@@ -41,7 +41,7 @@ same order.
 | page | entry | what it is for |
 | --- | --- | --- |
 | `index.html` | `src/patchnetwork/` | **Start here.** The homeowner-facing argument, led by the PLANTS memory aid, with the keystone-genus screen ("What belongs here") and the invasives list. Needs no project; its handoff section opens a yard in `design.html`. |
-| `ecosystem.html` | `src/ecosystem/` | **What's nearby**: plants and animals reported on iNaturalist near a site, and the plant genera that would serve them. Also available as a drawer (`src/ui/ecosystemDrawer.js`) on any page with `?project=`; both compute matches through `src/ecosystem/plantMatches.view.js`. |
+| `ecosystem.html` | `src/ecosystem/` | **What's nearby**: streams and green space near the site ("Habitat nearby", from `ecology/anchors.csv`: name and straight-line distance only, OSM green space marked not checked), plants and animals reported on iNaturalist nearby, and the plant genera that would serve them. Also available as a drawer (`src/ui/ecosystemDrawer.js`) on any page with `?project=`; both compute matches through `src/ecosystem/plantMatches.view.js`. |
 | `feed.html` | `src/feed/` | **New sightings**: new iNaturalist records in saved monitoring areas, flagged for invasives, rarity, and yard relevance. |
 | `design.html` | `src/app.js` | **Your yard**, the design tool: a planting drawn month by month in a plan and compass elevations, graded by the ecological rules engine. Scoped by `?project=<slug>`. See [docs/design-tool.md](docs/design-tool.md). |
 | `rights.html` | (static) | **Your rights**: Texas statutes on what an HOA can and cannot forbid. Statutory information, not legal advice. |
