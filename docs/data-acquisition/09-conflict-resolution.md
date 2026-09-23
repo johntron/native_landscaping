@@ -117,8 +117,9 @@ already established the file has no reader until the claim store exists to repla
 Deciding it now, since [07 §3.5](07-mcp-introspection.md)'s `claims_correct` tool needs a
 concrete target to append to.
 
-**Path**: `manual-corrections.tsv` at the **repo root**, alongside `plants.csv` and the
-other flat catalogs already there (`blackland-prairie-natives.csv`, `dfw-nctx-natives.csv`)
+**Path**: `catalog/manual-corrections.tsv`, beside the other flat regional catalogs
+(`catalog/blackland-prairie-natives.csv`, `catalog/dfw-nctx-natives.csv`; moved out of the
+repo root 2026-09-22)
 — not under `docs/data-acquisition/` (design docs, not data) and not under `data/`
 (the gitignored, rebuildable `claims.db` store). Plain text, diffable, the system of record
 [04 §3.4](04-data-model.md) requires because `claims.db` is gitignored and a correction has
@@ -255,7 +256,7 @@ gotten wrong once.
 | Criterion | Answer |
 |---|---|
 | A precedence rule, stated per-field where warranted | §1 — the table is [02](02-source-inventory.md)'s existing PRIMARY/CORROBORATING roles, read as a rule; §1.1 states what it cannot resolve and routes that to `review` instead of guessing |
-| A correction record shape carrying reason, author, and the source version it was made against | §2 — `manual-corrections.tsv` at the repo root, columns include `reason`, `author`, `supersedes_source`; §3 explains why `retrieved_at` stands in for a version field no source publishes |
+| A correction record shape carrying reason, author, and the source version it was made against | §2 — `catalog/manual-corrections.tsv`, columns include `reason`, `author`, `supersedes_source`; §3 explains why `retrieved_at` stands in for a version field no source publishes |
 | A guarantee that a re-crawl cannot silently erase a correction, and a described mechanism | §2.1 — replay-last ordering plus append-only `superseded_by`; §5 demonstrates it on a real correction |
 | A decision on what an unadjudicated conflict shows in the app | §4 — nothing in the export (same as `unknown`), visible in the `claims_conflicts` review queue, resolved only through the same reasoned `claims_correct` path as any other correction |
 

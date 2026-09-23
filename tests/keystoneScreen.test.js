@@ -22,7 +22,7 @@ const rows = screenKeystoneGenera({
   hostGenera: buildHostGeneraIndex(read('ecology/host-genera.csv'), { ecoregion: '9' }),
   fnctScreen: buildFnctScreenIndex(read('ecology/fnct-genus-screen.csv')),
   lepHosts: buildLepHostIndex(read('ecology/fnct-lepidoptera-hosts.csv')),
-  growth: buildGrowthIndex(read('blackland-prairie-natives.csv')),
+  growth: buildGrowthIndex(read('catalog/blackland-prairie-natives.csv')),
   nearbyFauna: buildNearbyFaunaIndex(read('ecology/nearby-fauna.csv')),
   place: 'home',
   nameChanges: buildNameChangeIndex(read('ecology/fnct-name-changes.csv')),

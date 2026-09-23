@@ -17,7 +17,7 @@ import { ingestUsdaClaims } from './usdaIngest.js';
 import { UsdaClient } from '../usda-plants/usdaClient.js';
 
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
-const DEFAULT_CORRECTIONS_PATH = `${REPO_ROOT}manual-corrections.tsv`;
+const DEFAULT_CORRECTIONS_PATH = `${REPO_ROOT}catalog/manual-corrections.tsv`;
 const SKIP_REPLAY_PATH = fileURLToPath(new URL('./__no-early-replay__.tsv', import.meta.url)); // never created
 
 export async function rebuildClaimsStoreWithUsda({

@@ -273,10 +273,10 @@ async function main() {
     fetchCsv(url('ecology/host-genera.csv')),
     fetchCsv(url('ecology/fnct-genus-screen.csv')),
     fetchCsv(url('ecology/fnct-lepidoptera-hosts.csv')),
-    fetchCsv(url('blackland-prairie-natives.csv')),
+    fetchCsv(url('catalog/blackland-prairie-natives.csv')),
     fetchCsv(url('ecology/nearby-fauna.csv')),
     fetchCsv(url('ecology/fnct-name-changes.csv')),
-    fetchCsv(url('dfw-avoid-non-natives.csv')),
+    fetchCsv(url('catalog/dfw-avoid-non-natives.csv')),
   ]);
 
   $('pnAvoidList').innerHTML = parseCsv(avoidCsv)

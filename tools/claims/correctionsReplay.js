@@ -13,7 +13,7 @@ import { ensureTaxon } from './taxaSeed.js';
 
 const REQUIRED_COLUMNS = ['usda_symbol', 'field', 'value', 'reason', 'author', 'date', 'supersedes_source'];
 
-const DEFAULT_CATALOG_PATH = fileURLToPath(new URL('../../blackland-prairie-natives.csv', import.meta.url));
+const DEFAULT_CATALOG_PATH = fileURLToPath(new URL('../../catalog/blackland-prairie-natives.csv', import.meta.url));
 
 /**
  * A correction can target a species outside today's plantable_core (10 §2.2) —

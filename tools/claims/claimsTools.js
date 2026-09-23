@@ -17,7 +17,7 @@ import { buildPlantsCsv, DEFAULT_IDENTITY_PATH } from './exportPlantsCsv.js';
 import { COMMERCIAL_STATUS } from './projectConfig.js';
 
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
-export const DEFAULT_CORRECTIONS_PATH = `${REPO_ROOT}manual-corrections.tsv`;
+export const DEFAULT_CORRECTIONS_PATH = `${REPO_ROOT}catalog/manual-corrections.tsv`;
 const CORRECTIONS_HEADER = 'usda_symbol\tfield\tvalue\treason\tauthor\tdate\tsupersedes_source';
 
 const CULTIVAR_NAME_RE = /'([^']+)'\s*$/;

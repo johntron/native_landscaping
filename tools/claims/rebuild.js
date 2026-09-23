@@ -16,8 +16,8 @@ const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 export function rebuildClaimsStore({
   dbPath = DEFAULT_PATH,
   plantsCsvPath = `${REPO_ROOT}plants.csv`,
-  blacklandCsvPath = `${REPO_ROOT}blackland-prairie-natives.csv`,
-  correctionsPath = `${REPO_ROOT}manual-corrections.tsv`,
+  blacklandCsvPath = `${REPO_ROOT}catalog/blackland-prairie-natives.csv`,
+  correctionsPath = `${REPO_ROOT}catalog/manual-corrections.tsv`,
   reconcileNames = true,
 } = {}) {
   const db = openClaimsStore(dbPath);

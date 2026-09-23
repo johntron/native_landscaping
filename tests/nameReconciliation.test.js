@@ -22,7 +22,7 @@ function tempDbPath() {
 // against the live corpus/catalog, not synthetic text, per that section's own
 // validation discipline ("every bug found there was invisible in the output
 // and obvious in the controls").
-const catalog = parseCsv(readFileSync(`${REPO_ROOT}blackland-prairie-natives.csv`, 'utf8'));
+const catalog = parseCsv(readFileSync(`${REPO_ROOT}catalog/blackland-prairie-natives.csv`, 'utf8'));
 const genusDictionary = buildGenusDictionary(catalog);
 const floraIndex = buildFloraIndex(loadCorpusText(), genusDictionary);
 
@@ -146,7 +146,7 @@ test('reconcileCatalog skips cultivars (06 §7 — no taxonomic work treats one)
   createSchema(db);
   seedPlantableCore(db, {
     plantsCsvPath: `${REPO_ROOT}plants.csv`,
-    blacklandCsvPath: `${REPO_ROOT}blackland-prairie-natives.csv`,
+    blacklandCsvPath: `${REPO_ROOT}catalog/blackland-prairie-natives.csv`,
   });
   const cultivarRows = [{ botanical_name: "Ilex vomitoria 'Nana'", usda_symbol: 'ILVO' }];
   const counts = reconcileCatalog(db, cultivarRows, floraIndex);

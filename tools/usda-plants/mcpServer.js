@@ -322,7 +322,7 @@ server.registerTool(
   {
     title: "Write a manual correction (the only write tool in this surface)",
     description:
-      "Appends a correction to manual-corrections.tsv at the repo root (07 §3.5) — it does NOT " +
+      "Appends a correction to catalog/manual-corrections.tsv (07 §3.5) — it does NOT " +
       "write data/claims.db directly, so the effect is only visible after the next rebuild " +
       "(tools/claims/rebuild.js); claims_provenance will not reflect this correction immediately. " +
       "reason and author are required with no optional path around either — a correction without " +

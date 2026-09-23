@@ -22,7 +22,7 @@ function tempDbPath() {
 }
 
 // Built once against the real corpus, same discipline as nameReconciliation.test.js.
-const catalog = parseCsv(readFileSync(`${REPO_ROOT}blackland-prairie-natives.csv`, 'utf8'));
+const catalog = parseCsv(readFileSync(`${REPO_ROOT}catalog/blackland-prairie-natives.csv`, 'utf8'));
 const genusDictionary = buildGenusDictionary(catalog);
 const floraIndex = buildFloraIndex(loadCorpusText(), genusDictionary);
 const treatmentIndex = buildTreatmentIndex(genusDictionary);
@@ -32,7 +32,7 @@ function buildIngestedStore() {
   createSchema(db);
   seedPlantableCore(db, {
     plantsCsvPath: `${REPO_ROOT}plants.csv`,
-    blacklandCsvPath: `${REPO_ROOT}blackland-prairie-natives.csv`,
+    blacklandCsvPath: `${REPO_ROOT}catalog/blackland-prairie-natives.csv`,
   });
   reconcileCatalog(db, catalog, floraIndex);
   ingestFloraNativity(db, treatmentIndex);

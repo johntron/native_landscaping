@@ -58,7 +58,7 @@ test('seedPlantableCore reproduces the documented derivation: plants.csv ∪ nps
   createSchema(db);
   const size = seedPlantableCore(db, {
     plantsCsvPath: `${REPO_ROOT}plants.csv`,
-    blacklandCsvPath: `${REPO_ROOT}blackland-prairie-natives.csv`,
+    blacklandCsvPath: `${REPO_ROOT}catalog/blackland-prairie-natives.csv`,
   });
 
   // 10 §2.2 measured 101 on 2026-09-18; plants.csv has since gained one species
@@ -83,7 +83,7 @@ test('an empty claims table makes the county-presence gate and nativity exclusio
   createSchema(db);
   seedPlantableCore(db, {
     plantsCsvPath: `${REPO_ROOT}plants.csv`,
-    blacklandCsvPath: `${REPO_ROOT}blackland-prairie-natives.csv`,
+    blacklandCsvPath: `${REPO_ROOT}catalog/blackland-prairie-natives.csv`,
   });
   const coreCount = db.prepare('SELECT COUNT(*) AS n FROM plantable_core').get().n;
   const setCount = db.prepare('SELECT COUNT(*) AS n FROM plantable_set').get().n;
@@ -95,7 +95,7 @@ test('plantable_set excludes a species with an asserted non-native claim, and ad
   createSchema(db);
   seedPlantableCore(db, {
     plantsCsvPath: `${REPO_ROOT}plants.csv`,
-    blacklandCsvPath: `${REPO_ROOT}blackland-prairie-natives.csv`,
+    blacklandCsvPath: `${REPO_ROOT}catalog/blackland-prairie-natives.csv`,
   });
   const taxon = db.prepare("SELECT id FROM taxa WHERE scientific_name = 'Silphium albiflorum'").get();
   db.prepare(
@@ -123,7 +123,7 @@ test('replayManualCorrections applies a valid row, setting superseded_by on the 
   createSchema(db);
   seedPlantableCore(db, {
     plantsCsvPath: `${REPO_ROOT}plants.csv`,
-    blacklandCsvPath: `${REPO_ROOT}blackland-prairie-natives.csv`,
+    blacklandCsvPath: `${REPO_ROOT}catalog/blackland-prairie-natives.csv`,
   });
   const taxon = db.prepare("SELECT id, usda_symbol FROM taxa WHERE scientific_name = 'Achillea millefolium var. occidentalis'").get()
     ?? db.prepare("SELECT id FROM taxa LIMIT 1").get();
@@ -167,7 +167,7 @@ test('replayManualCorrections rejects a row missing reason/author rather than im
   createSchema(db);
   seedPlantableCore(db, {
     plantsCsvPath: `${REPO_ROOT}plants.csv`,
-    blacklandCsvPath: `${REPO_ROOT}blackland-prairie-natives.csv`,
+    blacklandCsvPath: `${REPO_ROOT}catalog/blackland-prairie-natives.csv`,
   });
 
   const dir = mkdtempSync(join(tmpdir(), 'claims-corrections-bad-'));
@@ -192,7 +192,7 @@ test('replayManualCorrections rejects an unresolvable usda_symbol', () => {
   createSchema(db);
   seedPlantableCore(db, {
     plantsCsvPath: `${REPO_ROOT}plants.csv`,
-    blacklandCsvPath: `${REPO_ROOT}blackland-prairie-natives.csv`,
+    blacklandCsvPath: `${REPO_ROOT}catalog/blackland-prairie-natives.csv`,
   });
 
   const dir = mkdtempSync(join(tmpdir(), 'claims-corrections-unresolved-'));
@@ -215,7 +215,7 @@ test('replayManualCorrections creates a taxa row from the wider catalog for a sp
   createSchema(db);
   seedPlantableCore(db, {
     plantsCsvPath: `${REPO_ROOT}plants.csv`,
-    blacklandCsvPath: `${REPO_ROOT}blackland-prairie-natives.csv`,
+    blacklandCsvPath: `${REPO_ROOT}catalog/blackland-prairie-natives.csv`,
   });
 
   // CHLI2 (Chilopsis linearis) is npsot_dfw_recommended='yes' so it IS in
@@ -248,7 +248,7 @@ test('replayManualCorrections auto-vivifies a taxa row from blackland-prairie-na
   createSchema(db);
   seedPlantableCore(db, {
     plantsCsvPath: `${REPO_ROOT}plants.csv`,
-    blacklandCsvPath: `${REPO_ROOT}blackland-prairie-natives.csv`,
+    blacklandCsvPath: `${REPO_ROOT}catalog/blackland-prairie-natives.csv`,
   });
 
   // Robinia pseudoacacia (ROPS) is npsot_dfw_recommended='no', so it has no
