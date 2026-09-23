@@ -223,12 +223,12 @@ match it exactly. Both directions on both scales are covered in
 
 ## Two results that look like bugs and are not
 
-- **Keystone genera read weak, and cannot be fixed from the catalog.** Only six of
-  the catalog's 42 genera are keystone in ecoregion 9 — `Helianthus`, `Solidago`,
-  `Symphyotrichum`, `Verbesina`, `Vernonia`, and `Packera` (via `Senecio`) — and
-  **none are woody**. `Quercus` alone hosts 253 caterpillar species and the catalog
-  carries no oak. The rule names the missing heavy hitters as a gap to close, not as
-  an error.
+- **Keystone genera can read weak even though the catalog now has them.** Seven of
+  the catalog's 49 genera are keystone in ecoregion 9: `Quercus` (five oaks, added
+  after this rule shipped, and alone the host of 253 caterpillar species),
+  `Helianthus`, `Solidago`, `Symphyotrichum`, `Verbesina`, `Vernonia`, and `Packera`
+  (via `Senecio`). A yard that has not *placed* them still reports the gap. The rule
+  names the missing heavy hitters as a gap to close, not as an error.
 - **Rule 4/10 measures footprint AREA**, `π(width/2)²`, not head-count: rule 10 is
   about how the yard's ground is spent. `createPlantFromSpecies` defaults `width` to
   1, so a species with a blank `width_ft` would silently contribute 1 ft² — harmless
