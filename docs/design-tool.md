@@ -536,6 +536,8 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
   shift features, patch a view. Pure, and unit-tested directly.
 - `src/render/speciesTable.js` – the species table; `src/interaction/plantMenu.js` – the plant's
   Clone/Remove menu.
+- `src/export/exportActions.js` – the plan-bundle and HOA-packet downloads: render in June,
+  capture every view, zip, restore the page. Covered by `tests-e2e/export.spec.js`.
 - `src/ui/projectPicker.js` – the project picker and new-project form; `src/ui/controls.js` – the
   month slider, zoom controls, scale bars, and button/download helpers.
 

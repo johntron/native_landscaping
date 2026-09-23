@@ -57,13 +57,11 @@ import { clampHiddenLayerCount } from './state/layers.js';
 import { getGenus, getSpeciesKey } from './utils/speciesKey.js';
 import { buildTooltipLines } from './render/tooltip.js';
 import { createLayoutHistory } from './history/layoutHistory.js';
-import { captureViewToPng } from './export/viewCapture.js';
-import { buildHoaCoverLetter, summarizePlacedSpecies } from './export/hoaPacket.js';
-import { resolvePhotoPlacement } from './render/photoPlacement.js';
 import { viewBoxAttribute, workingExtentFt } from './render/setupOverlay.js';
 import { resolveYardBounds } from './render/yardBounds.js';
 import { resolvePageScale } from './render/pageScale.js';
 import { pageTitle } from './ui/siteRoute.js';
+import { createExportActions } from './export/exportActions.js';
 import { featurePoints, patchView, round2, scaleFeatures, translateFeaturesInside } from './state/yardEdits.js';
 import { addPlantFromCatalog, clonePlantById, removePlantById } from './state/plantEdits.js';
 import { renderSpeciesTable } from './render/speciesTable.js';
@@ -74,9 +72,6 @@ import {
   formatFileSize,
   initMonthSlider,
   initZoomControls,
-  nextFrame,
-  toggleButtonBusy,
-  triggerDownload,
   updateScaleIndicator,
 } from './ui/controls.js';
 
@@ -84,7 +79,6 @@ const MODE_KEY = 'native-landscaping-mode';
 const LEGACY_LOCK_STATE_KEY = 'native-landscaping-positions-locked';
 const MODES = ['view', 'edit', 'setup', 'features'];
 
-const EXPORT_MONTH = 6; // June
 
 const appState = {
   project: null,
@@ -121,8 +115,6 @@ const appState = {
 };
 
 let loadedSpeciesCsv = '';
-let isBundleExporting = false;
-const JSZipLib = typeof window !== 'undefined' ? window.JSZip : null;
 
 async function init() {
   const monthSlider = document.getElementById('monthSlider');
@@ -444,142 +436,19 @@ async function init() {
     }
     render();
   };
-  const handleBundleExport = async () => {
-    if (isBundleExporting) return;
-    if (!viewPanels.length || viewPanels.some(({ svg }) => !svg)) return;
-    if (!loadedSpeciesCsv) {
-      console.warn('No plants.csv loaded; cannot export bundle.');
-      return;
-    }
-    isBundleExporting = true;
-    const restoreToken = snapshotViewState({
-      monthSlider,
-      monthReadout,
-      state: appState,
-    });
-    toggleButtonBusy(exportBundleButton, true, 'Preparing bundle…');
-    applyHiddenLayers(0, { shouldRender: false });
-    appState.hoveredPlantId = '';
-    appState.targetedPlantId = '';
-    appState.month = EXPORT_MONTH;
-    if (monthSlider) monthSlider.value = String(EXPORT_MONTH);
-    if (monthReadout) monthReadout.textContent = MONTH_NAMES[EXPORT_MONTH - 1] || '';
-    render();
-    await nextFrame();
-
-    try {
-      if (!JSZipLib) {
-        throw new Error('JSZip is not loaded');
-      }
-      const panels = viewPanels.map(({ view, svg }) => ({
-        view,
-        svg,
-        fileName: `${view.id}-view.png`,
-      }));
-      const pngs = await Promise.all(
-        panels.map(({ view, svg }) =>
-          captureViewToPng({
-            svg,
-            viewBox: view.viewBox,
-            ...backgroundForCapture(project, view),
-          })
-        )
-      );
-
-      const zip = new JSZipLib();
-      zip.file('plants.csv', loadedSpeciesCsv);
-      zip.file('planting_layout.csv', buildLayoutCsv(appState.plants));
-      pngs.forEach((png, index) => {
-        zip.file(`images/${panels[index].fileName}`, png);
-      });
-      const blob = await zip.generateAsync({ type: 'blob' });
-      triggerDownload(blob, `${project.id}-plan.zip`);
-    } catch (err) {
-      console.error('Failed to export plan bundle', err);
-      alert('Unable to export plan bundle. Check console for details.');
-    } finally {
-      restoreViewState(restoreToken, {
-        monthSlider,
-        monthReadout,
-        state: appState,
-        onRestore: () => {
-          syncLayerButtons(appState.hiddenLayerCount);
-          render();
-        },
-      });
-      toggleButtonBusy(exportBundleButton, false);
-      isBundleExporting = false;
-    }
-  };
-  const handleHoaExport = async () => {
-    if (isBundleExporting) return;
-    if (!viewPanels.length || viewPanels.some(({ svg }) => !svg)) return;
-    isBundleExporting = true;
-    const restoreToken = snapshotViewState({
-      monthSlider,
-      monthReadout,
-      state: appState,
-    });
-    toggleButtonBusy(exportHoaButton, true, 'Preparing packet…');
-    applyHiddenLayers(0, { shouldRender: false });
-    appState.hoveredPlantId = '';
-    appState.targetedPlantId = '';
-    appState.month = EXPORT_MONTH;
-    if (monthSlider) monthSlider.value = String(EXPORT_MONTH);
-    if (monthReadout) monthReadout.textContent = MONTH_NAMES[EXPORT_MONTH - 1] || '';
-    render();
-    await nextFrame();
-
-    try {
-      if (!JSZipLib) {
-        throw new Error('JSZip is not loaded');
-      }
-      const panels = viewPanels.map(({ view, svg }) => ({
-        view,
-        svg,
-        fileName: `${view.id}-view.png`,
-      }));
-      const pngs = await Promise.all(
-        panels.map(({ view, svg }) =>
-          captureViewToPng({
-            svg,
-            viewBox: view.viewBox,
-            ...backgroundForCapture(project, view),
-          })
-        )
-      );
-
-      const species = summarizePlacedSpecies(appState.plants);
-      const coverLetter = buildHoaCoverLetter({
-        projectName: project.name || project.id,
-        species,
-        preparedOn: new Date().toISOString().slice(0, 10),
-      });
-
-      const zip = new JSZipLib();
-      zip.file('cover-letter.txt', coverLetter);
-      pngs.forEach((png, index) => {
-        zip.file(`images/${panels[index].fileName}`, png);
-      });
-      const blob = await zip.generateAsync({ type: 'blob' });
-      triggerDownload(blob, `${project.id}-hoa-packet.zip`);
-    } catch (err) {
-      console.error('Failed to export HOA packet', err);
-      alert('Unable to export HOA packet. Check console for details.');
-    } finally {
-      restoreViewState(restoreToken, {
-        monthSlider,
-        monthReadout,
-        state: appState,
-        onRestore: () => {
-          syncLayerButtons(appState.hiddenLayerCount);
-          render();
-        },
-      });
-      toggleButtonBusy(exportHoaButton, false);
-      isBundleExporting = false;
-    }
-  };
+  const exportActions = createExportActions({
+    appState,
+    getProject: () => project,
+    getViewPanels: () => viewPanels,
+    getSpeciesCsv: () => loadedSpeciesCsv,
+    render: () => render(),
+    applyHiddenLayers,
+    syncLayerButtons,
+    monthSlider,
+    monthReadout,
+  });
+  const handleBundleExport = () => exportActions.exportBundle(exportBundleButton);
+  const handleHoaExport = () => exportActions.exportHoaPacket(exportHoaButton);
   /**
    * Size every panel from the yard it covers, at one scale for the page.
    *
@@ -1570,21 +1439,6 @@ async function init() {
   render();
 }
 
-/**
- * Background to composite under a view's export: an absolute URL plus, for a
- * photo that has been placed, the rectangle of the drawing it occupies. Both
- * are null when the view has no image yet — captureViewToPng then skips the
- * background rather than fetching projects/<slug>/null.
- */
-function backgroundForCapture(project, view) {
-  const { path, rect } = resolvePhotoPlacement(view);
-  if (!path) return { backgroundUrl: null, destRect: null };
-  return {
-    backgroundUrl: new URL(projectAssetPath(project.id, path), document.baseURI).toString(),
-    destRect: rect,
-  };
-}
-
 const DEFAULT_LOAD_ERROR_HINT =
   'Please serve plants.csv and the projects/ directory over HTTP (for example, via `npx serve`).';
 
@@ -1636,34 +1490,6 @@ function persistMode(mode) {
   } catch (err) {
     console.warn('Unable to persist mode', err);
   }
-}
-
-function snapshotViewState({ monthSlider, monthReadout, state }) {
-  return {
-    month: state.month,
-    hiddenLayerCount: state.hiddenLayerCount,
-    highlightedSpeciesKey: state.highlightedSpeciesKey,
-    targetedPlantId: state.targetedPlantId,
-    hoveredPlantId: state.hoveredPlantId,
-    monthSliderValue: monthSlider ? monthSlider.value : null,
-    monthReadoutText: monthReadout ? monthReadout.textContent : null,
-  };
-}
-
-function restoreViewState(snapshot, { monthSlider, monthReadout, state, onRestore }) {
-  if (!snapshot) return;
-  state.month = snapshot.month;
-  state.hiddenLayerCount = snapshot.hiddenLayerCount;
-  state.highlightedSpeciesKey = snapshot.highlightedSpeciesKey;
-  state.targetedPlantId = snapshot.targetedPlantId;
-  state.hoveredPlantId = snapshot.hoveredPlantId;
-  if (monthSlider && snapshot.monthSliderValue !== null) {
-    monthSlider.value = snapshot.monthSliderValue;
-  }
-  if (monthReadout && snapshot.monthReadoutText !== null) {
-    monthReadout.textContent = snapshot.monthReadoutText;
-  }
-  onRestore?.();
 }
 
 if (document.readyState === 'loading') {
