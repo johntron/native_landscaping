@@ -524,6 +524,7 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
 - `src/data/backgroundUpload.js` – browser-side resize/re-encode, and the upload POST.
 - `src/data/backgroundStore.js` – server-side upload guards: allowed types, magic-byte
   sniff, and the filename the server (never the client) chooses.
+- `src/interaction/setupMode.js` – Setup mode itself: the panel, the one-view setup overlay, validation of every view edit (`applyViewEdit`), photo upload, and the scale-to-fit / move-inside actions. The setup controllers and the photo-aspect cache they read stay in `app.js`.
 - `src/interaction/setupPanel.js`, `src/interaction/setupController.js`, `src/render/setupOverlay.js` – Setup mode's yard form and stranded-plant list, the camera drag, and the guides.
 - `src/interaction/featuresMode.js` – Features mode itself: the panel, the plan overlay, and edit → validate → save for features.json. The controllers stay built in `app.js`'s `rebuildViews` beside the drag and setup controllers.
 - `src/interaction/featurePanel.js`, `src/interaction/featureController.js`, `src/render/featureOverlay.js` – Features mode's list, plan-only drag handles, and selection outline.
