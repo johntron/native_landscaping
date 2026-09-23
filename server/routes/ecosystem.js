@@ -78,8 +78,14 @@ export async function handleEcosystemRoutes(req, res, { url, pathname, publicDir
   // such, never silently filled in as if it were usable.
   if (pathname === '/api/ecoregion' && req.method === 'GET') {
     try {
-      const lat = Number(url.searchParams.get('lat'));
-      const lng = Number(url.searchParams.get('lng'));
+      // A missing or blank param must stay missing: Number(null) and Number('')
+      // are both 0, which passed the finiteness check and looked up 0,0 (nl-yju).
+      const coordinate = (name) => {
+        const raw = url.searchParams.get(name);
+        return raw === null || raw.trim() === '' ? NaN : Number(raw);
+      };
+      const lat = coordinate('lat');
+      const lng = coordinate('lng');
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
         throw new Error('"lat" and "lng" query params are required and must be numbers');
       }
