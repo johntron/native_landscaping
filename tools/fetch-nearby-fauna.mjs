@@ -27,6 +27,7 @@ import {
   fetchEstablishmentMeans,
   fetchWithBackoff,
   resolvePlaceId,
+  restrictToWildPreciseRecords,
   sleep,
 } from './inatShared.mjs';
 
@@ -188,6 +189,9 @@ async function fetchSpeciesCounts({ lat, lng, radiusMi, iconicTaxon, fetchJson }
   url.searchParams.set('iconic_taxa[]', iconicTaxon);
   url.searchParams.set('per_page', String(PER_TAXON_PAGE_SIZE));
   url.searchParams.set('order_by', 'observation_count'); // most-established local presence first
+  // Wild, research-grade, precisely located records only (nl-hr5): captive
+  // records and obscured locations would put species in the wrong distance band.
+  restrictToWildPreciseRecords(url);
 
   const body = await fetchJson('observations/species_counts', url);
   return (body.results || [])

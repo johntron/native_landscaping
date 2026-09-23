@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fetchTaxaFacts, fetchEstablishmentMeans } from '../tools/inatShared.mjs';
+import { fetchTaxaFacts, fetchEstablishmentMeans, restrictToWildPreciseRecords } from '../tools/inatShared.mjs';
 
 test('fetchTaxaFacts returns both establishment_means and conservation_status from one batched /v1/taxa request', async () => {
   const calls = [];
@@ -44,4 +44,18 @@ test('fetchEstablishmentMeans stays a thin wrapper returning only the means map 
   const meansById = await fetchEstablishmentMeans([1], 1, { fetchJson });
   assert.equal(meansById.get(1), 'native');
   assert.equal(meansById instanceof Map, true);
+});
+
+test('restrictToWildPreciseRecords appends the four filters after existing params, in cache-key order', () => {
+  const url = new URL('https://api.inaturalist.org/v1/observations/species_counts');
+  url.searchParams.set('lat', '32.8');
+  url.searchParams.set('order_by', 'observation_count');
+  restrictToWildPreciseRecords(url);
+  // The probe cache keys on url.toString(), so this exact order is what keeps
+  // fetch-ecosystem-index.mjs's cached responses reachable (it set these same
+  // four inline, in this order, before nl-hr5 moved them here).
+  assert.equal(
+    url.search,
+    '?lat=32.8&order_by=observation_count&captive=false&quality_grade=research&taxon_geoprivacy=open&geoprivacy=open'
+  );
 });

@@ -15,6 +15,39 @@
  */
 export const MI_TO_KM = 1.60934;
 
+/**
+ * Restrict an observation query to wild, species-vetted records whose public
+ * location is the real one. Both fetch tools call this; the nearby-fauna tool
+ * went without it until nl-hr5, which is the drift this module exists to stop.
+ *
+ * - captive=false + quality_grade=research: without these a Dallas search for
+ *   Amphibia returned a captive axolotl and red-eyed tree frog alongside
+ *   actually-wild species.
+ * - Two INDEPENDENT obscuring mechanisms, both of which randomize the public
+ *   location within a large cell, and both need excluding — one does not imply
+ *   the other:
+ *   - taxon_geoprivacy=open excludes species iNaturalist itself force-obscures
+ *     (raptors, poaching-targeted plants). Confirmed on Haliaeetus
+ *     leucocephalus (Bald Eagle): every nearby record had
+ *     public_positional_accuracy=29039m (~18 mi); geoprivacy=open alone did
+ *     NOT catch it.
+ *   - geoprivacy=open excludes an individual observer's own choice to obscure
+ *     a record. Confirmed on a nearby Phyllanthus polygonoides record
+ *     (geoprivacy=obscured, taxon_geoprivacy=None); taxon_geoprivacy=open
+ *     alone did NOT catch it. It drops nearby Plantae by only ~1.5%
+ *     (1062 -> 1046), so it is not excluding ordinary public records.
+ *
+ * Sets the params in this order on purpose: the probe cache keys on the full
+ * URL, so a reordering would orphan every cached response.
+ * @param {URL} url
+ */
+export function restrictToWildPreciseRecords(url) {
+  url.searchParams.set('captive', 'false');
+  url.searchParams.set('quality_grade', 'research');
+  url.searchParams.set('taxon_geoprivacy', 'open');
+  url.searchParams.set('geoprivacy', 'open');
+}
+
 /** @param {number} ms */
 export function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
