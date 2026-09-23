@@ -185,9 +185,14 @@ pattern as `nearby-fauna.csv` above; geometry math (point-to-line distance,
 polygon area) lives in `tools/geoShared.mjs`, tested in
 `tests/geoShared.test.js`.
 
-**Not yet built**: no `src/analysis/` rule reads this table and no UI
-surfaces it — nl-3hi.7.6 (verification debt) gates that, and stages 3/4
-(PAD-US protection status, named barriers) add more rows first.
+**Shown on the "What's nearby" page** (`ecosystem.html`, section "Habitat nearby"):
+`src/analysis/anchors.js` groups the rows (pure, unit-tested) and the page lists
+streams and unchecked green space by name and straight-line distance, with the
+USGS and OpenStreetMap credits (`ecology/NOTICE.md`; licensing checked under
+nl-3hi.7.6 item 3). Still not built: no `src/analysis/` rule grades against it,
+and stages 3/4 (PAD-US protection status, named barriers) add more rows first.
+The page makes no claim that waits on nl-3hi.7.6's open items (GAP code
+meanings, cemeteries as prairie remnants, the EMST caveat).
 
 ## `project.json`: `ecoregion` and `site`
 

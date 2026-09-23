@@ -94,6 +94,16 @@
   font-style: italic;
 }
 
+/*
+ * Habitat nearby: its notes are the section's honesty caveats (distance only,
+ * no score; an OSM tag is not habitat) and the OpenStreetMap credit the ODbL
+ * requires, so they stay visible on a phone, where styles.css hides every
+ * other .data-note.
+ */
+.habitat-nearby .data-note {
+  display: block;
+}
+
 .plant-matches__empty {
   color: var(--ink-faint);
   font-size: 0.9rem;

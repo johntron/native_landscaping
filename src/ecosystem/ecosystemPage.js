@@ -8,6 +8,7 @@ import { loadProjectIndex, loadProjectConfig, resolveActiveProjectId } from '../
 import { fetchCsv, parseCsv } from '../data/csvLoader.js';
 import { computePlantMatches, renderPlantMatchItem, escapeHtml } from './plantMatches.view.js';
 import { pageTitle } from '../ui/siteRoute.js';
+import { candidateSize, formatDistance, groupAnchors, kindLabel } from '../analysis/anchors.js';
 
 const PROJECT_QUERY_PARAM = 'project';
 
@@ -21,6 +22,10 @@ const navDesignLink = document.getElementById('navDesignLink');
 const plantMatchesNoteEl = document.getElementById('plantMatchesNote');
 const plantMatchCandidatesEl = document.getElementById('plantMatchCandidates');
 const plantMatchCatalogEl = document.getElementById('plantMatchCatalog');
+const habitatSectionEl = document.getElementById('habitatNearby');
+const habitatAnchorsEl = document.getElementById('habitatAnchors');
+const habitatCandidatesEl = document.getElementById('habitatCandidates');
+const habitatCreditEl = document.getElementById('habitatNearbyCredit');
 
 let allRows = [];
 let sortKey = 'observation_count';
@@ -55,6 +60,9 @@ async function load() {
     rowsEl.innerHTML = `<tr><td colspan="7">"${project.name}" declares no "place" in project.json — add one before indexing.</td></tr>`;
     return;
   }
+  // Independent of the species index below: a missing anchors table costs this
+  // section, never the page.
+  renderHabitatNearby(place).catch((err) => console.warn('Habitat anchors unavailable', err));
   if (noteEl) {
     noteEl.innerHTML = `Species reported on iNaturalist near "${place}", banded by how far each taxon
       plausibly ranges to find a newly planted specimen. See
@@ -182,3 +190,48 @@ taxonFilter.addEventListener('change', render);
 searchFilter.addEventListener('input', render);
 
 load();
+
+/**
+ * Streams and green space near the site (ecology/anchors.csv, nl-3hi.7). Name and
+ * straight-line distance only, by design: no score or ranking beyond distance.
+ * The section stays hidden when this place has no rows.
+ */
+async function renderHabitatNearby(place) {
+  if (!habitatSectionEl) return;
+  const rows = parseCsv(await fetchCsv(new URL('ecology/anchors.csv', document.baseURI)));
+  const { anchors, candidates, fetchedOn } = groupAnchors(rows, place);
+  if (!anchors.length && !candidates.length) return;
+
+  const renderList = (listEl, entries, describe) => {
+    listEl.innerHTML = '';
+    if (!entries.length) {
+      const empty = document.createElement('li');
+      empty.className = 'plant-matches__empty';
+      empty.textContent = 'None found within range.';
+      listEl.appendChild(empty);
+      return;
+    }
+    entries.forEach((entry) => {
+      const item = document.createElement('li');
+      item.className = 'plant-matches__item';
+      const name = document.createElement('strong');
+      name.textContent = entry.name;
+      const facts = document.createElement('div');
+      facts.className = 'plant-matches__evidence';
+      facts.textContent = describe(entry);
+      item.append(name, facts);
+      listEl.appendChild(item);
+    });
+  };
+
+  renderList(habitatAnchorsEl, anchors, (entry) => `${formatDistance(entry.distanceMi)} away`);
+  renderList(habitatCandidatesEl, candidates, (entry) =>
+    [kindLabel(entry.kind), candidateSize(entry.detail), `${formatDistance(entry.distanceMi)} away`]
+      .filter(Boolean)
+      .join(' · ')
+  );
+  if (habitatCreditEl && fetchedOn) {
+    habitatCreditEl.append(` Fetched ${fetchedOn}.`);
+  }
+  habitatSectionEl.hidden = false;
+}

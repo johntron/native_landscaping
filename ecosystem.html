@@ -29,6 +29,34 @@
       </div>
     </header>
     <main class="ecosystem-page">
+      <section class="plant-matches habitat-nearby" id="habitatNearby" hidden>
+        <h2>Habitat nearby</h2>
+        <p class="data-note" id="habitatNearbyNote">
+          Water and green space near this site, by straight-line distance, rounded to the nearest
+          quarter mile. This list says where things are. It does not score how well a yard connects
+          to them, and it does not yet name what lies between (roads, highways, open lawn).
+        </p>
+        <div class="plant-matches__group">
+          <h3>Streams</h3>
+          <p class="data-note">Mapped in the USGS National Hydrography Dataset.</p>
+          <ul class="plant-matches__list" id="habitatAnchors"></ul>
+        </div>
+        <div class="plant-matches__group">
+          <h3>Parks and cemeteries, not checked</h3>
+          <p class="data-note">
+            Land OpenStreetMap tags as a park, cemetery, forest, reserve, or golf course, 1 acre or
+            larger. A tag records what land is called, not whether it is habitat: a live test of
+            this query returned the State Fair grounds as a park. Treat these as places to go and look.
+          </p>
+          <ul class="plant-matches__list" id="habitatCandidates"></ul>
+        </div>
+        <p class="data-note habitat-nearby__credit" id="habitatNearbyCredit">
+          Streams: U.S. Geological Survey, National Hydrography Dataset (public domain).
+          Parks and cemeteries: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>
+          contributors, available under the Open Database License.
+        </p>
+      </section>
+
       <section class="plant-matches" id="plantMatches">
         <h2>Plant matches</h2>
         <p class="data-note" id="plantMatchesNote"></p>
