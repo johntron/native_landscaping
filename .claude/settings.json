@@ -23,7 +23,10 @@
       }
     ]
   },
-  "enabledMcpjsonServers": ["codegraph"],
+  "enabledMcpjsonServers": [
+    "codegraph",
+    "usda-plants"
+  ],
   "permissions": {
     "allow": [
       "Bash(bd ready:*)",

@@ -5,8 +5,8 @@
       "name": "serve",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "serve"],
-      "port": 8123,
-      "env": { "PORT": "8123" }
+      "port": 8130,
+      "env": { "PORT": "8130" }
     }
   ]
 }
