@@ -22,18 +22,15 @@ import { renderViews } from './render/renderViews.js';
 import { createViewTransform } from './render/viewTransform.js';
 import { createSetupController } from './interaction/setupController.js';
 import { createFeatureController } from './interaction/featureController.js';
-import { analyzeEcology, buildEcologyContext } from './analysis/ecology.js';
 import { emptyHostGeneraIndex } from './analysis/hostGenera.js';
 import {
   emptyInteractionsIndex,
   emptyNearbyFaunaIndex,
 } from './analysis/faunaMatches.js';
 import { loadEcologyTables } from './data/ecologyTables.js';
-import { renderEcologyPanel } from './render/ecologyPanel.js';
 import { configureViews } from './render/viewConfig.js';
 import { createPlantDragController, createElevationDragController } from './interaction/dragController.js';
 import { clampHiddenLayerCount } from './state/layers.js';
-import { getSpeciesKey } from './utils/speciesKey.js';
 import { workingExtentFt } from './render/setupOverlay.js';
 import { resolveYardBounds } from './render/yardBounds.js';
 import { resolvePageScale } from './render/pageScale.js';
@@ -43,9 +40,9 @@ import { createDetailSheet } from './ui/detailSheet.js';
 import { createFeaturesMode } from './interaction/featuresMode.js';
 import { createSetupMode } from './interaction/setupMode.js';
 import { createLayoutHistoryController } from './history/layoutHistoryController.js';
+import { createSpeciesHighlight } from './ui/speciesHighlight.js';
 import { patchView } from './state/yardEdits.js';
 import { addPlantFromCatalog, clonePlantById, removePlantById } from './state/plantEdits.js';
-import { renderSpeciesTable } from './render/speciesTable.js';
 import { createPlantMenu } from './interaction/plantMenu.js';
 import { PROJECT_QUERY_PARAM, initNewProjectForm, initProjectPicker } from './ui/projectPicker.js';
 import {
@@ -238,7 +235,6 @@ async function init() {
   initMonthSlider(monthSlider, monthReadout, appState.month);
 
   let render = () => {};
-  let highlightedRowEl = null;
   const layoutHistory = createLayoutHistoryController({
     appState,
     undoButton,
@@ -260,113 +256,16 @@ async function init() {
     }
   };
 
-  const setHighlightedSpecies = (speciesKey, rowEl) => {
-    const normalized = (speciesKey || '').toLowerCase();
-    if (highlightedRowEl && highlightedRowEl !== rowEl) {
-      highlightedRowEl.classList.remove('is-highlighted');
-    }
-    if (normalized && rowEl) {
-      rowEl.classList.add('is-highlighted');
-      highlightedRowEl = rowEl;
-    } else if (!normalized) {
-      if (highlightedRowEl) highlightedRowEl.classList.remove('is-highlighted');
-      highlightedRowEl = null;
-    }
-    if (appState.highlightedSpeciesKey !== normalized) {
-      appState.highlightedSpeciesKey = normalized;
-      render();
-    }
-  };
+  const speciesHighlight = createSpeciesHighlight({
+    appState,
+    speciesTableContainer: document.getElementById('speciesTable'),
+    ecologyContainer: document.getElementById('ecologyCheck'),
+    render: () => render(),
+  });
+  const refreshSpeciesTable = () => speciesHighlight.refresh();
+  const setTargetedPlant = (plantId) => speciesHighlight.setTargetedPlant(plantId);
+  const setHoveredPlant = (plantId) => speciesHighlight.setHoveredPlant(plantId);
 
-  const clearHighlightedSpecies = (rowEl) => {
-    if (rowEl && highlightedRowEl && rowEl !== highlightedRowEl) return;
-    if (highlightedRowEl) {
-      highlightedRowEl.classList.remove('is-highlighted');
-      highlightedRowEl = null;
-    }
-    if (appState.highlightedSpeciesKey) {
-      appState.highlightedSpeciesKey = '';
-      render();
-    }
-  };
-
-  /**
-   * Re-grade the design. Rides refreshSpeciesTable rather than render() for the
-   * same reason the table does: render() fires on every month-slider input
-   * event, and rebuilding this DOM mid-drag would collapse a row the reader had
-   * just opened. What changes the grade is what is planted, and that is exactly
-   * when refreshSpeciesTable runs.
-   */
-  const refreshEcologyPanel = () => {
-    const container = document.getElementById('ecologyCheck');
-    if (!container) return;
-    const results = analyzeEcology(
-      buildEcologyContext({
-        plants: appState.plants,
-        species: appState.species,
-        hostGenera: appState.hostGenera,
-        site: appState.project?.site,
-        ecoregion: appState.project?.ecoregion,
-        interactions: appState.interactions,
-        nearbyFauna: appState.nearbyFauna,
-        place: appState.project?.place,
-      })
-    );
-    renderEcologyPanel(results, container);
-  };
-
-  /**
-   * Rebuild the species legend from the current plants. Adding, removing, or
-   * undoing changes which species are placed, and the table is built from the
-   * layout rather than from the catalog. Deliberately not called from render():
-   * the month slider renders on every input event, and rebuilding the table
-   * mid-drag would orphan the row this closure is holding.
-   */
-  const refreshSpeciesTable = () => {
-    highlightedRowEl = null;
-    const stillPlaced = appState.plants.some(
-      (plant) => getSpeciesKey(plant) === appState.highlightedSpeciesKey
-    );
-    if (appState.highlightedSpeciesKey && !stillPlaced) {
-      appState.highlightedSpeciesKey = '';
-    }
-    renderSpeciesTable(document.getElementById('speciesTable'), appState.plants, appState.hostGenera, {
-      onHoverStart: (speciesKey, rowEl) => setHighlightedSpecies(speciesKey, rowEl),
-      onHoverEnd: (_speciesKey, rowEl) => clearHighlightedSpecies(rowEl),
-    });
-    refreshEcologyPanel();
-  };
-
-
-  const setTargetedPlant = (plantId) => {
-    const normalized = plantId ? String(plantId) : '';
-    if (normalized === appState.targetedPlantId) return;
-    appState.targetedPlantId = normalized;
-    render();
-  };
-  const findSpeciesRowEl = (speciesKey) => {
-    if (!speciesKey) return null;
-    const container = document.getElementById('speciesTable');
-    if (!container) return null;
-    return (
-      Array.from(container.querySelectorAll('tr[data-species-key]')).find(
-        (row) => row.dataset.speciesKey === speciesKey
-      ) || null
-    );
-  };
-  const setHoveredPlant = (plantId) => {
-    const normalized = plantId ? String(plantId) : '';
-    if (normalized === appState.hoveredPlantId) return;
-    appState.hoveredPlantId = normalized;
-    const plant = normalized ? appState.plants.find((p) => String(p.id) === normalized) : null;
-    if (plant) {
-      const speciesKey = getSpeciesKey(plant);
-      setHighlightedSpecies(speciesKey, findSpeciesRowEl(speciesKey));
-    } else {
-      clearHighlightedSpecies();
-    }
-    render();
-  };
   const exportActions = createExportActions({
     appState,
     getProject: () => project,

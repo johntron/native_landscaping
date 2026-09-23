@@ -537,6 +537,7 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
 - `src/history/layoutHistoryController.js` – the page's side of it: undo/redo buttons, the save-status line, and `commit()` (record, persist, adopt the server's entry and cursor).
 - `src/state/plantEdits.js` – add, clone, and remove a plant; `src/state/yardEdits.js` – scale and
   shift features, patch a view. Pure, and unit-tested directly.
+- `src/ui/speciesHighlight.js` – the table ↔ drawing link: highlighted species, targeted and hovered plant, and `refresh()` (rebuild the table, re-grade the ecology check).
 - `src/render/speciesTable.js` – the species table; `src/interaction/plantMenu.js` – the plant's
   Clone/Remove menu.
 - `src/export/exportActions.js` – the plan-bundle and HOA-packet downloads: render in June,
