@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openScratchProject, plantPointerTarget, readScratchLayout } from './helpers.js';
+import { openScratchProject, plantPointerTarget, readScratchHistory, readScratchLayout } from './helpers.js';
 
 // Adding and removing both auto-save through POST /api/layout, so these run
 // against the throwaway document root built by scratch-fixture.mjs — never the
@@ -86,6 +86,8 @@ test.describe('adding and removing plants', () => {
 
   test('undo and redo both move the saved layout, and the buttons track what is possible', async ({ page }) => {
     await openScratchProject(page, 'plant-redo');
+    // The scratch copy may carry the source project's own history, in any shape.
+    const historyBefore = (await readScratchHistory('plant-redo'))?.entries.length ?? 0;
     const saved = async () => (await readScratchLayout('plant-redo')).map((row) => row.id);
     const before = await planPlants(page).count();
 
@@ -108,5 +110,17 @@ test.describe('adding and removing plants', () => {
     await expect(planPlants(page)).toHaveCount(before - 1);
     await expect(redo).toBeDisabled();
     await expect.poll(saved, { timeout: 5000 }).not.toContain(victimId);
+
+    // What this test wrote to history is placements only (nl-3s5.19): no
+    // species attributes on disk. The remove is the last entry; with no history
+    // before it, the server also wrote an "Initial layout" entry.
+    const history = await readScratchHistory('plant-redo');
+    const written = history.entries.slice(Math.min(historyBefore, history.entries.length - 1));
+    expect(written.length).toBeGreaterThanOrEqual(1);
+    for (const entry of written) {
+      for (const plant of entry.plants) {
+        expect(Object.keys(plant).sort()).toEqual(['id', 'speciesId', 'x', 'y']);
+      }
+    }
   });
 });

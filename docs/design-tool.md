@@ -458,9 +458,23 @@ layouts, history, the rules and the exports:
   write a row nothing can read back. `getSpeciesKey` (the grouping key for
   highlighting, the rules engine and the HOA species list) is the lower-cased
   `speciesId`. Never `.id`, which on a plant is the plant's own id.
-- **History entries** in `layout-history.json` are full plant snapshots, each with
-  its `speciesId`. `rehydratePlants` re-derives attributes by that id. A snapshot
-  from before species ids falls back to its botanical name, as below.
+- **History entries** in `layout-history.json` hold placements only (nl-3s5.19):
+  each plant is `{ id, speciesId, x, y }`, plus any optional per-plant field that is
+  not a species attribute (`src/data/placements.js` draws that line, and carries
+  such fields through untouched). A displayed plant is always
+  `createPlantFromSpecies(species, placement)`, via `plantsFromPlacements`, so undo
+  after a catalog correction shows the correction. The server reduces whatever a
+  client posts to placements, so an old tab cannot put attributes back. A legacy
+  full-object snapshot still loads the same way (its attributes are ignored); one
+  from before species ids falls back to its botanical name, as below, and one that
+  resolves to nothing is kept verbatim. `tools/migrate-history-placements.mjs
+  <projects-dir> [--dry-run]` reduces old files, with a backup per changed file.
+- **The layout file wins over history.** On load, `src/history/reconcileLayout.js`
+  compares `planting_layout.csv` with the entry at the cursor (same plants, order,
+  ids, species ids, and coordinates as the CSV writes them). If another entry
+  matches, the cursor moves there and the server is told; if none does (the CSV was
+  edited outside the app), the CSV's layout is saved as a new entry, "Layout file
+  edited outside the app", so undo still reaches the last state made in the app.
 - **plants.csv ids are required and unique**; `parseSpeciesCsv` throws otherwise.
   Renaming an `id` orphans every yard that uses it, so don't. Renaming a
   `botanical_name` is safe (`tests/plantParser.test.js` proves it).
@@ -578,7 +592,9 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
 - `src/render/*` – view configuration, SVG helpers, tooltip builder, plan view and elevation renderers.
 - `src/state/seasonalState.js` – pure logic for foliage/bloom state per month.
 - `src/interaction/dragController.js` – pointer events + hit-testing for moving plants in plan view.
-- `src/history/layoutHistory.js` – the undo/redo stack; server-backed via `/api/history`.
+- `src/history/layoutHistory.js` – the undo/redo stack of placements; server-backed via `/api/history`.
+- `src/history/reconcileLayout.js` – which history entry the saved layout file is showing (see above).
+- `src/data/placements.js` – a plant reduced to its placement, and `sameLayout`.
 - `src/history/layoutHistoryController.js` – the page's side of it: undo/redo buttons, the save-status line, and `commit()` (record, persist, adopt the server's entry and cursor).
 - `src/state/plantEdits.js` – add, clone, and remove a plant; `src/state/yardEdits.js` – scale and
   shift features, patch a view. Pure, and unit-tested directly.

@@ -30,71 +30,32 @@ async function runPersistenceTest() {
   assert.strictEqual(Array.isArray(historyData.entries) ? historyData.entries.length : 0, 1);
   assert.strictEqual(historyStatusMessages[0].state, 'success');
 
-  const earlierPlants = [{ id: 'match-plant', speciesId: 'match', botanicalName: 'Match', x: 1, y: 2 }];
-  const laterPlants = [{ id: 'future-plant', speciesId: 'future', botanicalName: 'Future', x: 3, y: 4 }];
-  const matchCsv = buildLayoutCsv(laterPlants);
-  const historyMatch = await loadLayoutHistory(null, {
-    layoutCsv: matchCsv,
+  // History comes back as placements whatever shape the server sent (a legacy
+  // full-object snapshot here), and the layout CSV no longer filters it: that
+  // reconciliation is src/history/reconcileLayout.js, run by the controller.
+  const legacyPlant = {
+    id: 'match-plant', speciesId: 'match', botanicalName: 'Match', commonName: 'Match',
+    width: 3, growingMonths: [3, 4], x: 1, y: 2,
+  };
+  const laterPlants = [{ id: 'future-plant', speciesId: 'future', x: 3, y: 4 }];
+  const mismatchCsv = buildLayoutCsv([{ id: 'mismatch', speciesId: 'mismatch', x: 9, y: 8 }]);
+  const loaded = await loadLayoutHistory(null, {
+    layoutCsv: mismatchCsv,
     fetchFn: async () => ({
       ok: true,
       json: async () => ({
         entries: [
-          { id: 'match', timestamp: '2024-01-01T00:00:00Z', description: 'match', plants: earlierPlants },
+          { id: 'match', timestamp: '2024-01-01T00:00:00Z', description: 'match', plants: [legacyPlant] },
           { id: 'future', timestamp: '2024-01-02T00:00:00Z', description: 'future', plants: laterPlants },
         ],
         cursor: 1,
       }),
     }),
   });
-  assert.strictEqual(Array.isArray(historyMatch.entries) ? historyMatch.entries.length : 0, 2);
-  assert.strictEqual(historyMatch.cursor, 1);
-
-  const mismatchCsv = buildLayoutCsv([{ id: 'mismatch', speciesId: 'mismatch', botanicalName: 'Mismatch', x: 9, y: 8 }]);
-  const mismatchStatus = [];
-  const mismatchResult = await loadLayoutHistory(
-    (msg, state) => mismatchStatus.push({ msg, state }),
-    {
-      layoutCsv: mismatchCsv,
-      fetchFn: async () => ({
-        ok: true,
-    json: async () => ({
-      entries: [
-        { id: 'seed', timestamp: '2024-01-01T00:00:00Z', description: 'seed', plants: earlierPlants },
-      ],
-      cursor: 0,
-    }),
-      }),
-    }
-  );
-  assert.strictEqual(mismatchResult.entries.length, 0);
-  assert.strictEqual(mismatchResult.cursor, -1);
-  assert.ok(mismatchStatus.some((entry) => entry.msg && entry.msg.includes('diverged')));
-
-  // Removing the last plant is a legitimate layout (nl-a7g), and buildLayoutCsv
-  // always writes the header row, so an emptied layout's CSV is never a blank
-  // string — the match against history's own last-entry-emptied state must
-  // still succeed, not report a false divergence and discard the stack.
-  const emptyCsv = buildLayoutCsv([]);
-  const emptyStatus = [];
-  const emptyResult = await loadLayoutHistory(
-    (msg, state) => emptyStatus.push({ msg, state }),
-    {
-      layoutCsv: emptyCsv,
-      fetchFn: async () => ({
-        ok: true,
-        json: async () => ({
-          entries: [
-            { id: 'seed', timestamp: '2024-01-01T00:00:00Z', description: 'seed', plants: earlierPlants },
-            { id: 'removed', timestamp: '2024-01-02T00:00:00Z', description: 'removed last plant', plants: [] },
-          ],
-          cursor: 1,
-        }),
-      }),
-    }
-  );
-  assert.strictEqual(emptyResult.entries.length, 2);
-  assert.strictEqual(emptyResult.cursor, 1);
-  assert.ok(!emptyStatus.some((entry) => entry.msg && entry.msg.includes('diverged')));
+  assert.strictEqual(loaded.entries.length, 2);
+  assert.strictEqual(loaded.cursor, 1);
+  assert.deepStrictEqual(loaded.entries[0].plants, [{ id: 'match-plant', speciesId: 'match', x: 1, y: 2 }]);
+  assert.strictEqual(loaded.entries[0].description, 'match');
 
   const persistCalls = [];
   let persistStatusMessage = '';
@@ -106,7 +67,7 @@ async function runPersistenceTest() {
     };
   };
   await persistLayout(
-    [{ id: 'plant-1', x: 1, y: 2 }],
+    [{ id: 'plant-1', speciesId: 'sp', commonName: 'Stale', width: 3, x: 1, y: 2 }],
     'manual update',
     (msg, state) => {
       persistStatusMessage = msg;
@@ -121,7 +82,7 @@ async function runPersistenceTest() {
   assert.strictEqual(persistCalls[0].url, '/api/layout?project=backyard');
   let body = JSON.parse(persistCalls[0].opts.body);
   assert.strictEqual(body.description, 'manual update');
-  assert.strictEqual(body.plants.length, 1);
+  assert.deepStrictEqual(body.plants, [{ id: 'plant-1', speciesId: 'sp', x: 1, y: 2 }], 'placements only');
   assert.strictEqual(body.previousPlants, undefined);
   assert.ok(persistStatusMessage.startsWith('Last saved at'));
 

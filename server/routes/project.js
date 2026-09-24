@@ -10,6 +10,7 @@ import {
 } from '../../src/data/projectConfig.js';
 import { normalizeFeatures, serializeFeatures } from '../../src/data/featureConfig.js';
 import { projectIdFromUrl, resolveProjectPaths } from '../../src/data/projectPaths.js';
+import { toPlacementEntry, toPlacements } from '../../src/data/placements.js';
 import {
   MAX_UPLOAD_BYTES,
   imageTypeForContentType,
@@ -46,7 +47,8 @@ export async function handleProjectRoutes(req, res, { url, pathname, publicDir }
       const { historyFile } = resolveProjectPaths(projectIdFromUrl(url), publicDir);
       const history = await readHistoryFile(historyFile);
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ entries: history.entries, cursor: history.cursor }));
+      // Placements only in the response, even from a file not yet migrated.
+      res.end(JSON.stringify({ entries: history.entries.map(toPlacementEntry), cursor: history.cursor }));
     } catch (err) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: err.message }));
@@ -212,7 +214,7 @@ export async function handleProjectRoutes(req, res, { url, pathname, publicDir }
       await writeHistoryFile(historyFile, { entries: history.entries, cursor });
       console.log(`Layout for '${projectId}' rewound to '${entry.id}' (cursor ${cursor})`);
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ entry, cursor }));
+      res.end(JSON.stringify({ entry: toPlacementEntry(entry), cursor }));
     } catch (err) {
       console.error(err);
       res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -278,11 +280,16 @@ export async function handleProjectRoutes(req, res, { url, pathname, publicDir }
   return false;
 }
 
+/**
+ * A new history entry. Its plants are reduced to placements whatever the client
+ * sent, so a tab still running the pre-nl-3s5.19 code (which posts full plant
+ * objects) cannot put species attributes back into history.
+ */
 function makeEntry(plants, description, id) {
   return {
     id: id || `entry-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     timestamp: new Date().toISOString(),
     description: description || 'Manual layout update',
-    plants,
+    plants: toPlacements(plants),
   };
 }

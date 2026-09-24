@@ -25,8 +25,8 @@ export function buildLayoutCsv(plants) {
     lines.push([
       escapeCell(plant.id),
       escapeCell(plant.speciesId),
-      formatNumber(plant.x),
-      formatNumber(plant.y),
+      formatLayoutNumber(plant.x),
+      formatLayoutNumber(plant.y),
     ].join(','));
   });
 
@@ -34,19 +34,12 @@ export function buildLayoutCsv(plants) {
 }
 
 /**
- * buildLayoutCsv for COMPARISON only: null instead of a throw when some plant
- * has no speciesId. Loading history compares every saved entry against the
- * layout file, and one unreadable entry (a pre-species-id snapshot, or a stray
- * test row) must mean "this entry does not match", not "history failed to load".
- * @param {Array<Object>} plants
- * @returns {string|null}
+ * How the layout file writes a coordinate. Exported so a comparison against a
+ * saved layout (src/data/placements.js sameLayout) uses the file's own format.
+ * @param {number} value
+ * @returns {string}
  */
-export function tryBuildLayoutCsv(plants) {
-  if (!Array.isArray(plants) || plants.some((plant) => !plant?.speciesId)) return null;
-  return buildLayoutCsv(plants);
-}
-
-function formatNumber(value) {
+export function formatLayoutNumber(value) {
   if (!Number.isFinite(value)) return '';
   return value.toFixed(3);
 }

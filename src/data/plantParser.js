@@ -1,6 +1,7 @@
 import { parseCsv } from './csvLoader.js';
 import { classifyPlantLayer } from '../state/layers.js';
 import { buildSpeciesIndex, normalizeBotanicalName, resolveSpeciesRef } from './speciesResolver.js';
+import { placementExtras } from './placements.js';
 
 const DEFAULT_LEAF_COLOR = '#6b8e23';
 
@@ -187,47 +188,39 @@ export function buildPlantsFromCsv(speciesCsvText, layoutCsvText, { synonyms } =
 }
 
 /**
- * Re-derive a plant list's ATTRIBUTES from the current species catalog, keeping only
- * each plant's identity and position (id, speciesId, x, y).
+ * Build the plants to display from a list of placements: each one is
+ * createPlantFromSpecies(species, placement), with the species found in the
+ * catalog just parsed. This is how every plant list that comes out of history
+ * (on boot, and after undo/redo) is shown, so an entry recorded before a
+ * catalog correction shows the corrected values: history answers "where were
+ * things", and plants.csv alone answers "what is this species like".
  *
- * Layout history and the server's saved history entries hold full plant objects —
- * attributes included — because that is the simplest thing to snapshot for undo/redo.
- * But `plants.csv` is supposed to be the single source of truth for species
- * attributes (see AGENTS.md), and a history entry is a snapshot from whenever it was
- * recorded: restoring one verbatim after the catalog has since been corrected quietly
- * un-corrects it, and a plant placed months ago never picks up a catalog fix at all
- * until something else moves it. History should only ever answer "where were things",
- * never "what did the catalog say" — so every plant list this app is about to show
- * (on boot, and after undo/redo) goes through here first.
+ * The species is found by `speciesId`. A legacy snapshot from before species
+ * ids (tools/migrate-species-ids.mjs adds them) falls back to its botanical
+ * name, exactly or through the synonym table, never its epithet. A legacy
+ * full-object snapshot works the same way; its stored attributes are ignored.
  *
- * The species is found by `speciesId`. A snapshot from before species ids
- * (tools/migrate-species-ids.mjs adds them) falls back to its botanical name,
- * exactly or through the synonym table, never its epithet.
+ * A placement whose species cannot be found is returned exactly as it was
+ * rather than dropped: better a stale plant than a vanished one. For a legacy
+ * snapshot its old attributes are the only ones left to draw it with; a bare
+ * placement whose species has left plants.csv has none (see the report on
+ * nl-3s5.19).
  *
- * A plant whose species cannot be found is left exactly as it was in the snapshot
- * rather than dropped — better a stale plant than a vanished one, and its old
- * attributes are the only ones left to draw it with.
- *
- * @param {Array<object>} plants plant objects (from history, possibly stale)
+ * @param {Array<object>} placements placements (or legacy plant snapshots)
  * @param {Array<object>} species fresh rows from parseSpeciesCsv
  * @param {{synonyms?: Map<string, string>}} [options]
  */
-export function rehydratePlants(plants, species, { synonyms } = {}) {
-  if (!Array.isArray(plants) || !plants.length) return plants || [];
+export function plantsFromPlacements(placements, species, { synonyms } = {}) {
+  if (!Array.isArray(placements) || !placements.length) return placements || [];
   const index = buildSpeciesIndex(species, synonyms);
 
-  return plants.map((plant) => {
+  return placements.map((placement) => {
     const resolved = resolveSpeciesRef(index, {
-      speciesId: plant.speciesId,
-      botanicalName: plant.botanicalName || plant.botanicalKey,
+      speciesId: placement.speciesId,
+      botanicalName: placement.botanicalName || placement.botanicalKey,
     });
-    if (!resolved) return plant;
-
-    return createPlantFromSpecies(resolved.entry, {
-      id: plant.id,
-      x: plant.x,
-      y: plant.y,
-    });
+    if (!resolved) return placement;
+    return createPlantFromSpecies(resolved.entry, placement);
   });
 }
 
@@ -239,12 +232,18 @@ export function rehydratePlants(plants, species, { synonyms } = {}) {
  * The plant's `speciesId` comes from the species row and nothing else: it is
  * what buildLayoutCsv writes and what every later load resolves by.
  *
+ * Optional per-plant fields on the placement (anything that is neither core
+ * nor a species attribute, see src/data/placements.js) ride along on the plant,
+ * so toPlacement(plant) gives the placement back. Species attributes on the
+ * placement, as a legacy snapshot has, are overwritten by the catalog's.
+ *
  * @param {Object} speciesEntry a row from parseSpeciesCsv
  * @param {{id: string, x: number, y: number}} placement
  * @returns {Object} plant, including its computed layer
  */
 export function createPlantFromSpecies(speciesEntry, placement = {}) {
   const plant = {
+    ...placementExtras(placement),
     id: placement.id,
     commonName: speciesEntry.commonName,
     botanicalName: speciesEntry.botanicalName,

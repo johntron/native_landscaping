@@ -1,6 +1,6 @@
 import { serializeProjectConfig } from './projectConfig.js';
 import { normalizeFeatures, serializeFeatures } from './featureConfig.js';
-import { tryBuildLayoutCsv } from './layoutExporter.js';
+import { toPlacementEntry, toPlacements } from './placements.js';
 
 const DEFAULT_DESCRIPTION = 'Manual layout update';
 
@@ -19,6 +19,19 @@ function defaultFetch() {
   return null;
 }
 
+/**
+ * Fetch the saved history. Entries come back with their plants as placements
+ * (src/data/placements.js), whatever shape the file on disk still holds.
+ *
+ * This no longer compares history with planting_layout.csv: that is
+ * src/history/reconcileLayout.js, run by the history controller's start()
+ * against the plants the CSV built. `options.layoutCsv` is accepted and ignored
+ * so the existing caller in app.js needs no change (nl-3s5.3 removes it).
+ *
+ * @param {(message: string, state: string) => void} [updateStatus]
+ * @param {{ projectId?: string, fetchFn?: Function, layoutCsv?: string }} [options]
+ * @returns {Promise<{ entries: Array<object>, cursor: number }>}
+ */
 export async function loadLayoutHistory(updateStatus, options = {}) {
   const fetchFn = options.fetchFn || defaultFetch();
   if (!fetchFn) {
@@ -27,8 +40,6 @@ export async function loadLayoutHistory(updateStatus, options = {}) {
     }
     return { entries: [], cursor: -1 };
   }
-  const layoutCsvText =
-    typeof options.layoutCsv === 'string' ? options.layoutCsv.trim() : '';
 
   try {
     const response = await fetchFn(apiUrl('/api/history', options.projectId), { cache: 'no-store' });
@@ -36,27 +47,14 @@ export async function loadLayoutHistory(updateStatus, options = {}) {
       throw new Error(`History request failed (${response.status})`);
     }
     const data = await response.json();
-    let entries = Array.isArray(data.entries) ? data.entries : [];
+    const entries = (Array.isArray(data.entries) ? data.entries : []).map(toPlacementEntry);
     const reportedCursor =
       typeof data.cursor === 'number' && Number.isFinite(data.cursor)
         ? data.cursor
         : entries.length - 1;
-    let cursor = entries.length
+    const cursor = entries.length
       ? Math.max(0, Math.min(reportedCursor, entries.length - 1))
       : -1;
-
-    if (layoutCsvText && entries.length) {
-      const matchIndex = findHistoryEntryIndexByLayout(entries, layoutCsvText);
-      if (matchIndex >= 0) {
-        entries = entries.slice(0, matchIndex + 1);
-        cursor = entries.length - 1;
-      } else {
-        if (updateStatus) {
-          updateStatus('History diverged from planting_layout.csv; using CSV layout.', 'warning');
-        }
-        return { entries: [], cursor: -1 };
-      }
-    }
 
     if (updateStatus) {
       updateStatus(entries.length ? 'Loaded saved history' : 'Local history ready', 'success');
@@ -82,12 +80,13 @@ export async function persistLayout(plants, description, updateStatus, options =
     }
     return null;
   }
+  // Placements only: the server keeps what it is sent in history (nl-3s5.19).
   const payload = {
-    plants,
+    plants: toPlacements(plants),
     description: description || DEFAULT_DESCRIPTION,
   };
   if (Array.isArray(options.previousPlants) && options.previousPlants.length) {
-    payload.previousPlants = options.previousPlants;
+    payload.previousPlants = toPlacements(options.previousPlants);
   }
   try {
     const response = await fetchFn(apiUrl('/api/layout', options.projectId), {
@@ -248,33 +247,4 @@ export async function updateHistoryCursor(cursor, updateStatus, options = {}) {
     }
     return null;
   }
-}
-
-export function historyMatchesLayout(entries, cursor, layoutCsv) {
-  if (!Array.isArray(entries) || entries.length === 0) return false;
-  const index =
-    typeof cursor === 'number' && Number.isFinite(cursor)
-      ? cursor
-      : entries.length - 1;
-  if (index < 0 || index >= entries.length) return false;
-  const entry = entries[index];
-  if (!entry || !Array.isArray(entry.plants)) return false;
-  const entryCsv = (tryBuildLayoutCsv(entry.plants) || '').trim();
-  const layoutText = (layoutCsv || '').trim();
-  return Boolean(entryCsv && layoutText && entryCsv === layoutText);
-}
-
-function findHistoryEntryIndexByLayout(entries, layoutCsv) {
-  if (!Array.isArray(entries) || entries.length === 0) return -1;
-  const normalized = (layoutCsv || '').trim();
-  if (!normalized) return -1;
-  for (let i = entries.length - 1; i >= 0; i -= 1) {
-    const entry = entries[i];
-    if (!entry || !Array.isArray(entry.plants)) continue;
-    const entryCsv = (tryBuildLayoutCsv(entry.plants) || '').trim();
-    if (entryCsv && entryCsv === normalized) {
-      return i;
-    }
-  }
-  return -1;
 }

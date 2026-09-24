@@ -1,20 +1,14 @@
-const DEFAULT_DESCRIPTION = 'Manual layout update';
+/**
+ * The undo/redo stack. An entry holds placements only, `{ id, speciesId, x, y }`
+ * (src/data/placements.js): recording a list of full plant objects keeps just
+ * where each plant stands and which species it is, and everything handed back
+ * (undo, redo, getCurrentPlants) is placements for the caller to turn into
+ * plants with plantsFromPlacements. Seed entries in the legacy full-object shape
+ * are reduced the same way as they load (nl-3s5.19).
+ */
+import { toPlacements } from '../data/placements.js';
 
-function clonePlants(plants) {
-  if (!Array.isArray(plants)) return [];
-  if (typeof structuredClone === 'function') {
-    try {
-      return structuredClone(plants);
-    } catch (err) {
-      // Fall through to JSON fallback.
-    }
-  }
-  try {
-    return JSON.parse(JSON.stringify(plants));
-  } catch (err) {
-    return plants.map((plant) => ({ ...plant }));
-  }
-}
+const DEFAULT_DESCRIPTION = 'Manual layout update';
 
 function makeEntry(plants, meta = {}) {
   return {
@@ -31,7 +25,7 @@ export function createLayoutHistory(initialPlants = [], options = {}) {
   let cursor = -1;
 
   const push = (plants, meta = {}) => {
-    const snapshot = clonePlants(plants);
+    const snapshot = toPlacements(plants);
     const entry = makeEntry(snapshot, meta);
     entries.splice(cursor + 1);
     entries.push(entry);
@@ -47,7 +41,7 @@ export function createLayoutHistory(initialPlants = [], options = {}) {
           id: seed.id || makeEntry([], {}).id,
           timestamp: seed.timestamp || new Date().toISOString(),
           description: seed.description || DEFAULT_DESCRIPTION,
-          plants: clonePlants(seed.plants),
+          plants: toPlacements(seed.plants),
         });
       });
       cursor = entries.length - 1;
@@ -68,7 +62,7 @@ export function createLayoutHistory(initialPlants = [], options = {}) {
     const next = clampCursor(target);
     if (next === cursor) return null;
     cursor = next;
-    return clonePlants(entries[cursor].plants);
+    return toPlacements(entries[cursor].plants);
   };
 
   initWithSeeds();
@@ -99,7 +93,11 @@ export function createLayoutHistory(initialPlants = [], options = {}) {
     annotateCurrentEntry(meta = {}) {
       const entry = entries[cursor];
       if (!entry) return null;
-      Object.assign(entry, meta);
+      // The server's copy of the entry (its id and timestamp) is adopted, but
+      // its plants, if any, are reduced like every other snapshot.
+      const { plants, ...rest } = meta || {};
+      Object.assign(entry, rest);
+      if (Array.isArray(plants)) entry.plants = toPlacements(plants);
       return entry;
     },
     canUndo() {
@@ -116,7 +114,7 @@ export function createLayoutHistory(initialPlants = [], options = {}) {
     },
     getCurrentPlants() {
       const entry = entries[cursor];
-      return entry ? clonePlants(entry.plants) : [];
+      return entry ? toPlacements(entry.plants) : [];
     },
     getEntries() {
       return entries.map((entry, index) => ({

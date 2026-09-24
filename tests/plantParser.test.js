@@ -6,7 +6,7 @@ import {
   LayoutDataError,
   parsePlantLayoutCsv,
   parseSpeciesCsv,
-  rehydratePlants,
+  plantsFromPlacements,
 } from '../src/data/plantParser.js';
 import { buildLayoutCsv } from '../src/data/layoutExporter.js';
 import { parseSynonymCsv } from '../src/data/speciesResolver.js';
@@ -208,44 +208,46 @@ test('a plant built from the catalog round-trips through the layout CSV', () => 
 });
 
 /**
- * Layout history and the server's saved history entries store full plant
- * objects, attributes included, as the simplest thing to snapshot for
- * undo/redo. Restoring one after the catalog has since been corrected must
- * not silently un-correct it — rehydratePlants is what re-derives attributes
- * from the current catalog every time a plant list comes out of history.
+ * History stores placements only (nl-3s5.19): a plant is its species plus where
+ * it stands, and plantsFromPlacements builds every plant shown from the catalog
+ * just parsed, so undo after a catalog correction shows the correction. Legacy
+ * full-object snapshots still load; their stored attributes are ignored.
  */
-test('rehydratePlants replaces stale attributes with what the catalog says now', () => {
-  const oldSpeciesCsv = `${speciesHeader}\n`
-    + 'c,Autumn sage,Salvia greggii,3-11,3-11,,,,,red,3,3,mound';
-  const oldSpecies = parseSpeciesCsv(oldSpeciesCsv);
-  const staleSnapshot = [createPlantFromSpecies(oldSpecies[0], { id: 'sage-1', x: 5, y: 5 })];
-  assert.equal(staleSnapshot[0].width, 3);
-  assert.equal(staleSnapshot[0].growthShape, 'mound');
+test('plantsFromPlacements takes every attribute from the catalog as it is now', () => {
+  const oldSpecies = parseSpeciesCsv(`${speciesHeader}\n`
+    + 'c,Autumn sage,Salvia greggii,3-11,3-11,,,,,red,3,3,mound');
+  const legacySnapshot = [createPlantFromSpecies(oldSpecies[0], { id: 'sage-1', x: 5, y: 5 })];
+  const placement = [{ id: 'sage-1', speciesId: 'c', x: 5, y: 5 }];
 
   // The catalog has since been corrected: wider, and reclassified as a vase shape.
-  const newSpeciesCsv = `${speciesHeader}\n`
-    + 'c,Autumn sage,Salvia greggii,3-11,3-11,,,,,red,5,3,vase';
-  const newSpecies = parseSpeciesCsv(newSpeciesCsv);
+  const newSpecies = parseSpeciesCsv(`${speciesHeader}\n`
+    + 'c,Autumn sage,Salvia greggii,3-11,3-11,,,,,red,5,3,vase');
 
-  const fresh = rehydratePlants(staleSnapshot, newSpecies);
+  const fromPlacement = plantsFromPlacements(placement, newSpecies);
+  const fromLegacy = plantsFromPlacements(legacySnapshot, newSpecies);
 
-  assert.equal(fresh[0].width, 5);
-  assert.equal(fresh[0].growthShape, 'vase');
-  // Identity and position survive untouched.
-  assert.equal(fresh[0].id, 'sage-1');
-  assert.equal(fresh[0].x, 5);
-  assert.equal(fresh[0].y, 5);
+  assert.equal(fromPlacement[0].width, 5);
+  assert.equal(fromPlacement[0].growthShape, 'vase');
+  assert.deepStrictEqual(fromLegacy, fromPlacement, 'a legacy snapshot renders exactly as its placement does');
+  assert.deepStrictEqual(fromPlacement, [createPlantFromSpecies(newSpecies[0], placement[0])]);
 });
 
-test('rehydratePlants leaves a plant alone if its species left the catalog', () => {
-  const speciesCsv = `${speciesHeader}\n`
-    + 'c,Autumn sage,Salvia greggii,3-11,3-11,,,,,red,3,3,mound';
-  const species = parseSpeciesCsv(speciesCsv);
-  const snapshot = [createPlantFromSpecies(species[0], { id: 'sage-1', x: 5, y: 5 })];
+test('plantsFromPlacements leaves a placement alone if its species left the catalog', () => {
+  const placement = [{ id: 'sage-1', speciesId: 'gone', x: 5, y: 5 }];
+  assert.deepStrictEqual(plantsFromPlacements(placement, []), placement);
+});
 
-  const stillThere = rehydratePlants(snapshot, []);
-
-  assert.deepStrictEqual(stillThere, snapshot);
+test('optional placement fields ride through createPlantFromSpecies and back', async () => {
+  const { toPlacement } = await import('../src/data/placements.js');
+  const species = parseSpeciesCsv(`${speciesHeader}\n`
+    + 'c,Autumn sage,Salvia greggii,3-11,3-11,,,,,red,3,3,mound');
+  const placement = { id: 'sage-1', speciesId: 'c', x: 5, y: 5, status: 'planned', source: { nursery: 'x' } };
+  const plant = createPlantFromSpecies(species[0], placement);
+  assert.equal(plant.status, 'planned');
+  assert.equal(plant.width, 3, 'species attributes still come from the catalog');
+  assert.deepStrictEqual(toPlacement(plant), placement);
+  // A species attribute on the placement never beats the catalog's.
+  assert.equal(createPlantFromSpecies(species[0], { ...placement, width: 99 }).width, 3);
 });
 
 /**
@@ -293,13 +295,13 @@ test('renaming every species in plants.csv leaves every shipped yard rendering t
   });
 });
 
-test('a history snapshot survives a rename too: rehydratePlants resolves by speciesId', () => {
+test('a history snapshot survives a rename too: plantsFromPlacements resolves by speciesId', () => {
   const species = parseSpeciesCsv(REPO_PLANTS_CSV);
   const holly = species.find((e) => e.speciesId === 'yaupon-holly');
   const snapshot = [createPlantFromSpecies(holly, { id: 'holly-1', x: 3, y: 4 })];
 
   const renamed = parseSpeciesCsv(renameInCatalog(REPO_PLANTS_CSV, 'yaupon-holly', 'Ilex renamedii'));
-  const [restored] = rehydratePlants(snapshot, renamed);
+  const [restored] = plantsFromPlacements(snapshot, renamed);
 
   assert.equal(restored.speciesId, 'yaupon-holly');
   assert.equal(restored.botanicalName, 'Ilex renamedii', 're-derived from the catalog, not left stale');
@@ -318,7 +320,7 @@ test('no path finds a species by epithet alone', () => {
   // A history snapshot carrying only an epithet is left as it was, not re-pointed.
   const species = parseSpeciesCsv(REPO_PLANTS_CSV);
   const stale = { id: 'old', botanicalName: 'Foo americana', speciesEpithet: 'americana', x: 0, y: 0 };
-  assert.deepStrictEqual(rehydratePlants([stale], species, { synonyms: REPO_SYNONYMS }), [stale]);
+  assert.deepStrictEqual(plantsFromPlacements([stale], species, { synonyms: REPO_SYNONYMS }), [stale]);
 
   // A variety is not rescued by its parent species, or vice versa.
   assert.throws(

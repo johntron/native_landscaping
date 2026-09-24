@@ -1,5 +1,6 @@
 // Filesystem helpers for the project routes: atomic writes, the layout and
 // history files, features.json, and background-upload housekeeping.
+import crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { buildLayoutCsv } from '../src/data/layoutExporter.js';
@@ -43,7 +44,7 @@ export async function syncProjectIndexName(publicDir, projectId, name) {
  * matters: rename is only atomic within a filesystem.
  */
 export async function writeJsonAtomic(targetFile, value) {
-  const tempFile = `${targetFile}.${process.pid}.tmp`;
+  const tempFile = `${targetFile}.${process.pid}.${crypto.randomUUID()}.tmp`;
   try {
     await fs.writeFile(tempFile, `${JSON.stringify(value, null, 2)}\n`);
     await fs.rename(tempFile, targetFile);
@@ -87,6 +88,13 @@ export async function readHistoryFile(historyFile) {
   }
 }
 
+/**
+ * Entries are written as they are handed in: new ones are placements already
+ * (makeEntry in routes/project.js), and legacy full-object entries still on
+ * disk are left for tools/migrate-history-placements.mjs, which backs the file
+ * up first. Written in place, not through a rename, so the file keeps its
+ * owner and mode whatever uid the server runs as.
+ */
 export async function writeHistoryFile(historyFile, history) {
   const entries = Array.isArray(history.entries) ? history.entries : [];
   const cursor =
@@ -99,7 +107,7 @@ export async function writeHistoryFile(historyFile, history) {
 
 /** Same temp-then-rename discipline as writeJsonAtomic, for opaque bytes. */
 export async function writeFileAtomic(targetFile, contents) {
-  const tempFile = `${targetFile}.${process.pid}.tmp`;
+  const tempFile = `${targetFile}.${process.pid}.${crypto.randomUUID()}.tmp`;
   try {
     await fs.writeFile(tempFile, contents);
     await fs.rename(tempFile, targetFile);

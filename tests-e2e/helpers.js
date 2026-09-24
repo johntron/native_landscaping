@@ -46,6 +46,18 @@ export async function openScratchProject(page, projectId) {
 }
 
 /** Read a scratch project's saved layout as {id, x, y} rows. */
+/** The scratch project's layout-history.json, parsed; null if nothing has been saved yet. */
+export async function readScratchHistory(projectId) {
+  try {
+    return JSON.parse(
+      await readFile(path.join(SCRATCH_DIR, 'projects', projectId, 'layout-history.json'), 'utf8')
+    );
+  } catch (err) {
+    if (err.code === 'ENOENT') return null;
+    throw err;
+  }
+}
+
 export async function readScratchLayout(projectId) {
   const csv = await readFile(
     path.join(SCRATCH_DIR, 'projects', projectId, 'planting_layout.csv'),
