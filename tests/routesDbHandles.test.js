@@ -37,8 +37,12 @@ function openDb(paths) {
   return { app: openAppDb({ dataDir: paths.dir, ownerEmail: '' }), ...openServerDatabases(paths) };
 }
 
-/** Minimal GET req/res + ctx a route handler needs, mirroring server.js's shape. */
-function stubRequest(pathnameAndQuery, db, publicDir) {
+/**
+ * Minimal GET req/res + ctx a route handler needs, mirroring server.js's
+ * shape. `user` defaults to null (anonymous); pass an admin user for the
+ * claims routes, which 404 anyone else (nl-3s5.7).
+ */
+function stubRequest(pathnameAndQuery, db, publicDir, user = null) {
   const url = new URL(`http://localhost${pathnameAndQuery}`);
   const req = { method: 'GET', headers: {} };
   const res = {
@@ -53,7 +57,7 @@ function stubRequest(pathnameAndQuery, db, publicDir) {
       if (chunk) this.body += chunk;
     },
   };
-  const ctx = { url, pathname: url.pathname, publicDir, db };
+  const ctx = { url, pathname: url.pathname, publicDir, db, user };
   return { req, res, ctx };
 }
 
@@ -151,7 +155,7 @@ test('GET /api/claims-coverage against an unbuilt claim store returns the exact 
   const paths = tmpPaths();
   try {
     const db = openDb(paths);
-    const { req, res, ctx } = stubRequest('/api/claims-coverage', db, paths.dir);
+    const { req, res, ctx } = stubRequest('/api/claims-coverage', db, paths.dir, { id: 1, email: 'admin@example.com', isAdmin: true });
     const handled = await handleClaimsRoutes(req, res, ctx);
 
     assert.equal(handled, true);

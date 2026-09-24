@@ -10,7 +10,19 @@ import { listEvents } from '../../tools/observationEventsDb.js';
 import { setFeedState } from '../../tools/feedState/feedStateDb.js';
 import { queryFeed } from '../../tools/feedState/feed.js';
 import { pollSavedAreas } from '../../tools/feedState/pollAreas.js';
-import { collectPayload } from '../http.js';
+import { collectPayload, createRateLimiter, enforceRateLimit, rateLimitKeyFor } from '../http.js';
+
+// /api/feed/refresh polls iNaturalist synchronously (via pollSavedAreas,
+// up to 3 pages). iNaturalist's API has no published per-client limit for
+// this kind of call, so this cap is a judgement: generous enough for a
+// homeowner mashing "Refresh now" a few times, tight enough that it can't be
+// turned into a scripted crawl of an area's history.
+const refreshLimiter = createRateLimiter({ capacity: 5, refillPerSecond: 1 / 30 });
+
+const PRUNE_SAMPLE_RATE = 0.01; // judgement, matches server/routes/ecosystem.js
+function maybePrune() {
+  if (Math.random() < PRUNE_SAMPLE_RATE) refreshLimiter.prune();
+}
 
 /**
  * The observation feed: saved monitoring areas and read/dismissed state
@@ -21,7 +33,9 @@ import { collectPayload } from '../http.js';
  * to let server.js try the next route module. `user` is ctx.user
  * (server/identity.js), or null.
  */
-export async function handleFeedRoutes(req, res, { url, pathname, db, user }) {
+export async function handleFeedRoutes(req, res, ctx) {
+  const { url, pathname, db, user } = ctx;
+  maybePrune();
   // Saved monitoring areas (nl-1qy.1.2) — arbitrary center+radius areas for the
   // observation feed, independent of any yard project, so these live behind
   // their own SQLite-backed CRUD routes rather than a per-project file.
@@ -190,6 +204,7 @@ export async function handleFeedRoutes(req, res, { url, pathname, db, user }) {
   // resolves quickly rather than potentially crawling a well-established
   // area's full incremental backlog in one request.
   if (pathname === '/api/feed/refresh' && req.method === 'POST') {
+    if (!enforceRateLimit(refreshLimiter, rateLimitKeyFor(ctx, req), res)) return true;
     try {
       const body = await collectPayload(req, { requirePlants: false });
       const { areaId } = body;

@@ -8,7 +8,7 @@ import { handleEcosystemRoutes } from './server/routes/ecosystem.js';
 import { handleFeedRoutes } from './server/routes/feed.js';
 import { handleClaimsRoutes } from './server/routes/claims.js';
 import { rejectCrossSite } from './server/http.js';
-import { legacyRedirect, serveStaticFile } from './server/static.js';
+import { legacyRedirect, serveStaticFile, isAdminOnlyStaticPath } from './server/static.js';
 import { openAppDb } from './server/db/appDb.js';
 import { createIdentity } from './server/identity.js';
 import { openServerDatabases } from './server/dbHandles.js';
@@ -52,6 +52,14 @@ const server = http.createServer(async (req, res) => {
   if (legacy) {
     res.writeHead(301, { Location: legacy });
     res.end();
+    return;
+  }
+
+  // Admin-only pages (nl-3s5.7): same 404 an unknown file gets, so a
+  // non-admin caller can't tell "exists but not for you" from "never existed".
+  if (isAdminOnlyStaticPath(pathname) && !ctx.user?.isAdmin) {
+    res.writeHead(404);
+    res.end('Not found');
     return;
   }
 

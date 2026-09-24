@@ -28,6 +28,20 @@ export function legacyRedirect(pathname, search) {
   return null;
 }
 
+// Maintainer-only pages over the plant-data claim store (nl-3s5.7): a
+// non-admin caller must get the same 404 an unknown file gets, not a 403
+// that would confirm the page exists. Checked by the caller (server.js, which
+// has ctx.user) before falling through to serveStaticFile below, so this
+// module doesn't need to know about identity.
+const ADMIN_ONLY_STATIC_PATHS = new Set(['/claims-coverage.html', '/claims-conflicts.html']);
+
+/**
+ * @param {string} pathname request pathname, e.g. "/claims-coverage.html"
+ */
+export function isAdminOnlyStaticPath(pathname) {
+  return ADMIN_ONLY_STATIC_PATHS.has(pathname);
+}
+
 // What the browser is allowed to load, and nothing else (nl-3s5.1). The repo
 // root is the served root, so anything not listed here (.env with the tunnel
 // token, data/*.db, .git, .beads, projects/*/location.json with an exact

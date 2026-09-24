@@ -1,16 +1,27 @@
 import { coverageView, conflictsView } from '../../tools/claims/humanViews.js';
 import { claimsCorrect } from '../../tools/claims/claimsTools.js';
-import { collectPayload } from '../http.js';
+import { collectPayload, requireAdmin } from '../http.js';
+
+const CLAIMS_PATHS = new Set(['/api/claims-coverage', '/api/claims-conflicts', '/api/claims-correct']);
 
 /**
  * The plant-data claim store's human views (coverage, conflicts) and the
  * conflicts queue's correction submit.
  *
+ * Admin-only (nl-3s5.7): these expose and let a caller rewrite
+ * catalog/manual-corrections.tsv, so every path here requires
+ * ctx.user.isAdmin, answering 404 (not 403) to anonymous and non-admin
+ * callers alike so the routes' existence isn't revealed.
+ *
  * Returns true when it handled the request (a response has been sent), false
  * to let server.js try the next route module. `publicDir` is the served root,
  * which the e2e scratch server points somewhere else.
  */
-export async function handleClaimsRoutes(req, res, { url, pathname, publicDir, db }) {
+export async function handleClaimsRoutes(req, res, ctx) {
+  const { url, pathname, publicDir, db } = ctx;
+  if (!CLAIMS_PATHS.has(pathname)) return false;
+  if (!requireAdmin(ctx, res)) return true;
+
   // Two human-facing views over the plant-data claim store (nl-scx.10),
   // implementing docs/data-acquisition/07-mcp-introspection.md §5. Both GET
   // routes reshape the existing claims_* tool output (tools/claims/humanViews.js)

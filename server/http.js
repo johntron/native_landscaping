@@ -50,6 +50,26 @@ export function requireUser(ctx, res) {
 }
 
 /**
+ * Require ctx.user to be an admin (users.is_admin, from server/identity.js).
+ * On success returns the user. On failure — anonymous or a signed-in
+ * non-admin — writes a 404 JSON response and returns null; the caller should
+ * stop handling the request (`return true` from a route).
+ *
+ * 404, not 403 (nl-3s5.7): these are maintainer-only routes (the plant-data
+ * claim store) whose existence a non-admin caller must not be able to infer,
+ * the same reasoning loadOwnedProject above already uses for project 404s.
+ *
+ * @param {{ user: import('../server/identity.js').User | null }} ctx
+ * @param {import('node:http').ServerResponse} res
+ * @returns {import('../server/identity.js').User | null}
+ */
+export function requireAdmin(ctx, res) {
+  if (ctx.user && ctx.user.isAdmin) return ctx.user;
+  json(res, 404, { error: 'Not found' });
+  return null;
+}
+
+/**
  * Require the caller to be signed in AND to own the project named by `slug`.
  *
  * Ownership doesn't exist on disk yet (yards still live under projects/<slug>/;

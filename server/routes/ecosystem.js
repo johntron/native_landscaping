@@ -7,7 +7,34 @@ import { openProbeCache } from '../../tools/usda-plants/probeCache.js';
 import { geocodeAddress } from '../../tools/geocode.mjs';
 import { lookupEcoregion } from '../../tools/ecoregionLookup.mjs';
 import { KNOWN_ECOREGIONS } from '../../src/data/ecoregionInput.js';
-import { collectPayload } from '../http.js';
+import { collectPayload, createRateLimiter, enforceRateLimit, rateLimitKeyFor } from '../http.js';
+
+// /api/geocode calls Nominatim (tools/geocode.mjs). Nominatim's usage policy
+// (https://operations.osmfoundation.org/policies/nominatim/) caps usage at
+// 1 request/second per client — sourced, not a judgement — so capacity 1 with
+// a 1/s refill lets exactly that through and no burst beyond it. The policy's
+// "client" is this server, not each visitor, so besides the per-caller bucket
+// every geocode also draws from one shared bucket (GEOCODE_SHARED_KEY): two
+// users together still stay under 1/s. Cache hits draw too (conservative).
+const GEOCODE_SHARED_KEY = 'upstream:nominatim';
+const geocodeLimiter = createRateLimiter({ capacity: 1, refillPerSecond: 1 });
+
+// /api/ecoregion calls the CEC ArcGIS FeatureServer (tools/ecoregionLookup.mjs),
+// which publishes no rate limit. Judgement call: sized to give the design
+// tool's location flow (one lookup per address entered, occasionally retried)
+// comfortable headroom while still bounding a runaway client.
+const ecoregionLimiter = createRateLimiter({ capacity: 10, refillPerSecond: 1 });
+
+// Sampled pruning (nl-3s5.7): every request that hits either limiter has a
+// small chance of also sweeping idle buckets, so memory doesn't grow one
+// entry per visitor forever without needing a live timer in every test.
+const PRUNE_SAMPLE_RATE = 0.01; // judgement: rare enough to be free, frequent enough to matter
+function maybePrune() {
+  if (Math.random() < PRUNE_SAMPLE_RATE) {
+    geocodeLimiter.prune();
+    ecoregionLimiter.prune();
+  }
+}
 
 /**
  * The nearby-ecosystem index and the location lookups the saved-areas UI uses:
@@ -18,7 +45,9 @@ import { collectPayload } from '../http.js';
  * to let server.js try the next route module. `publicDir` is the served root,
  * which the e2e scratch server points somewhere else.
  */
-export async function handleEcosystemRoutes(req, res, { url, pathname, publicDir, db }) {
+export async function handleEcosystemRoutes(req, res, ctx) {
+  const { url, pathname, publicDir, db } = ctx;
+  maybePrune();
   if (pathname === '/api/ecosystem' && req.method === 'GET') {
     try {
       const place = url.searchParams.get('place') || 'home';
@@ -54,6 +83,8 @@ export async function handleEcosystemRoutes(req, res, { url, pathname, publicDir
   // "enter a location" flow — same Nominatim geocode tools/fetch-ecosystem-
   // index.mjs already uses for a project's location.json address.
   if (pathname === '/api/geocode' && req.method === 'POST') {
+    if (!enforceRateLimit(geocodeLimiter, rateLimitKeyFor(ctx, req), res)) return true;
+    if (!enforceRateLimit(geocodeLimiter, GEOCODE_SHARED_KEY, res)) return true;
     try {
       const body = await collectPayload(req, { requirePlants: false });
       const query = typeof body.query === 'string' ? body.query : '';
@@ -76,6 +107,7 @@ export async function handleEcosystemRoutes(req, res, { url, pathname, publicDir
   // a real detection the yard-relevance lane still can't use is reported as
   // such, never silently filled in as if it were usable.
   if (pathname === '/api/ecoregion' && req.method === 'GET') {
+    if (!enforceRateLimit(ecoregionLimiter, rateLimitKeyFor(ctx, req), res)) return true;
     try {
       // A missing or blank param must stay missing: Number(null) and Number('')
       // are both 0, which passed the finiteness check and looked up 0,0 (nl-yju).
