@@ -104,6 +104,11 @@ services:
       # from the gitignored .env: this repo is public, so the address never
       # appears in a tracked file. Unset seeds nothing.
       OWNER_EMAIL: ${OWNER_EMAIL:-}
+      # Verify the Cloudflare Access JWT on every request (server/identity.js).
+      # Also from .env. Either one unset means every request is anonymous.
+      # Never set DEV_USER_EMAIL here: it is for local dev and e2e only.
+      CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
+      CF_ACCESS_AUD: ${CF_ACCESS_AUD:-}
     # Loopback ONLY. Off-box reach comes solely through the Cloudflare Tunnel
     # + Access gate, same as geneology's `review` service. A bare "8080:8080"
     # binds 0.0.0.0 and would serve the app to the whole LAN with no Google
