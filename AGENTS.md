@@ -316,11 +316,11 @@ sidecar that must **never** be restarted (it self-heals). A second service,
 `feed-poller`, runs `tools/schedule-feed-poll.mjs` every `FEED_POLL_INTERVAL_MINUTES`
 (default 30). Both mount a separate git worktree, `../native_landscaping-deploy`
 (a sibling of this tree; override with `DEPLOY_DIR`), detached at a commit of main.
-Only `data/`, `projects/`, `catalog/` (for `manual-corrections.tsv`) and
-`node_modules/jszip` are mounted from this tree, so what users write stays here and
-the deploy tree is never written to. (`projects/` is mounted only as the source of
-the one-time yard import; nothing writes or serves it since nl-3s5.3, and the mount
-goes once that import is verified.) An uncommitted code edit is not live, and neither is a
+Only `data/`, `catalog/` (for `manual-corrections.tsv`) and `node_modules/jszip` are
+mounted from this tree, so what users write stays here and the deploy tree is never
+written to. (`projects/` is not mounted (nl-3s5.28): `/app/projects` is just the
+deploy tree's own tracked seed, `projects/backyard`, which nothing serves.) An
+uncommitted code edit is not live, and neither is a
 commit on any branch other than main. `npm run serve` and the e2e scratch server
 still run straight from this tree for local work.
 

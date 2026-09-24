@@ -107,7 +107,7 @@ deploy_common=$(git -C "$deploy_dir" rev-parse --path-format=absolute --git-comm
 mkdir -p "$deploy_dir/node_modules/jszip"
 
 # Nothing may have been edited in the deploy tree: runtime writes go to the dev
-# tree's data/, projects/ and catalog/ (see docker-compose.yml). A local change
+# tree's data/ and catalog/ (see docker-compose.yml). A local change
 # here is a bug, and checking out over it would lose it.
 if [ -n "$(git -C "$deploy_dir" status --porcelain --untracked-files=no)" ]; then
   git -C "$deploy_dir" status --short --untracked-files=no >&2
@@ -228,7 +228,8 @@ log "$base_url/ answered 200"
 # If the range changed a file the server serves straight from the deploy tree,
 # make sure the live copy is the deployed one. Many commits change none (the
 # static allowlist in server/static.js is narrow), and that is fine.
-# projects/ and catalog/ are served from the dev tree's mounts, so they are skipped.
+# catalog/ is served from the dev tree's mount, so it is skipped (projects/
+# is unmounted since nl-3s5.28 and nothing under it is served either).
 served=$(printf '%s\n' "$changed" |
   grep -E '^([a-z0-9-]+\.(html|css)|plants\.csv|plant-drawing\.csv|src/.+\.js|(ecology|sourcing)/[a-z0-9-]+\.csv)$' || true)
 for path in $served; do

@@ -81,16 +81,18 @@ x-app: &app
     #              written by the host's nightly backup timer (nl-3s5.13,
     #              tools/backup/), which reads app.db and the photos from this
     #              same host directory, not through a container
-    #   projects/  NOT written any more (nl-3s5.3). Mounted only so the
-    #              one-time tools/import-projects.mjs can read the yards as
-    #              they stood here; once that import is verified this line
-    #              goes, and /app/projects is then just the deploy tree's
-    #              tracked seed (projects/backyard), which nothing serves.
     #   catalog/   manual-corrections.tsv, appended by /api/claims-correct
     # Directories, not single files: the app writes temp-then-rename, and a
     # rename onto a single-file bind mount fails with EBUSY.
+    #
+    # projects/ is NOT mounted (nl-3s5.28). It was mounted only for the
+    # one-time tools/import-projects.mjs, which read the yards under this
+    # tree's projects/ and copied them into app.db (nl-3s5.3); that import
+    # is done and verified (app_meta records it), and nothing under
+    # projects/ is written or served at runtime since. /app/projects is now
+    # just the deploy tree's own tracked seed (projects/backyard), which
+    # nothing serves either.
     - ./data:/app/data
-    - ./projects:/app/projects
     - ./catalog:/app/catalog
     # server/static.js serves node_modules/jszip/dist/jszip.min.js (the HOA
     # packet export) from /app, and the deploy worktree has no node_modules.
