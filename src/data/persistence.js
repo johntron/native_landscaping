@@ -20,16 +20,12 @@ function defaultFetch() {
 }
 
 /**
- * Fetch the saved history. Entries come back with their plants as placements
- * (src/data/placements.js), whatever shape the file on disk still holds.
- *
- * This no longer compares history with planting_layout.csv: that is
- * src/history/reconcileLayout.js, run by the history controller's start()
- * against the plants the CSV built. `options.layoutCsv` is accepted and ignored
- * so the existing caller in app.js needs no change (nl-3s5.3 removes it).
+ * Fetch the saved history: the yard itself, since the layout shown is the
+ * entry at the cursor (nl-3s5.3). Entries come back with their plants as
+ * placements (src/data/placements.js).
  *
  * @param {(message: string, state: string) => void} [updateStatus]
- * @param {{ projectId?: string, fetchFn?: Function, layoutCsv?: string }} [options]
+ * @param {{ projectId?: string, fetchFn?: Function }} [options]
  * @returns {Promise<{ entries: Array<object>, cursor: number }>}
  */
 export async function loadLayoutHistory(updateStatus, options = {}) {
@@ -85,7 +81,10 @@ export async function persistLayout(plants, description, updateStatus, options =
     plants: toPlacements(plants),
     description: description || DEFAULT_DESCRIPTION,
   };
-  if (Array.isArray(options.previousPlants) && options.previousPlants.length) {
+  // Sent even when empty: a new yard's first save starts from nothing, and
+  // the server needs that 'Initial layout' entry to keep its indices in step
+  // with the stack here, which always starts with the layout it loaded.
+  if (Array.isArray(options.previousPlants)) {
     payload.previousPlants = toPlacements(options.previousPlants);
   }
   try {

@@ -5,10 +5,6 @@ const { pathToFileURL } = require('url');
 async function runPersistenceTest() {
   const modulePath = pathToFileURL(path.join(__dirname, '../src/data/persistence.js')).href;
   const { loadLayoutHistory, persistLayout, updateHistoryCursor } = await import(modulePath);
-  const layoutExporterPath = pathToFileURL(
-    path.join(__dirname, '../src/data/layoutExporter.js')
-  ).href;
-  const { buildLayoutCsv } = await import(layoutExporterPath);
 
   const loadCalls = [];
   const historyStatusMessages = [];
@@ -31,16 +27,14 @@ async function runPersistenceTest() {
   assert.strictEqual(historyStatusMessages[0].state, 'success');
 
   // History comes back as placements whatever shape the server sent (a legacy
-  // full-object snapshot here), and the layout CSV no longer filters it: that
-  // reconciliation is src/history/reconcileLayout.js, run by the controller.
+  // full-object snapshot here). It is the yard: nothing filters it against a
+  // layout file any more (nl-3s5.3).
   const legacyPlant = {
     id: 'match-plant', speciesId: 'match', botanicalName: 'Match', commonName: 'Match',
     width: 3, growingMonths: [3, 4], x: 1, y: 2,
   };
   const laterPlants = [{ id: 'future-plant', speciesId: 'future', x: 3, y: 4 }];
-  const mismatchCsv = buildLayoutCsv([{ id: 'mismatch', speciesId: 'mismatch', x: 9, y: 8 }]);
   const loaded = await loadLayoutHistory(null, {
-    layoutCsv: mismatchCsv,
     fetchFn: async () => ({
       ok: true,
       json: async () => ({

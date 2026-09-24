@@ -4,14 +4,29 @@ Deep dive for `design.html` and `src/app.js`: how a project declares its yard, h
 every view is derived from it, Setup and Features modes, photo placement and upload,
 the plant CSVs, rendering, and interaction. [AGENTS.md](../AGENTS.md) is the map;
 read this when you are working in `src/render/`, `src/interaction/`, `src/data/`, or
-`projects/`.
+`server/routes/project.js` and `server/db/projectStore.js`.
 
 ## Projects
 
 The app hosts **multiple projects** — separate yards, each with its own background
 images, canvas dimensions, and compass orientation. They share one species catalog
 (`plants.csv` at the repo root); each project's *selection* of species is implicit
-in its own `planting_layout.csv`.
+in its own layout.
+
+### Where a yard lives (nl-3s5.3)
+
+A yard is **private to the person who made it**, and lives in `app.db`
+(`server/db/projectStore.js`, migration `server/db/migrations/003_projects.sql`),
+not in the repo:
+
+| what | where | how the browser gets it |
+| --- | --- | --- |
+| the yard list | `projects` rows for the caller (`owner_id`), oldest first; the oldest is the default | `GET /api/projects` |
+| the config (the yard in feet, `views[]`, optional `ecoregion`, `site`, `place`) | `projects.config_json`, stored as saved, normalized on read | `GET`/`POST /api/project` |
+| the layout and its undo stack | `history_entries` (one row per step, placements only) and `projects.history_cursor` | `GET /api/history`, `POST /api/layout`, `POST /api/history/cursor` |
+| yard features | `projects.features_json` (NULL means none drawn) | `GET`/`POST /api/features` |
+| the exact location behind `place` | `projects.location_json` | never, except `{ lat, lng }` to the owner in `/api/ecosystem` |
+| photos | files under `DATA_DIR/projects/<projects.id>/img/`, outside the served root | `GET /api/project-photo?project=<slug>&path=img/<file>` |
 
 ```
 plants.csv                       shared species catalog (all projects)
@@ -19,26 +34,80 @@ ecology/host-genera.csv          keystone/larval-host genera per ecoregion (all 
 ecology/plant-animal-interactions.csv  genus-keyed animal interactions (all projects)
 ecology/nearby-fauna.csv         animal species reported nearby, keyed by place
 ecology/anchors.csv              streams and green space near the site, keyed by place
-projects/index.json              { defaultProject, projects: [{ id, name }] }
-projects/<slug>/project.json     the yard in feet, plus views[]: labels, photos
-                                 (and optional ecoregion + site + place, for the ecology check)
-projects/<slug>/planting_layout.csv
-projects/<slug>/features.json    yard features in feet; optional, absent means none
-projects/<slug>/location.json    exact address/coords behind `place` (gitignored, never committed)
-projects/<slug>/img/…            that project's background images
-projects/<slug>/layout-history.json   (generated, gitignored)
+projects/backyard/               the one yard still tracked: seed data for the shared
+                                 read-only example (nl-3s5.24), in the old file layout
 ```
 
-**Adding a project**: create `projects/<slug>/` with the four items above, then add
-`{ "id": "<slug>", "name": "…" }` to `projects/index.json`. Slugs must match
-`^[a-z0-9][a-z0-9_-]*$` — they become both URL and file path segments, and the
-server rejects anything else (`src/data/projectPaths.js`).
+What follows from that:
 
-**Prefer the Setup mode toolbar over hand-editing `project.json`.** It edits the
-yard, adds/reorders/removes views, and places each view's photograph by dragging
-it on the drawing; *Save views* writes the file back through `POST /api/project`.
-Hand-editing works too, but Setup mode cannot produce a geometry the renderers
-disagree with.
+- **Every `?project=<slug>` is resolved among the caller's own yards.** Slugs are
+  unique per owner, not globally. `server/http.js`'s `loadOwnedProject`, handed
+  `findCallerProject`, answers 401 to an anonymous caller and the same 404 to a
+  slug that does not exist and to someone else's; admins get no bypass.
+- **History is the yard.** There is no stored `planting_layout.csv` any more: the
+  layout is the entry at the cursor. `GET /api/layout?project=<slug>` exports it
+  as the CSV the file used to be (`id,species_id,x_ft,y_ft`), and nothing reads
+  one back.
+- **Each save is one transaction** (`BEGIN IMMEDIATE`, nothing awaited inside it,
+  because `ctx.db.app` is one connection shared by every request). Two tabs saving
+  the same yard are serialized: both entries land, in order, and no write is torn.
+  The later one does not know about the earlier one, so its layout wins at the
+  cursor; the other is one undo away. Refusing a stale tab's save outright (a 409
+  on a base-entry mismatch) is not done yet.
+- **Nothing under `projects/` is served.** `server/static.js` no longer lists it; a
+  photo is only reachable through the owner-checked route, which also sends
+  `X-Content-Type-Options: nosniff` and a sandboxing CSP.
+
+**Adding a project**: *+ New project* in the design tool (`POST /api/projects`),
+which gives it one plan view and no history. Slugs must match
+`^[a-z0-9][a-z0-9_-]*$`; the photo path a view names is held to
+`img/<name>.(webp|png|jpg|jpeg|svg)` (`src/data/projectPaths.js`).
+
+**A yard's location** is set with `node tools/project-location.mjs --project <slug>
+--lat <n> --lng <n>` (or `--address "..."`); run it with no value to see whether
+one is set, without printing it. The fetch scripts read it, and `place`, through
+`tools/projectSite.mjs`. `--owner <email>` (else `OWNER_EMAIL`, else the sole
+admin) says whose yard, since slugs are per owner.
+
+### Importing yards from files
+
+`tools/import-projects.mjs` copies yards laid out the old way
+(`<dir>/index.json` and `<dir>/<slug>/{project.json, features.json, location.json,
+layout-history.json, planting_layout.csv, img/}`) into `app.db`, once
+(`server/db/projectImport.js`, recorded as `legacy_import.projects` in `app_meta`).
+
+```bash
+node tools/import-projects.mjs --dry-run [--projects-dir <dir>] [--slug <slug> ...]
+node tools/import-projects.mjs          [--projects-dir <dir>] [--slug <slug> ...]
+```
+
+- **Copy, never move.** Source files are only read. Photos are copied byte for byte
+  (checked by hash) to `DATA_DIR/projects/<id>/img/`.
+- **The layout file still wins, once.** Each yard's `planting_layout.csv` picks its
+  cursor exactly as the old client did on load (`src/history/reconcileLayout.js`,
+  which now runs here and nowhere else): the matching entry becomes the cursor, and
+  a CSV that matches none is appended as "Layout file edited outside the app". A
+  yard with a CSV and no history gets it as an "Initial layout" entry.
+- **Fail closed.** A listed yard without `project.json`, a history that does not
+  parse (only a *missing* one reads as empty), a layout row without a species id,
+  or yards on disk with no `index.json` throw before anything is written, and no
+  marker is recorded. So does a copy that does not verify inside the transaction
+  (entry count, cursor, config/features/location text, photo count), rolling back
+  and removing the photo directories that run made.
+- **Owner:** `OWNER_EMAIL`, else the sole admin; with neither, nothing is imported.
+  A slug the owner already has is left alone and reported as `skipped-exists`.
+- **`--dry-run`** opens `app.db` read-only and migrates nothing, so it works on the
+  live file with web up and on a schema that has no `projects` table yet. It prints
+  counts and yes/no only, never a location or a config body.
+- **Web never runs it on start**, unlike `server/db/legacyImport.js`. The commit that
+  stopped tracking the private yards deletes their tracked files from any tree it is
+  merged into, and an import on the restart after that merge would have found the
+  yards half gone. Stop web, import, then deploy.
+
+**Setup mode is how a yard's config changes.** It edits the yard,
+adds/reorders/removes views, and places each view's photograph by dragging it on
+the drawing; *Save views* stores it through `POST /api/project`. (The config is
+still called `project.json` below: it is the same JSON the file held.)
 
 ### The yard, and the views derived from it
 
@@ -230,8 +299,9 @@ Switching projects **reloads the page** rather than re-initializing in place: th
 render loop, history stack, and drag controllers are each built once against a
 single project, and a reload keeps that simple and the URL linkable.
 
-`projects/example-frontyard/` is a sample showing a tall narrow yard,
-north/east/south elevations, and photographs placed rather than fitted.
+`tests-e2e/scratch-fixture.mjs`'s `FRONTYARD_SAVE_VIEWS` is a sample of a tall
+narrow yard with north/east/south elevations and photographs placed rather than
+fitted.
 
 **When a photo and the drawing disagree**, overlay the one piece of hand-traced
 geometry (`features.json`) on the background photo and look: whichever placement puts
@@ -242,8 +312,9 @@ tools block `file://`. This is how example-frontyard's stale plan origin was fou
 ### Yard features
 
 Beds, hardscape, fences, and the house footprint are **yard geometry in feet
-shared by every view**, so they live in `projects/<slug>/features.json` rather
-than in `project.json`, which holds per-view presentation. There is one model
+shared by every view**, so they live in the yard's features (`features.json` as
+was, `projects.features_json` now) rather than in `project.json`, which holds
+per-view presentation. There is one model
 and every view is a projection of it — never a drawing per view, which is how
 the house ends up drawn three times and the three disagree.
 
@@ -292,11 +363,10 @@ Unlike a plant drag and like Setup mode, editing does **not** auto-save — pres
 features*.
 
 Features load through `GET /api/features` and save through `POST /api/features`
-(`loadProjectFeatures` / `persistFeatures` in `src/data/persistence.js`). The
-load deliberately does *not* fetch `features.json` off disk: most projects have
-never drawn a feature, and a static fetch for a missing file makes the browser
-log a 404 on every page load. Like `project.json` and unlike the layout, there
-is no undo stack — features are setup.
+(`loadProjectFeatures` / `persistFeatures` in `src/data/persistence.js`). Most
+projects have never drawn a feature, and the endpoint answers those with an empty
+list rather than an error. Like `project.json` and unlike the layout, there is no
+undo stack — features are setup.
 
 ### Elevation orientation
 
@@ -376,7 +446,9 @@ design".
 ## Background layers
 
 - Each view's **static background image** is declared in its `project.json` as a
-  path relative to the project directory, and applied by `src/render/viewConfig.js`.
+  path relative to the yard (`img/<file>`), loaded through `GET /api/project-photo`
+  (`projectAssetPath` in `src/data/projectConfig.js`), and applied by
+  `src/render/viewConfig.js`.
   A stylesheet cannot vary backgrounds per project, so `styles.css` no longer sets them.
 - An **unplaced** photo is painted `background-size: contain`, not stretched to
   the panel: it has no rectangle of its own yet, so it is shown whole rather than
@@ -408,17 +480,18 @@ it only checks it.
   *and* the leading bytes must agree with it. A declared type is a string the
   client picked; the magic-byte sniff is what stops an HTML document being
   stored as `north.webp`. **SVG is excluded on purpose and must stay excluded** —
-  `serveStaticFile` returns it as `image/svg+xml`, which executes script, so an
-  uploaded SVG would be stored XSS against everyone who opens the project.
+  the photo route returns it as `image/svg+xml`, which executes script when opened
+  directly, so an uploaded SVG would be stored XSS against everyone who opens the
+  project. (The route's sandboxing CSP is a second line, not a reason to relax this.)
 - **Size**: capped at 8 MB, checked as chunks arrive rather than from
   `Content-Length` (a claim, not a fact). Over the cap the request is paused,
   answered with 413, and only then destroyed — destroying first drops the
   connection before the explanation reaches the client.
 - **Path**: the filename is built from the validated view id, a SHA-256 prefix of
   the content, and an extension derived from the *sniffed* type, then re-checked
-  for containment inside the project's `img/`. View ids are slugs on the same
-  pattern as project ids, for the same reason: this one becomes a filename.
-- **Write**: temp file then rename, like `writeJsonAtomic`, so a crash never
+  for containment inside the yard's `img/` under `DATA_DIR`. View ids are slugs on
+  the same pattern as project ids, for the same reason: this one becomes a filename.
+- **Write**: temp file then rename (`writeFileAtomic`), so a crash never
   leaves a half-written photo. Superseded uploads for that view are removed
   afterwards, best effort — the new background is already usable, so tidying up
   must not fail the request.
@@ -432,7 +505,7 @@ a phone photo from landing sideways.
 
 ## Plant data (CSV)
 
-`plants.csv` is the **single source of truth** for species attributes and seasonal palettes, shared by every project; each project's `projects/<slug>/planting_layout.csv` holds per-plant coordinates (in feet) and references each species by **plants.csv's `id`**, never by botanical name.
+`plants.csv` is the **single source of truth** for species attributes and seasonal palettes, shared by every project; each yard's layout holds per-plant coordinates (in feet) and references each species by **plants.csv's `id`**, never by botanical name. The layout is stored as history placements (below); `GET /api/layout` exports it as `planting_layout.csv`.
 
 Each layout row describes one plant clump or individual:
 
@@ -458,7 +531,8 @@ layouts, history, the rules and the exports:
   write a row nothing can read back. `getSpeciesKey` (the grouping key for
   highlighting, the rules engine and the HOA species list) is the lower-cased
   `speciesId`. Never `.id`, which on a plant is the plant's own id.
-- **History entries** in `layout-history.json` hold placements only (nl-3s5.19):
+- **History entries** (`history_entries.plants_json`; `layout-history.json` before
+  nl-3s5.3) hold placements only (nl-3s5.19):
   each plant is `{ id, speciesId, x, y }`, plus any optional per-plant field that is
   not a species attribute (`src/data/placements.js` draws that line, and carries
   such fields through untouched). A displayed plant is always
@@ -468,13 +542,12 @@ layouts, history, the rules and the exports:
   full-object snapshot still loads the same way (its attributes are ignored); one
   from before species ids falls back to its botanical name, as below, and one that
   resolves to nothing is kept verbatim. `tools/migrate-history-placements.mjs
-  <projects-dir> [--dry-run]` reduces old files, with a backup per changed file.
-- **The layout file wins over history.** On load, `src/history/reconcileLayout.js`
-  compares `planting_layout.csv` with the entry at the cursor (same plants, order,
-  ids, species ids, and coordinates as the CSV writes them). If another entry
-  matches, the cursor moves there and the server is told; if none does (the CSV was
-  edited outside the app), the CSV's layout is saved as a new entry, "Layout file
-  edited outside the app", so undo still reaches the last state made in the app.
+  <projects-dir> [--dry-run]` reduces old files, with a backup per changed file
+  (run it, like `tools/migrate-species-ids.mjs`, on files before importing them).
+- **History is the layout** (nl-3s5.3). The page shows the entry at the stored
+  cursor and nothing else. The old rule that the layout file wins over history
+  applies once, when a yard is imported from files (see "Importing yards from
+  files"), because there is no stored file left to disagree with.
 - **plants.csv ids are required and unique**; `parseSpeciesCsv` throws otherwise.
   Renaming an `id` orphans every yard that uses it, so don't. Renaming a
   `botanical_name` is safe (`tests/plantParser.test.js` proves it).
@@ -557,11 +630,11 @@ Top view uses the yard coordinate system (origin at SW corner, y increasing nort
   long-press `contextmenu`, so the right-click menu cannot be tested on touch.
 - Edit mode's "Add plant" picker places one plant of the chosen species at the middle of
   the plan view; the plant's own detail sheet and right-click menu carry Clone and Remove.
-  All three go through the same commit path as a drag, so undo/redo and the auto-save to
-  `planting_layout.csv` come for free — there is no separate confirmation step.
-- Export button uses `buildLayoutCsv` to download the current layout so edits can be saved back to `planting_layout.csv`.
+  All three go through the same commit path as a drag, so undo/redo and the auto-save
+  (`POST /api/layout`) come for free — there is no separate confirmation step.
+- The plan bundle export uses `buildLayoutCsv` to include the current layout as `planting_layout.csv`.
 - SVG `<title>` tooltips (built by `render/tooltip.js`) display common + botanical names plus horticultural prefs on hover.
-- When data fails to load, `src/app.js` surfaces a lightweight error banner with instructions to serve CSVs over HTTP.
+- When data fails to load, `src/app.js` surfaces a lightweight error banner: sign in (a 401), start a yard (an empty list), or serve the app with `node server.js`.
 
 Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
 
@@ -573,7 +646,9 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
 - `src/constants.js` – canonical sizes, offsets, and scale defaults shared across modules.
 - `src/data/csvLoader.js` – fetch + minimalist CSV parser (also used by tests).
 - `src/data/projectConfig.js` – project index/config loading, normalization, and slug validation.
-- `src/data/projectPaths.js` – server-side resolution of a project's data files (path-traversal guard).
+- `src/data/projectPaths.js` – server-side resolution of a yard's photo path under `DATA_DIR` (path-traversal guard).
+- `server/db/projectStore.js` – yards in `app.db`: lookups scoped by owner, the history transactions, the photo directory.
+- `server/db/projectImport.js`, `tools/import-projects.mjs` – the one-time copy of yards from files (see "Importing yards from files").
 - `src/render/elevationOrientation.js` – compass → axis/mirror/depth mapping for elevations.
 - `src/render/viewTransform.js` – the one feet↔pixel authority, wrapping that mapping.
 - `src/render/yardBounds.js` – the declared yard a plant may be dragged within.
@@ -593,7 +668,7 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
 - `src/state/seasonalState.js` – pure logic for foliage/bloom state per month.
 - `src/interaction/dragController.js` – pointer events + hit-testing for moving plants in plan view.
 - `src/history/layoutHistory.js` – the undo/redo stack of placements; server-backed via `/api/history`.
-- `src/history/reconcileLayout.js` – which history entry the saved layout file is showing (see above).
+- `src/history/reconcileLayout.js` – which history entry a legacy layout file was showing; used only by the import.
 - `src/data/placements.js` – a plant reduced to its placement, and `sameLayout`.
 - `src/history/layoutHistoryController.js` – the page's side of it: undo/redo buttons, the save-status line, and `commit()` (record, persist, adopt the server's entry and cursor).
 - `src/state/plantEdits.js` – add, clone, and remove a plant; `src/state/yardEdits.js` – scale and
@@ -608,9 +683,10 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
 - `src/ui/projectPicker.js` – the project picker and new-project form; `src/ui/controls.js` – the
   month slider, zoom controls, scale bars, and button/download helpers.
 
-Persistence routes (`/api/layout`, `/api/history`, `/api/history/cursor`, `/api/project`,
-`/api/features`, `/api/view-background`) all require `?project=<slug>` and write inside
-that project's directory only. `design.html` loads JSZip from `node_modules/`, so run
+Persistence routes (`/api/project`, `/api/layout`, `/api/history`, `/api/history/cursor`,
+`/api/features`, `/api/view-background`, `/api/project-photo`) all require a signed-in
+caller and `?project=<slug>`, resolved among that caller's yards only; `/api/projects`
+lists and creates them. `design.html` loads JSZip from `node_modules/`, so run
 `npm install` once before serving.
 
 ## Domain and code rules for this tool
@@ -620,9 +696,10 @@ that project's directory only. `design.html` loads JSZip from `node_modules/`, s
   evergreen or semi-evergreen per the data.
 - Support every growth form and stratum (groundcover to small tree) with one generic,
   reusable visual vocabulary. Diagrammatic, not photorealistic.
-- Every `id` in a `planting_layout.csv` is **unique**: ids address plants for dragging,
+- Every plant `id` in a layout is **unique**: ids address plants for dragging,
   cloning, and highlighting, so a repeat makes every later row unreachable.
-  `parsePlantLayoutCsv` rejects duplicates with a `LayoutDataError`. Mint ids through
+  `parsePlantLayoutCsv` rejects duplicates with a `LayoutDataError`, which is what stops
+  an import of a hand-edited CSV with a repeat. Mint ids through
   `src/state/plantIds.js` (`buildCloneId`, `buildNewPlantId`).
 - DOM queries stay in `src/app.js`; the only global mutable state is `appState`.
 - Comment any non-obvious geometry: coordinate transforms, scaling, hit-testing.

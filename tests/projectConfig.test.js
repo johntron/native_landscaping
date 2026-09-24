@@ -8,7 +8,8 @@ import {
   normalizeProjectConfig,
   normalizeProjectIndex,
   serializeProjectConfig,
-  projectLayoutPath,
+  projectAssetPath,
+  projectConfigPath,
   resolveActiveProjectId,
 } from '../src/data/projectConfig.js';
 import { INCHES_PER_FOOT, PLAN_VIEWBOX } from '../src/constants.js';
@@ -52,7 +53,9 @@ test('normalizeProjectIndex keeps valid entries and picks a sane default', () =>
   // The declared default does not exist, so the first listed project wins.
   assert.equal(index.defaultProject, 'backyard');
 
-  assert.throws(() => normalizeProjectIndex({ projects: [] }), /no valid projects/);
+  // A person with no yards yet is a normal state, not a broken index (nl-3s5.3).
+  assert.deepEqual(normalizeProjectIndex({ projects: [] }), { defaultProject: null, projects: [] });
+  assert.deepEqual(normalizeProjectIndex({}), { defaultProject: null, projects: [] });
 });
 
 test('resolveActiveProjectId falls back and reports that it did', () => {
@@ -150,8 +153,17 @@ test('invalid numbers fall back rather than producing a broken viewBox', () => {
   assert.ok(config.views[0].viewBox.height > 0);
 });
 
-test('layout path is scoped to the project directory', () => {
-  assert.equal(projectLayoutPath('backyard'), 'projects/backyard/planting_layout.csv');
+test('a yard and its photos load through the owner-checked API, never as static files', () => {
+  assert.equal(projectConfigPath('backyard'), 'api/project?project=backyard');
+  assert.equal(
+    projectAssetPath('backyard', 'img/top.webp'),
+    'api/project-photo?project=backyard&path=img/top.webp'
+  );
+  // Anything that could break out of the query value is encoded.
+  assert.equal(
+    projectAssetPath('backyard', 'img/a&b=c#d.webp'),
+    'api/project-photo?project=backyard&path=img/a%26b%3Dc%23d.webp'
+  );
 });
 
 // --- views[] schema, migration, and serialization ---
@@ -758,13 +770,13 @@ test('an unknown site value is a hand-edit mistake and fails loudly', () => {
   );
 });
 
-test('both shipped projects declare an ecoregion and a site', () => {
-  ['example-frontyard', 'backyard'].forEach((id) => {
-    const raw = JSON.parse(
-      readFileSync(fileURLToPath(new URL(`../projects/${id}/project.json`, import.meta.url)), 'utf8')
-    );
-    const config = normalizeProjectConfig(raw, id);
-    assert.equal(config.ecoregion, '9', `${id} ecoregion`);
-    assert.ok(config.site?.sun && config.site?.water && config.site?.soil, `${id} site`);
-  });
+test('the shipped example yard declares an ecoregion and a site', () => {
+  // backyard is the one yard still tracked (nl-3s5.3), as the seed for the
+  // shared example (nl-3s5.24); the others are private and live in app.db.
+  const raw = JSON.parse(
+    readFileSync(fileURLToPath(new URL('../projects/backyard/project.json', import.meta.url)), 'utf8')
+  );
+  const config = normalizeProjectConfig(raw, 'backyard');
+  assert.equal(config.ecoregion, '9', 'backyard ecoregion');
+  assert.ok(config.site?.sun && config.site?.water && config.site?.soil, 'backyard site');
 });

@@ -7,7 +7,7 @@
  *
  * Same offline-fetch/checked-in-CSV pattern as fetch-nearby-fauna.mjs and
  * fetch-nhd-creeks.mjs. Coordinates never reach the CSV or git — see
- * projects/<id>/location.json.
+ * the yard's location in app.db (tools/projectSite.mjs).
  *
  * OSM's leisure/landuse tags are ADMINISTRATIVE, not ecological (a live test
  * against Dallas returned "Texas State Fair Grounds" and "Old East Dallas
@@ -19,14 +19,12 @@
  *   node tools/fetch-osm-greenspace.mjs --project backyard
  *   node tools/fetch-osm-greenspace.mjs --project backyard --smoke
  */
-import { readFileSync, existsSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { readProjectSite, ownerFromArgs } from './projectSite.mjs';
 import { openProbeCache, cached } from './usda-plants/probeCache.js';
 import { USER_AGENT, fetchWithBackoff } from './inatShared.mjs';
 import { pointToPolylineMi, ringAreaAcres, roundDistanceMi } from './geoShared.mjs';
 import { ANCHORS_CSV, mergeAnchorRows } from './anchorsShared.mjs';
 
-const ROOT = fileURLToPath(new URL('..', import.meta.url));
 
 /**
  * overpass-api.de returned HTTP 406 to a default curl User-Agent in the
@@ -71,27 +69,22 @@ async function main() {
   const smoke = args.includes('--smoke');
   const force = args.includes('--force');
   if (!projectId) {
-    console.error('Usage: node tools/fetch-osm-greenspace.mjs --project <id> [--smoke] [--force]');
+    console.error('Usage: node tools/fetch-osm-greenspace.mjs --project <id> [--owner <email>] [--smoke] [--force]');
     process.exit(1);
   }
 
-  const locationPath = `${ROOT}projects/${projectId}/location.json`;
-  if (!existsSync(locationPath)) {
-    console.error(
-      `${locationPath} does not exist. Create it (gitignored) with { "lat": ..., "lng": ... } or { "address": "..." }.`
-    );
+  // The place label and the location behind it live in app.db (nl-3s5.3);
+  // the location never reaches git. tools/projectSite.mjs says how to set one.
+  let site;
+  try {
+    site = readProjectSite(projectId, { ownerEmail: ownerFromArgs(args) });
+  } catch (err) {
+    console.error(err.message);
     process.exit(1);
   }
-  const location = JSON.parse(readFileSync(locationPath, 'utf8'));
+  const { place, location } = site;
   const { lat, lng } = await resolveCoordinates(location);
 
-  const projectConfigPath = `${ROOT}projects/${projectId}/project.json`;
-  const projectConfig = JSON.parse(readFileSync(projectConfigPath, 'utf8'));
-  const place = String(projectConfig.place || '').trim();
-  if (!place) {
-    console.error(`projects/${projectId}/project.json declares no "place"; add one before fetching.`);
-    process.exit(1);
-  }
 
   const probeCache = openProbeCache();
   const cacheKey = `${lat.toFixed(4)},${lng.toFixed(4)},r${SEARCH_RADIUS_MI}`;
@@ -187,7 +180,7 @@ async function resolveCoordinates(location) {
     return { lat: location.lat, lng: location.lng };
   }
   if (!location.address) {
-    throw new Error('location.json has neither lat/lng nor an address');
+    throw new Error('the stored location has neither lat/lng nor an address');
   }
   const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(location.address)}`;
   const response = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });

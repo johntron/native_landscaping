@@ -259,7 +259,8 @@ const REPO_PLANTS_CSV = readFileSync(new URL('../plants.csv', import.meta.url), 
 const REPO_SYNONYMS = parseSynonymCsv(
   readFileSync(new URL('../catalog/species-synonyms.csv', import.meta.url), 'utf8')
 );
-const SHIPPED_PROJECTS = ['backyard', 'example-frontyard', 'linh-and-nam-s-backyard', 'walkway'];
+// The one yard still tracked (nl-3s5.3); the others are private, in app.db.
+const SHIPPED_PROJECTS = ['backyard'];
 
 /** Rename one species' botanical_name in plants.csv text, leaving its id alone. */
 function renameInCatalog(csvText, speciesId, newName) {

@@ -3,20 +3,33 @@ import { cpSync, existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } fro
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DatabaseSync } from 'node:sqlite';
+import { openAppDb } from '../server/db/appDb.js';
+import { upsertUser } from '../server/identity.js';
+import { importLegacyProjects } from '../server/db/projectImport.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 /**
- * A throwaway document root for the specs that WRITE.
+ * Throwaway yards for the e2e servers (nl-3s5.3).
  *
- * Dragging a plant saves through POST /api/layout, so a drag spec pointed at
- * the repo would rewrite projects/backyard/planting_layout.csv on every run.
- * These specs get their own copy of the yard instead. It lives in the system
- * temp directory rather than under test-results/, which Playwright wipes at the
- * start of every run, and is keyed by checkout so two clones cannot collide.
+ * Yards live in app.db, owned by whoever made them, so each e2e server gets
+ * its own app.db under its own DATA_DIR, seeded here with yards owned by the
+ * one identity both servers run as (E2E_USER_EMAIL, DEV_USER_EMAIL in
+ * playwright.config.js). The seeding goes through the same import the real
+ * migration uses (server/db/projectImport.js), from project directories laid
+ * out the old way:
  *
- * Each writing spec takes its own project so a drag in one cannot move the
- * plants another is aiming at.
+ * - the main (read-only) server gets the repo's tracked projects/backyard;
+ * - the scratch server, for the specs that WRITE, gets one copy of backyard
+ *   per spec (SCRATCH_PROJECTS), some with their own project.json, built in
+ *   SCRATCH_DIR/projects. Dragging a plant saves through POST /api/layout, so
+ *   each writing spec takes its own yard, and a drag in one cannot move the
+ *   plants another is aiming at.
+ *
+ * Both live in the system temp directory rather than under test-results/,
+ * which Playwright wipes at the start of every run, and are keyed by checkout
+ * so two clones cannot collide.
  */
 const CHECKOUT_KEY = createHash('sha256').update(REPO_ROOT).digest('hex').slice(0, 12);
 export const SCRATCH_DIR = path.join(os.tmpdir(), `native-landscaping-e2e-${CHECKOUT_KEY}`);
@@ -25,6 +38,11 @@ export const SCRATCH_DIR = path.join(os.tmpdir(), `native-landscaping-e2e-${CHEC
 // data/app.db. Separate from SCRATCH_DIR because DATA_DIR and PUBLIC_DIR are
 // independent knobs on server.js — this is not part of the served document root.
 export const SCRATCH_DATA_DIR = path.join(os.tmpdir(), `native-landscaping-e2e-data-${CHECKOUT_KEY}`);
+/** DATA_DIR of each e2e server; playwright.config.js passes these. */
+export const MAIN_SERVER_DATA_DIR = path.join(SCRATCH_DATA_DIR, 'main');
+export const SCRATCH_SERVER_DATA_DIR = path.join(SCRATCH_DATA_DIR, 'scratch');
+/** The one identity both e2e servers run as, and the owner of every seeded yard. */
+export const E2E_USER_EMAIL = 'e2e@example.com';
 export const SCRATCH_PROJECTS = [
   'drag-plan',
   'drag-elevation',
@@ -44,6 +62,7 @@ export const SCRATCH_PROJECTS = [
   'yard-conflict',
   'frontyard-save',
   'ecology-check',
+  'second-yard',
 ];
 
 /**
@@ -170,6 +189,60 @@ const FRONTYARD_SAVE_VIEWS = {
   ],
 };
 
+/**
+ * Seed a fresh app.db under `dataDir` with `slugs` from `projectsDir`, owned
+ * by E2E_USER_EMAIL. The import records its marker, so nothing re-imports.
+ */
+function seedAppDb(dataDir, projectsDir, slugs) {
+  mkdirSync(dataDir, { recursive: true });
+  const db = openAppDb({ dataDir, ownerEmail: '', importLegacy: false });
+  try {
+    upsertUser(db, E2E_USER_EMAIL);
+    importLegacyProjects(db, { projectsDir, dataDir, ownerEmail: E2E_USER_EMAIL, slugs });
+  } finally {
+    db.close();
+  }
+}
+
+/** A yard's copy of backyard, without anything that is not seed data. */
+function copyBackyard(target) {
+  cpSync(path.join(REPO_ROOT, 'projects', 'backyard'), target, {
+    recursive: true,
+    // A dev tree's backyard also holds its gitignored live history, backups
+    // and exact location; none of that belongs in a test yard.
+    filter: (src) => !/(?:location\.json|layout-history\.json(?:\.bak-.*)?|\.bak-[^/]*)$/.test(src),
+  });
+}
+
+/**
+ * Read a seeded yard's row straight from a server's app.db (read-only), for
+ * the specs that assert on exactly what was stored: the config text, the
+ * photo directory. Everything else goes through the API.
+ *
+ * @param {string} dataDir MAIN_SERVER_DATA_DIR or SCRATCH_SERVER_DATA_DIR
+ * @param {string} slug
+ */
+export function readSeededProject(dataDir, slug) {
+  const db = new DatabaseSync(path.join(dataDir, 'app.db'), { readOnly: true });
+  try {
+    const row = db
+      .prepare(
+        `SELECT p.id, p.config_json, p.features_json FROM projects p JOIN users u ON u.id = p.owner_id
+         WHERE u.email = ? AND p.slug = ?`
+      )
+      .get(E2E_USER_EMAIL, slug);
+    if (!row) throw new Error(`No seeded yard "${slug}" in ${dataDir}`);
+    return {
+      id: Number(row.id),
+      config: JSON.parse(row.config_json),
+      features: row.features_json ? JSON.parse(row.features_json) : null,
+      imgDir: path.join(dataDir, 'projects', String(row.id), 'img'),
+    };
+  } finally {
+    db.close();
+  }
+}
+
 /** Files the app is served from; symlinked so the specs test the real source. */
 // `ecology` carries host-genera.csv. Without it the scratch root 404s that
 // fetch and the three genus-dependent checks silently report "not declared" —
@@ -208,11 +281,7 @@ export function buildScratchPublicDir() {
     if (existsSync(target)) symlinkSync(target, path.join(SCRATCH_DIR, entry));
   });
 
-  SCRATCH_PROJECTS.forEach((id) => {
-    cpSync(path.join(REPO_ROOT, 'projects', 'backyard'), path.join(SCRATCH_DIR, 'projects', id), {
-      recursive: true,
-    });
-  });
+  SCRATCH_PROJECTS.forEach((id) => copyBackyard(path.join(SCRATCH_DIR, 'projects', id)));
 
   // backyard now carries a real features.json (the passionflower trellis), but
   // features.spec.js relies on drag-plan — a plain backyard copy — to still be a
@@ -240,17 +309,20 @@ export function buildScratchPublicDir() {
     `${JSON.stringify(FRONTYARD_SAVE_VIEWS, null, 2)}\n`
   );
 
+  // Read, never written, by the project-switching spec: a yard shaped unlike
+  // backyard (four views, a tall narrow yard), under its own name so a Setup
+  // save in setupSave.spec.js cannot change what it asserts on.
   writeFileSync(
-    path.join(SCRATCH_DIR, 'projects', 'index.json'),
-    `${JSON.stringify(
-      {
-        defaultProject: SCRATCH_PROJECTS[0],
-        projects: SCRATCH_PROJECTS.map((id) => ({ id, name: id })),
-      },
-      null,
-      2
-    )}\n`
+    path.join(SCRATCH_DIR, 'projects', 'second-yard', 'project.json'),
+    `${JSON.stringify({ ...FRONTYARD_SAVE_VIEWS, id: 'second-yard', name: 'second-yard' }, null, 2)}\n`
   );
+
+  // The main server's yards: the repo's tracked example, backyard, copied
+  // first so the seed never reads anything else the dev tree holds.
+  const mainProjects = path.join(SCRATCH_DATA_DIR, 'main-projects');
+  copyBackyard(path.join(mainProjects, 'backyard'));
+  seedAppDb(MAIN_SERVER_DATA_DIR, mainProjects, ['backyard']);
+  seedAppDb(SCRATCH_SERVER_DATA_DIR, path.join(SCRATCH_DIR, 'projects'), SCRATCH_PROJECTS);
 
   return SCRATCH_DIR;
 }

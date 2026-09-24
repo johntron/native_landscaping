@@ -1,6 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
-import path from 'node:path';
-import { buildScratchPublicDir, SCRATCH_DATA_DIR, SCRATCH_DIR } from './tests-e2e/scratch-fixture.mjs';
+import {
+  buildScratchPublicDir,
+  E2E_USER_EMAIL,
+  MAIN_SERVER_DATA_DIR,
+  SCRATCH_SERVER_DATA_DIR,
+  SCRATCH_DIR,
+} from './tests-e2e/scratch-fixture.mjs';
 
 // The e2e suite drives the real app through `node server.js`. It lives outside
 // `tests/` because `tests/run-tests.cjs` auto-runs every *.test.js there under
@@ -15,10 +20,14 @@ buildScratchPublicDir();
 // working once routes start requiring a user (nl-3s5.15). Playwright merges
 // webServer.env over process.env, and the dev identity is ignored whenever the
 // Cloudflare Access vars are set, so blank them rather than inherit a shell's.
+// Every seeded yard is owned by this user (tests-e2e/scratch-fixture.mjs), and
+// yards are private to their owner (nl-3s5.3). OWNER_EMAIL is blanked too, so
+// a shell's value can never make an e2e server seed a real person as admin.
 const E2E_IDENTITY_ENV = {
-  DEV_USER_EMAIL: 'e2e@example.com',
+  DEV_USER_EMAIL: E2E_USER_EMAIL,
   CF_ACCESS_TEAM_DOMAIN: '',
   CF_ACCESS_AUD: '',
+  OWNER_EMAIL: '',
 };
 
 export default defineConfig({
@@ -53,7 +62,7 @@ export default defineConfig({
       // DATA_DIR keeps app.db (opened at startup regardless of which specs
       // run against this server) inside a throwaway directory instead of the
       // real data/, even though this server's PUBLIC_DIR is the repo itself.
-      env: { PORT: String(PORT), DATA_DIR: path.join(SCRATCH_DATA_DIR, 'main'), ...E2E_IDENTITY_ENV },
+      env: { PORT: String(PORT), DATA_DIR: MAIN_SERVER_DATA_DIR, ...E2E_IDENTITY_ENV },
       url: `http://127.0.0.1:${PORT}/index.html`,
       reuseExistingServer: !process.env.CI,
       stdout: 'ignore',
@@ -66,7 +75,7 @@ export default defineConfig({
       env: {
         PORT: String(SCRATCH_PORT),
         PUBLIC_DIR: SCRATCH_DIR,
-        DATA_DIR: path.join(SCRATCH_DATA_DIR, 'scratch'),
+        DATA_DIR: SCRATCH_SERVER_DATA_DIR,
         ...E2E_IDENTITY_ENV,
       },
       url: `http://127.0.0.1:${SCRATCH_PORT}/index.html`,

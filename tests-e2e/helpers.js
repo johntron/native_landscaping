@@ -1,38 +1,50 @@
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { SCRATCH_DIR } from './scratch-fixture.mjs';
-
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+/** The read-only server, as Node (not the page) reaches it. */
+const MAIN_BASE = `http://127.0.0.1:${Number(process.env.E2E_PORT) || 8123}`;
 
 /** The write-safe server; see scratch-fixture.mjs. */
 export const SCRATCH_BASE = `http://127.0.0.1:${(Number(process.env.E2E_PORT) || 8123) + 1}`;
 
-/** Parse a project's planting_layout.csv (id,species_id,x_ft,y_ft) into {id, speciesId, xFt, yFt} rows. */
-export async function readLayoutRows(projectId) {
-  const csv = await readFile(
-    path.join(REPO_ROOT, 'projects', projectId, 'planting_layout.csv'),
-    'utf8'
-  );
-  return csv
-    .split(/\r?\n/)
-    .slice(1) // drop header
-    .filter((line) => line.trim())
-    .map((line) => {
-      const [id, speciesId, xFt, yFt] = line.split(',');
-      return {
-        id,
-        speciesId: (speciesId || '').trim(),
-        xFt: Number.parseFloat(xFt),
-        yFt: Number.parseFloat(yFt),
-      };
+// Yards live in each server's app.db (nl-3s5.3), so the specs read what was
+// saved through the same API the page uses. Node's fetch sends no identity
+// header, and the e2e servers make every request the seeded owner
+// (DEV_USER_EMAIL), so these see exactly the yards the page does.
+async function apiText(base, route, projectId) {
+  const response = await fetch(`${base}${route}?project=${encodeURIComponent(projectId)}`);
+  if (!response.ok) throw new Error(`${route} for ${projectId} answered ${response.status}`);
+  return response.text();
+}
+
+/** Parse the exported layout CSV (id,species_id,x_ft,y_ft) into rows keyed by its header. */
+function parseLayoutCsv(csv) {
+  const [header, ...lines] = csv.split(/\r?\n/).filter((line) => line.trim());
+  const columns = header.split(',').map((name) => name.trim());
+  return lines.map((line) => {
+    const cells = line.split(',');
+    const row = {};
+    columns.forEach((name, i) => {
+      row[name] = cells[i];
     });
+    return row;
+  });
+}
+
+/**
+ * A yard's layout on the read-only server (the entry at its cursor, as GET
+ * /api/layout exports it), as {id, speciesId, xFt, yFt} rows.
+ */
+export async function readLayoutRows(projectId) {
+  return parseLayoutCsv(await apiText(MAIN_BASE, '/api/layout', projectId)).map((row) => ({
+    id: row.id,
+    speciesId: (row.species_id || '').trim(),
+    xFt: Number.parseFloat(row.x_ft),
+    yFt: Number.parseFloat(row.y_ft),
+  }));
 }
 
 /**
  * Open a project and wait for the first render. Every plan-view plant is a <g>
  * stamped with data-plant-id by renderTopView, so their presence is the signal
- * that CSV loading, parsing, and rendering all completed.
+ * that loading, parsing, and rendering all completed.
  */
 export async function openProject(page, projectId) {
   await page.goto(`/design.html?project=${projectId}`);
@@ -45,48 +57,24 @@ export async function openScratchProject(page, projectId) {
   await page.locator('#topSvg g[data-plant-id]').first().waitFor();
 }
 
-/** Read a scratch project's saved layout as {id, x, y} rows. */
-/** The scratch project's layout-history.json, parsed; null if nothing has been saved yet. */
+/** A scratch yard's saved history, `{ entries, cursor }`; null if it has none yet. */
 export async function readScratchHistory(projectId) {
-  try {
-    return JSON.parse(
-      await readFile(path.join(SCRATCH_DIR, 'projects', projectId, 'layout-history.json'), 'utf8')
-    );
-  } catch (err) {
-    if (err.code === 'ENOENT') return null;
-    throw err;
-  }
+  const history = JSON.parse(await apiText(SCRATCH_BASE, '/api/history', projectId));
+  return history.entries.length ? history : null;
 }
 
+/** A scratch yard's saved layout (the entry at its cursor) as {id, x, y} rows. */
 export async function readScratchLayout(projectId) {
-  const csv = await readFile(
-    path.join(SCRATCH_DIR, 'projects', projectId, 'planting_layout.csv'),
-    'utf8'
-  );
-  const [header, ...lines] = csv.split(/\r?\n/).filter((line) => line.trim());
-  const columns = header.split(',').map((name) => name.trim());
-  return lines.map((line) => {
-    const cells = line.split(',');
-    const row = {};
-    columns.forEach((name, i) => {
-      row[name] = cells[i];
-    });
-    return { id: row.id, x: Number(row.x_ft), y: Number(row.y_ft) };
-  });
+  return parseLayoutCsv(await apiText(SCRATCH_BASE, '/api/layout', projectId)).map((row) => ({
+    id: row.id,
+    x: Number(row.x_ft),
+    y: Number(row.y_ft),
+  }));
 }
 
-/** Read a scratch project's saved features.json, or [] if it has none. */
+/** A scratch yard's saved features, or [] if it has none. */
 export async function readScratchFeatures(projectId) {
-  try {
-    const raw = await readFile(
-      path.join(SCRATCH_DIR, 'projects', projectId, 'features.json'),
-      'utf8'
-    );
-    return JSON.parse(raw).features || [];
-  } catch (err) {
-    if (err.code === 'ENOENT') return [];
-    throw err;
-  }
+  return JSON.parse(await apiText(SCRATCH_BASE, '/api/features', projectId)).features || [];
 }
 
 /**

@@ -13,8 +13,14 @@ import {
 import { isValidViewFrom, resolveElevationOrientation } from '../render/elevationOrientation.js';
 import { createViewTransform } from '../render/viewTransform.js';
 
-export const PROJECTS_DIR = 'projects';
-export const PROJECT_INDEX_PATH = `${PROJECTS_DIR}/index.json`;
+/**
+ * Where the browser loads a yard from (nl-3s5.3). Yards live in app.db on the
+ * server, scoped to the signed-in owner, so these are API routes rather than
+ * files under projects/: the caller's yard list, one yard's config, and one
+ * of its photos. Relative, like every other fetch here, so they resolve
+ * against document.baseURI.
+ */
+export const PROJECT_INDEX_PATH = 'api/projects';
 
 /**
  * Project ids become path segments on both the client and the server, so keep
@@ -44,9 +50,11 @@ export function isValidProjectId(id) {
 }
 
 /**
- * Normalize projects/index.json into a predictable shape.
+ * Normalize the caller's yard list (GET /api/projects) into a predictable shape.
+ * An empty list is legitimate — a person who has not made a yard yet — and
+ * comes back with a null default rather than an error.
  * @param {any} raw
- * @returns {{ defaultProject: string, projects: Array<{ id: string, name: string }> }}
+ * @returns {{ defaultProject: string | null, projects: Array<{ id: string, name: string }> }}
  */
 export function normalizeProjectIndex(raw) {
   const entries = Array.isArray(raw?.projects) ? raw.projects : [];
@@ -59,9 +67,7 @@ export function normalizeProjectIndex(raw) {
     })
     .filter(Boolean);
 
-  if (!projects.length) {
-    throw new Error('projects/index.json lists no valid projects');
-  }
+  if (!projects.length) return { defaultProject: null, projects };
 
   const requestedDefault = raw?.defaultProject;
   const defaultProject = projects.some((p) => p.id === requestedDefault)
@@ -196,9 +202,9 @@ function normalizeSite(raw, projectId) {
  * A short label identifying which locality's nearby-fauna records
  * (`ecology/nearby-fauna.csv`) apply to this project — e.g. "home". The exact
  * address or coordinates behind that label are never committed to this
- * (public) repo; they live in `projects/<id>/location.json`, which is
- * gitignored and read only by the offline `tools/` fetch script, never by the
- * app itself. Two projects on the same property (backyard, walkway) share one
+ * (public) repo; they live in app.db (`projects.location_json`, nl-3s5.3), read
+ * by the offline `tools/` fetch scripts (tools/projectSite.mjs) and, as bare
+ * lat/lng for the owner, by /api/ecosystem. Two projects on the same property (backyard, walkway) share one
  * `place` and therefore one fetch.
  */
 function normalizePlace(raw) {
@@ -638,27 +644,24 @@ function oppositeOf(direction) {
   return opposites[direction] || direction;
 }
 
-/** Directory holding a project's config, layout, and background images. */
-export function projectDirectory(projectId) {
-  return `${PROJECTS_DIR}/${projectId}`;
-}
-
-/** Resolve an asset declared in project.json against the project directory. */
+/**
+ * The URL of a photo a view's `background` names (a path relative to the yard,
+ * e.g. "img/plan-130d05047b7d.webp"). Photos are served by the owner-checked
+ * GET /api/project-photo, never as static files.
+ */
 export function projectAssetPath(projectId, relativePath) {
-  return `${projectDirectory(projectId)}/${relativePath}`;
-}
-
-export function projectLayoutPath(projectId) {
-  return `${projectDirectory(projectId)}/planting_layout.csv`;
+  // Slashes left readable ("path=img/top.webp"): they are legal in a query
+  // value, and a URL that still names the file is easier to debug.
+  const photo = encodeURIComponent(relativePath).replace(/%2F/gi, '/');
+  return `api/project-photo?project=${encodeURIComponent(projectId)}&path=${photo}`;
 }
 
 export function projectConfigPath(projectId) {
-  return `${projectDirectory(projectId)}/project.json`;
+  return `api/project?project=${encodeURIComponent(projectId)}`;
 }
 
 /**
- * Fetch and normalize the project index. Kept fetch-injectable for tests and so
- * the app keeps working as plain static files (no API endpoint involved).
+ * Fetch and normalize the caller's yard list. Kept fetch-injectable for tests.
  */
 export async function loadProjectIndex(fetchFn, baseUri) {
   const raw = await fetchJson(fetchFn, PROJECT_INDEX_PATH, baseUri);
@@ -677,7 +680,11 @@ async function fetchJson(fetchFn, path, baseUri) {
   const url = baseUri ? new URL(path, baseUri).toString() : path;
   const response = await fetchFn(url, { cache: 'no-store' });
   if (!response.ok) {
-    throw new Error(`Failed to load ${path} (${response.status})`);
+    const error = new Error(
+      response.status === 401 ? 'Sign in to see your yards' : `Failed to load ${path} (${response.status})`
+    );
+    error.status = response.status;
+    throw error;
   }
   return response.json();
 }

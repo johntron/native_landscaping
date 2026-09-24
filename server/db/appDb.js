@@ -5,7 +5,8 @@
 // app.db holds what a person entered by hand and no tools/ script can
 // reconstruct: users, saved monitoring areas and the feed's read/dismissed
 // flags (moved here from saved-areas.db and feed-state.db in nl-3s5.11), and
-// from nl-3s5.3 onward projects and revisions. It is the one file to back up.
+// every yard with its undo history (nl-3s5.3, server/db/projectStore.js). Back
+// it up together with the yard photos beside it, DATA_DIR/projects/.
 import { DatabaseSync } from 'node:sqlite';
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';

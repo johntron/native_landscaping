@@ -1,23 +1,24 @@
 /**
- * Decide which history entry the saved layout file is showing.
+ * Decide which history entry a legacy planting_layout.csv was showing.
  *
- * planting_layout.csv and layout-history.json are written together on every
- * save and every undo/redo, so the entry at the stored cursor normally IS the
- * layout file. They can still disagree: the CSV was edited by hand (or by a
- * tool) outside the app, or a save wrote the CSV and failed before the history.
- * The layout file is what the yard is, so it always wins; the question is only
- * what happens to the history around it.
+ * Until nl-3s5.3 a yard was two files written together on every save and
+ * every undo/redo: planting_layout.csv and layout-history.json. They could
+ * still disagree (the CSV edited by hand or by a tool, or a save that wrote
+ * the CSV and failed before the history), and the design tool showed the CSV,
+ * so the layout file always won. Yards now live in app.db, where history is
+ * the only copy and the layout is the entry at the cursor, so this runs in
+ * exactly one place: server/db/projectImport.js, once per yard, so the
+ * imported yard shows what the old app showed. The browser no longer calls it.
  *
  * - 'empty':    there is no history. The stack starts from the layout file.
  * - 'current':  the entry at the cursor is the layout file. Nothing to do.
  * - 'moved':    another entry is the layout file (the latest one that is). The
  *               cursor moves there and every entry is kept, so redo still works;
- *               the caller tells the server about the new cursor so the two
- *               stacks keep the same indices.
+ *               the import stores that cursor.
  * - 'diverged': no entry is the layout file. History up to the cursor is kept
  *               (so undo still reaches the last state made in the app), and the
- *               caller records the layout file as a new entry and saves it, the
- *               same way any other change is saved.
+ *               import appends the layout file as a new entry, "Layout file
+ *               edited outside the app", exactly as the old client saved one.
  *
  * "Is the layout file" is sameLayout (src/data/placements.js): same plants in
  * the same order, same ids and species ids, same coordinates as the CSV writes

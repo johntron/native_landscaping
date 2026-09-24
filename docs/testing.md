@@ -18,6 +18,11 @@ This happened twice in two days to `example-frontyard`. Unit tests inline their 
 fixture (see `LEGACY_BACKYARD` in `tests/projectConfig.test.js`).
 e2e specs take their own scratch project (below).
 
+Since nl-3s5.3 the only yard left in the repo is `projects/backyard` (the seed for the
+shared example, nl-3s5.24); the rest are private and live in `app.db`. A test that
+needs "a real yard" uses `backyard` and asserts only what holds for any yard (it
+parses, it analyses, it survives a catalog rename), never its numbers.
+
 ## End-to-end browser tests (Playwright)
 
 `npm run test:e2e` runs the Playwright suite in `tests-e2e/`. It boots `node server.js`
@@ -35,13 +40,24 @@ on port `8123` (override with `E2E_PORT`) and drives the real `design.html` in C
   with `data-plant-id`, `data-name`, and `data-species-key`; those are the query handles
   (`tests-e2e/helpers.js` wraps the common ones). Screenshot diffs are noisy here because
   the renderers deliberately jitter canopy outlines.
+- **Yards live in each server's own `app.db`, seeded by the fixture** (nl-3s5.3).
+  `tests-e2e/scratch-fixture.mjs` lays the yards out the old way (a directory per
+  slug) and runs the real import (`server/db/projectImport.js`) into each server's
+  `DATA_DIR`, owned by `E2E_USER_EMAIL`, the identity both servers run as
+  (`DEV_USER_EMAIL`). `OWNER_EMAIL` is blanked for both, so a shell's value never
+  seeds a real person. The main (read-only) server gets the repo's `backyard`,
+  without its gitignored history or location; that is its only yard.
 - **A spec that writes must use the scratch server.** Dragging a plant auto-saves via
   `POST /api/layout`, Setup mode's *Save views* posts `/api/project`, and
-  *Upload photo* posts `/api/view-background` — any of which would rewrite the
-  repo's `projects/` if pointed at the default server.
-  `playwright.config.js` starts a second server on `E2E_PORT + 1` over a throwaway
-  root built by `tests-e2e/scratch-fixture.mjs`; reach it through `openScratchProject`
+  *Upload photo* posts `/api/view-background`, and a shared yard is state other specs
+  read. `playwright.config.js` starts a second server on `E2E_PORT + 1` over a
+  throwaway root and its own `app.db`; reach it through `openScratchProject`
   (`tests-e2e/helpers.js`). Read-only specs use the default server.
+- **Read what was saved through the API** (`readScratchLayout`, `readScratchHistory`,
+  `readScratchFeatures` in `tests-e2e/helpers.js`, which fetch `/api/layout`,
+  `/api/history` and `/api/features` as the same user). For the stored text itself or a
+  yard's photo directory, `readSeededProject(dataDir, slug)` in the fixture opens that
+  server's `app.db` read-only.
 - **Each writing spec gets its own scratch project**, listed in `SCRATCH_PROJECTS` in
   `tests-e2e/scratch-fixture.mjs` (each is a copy of `backyard`; the fixture can write a
   custom `project.json` after the copy when a spec needs other geometry). A spec that
@@ -51,9 +67,10 @@ on port `8123` (override with `E2E_PORT`) and drives the real `design.html` in C
   (Playwright wipes that at run start), and it is built only in the main process: the
   config is loaded once per worker too, and eight workers racing on one directory tear it
   apart mid-run.
-- **Both e2e servers point `DATA_DIR` at a throwaway directory** (`SCRATCH_DATA_DIR` in
-  `tests-e2e/scratch-fixture.mjs`), separate subdirectories for the main and scratch
-  server so the two never open the same SQLite file at once. This covers every
+- **Both e2e servers point `DATA_DIR` at a throwaway directory** (`MAIN_SERVER_DATA_DIR`
+  and `SCRATCH_SERVER_DATA_DIR`, under `SCRATCH_DATA_DIR` in
+  `tests-e2e/scratch-fixture.mjs`), separate for the main and scratch server so the two
+  never open the same SQLite file at once. Uploaded photos land there too. This covers every
   gitignored cache DB the server opens, not just `app.db`: `data/observation-events.db`,
   `data/ecosystem.db`, `data/claims.db`, and `data/probe-cache.db` (opened per request by
   `/api/geocode` and `/api/ecoregion`) all resolve their default path through

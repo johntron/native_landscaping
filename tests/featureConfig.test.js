@@ -3,9 +3,7 @@ import assert from 'node:assert/strict';
 import {
   geometryKeyFor,
   isValidFeatureId,
-  loadFeatures,
   normalizeFeatures,
-  projectFeaturesPath,
   serializeFeatures,
 } from '../src/data/featureConfig.js';
 
@@ -224,29 +222,4 @@ test('coordinates must be finite and enclose something', () => {
     'backyard'
   );
   assert.deepEqual(coerced.features[0].footprintFt[0], { x: 0, y: 0 });
-});
-
-test('loadFeatures treats a missing file as an empty yard', async () => {
-  assert.equal(projectFeaturesPath('backyard'), 'projects/backyard/features.json');
-
-  const requested = [];
-  const fetchFn = async (url) => {
-    requested.push(url);
-    return { ok: false, status: 404 };
-  };
-  assert.deepEqual(await loadFeatures('backyard', fetchFn), { features: [] });
-  assert.deepEqual(requested, ['projects/backyard/features.json']);
-
-  const ok = await loadFeatures('backyard', async () => ({
-    ok: true,
-    status: 200,
-    json: async () => ({ features: [FENCE] }),
-  }));
-  assert.equal(ok.features[0].id, 'fence');
-
-  await assert.rejects(
-    loadFeatures('backyard', async () => ({ ok: false, status: 500 })),
-    /Failed to load projects\/backyard\/features.json \(500\)/
-  );
-  await assert.rejects(loadFeatures('../etc', async () => ({ ok: true })), /Invalid project id/);
 });

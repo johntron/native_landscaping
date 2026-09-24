@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import zlib from 'node:zlib';
-import { SCRATCH_DIR } from './scratch-fixture.mjs';
+import { SCRATCH_SERVER_DATA_DIR, readSeededProject } from './scratch-fixture.mjs';
 import { openScratchProject } from './helpers.js';
 
 // Its own copy of the yard, per the convention in scratch-fixture.mjs: a spec
@@ -11,15 +11,16 @@ import { openScratchProject } from './helpers.js';
 const PROJECT = 'background-upload';
 
 /**
- * Uploading writes into the project directory, so this whole spec runs against
+ * Uploading writes into the yard's photo directory, so this whole spec runs against
  * the scratch server. Serially, because the two tests upload to the same view
  * and the second one's assertion about superseded files depends on the first
  * one's file being gone.
  */
 test.describe.configure({ mode: 'serial' });
 
+/** The yard's photo directory under the scratch server's DATA_DIR (nl-3s5.3). */
 function imgDir() {
-  return path.join(SCRATCH_DIR, 'projects', PROJECT, 'img');
+  return readSeededProject(SCRATCH_SERVER_DATA_DIR, PROJECT).imgDir;
 }
 
 /**

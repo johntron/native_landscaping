@@ -1,34 +1,28 @@
 import path from 'node:path';
-import { isValidProjectId, PROJECTS_DIR } from './projectConfig.js';
 
 /**
- * Server-side resolution of a project's data files.
+ * Server-side resolution of a yard's photo files.
  *
- * The project id arrives from the client and becomes a path segment, so it is
- * validated as a slug and the resolved directory is re-checked against the
- * projects root before any read or write.
- *
- * @param {string} projectId
- * @param {string} publicDir absolute path to the served root
+ * Since nl-3s5.3 a yard's config, features, location and history live in
+ * app.db (server/db/projectStore.js), and only its photos are files, under
+ * DATA_DIR/projects/<projects.id>/img/ (projectDataDir). The path a view's
+ * `background` names arrives from the client and becomes a path, so it is held
+ * to the shape the upload handler writes (plus the shipped .svg drawings and
+ * un-hashed names the older yards carry) and re-checked for containment.
  */
-export function resolveProjectPaths(projectId, publicDir) {
-  if (!isValidProjectId(projectId)) {
-    throw new Error(`Invalid or missing project id "${projectId}"`);
-  }
-  const projectsRoot = path.join(publicDir, PROJECTS_DIR);
-  const projectDir = path.resolve(projectsRoot, projectId);
-  if (projectDir !== path.join(projectsRoot, projectId)) {
-    throw new Error('Project path escapes the projects directory');
-  }
-  return {
-    projectId,
-    projectDir,
-    layoutFile: path.join(projectDir, 'planting_layout.csv'),
-    historyFile: path.join(projectDir, 'layout-history.json'),
-    configFile: path.join(projectDir, 'project.json'),
-    featuresFile: path.join(projectDir, 'features.json'),
-    locationFile: path.join(projectDir, 'location.json'),
-  };
+const PHOTO_PATH = /^img\/[A-Za-z0-9_-]+\.(?:webp|png|jpe?g|svg)$/;
+
+/**
+ * @param {string} projectDir the yard's directory under DATA_DIR (projectDataDir)
+ * @param {string} relativePath e.g. "img/plan-130d05047b7d.webp"
+ * @returns {string | null} the absolute file path, or null if the path is not a photo path
+ */
+export function resolveProjectPhoto(projectDir, relativePath) {
+  const rel = String(relativePath || '');
+  if (!PHOTO_PATH.test(rel)) return null;
+  const file = path.resolve(projectDir, rel);
+  if (file !== path.join(projectDir, rel)) return null;
+  return file;
 }
 
 /** Pull the project id out of a request URL's query string. */

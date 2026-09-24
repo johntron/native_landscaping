@@ -16,7 +16,7 @@
  * not hand-curated.
  *
  * The exact coordinates never reach the index or git: they live in
- * projects/<id>/location.json, which is gitignored (this repo is public).
+ * a yard's location in app.db (tools/projectSite.mjs), never in git (this repo is public).
  *
  * Raw API responses are cached (data/probe-cache.db, shared with
  * tools/usda-plants/probeCache.js) keyed by their full request URL, so
@@ -29,8 +29,7 @@
  *   node tools/fetch-ecosystem-index.mjs --project backyard --smoke   # one taxon, one radius
  *   node tools/fetch-ecosystem-index.mjs --project backyard --force   # bypass the response cache
  */
-import { readFileSync, existsSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { readProjectSite, ownerFromArgs } from './projectSite.mjs';
 import { openEcosystemDb, replaceTaxonRows } from './ecosystemIndexDb.js';
 // Same raw-response cache tools/usda-plants/probeCache.js already built for
 // USDA, sharing its default file (data/probe-cache.db) — its schema is keyed
@@ -43,7 +42,6 @@ import { isExcludedEstablishment } from '../src/analysis/establishmentMeans.js';
 import { geocodeAddress } from './geocode.mjs';
 import { restrictToWildPreciseRecords } from './inatShared.mjs';
 
-const ROOT = fileURLToPath(new URL('..', import.meta.url));
 
 /**
  * Per-taxon radius bands, in miles, ascending. Reasoned defaults (not a
@@ -107,18 +105,20 @@ async function main() {
   const smoke = args.includes('--smoke');
   const force = args.includes('--force');
   if (!projectId) {
-    console.error('Usage: node tools/fetch-ecosystem-index.mjs --project <id> [--smoke] [--force]');
+    console.error('Usage: node tools/fetch-ecosystem-index.mjs --project <id> [--owner <email>] [--smoke] [--force]');
     process.exit(1);
   }
 
-  const locationPath = `${ROOT}projects/${projectId}/location.json`;
-  if (!existsSync(locationPath)) {
-    console.error(
-      `${locationPath} does not exist. Create it (gitignored) with { "lat": ..., "lng": ... } or { "address": "..." }.`
-    );
+  // The place label and the location behind it live in app.db (nl-3s5.3);
+  // the location never reaches git. tools/projectSite.mjs says how to set one.
+  let site;
+  try {
+    site = readProjectSite(projectId, { ownerEmail: ownerFromArgs(args) });
+  } catch (err) {
+    console.error(err.message);
     process.exit(1);
   }
-  const location = JSON.parse(readFileSync(locationPath, 'utf8'));
+  const { place, location } = site;
   const probeCache = openProbeCache();
   const { lat, lng } = await resolveCoordinates(location, probeCache, force);
   const placeId = await resolvePlaceId(lat, lng, probeCache, force);
@@ -128,13 +128,6 @@ async function main() {
     console.warn('Could not resolve a state/country place_id — establishment_means will be left blank for every row (nothing excluded).');
   }
 
-  const projectConfigPath = `${ROOT}projects/${projectId}/project.json`;
-  const projectConfig = JSON.parse(readFileSync(projectConfigPath, 'utf8'));
-  const place = String(projectConfig.place || '').trim();
-  if (!place) {
-    console.error(`projects/${projectId}/project.json declares no "place"; add one before fetching.`);
-    process.exit(1);
-  }
 
   const taxa = smoke ? [ICONIC_TAXA[0]] : ICONIC_TAXA;
 
@@ -209,7 +202,7 @@ async function resolveCoordinates(location, probeCache, force) {
     return { lat: location.lat, lng: location.lng };
   }
   if (!location.address) {
-    throw new Error('location.json has neither lat/lng nor an address');
+    throw new Error('the stored location has neither lat/lng nor an address');
   }
   const { lat, lng } = await geocodeAddress(location.address, { probeCache, force });
   return { lat, lng };

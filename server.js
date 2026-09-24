@@ -9,7 +9,7 @@ import { handleFeedRoutes } from './server/routes/feed.js';
 import { handleClaimsRoutes } from './server/routes/claims.js';
 import { rejectCrossSite } from './server/http.js';
 import { legacyRedirect, serveStaticFile, isAdminOnlyStaticPath } from './server/static.js';
-import { openAppDb } from './server/db/appDb.js';
+import { openAppDb, resolveDataDir } from './server/db/appDb.js';
 import { createIdentity } from './server/identity.js';
 import { openServerDatabases } from './server/dbHandles.js';
 import { resolveRequestLogMode, shouldLogRequest, formatRequestLog } from './server/requestLog.js';
@@ -20,6 +20,10 @@ const PUBLIC_DIR = process.env.PUBLIC_DIR
   ? path.resolve(process.env.PUBLIC_DIR)
   : path.resolve(process.cwd());
 
+// Where app.db and every yard's photos live (DATA_DIR/projects/<id>/img/,
+// nl-3s5.3): outside the served root, reached only through /api routes.
+const DATA_DIR = resolveDataDir();
+
 const ROUTES = [handleProjectRoutes, handleEcosystemRoutes, handleFeedRoutes, handleClaimsRoutes];
 
 // Built once so its configuration warnings log at startup (server/identity.js).
@@ -28,7 +32,7 @@ const identify = createIdentity();
 // Every SQLite store is opened once at startup and shared through ctx.db,
 // instead of each route opening (and leaking) a handle per request: app.db
 // (nl-3s5.23) plus the tools/ stores (nl-3s5.14, server/dbHandles.js).
-const db = { app: openAppDb(), ...openServerDatabases() };
+const db = { app: openAppDb({ dataDir: DATA_DIR }), ...openServerDatabases() };
 
 // REQUEST_LOG=all|api|off, default 'api': see server/requestLog.js for why
 // 'api' (skip static-asset 200s, keep everything else) is the quiet default.
@@ -43,7 +47,7 @@ const server = http.createServer(async (req, res) => {
   const pathname = url.pathname;
   const method = req.method || 'GET';
   const startedAt = process.hrtime.bigint();
-  const ctx = { url, pathname, publicDir: PUBLIC_DIR, db };
+  const ctx = { url, pathname, publicDir: PUBLIC_DIR, dataDir: DATA_DIR, db };
 
   res.on('finish', () => {
     if (!shouldLogRequest(requestLogMode, pathname, res.statusCode)) return;

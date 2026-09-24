@@ -4,15 +4,9 @@ import {
   loadProjectConfig,
   loadProjectIndex,
   projectAssetPath,
-  projectLayoutPath,
   resolveActiveProjectId,
 } from './data/projectConfig.js';
-import {
-  buildPlantsFromCsv,
-  parseSpeciesCsv,
-  LayoutDataError,
-} from './data/plantParser.js';
-import { buildLayoutCsv } from './data/layoutExporter.js';
+import { parseSpeciesCsv } from './data/plantParser.js';
 import { parseSynonymCsv } from './data/speciesResolver.js';
 import {
   loadLayoutHistory,
@@ -146,6 +140,19 @@ async function init() {
   let project;
   try {
     projectIndex = await loadProjectIndex(fetch, document.baseURI);
+    if (!projectIndex.projects.length) {
+      // A signed-in person with no yard yet: the one useful thing on the page
+      // is the form that makes one.
+      initNewProjectForm({
+        button: newProjectBtn,
+        form: newProjectForm,
+        nameInput: newProjectName,
+        cancelButton: newProjectCancelBtn,
+        status: newProjectStatus,
+      });
+      showLoadError('You have no yards yet.', { hint: 'Start one with "+ New project".' });
+      return;
+    }
     const resolved = resolveActiveProjectId(
       new URLSearchParams(window.location.search).get(PROJECT_QUERY_PARAM),
       projectIndex
@@ -159,7 +166,10 @@ async function init() {
     // shared yard. It cannot happen any more: every view is derived from the
     // one declared yard, so a view that misses it is not expressible.
   } catch (err) {
-    showLoadError('Unable to load project configuration.');
+    showLoadError(
+      err.status === 401 ? 'Sign in to see your yards.' : 'Unable to load project configuration.',
+      err.status === 401 ? { hint: '' } : undefined
+    );
     console.error(err);
     return;
   }
@@ -672,9 +682,8 @@ async function init() {
   }
 
   try {
-    const [speciesCsv, layoutCsv, synonymCsv, ecology] = await Promise.all([
+    const [speciesCsv, synonymCsv, ecology] = await Promise.all([
       fetchCsv(new URL('plants.csv', document.baseURI)),
-      fetchCsv(new URL(projectLayoutPath(project.id), document.baseURI)),
       fetchCsv(new URL('catalog/species-synonyms.csv', document.baseURI)).catch(() => ''),
       // A missing or unreadable ecology table costs checks, not the app, so
       // this never joins the failure path above — which stops the yard
@@ -687,12 +696,10 @@ async function init() {
     loadedSpeciesCsv = speciesCsv;
     appState.species = parseSpeciesCsv(speciesCsv);
     appState.speciesSynonyms = parseSynonymCsv(synonymCsv);
-    const initialPlants = buildPlantsFromCsv(speciesCsv, layoutCsv, {
-      synonyms: appState.speciesSynonyms,
-    });
-    const layoutCsvSnapshot = buildLayoutCsv(initialPlants);
+    // History is the yard (nl-3s5.3): the plants shown are the entry at its
+    // cursor, built from plants.csv. There is no stored layout file to load
+    // first and reconcile against any more.
     const historyData = await loadLayoutHistory(layoutHistory.updateStatus, {
-      layoutCsv: layoutCsvSnapshot,
       projectId: project.id,
     });
     appState.features = (await loadProjectFeatures(undefined, { projectId: project.id })).features;
@@ -701,7 +708,7 @@ async function init() {
     // the panel rebuilds its DOM outright, and doing that on every month-slider
     // frame would take the focus out of the field being typed in.
     featuresMode.panel.render(appState.features);
-    appState.plants = layoutHistory.start(initialPlants, historyData);
+    appState.plants = layoutHistory.start(historyData);
     // The layout arrives after the panel is first built, and whether the yard
     // still contains it is the panel's loudest section — so it is rebuilt here
     // rather than left reporting the empty list it was born with.
@@ -718,13 +725,7 @@ async function init() {
       exportHoaButton.addEventListener('click', handleHoaExport);
     }
   } catch (err) {
-    if (err instanceof LayoutDataError) {
-      // The files loaded; their contents are wrong. Say which row so a hand-edit
-      // mistake is fixable without opening the console.
-      showLoadError(err.message, { hint: 'Fix the layout CSV for this project, then reload.' });
-    } else {
-      showLoadError('Unable to load plants and layout data.');
-    }
+    showLoadError('Unable to load plants and layout data.');
     console.error(err);
     return;
   }
@@ -811,10 +812,10 @@ async function init() {
 }
 
 const DEFAULT_LOAD_ERROR_HINT =
-  'Please serve plants.csv and the projects/ directory over HTTP (for example, via `npx serve`).';
+  'Serve the app with `node server.js` (npm run serve): yards load through its /api routes.';
 
 function showLoadError(message, { hint = DEFAULT_LOAD_ERROR_HINT } = {}) {
-  const text = `${message} ${hint}`;
+  const text = hint ? `${message} ${hint}` : message;
   const existing = document.querySelector('.error-banner');
   if (existing) {
     existing.textContent = text;

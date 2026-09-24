@@ -58,7 +58,7 @@ plants.csv            the species catalog every yard renders from (the single so
 catalog/              wider regional lists + manual-corrections.tsv; see catalog/README.md
 ecology/              sourced, genus- or place-keyed tables for the rules engine
 sourcing/             sourced nursery and plant-sale tables behind sourcing.html
-projects/<slug>/      one yard each; listed in projects/index.json
+projects/backyard/    the one yard still in git: seed for the shared example (yards live in app.db)
 src/                  browser code: one folder per page, plus shared analysis/, data/, render/, ui/
 tools/                everything that calls a third-party API, the claim store, the usda-plants MCP server
 server.js, server/     the HTTP server: server.js dispatches to server/routes/{project,ecosystem,feed,claims}.js, then static files
@@ -97,7 +97,9 @@ tests/, tests-e2e/    Node unit tests (the gate) and Playwright specs
 ### Privacy and licensing (this repo is public)
 
 - Exact addresses and coordinates never reach git. A project's `place` is a short
-  label; the address behind it is in the gitignored `projects/<slug>/location.json`.
+  label; the address behind it is in `app.db` (`projects.location_json`), set with
+  `tools/project-location.mjs`. Yards themselves are private to their owner and live in
+  `app.db` too, not in the repo (nl-3s5.3).
 - The NCTX flora PDFs may be downloaded but not redistributed. They stay local
   (`docs/data-acquisition/corpus/*.pdf` is gitignored); the extracted text is what
   code reads.
@@ -130,8 +132,8 @@ tests/, tests-e2e/    Node unit tests (the gate) and Playwright specs
 
 `data/*.db` files are gitignored. Most are rebuildable caches (`ecosystem.db`,
 `probe-cache.db`, `observation-events.db`, `claims.db`): re-run the matching `tools/`
-script. **One holds state a person entered by hand and cannot be rebuilt: `app.db`.**
-Back it up; it is the one file that matters.
+script. **One holds state a person entered by hand and cannot be rebuilt: `app.db`**,
+with the yard photos beside it under `DATA_DIR/projects/`. Back up both, together.
 
 - `app.db` (`server/db/appDb.js`, numbered migrations in `server/db/migrations/`) holds
   users, the saved monitoring areas entered through `/api/saved-areas` (`saved_areas`,
@@ -139,7 +141,8 @@ Back it up; it is the one file that matters.
   feed and saved-area route is scoped to it in SQL, and an unowned area is visible to
   nobody, admins included; nl-3s5.5), the feed's per-observation
   read/dismissed flags (`feed_state`, kept out of `observation-events.db` so it survives
-  a rebuild of that file), and from nl-3s5.3 onward projects and their revisions. `web`
+  a rebuild of that file), and every yard (`projects`: config, features, location, history
+  cursor, owner; `history_entries`: every undo step), since nl-3s5.3. `web`
   opens it once at startup (`ctx.db.app`), applies migrations, seeds `OWNER_EMAIL` as
   admin, and runs the one-time legacy import below. `feed-poller` opens it with
   `openAppDbWithoutMigrating`, which never migrates, seeds or imports, and waits for
@@ -157,6 +160,15 @@ Back it up; it is the one file that matters.
   `-wal`, `-shm`) or as a `VACUUM INTO` snapshot, never the `.db` alone, because recent
   rows may sit only in the `-wal`. `node tools/import-legacy-app-data.mjs --dry-run`
   compares their row counts with `app.db`, read-only.
+- **Yard photos** are files, not rows: `DATA_DIR/projects/<projects.id>/img/` (so
+  `data/projects/` by default, gitignored). Hand-uploaded and not rebuildable either:
+  back them up with `app.db`, as a set, because each directory is named by the row id
+  it belongs to. They are outside the served root; `GET /api/project-photo` serves
+  them to the yard's owner only.
+- **Retired:** `projects/<slug>/` as the store. `tools/import-projects.mjs` copied the
+  yards into `app.db` once (recorded as `legacy_import.projects`) and never writes the
+  files; web does not run it on start. See
+  [docs/design-tool.md](docs/design-tool.md#importing-yards-from-files).
 
 A PreToolUse hook in `.claude/settings.json` blocks any `rm` whose command
 mentions `data/`: inspect the file and ask before deleting anything there.
@@ -206,8 +218,9 @@ sidecar that must **never** be restarted (it self-heals). A second service,
 (a sibling of this tree; override with `DEPLOY_DIR`), detached at a commit of main.
 Only `data/`, `projects/`, `catalog/` (for `manual-corrections.tsv`) and
 `node_modules/jszip` are mounted from this tree, so what users write stays here and
-the deploy tree is never written to (it also means `projects/` is served as it stands
-here, committed or not). An uncommitted code edit is not live, and neither is a
+the deploy tree is never written to. (`projects/` is mounted only as the source of
+the one-time yard import; nothing writes or serves it since nl-3s5.3, and the mount
+goes once that import is verified.) An uncommitted code edit is not live, and neither is a
 commit on any branch other than main. `npm run serve` and the e2e scratch server
 still run straight from this tree for local work.
 

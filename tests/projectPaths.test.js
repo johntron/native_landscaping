@@ -1,23 +1,33 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { projectIdFromUrl, resolveProjectPaths } from '../src/data/projectPaths.js';
+import { projectIdFromUrl, resolveProjectPhoto } from '../src/data/projectPaths.js';
 
-const PUBLIC_DIR = '/srv/yard';
+const PROJECT_DIR = '/srv/data/projects/7';
 
-test('resolves the per-project data files under projects/', () => {
-  const paths = resolveProjectPaths('backyard', PUBLIC_DIR);
-  assert.equal(paths.projectId, 'backyard');
-  assert.equal(paths.layoutFile, path.join(PUBLIC_DIR, 'projects/backyard/planting_layout.csv'));
-  assert.equal(paths.historyFile, path.join(PUBLIC_DIR, 'projects/backyard/layout-history.json'));
-  assert.equal(paths.configFile, path.join(PUBLIC_DIR, 'projects/backyard/project.json'));
+test('resolves a photo path inside the yard directory', () => {
+  assert.equal(resolveProjectPhoto(PROJECT_DIR, 'img/top.webp'), path.join(PROJECT_DIR, 'img/top.webp'));
+  assert.equal(
+    resolveProjectPhoto(PROJECT_DIR, 'img/plan-130d05047b7d.webp'),
+    path.join(PROJECT_DIR, 'img/plan-130d05047b7d.webp')
+  );
+  assert.equal(resolveProjectPhoto(PROJECT_DIR, 'img/north.svg'), path.join(PROJECT_DIR, 'img/north.svg'));
 });
 
-test('rejects ids that could escape the projects directory', () => {
-  const hostile = ['../../etc', '..', 'a/b', 'a\\b', './x', '', 'Back Yard'];
-  hostile.forEach((id) => {
-    assert.throws(() => resolveProjectPaths(id, PUBLIC_DIR), /Invalid or missing project id/, id);
-  });
+test('refuses anything that is not a photo in img/', () => {
+  const hostile = [
+    '',
+    '../1/img/top.webp',
+    'img/../../2/img/top.webp',
+    'img/sub/top.webp',
+    '/etc/passwd',
+    'img/top.xcf',
+    'img/top.html',
+    'img/.hidden.webp',
+    'project.json',
+    'img\\top.webp',
+  ];
+  hostile.forEach((rel) => assert.equal(resolveProjectPhoto(PROJECT_DIR, rel), null, rel));
 });
 
 test('reads the project id from a request URL', () => {

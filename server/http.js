@@ -72,10 +72,11 @@ export function requireAdmin(ctx, res) {
 /**
  * Require the caller to be signed in AND to own the project named by `slug`.
  *
- * Ownership doesn't exist on disk yet (yards still live under projects/<slug>/;
- * nl-3s5.3 moves them into app.db with an owner column). So the lookup is
- * injected as `findProject(ctx, slug) -> { slug, ownerId, ... } | null`,
- * rather than this module reaching into a store that doesn't exist yet.
+ * The lookup is injected as `findProject(ctx, slug) -> { slug, ownerId, ... } | null`
+ * so this module stays free of any store. The project routes pass
+ * server/db/projectStore.js's findCallerProject, which looks the slug up among
+ * ctx.user's own yards in app.db (nl-3s5.3): slugs are unique per owner, so
+ * someone else's yard is simply not found.
  *
  * A missing project, someone else's project, and a malformed slug all answer
  * with the identical 404 body below: the caller (anonymous or not the owner)

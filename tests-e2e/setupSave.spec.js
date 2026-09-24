@@ -1,7 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
-import { SCRATCH_DIR } from './scratch-fixture.mjs';
+import { SCRATCH_SERVER_DATA_DIR, readSeededProject } from './scratch-fixture.mjs';
 import { openScratchProject } from './helpers.js';
 
 /**
@@ -26,9 +24,7 @@ const PROJECT = 'frontyard-save';
 test.describe.configure({ mode: 'serial' });
 
 async function placements() {
-  const cfg = JSON.parse(
-    await readFile(path.join(SCRATCH_DIR, 'projects', PROJECT, 'project.json'), 'utf8')
-  );
+  const cfg = readSeededProject(SCRATCH_SERVER_DATA_DIR, PROJECT).config;
   return Object.fromEntries(cfg.views.map((view) => [view.id, view.photoFt ?? null]));
 }
 
@@ -77,9 +73,7 @@ test('a save carries every photo placement through untouched', async ({ page }) 
 
 test('dragging a camera moves that elevation and saves it alone', async ({ page }) => {
   const cameras = async () => {
-    const cfg = JSON.parse(
-      await readFile(path.join(SCRATCH_DIR, 'projects', PROJECT, 'project.json'), 'utf8')
-    );
+    const cfg = readSeededProject(SCRATCH_SERVER_DATA_DIR, PROJECT).config;
     return Object.fromEntries(cfg.views.map((view) => [view.id, view.viewerAtFt ?? null]));
   };
   const before = { placements: await placements(), cameras: await cameras() };
@@ -127,9 +121,7 @@ test('a save keeps the ecoregion and site declarations', async ({ page }) => {
   // whitelists means two places a declaration can quietly die on save, and the
   // symptom — the ecology check going "not declared" — looks like a rule bug.
   const declared = async () => {
-    const cfg = JSON.parse(
-      await readFile(path.join(SCRATCH_DIR, 'projects', PROJECT, 'project.json'), 'utf8')
-    );
+    const cfg = readSeededProject(SCRATCH_SERVER_DATA_DIR, PROJECT).config;
     return { ecoregion: cfg.ecoregion ?? null, site: cfg.site ?? null };
   };
 

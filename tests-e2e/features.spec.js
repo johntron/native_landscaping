@@ -1,7 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
-import { SCRATCH_DIR } from './scratch-fixture.mjs';
+import { SCRATCH_SERVER_DATA_DIR, readSeededProject } from './scratch-fixture.mjs';
 import { SCRATCH_BASE, openScratchProject } from './helpers.js';
 
 // Its own copy of the yard, per the convention in scratch-fixture.mjs: this
@@ -28,12 +26,9 @@ function featuresUrl(project = PROJECT) {
   return `${SCRATCH_BASE}/api/features?project=${project}`;
 }
 
+/** Exactly what the save stored (app.db projects.features_json), not the API's normalized copy. */
 async function readSavedFeatures() {
-  const raw = await readFile(
-    path.join(SCRATCH_DIR, 'projects', PROJECT, 'features.json'),
-    'utf8'
-  );
-  return JSON.parse(raw);
+  return readSeededProject(SCRATCH_SERVER_DATA_DIR, PROJECT).features;
 }
 
 test('a project with no features.json loads as an empty yard, not an error', async ({ request }) => {

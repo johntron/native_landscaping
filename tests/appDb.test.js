@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +10,12 @@ import { DatabaseSync } from 'node:sqlite';
 import { runMigrations } from '../server/db/migrate.js';
 
 const MIGRATIONS_DIR = fileURLToPath(new URL('../server/db/migrations', import.meta.url));
+/** Every NNN_*.sql in migrations/, so a new migration needs no edit here. */
+const ALL_VERSIONS = readdirSync(MIGRATIONS_DIR)
+  .map((name) => /^(\d{3})_.+\.sql$/.exec(name))
+  .filter(Boolean)
+  .map((match) => Number(match[1]))
+  .sort((a, b) => a - b);
 
 /** A throwaway data dir per test, so no test touches the repo's real data/. */
 function tempDataDir() {
@@ -40,8 +46,9 @@ test('the migration runner applies every migration once and records schema_versi
     const versions = db.prepare('SELECT version, name FROM schema_version ORDER BY version').all();
     assert.deepEqual(
       versions.map((r) => r.version),
-      [1, 2]
+      ALL_VERSIONS
     );
+    assert.ok(ALL_VERSIONS.length >= 3);
     assert.match(versions[0].name, /^001_/);
     assert.match(versions[1].name, /^002_saved_areas_and_feed_state/);
 
@@ -65,10 +72,10 @@ test('re-running the migration runner is a no-op', () => {
     // must not record a second row for a version already seen.
     runMigrations(db, MIGRATIONS_DIR);
     runMigrations(db, MIGRATIONS_DIR);
-    const versions = db.prepare('SELECT version FROM schema_version').all();
+    const versions = db.prepare('SELECT version FROM schema_version ORDER BY version').all();
     assert.deepEqual(
       versions.map((r) => r.version),
-      [1, 2]
+      ALL_VERSIONS
     );
   } finally {
     db.close();

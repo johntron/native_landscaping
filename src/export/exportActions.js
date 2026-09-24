@@ -155,7 +155,7 @@ export function createExportActions({
  * Background to composite under a view's export: an absolute URL plus, for a
  * photo that has been placed, the rectangle of the drawing it occupies. Both
  * are null when the view has no image yet — captureViewToPng then skips the
- * background rather than fetching projects/<slug>/null.
+ * background rather than fetching a photo named null.
  */
 function backgroundForCapture(project, view) {
   const { path, rect } = resolvePhotoPlacement(view);

@@ -11,14 +11,25 @@ projects/*/planting_layout.csv.bak-*
 .env
 
 # Exact addresses/coordinates behind each project's `place` label. This repo
-# is public — see the note on docs/data-acquisition/corpus below. Read by the
-# tools/ fetch scripts and server-side by /api/ecosystem; never committed.
+# is public — see the note on docs/data-acquisition/corpus below. Since
+# nl-3s5.3 they live in app.db (projects.location_json); any location.json
+# still on disk is a pre-import source file, never committed.
 projects/*/location.json
 
 # Local backup of every user's saved monitoring areas (nl-3s5.5). Area names
 # can identify people and belong to different users, so it never reaches git;
 # written under DATA_DIR by tools/savedAreas/savedAreasDb.js.
 data/saved-areas.export.json
+
+# Yards are private and live in app.db (nl-3s5.3), their photos under
+# DATA_DIR/projects/<id>/img/. The files that used to hold them stay on disk as
+# the import's source but are not tracked. Only backyard's non-secret files
+# stay tracked, as the seed for the shared read-only example yard (nl-3s5.24).
+projects/*
+!projects/backyard/
+# Photos under DATA_DIR (default data/projects/<id>/img/): hand-entered, not
+# rebuildable, and never committed.
+data/projects/
 
 # Beads / Dolt files (added by bd init)
 .dolt/

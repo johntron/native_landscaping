@@ -30,7 +30,7 @@ const habitatCreditEl = document.getElementById('habitatNearbyCredit');
 let allRows = [];
 let sortKey = 'observation_count';
 let sortDir = -1;
-let siteLocation = null; // { lat, lng } for the active project, if it has a location.json — used to scope outbound iNaturalist links
+let siteLocation = null; // { lat, lng } for the active project, if one is set in app.db and the viewer owns the yard — used to scope outbound iNaturalist links
 
 async function load() {
   let project;
@@ -57,7 +57,7 @@ async function load() {
   if (titleEl) titleEl.textContent = `What’s nearby: ${project.name}`;
   document.title = pageTitle(`What’s nearby: ${project.name}`);
   if (!place) {
-    rowsEl.innerHTML = `<tr><td colspan="7">"${project.name}" declares no "place" in project.json — add one before indexing.</td></tr>`;
+    rowsEl.innerHTML = `<tr><td colspan="7">"${project.name}" declares no "place" — add one before indexing.</td></tr>`;
     return;
   }
   // Independent of the species index below: a missing anchors table costs this
@@ -160,7 +160,7 @@ const MI_TO_KM = 1.60934;
  * site — using the SAME radius this row was actually found at, so the link
  * shows exactly the evidence behind that row's distance claim rather than a
  * generic global search. Coordinates come from /api/ecosystem's `location`
- * (server-side only, read from the gitignored projects/<id>/location.json)
+ * (server-side only, read from app.db's projects.location_json, for the yard's owner)
  * and are sent to iNaturalist.org only when this specific link is clicked —
  * by request; see the ecosystem note for the tradeoff this makes explicit.
  */

@@ -17,6 +17,15 @@ test('secrets, local state, exact addresses and the flora PDFs are never served'
     'projects/backyard/location.json',
     'projects/backyard/layout-history.json',
     'projects/backyard/img/top.xcf',
+    // Yards are private to their owner (nl-3s5.3): only the owner-checked
+    // /api/project* routes reach them, never a static path.
+    'projects/index.json',
+    'projects/backyard/project.json',
+    'projects/backyard/planting_layout.csv',
+    'projects/backyard/features.json',
+    'projects/backyard/img/top.webp',
+    'projects/example-frontyard/img/north.svg',
+    'data/projects/1/img/top.webp',
     'docs/data-acquisition/corpus/flora.pdf',
     'node_modules/jszip/package.json',
     'server.js',
@@ -41,7 +50,7 @@ test('every page, and every file those pages reference, is served', () => {
   }
 });
 
-test('the data files and project assets the browser fetches are served', () => {
+test('the data files the browser fetches are served', () => {
   for (const p of [
     'plants.csv',
     'src/app.js',
@@ -49,11 +58,6 @@ test('the data files and project assets the browser fetches are served', () => {
     'ecology/anchors.csv',
     'catalog/blackland-prairie-natives.csv',
     'sourcing/plant-sales.csv',
-    'projects/index.json',
-    'projects/backyard/project.json',
-    'projects/backyard/planting_layout.csv',
-    'projects/backyard/img/top.webp',
-    'projects/example-frontyard/img/north.svg',
   ]) {
     assert.equal(isServableStaticPath(p), true, p);
   }

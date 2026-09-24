@@ -520,8 +520,9 @@ test('local fauna support points at the keystone-genera check rather than invent
   assert.ok(result.suggestions.some((s) => /[Kk]eystone genera/.test(s)));
 });
 
-test('both shipped projects analyse without throwing, and report what the data says', () => {
-  ['example-frontyard', 'backyard'].forEach((id) => {
+test('the shipped example yard analyses without throwing, and reports what the data says', () => {
+  // backyard is the one yard still tracked (nl-3s5.3); the others are private, in app.db.
+  ['backyard'].forEach((id) => {
     const layout = readFileSync(
       fileURLToPath(new URL(`../projects/${id}/planting_layout.csv`, import.meta.url)),
       'utf8'

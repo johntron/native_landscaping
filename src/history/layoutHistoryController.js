@@ -11,14 +11,16 @@
  * History holds placements only (src/data/placements.js); the plants shown are
  * always built from them with plantsFromPlacements, so their attributes are
  * whatever plants.csv says now (nl-3s5.19).
+ *
+ * History IS the yard (nl-3s5.3): the server stores no layout file any more,
+ * so the plants shown are the entry at the stored cursor, full stop. The old
+ * start() reconciled history against planting_layout.csv and saved an
+ * "edited outside the app" entry when they disagreed; that reconciliation now
+ * runs once, in the import (server/db/projectImport.js), and nowhere else.
  */
 import { createLayoutHistory } from './layoutHistory.js';
-import { reconcileHistoryWithLayout } from './reconcileLayout.js';
 import { plantsFromPlacements } from '../data/plantParser.js';
 import { persistLayout, updateHistoryCursor } from '../data/persistence.js';
-
-/** The description of the entry recorded when the layout file was changed outside the app. */
-export const OUTSIDE_EDIT_DESCRIPTION = 'Layout file edited outside the app';
 
 /**
  * @param {object} deps
@@ -107,6 +109,8 @@ export function createLayoutHistoryController({
     const previousPlants = layoutHistoryInstance.getCurrentPlants();
     layoutHistoryInstance.record(plants, { description });
     updateHistoryControls();
+    // previousPlants seeds the server's 'Initial layout' entry when it has no
+    // history yet (a new yard), so both stacks keep the same indices.
     return persistLayout(plants, description, status, {
       previousPlants,
       projectId: appState.project?.id,
@@ -129,48 +133,19 @@ export function createLayoutHistoryController({
   }
 
   /**
-   * Build the stack from the saved history and return the plants to show.
+   * Build the stack from the saved history and return the plants to show:
+   * the entry at the cursor, or none for a yard with no history yet.
    *
-   * The layout file wins over history (see reconcileLayout.js): when another
-   * entry matches it, the cursor moves there and the server is told; when none
-   * does, the file's layout is recorded and saved as a new entry, so undo still
-   * reaches the last state made in the app and both stacks keep one index.
-   *
-   * @param {Array<object>} initialPlants  the layout CSV as loaded
    * @param {{ entries?: Array, cursor?: number }} historyData  from loadLayoutHistory
    */
-  function start(initialPlants, historyData) {
-    const { entries, cursor, verdict } = reconcileHistoryWithLayout(
-      historyData?.entries || [],
-      typeof historyData?.cursor === 'number' ? historyData.cursor : NaN,
-      initialPlants
-    );
-    layoutHistoryInstance = createLayoutHistory(initialPlants, {
+  function start(historyData) {
+    const entries = Array.isArray(historyData?.entries) ? historyData.entries : [];
+    layoutHistoryInstance = createLayoutHistory([], {
       seedEntries: entries,
-      initialCursor: cursor,
+      initialCursor: typeof historyData?.cursor === 'number' ? historyData.cursor : null,
     });
-
-    const projectId = appState.project?.id;
-    if (!projectId && (verdict === 'moved' || verdict === 'diverged')) {
-      // Never write without knowing which project: show the file, touch nothing.
-      updateHistoryStatus('planting_layout.csv does not match the saved history; not saved (no project).', 'warning');
-    } else if (verdict === 'moved') {
-      updateHistoryCursor(layoutHistoryInstance.getCursor(), updateHistoryStatus, {
-        projectId: appState.project?.id,
-      });
-    } else if (verdict === 'diverged') {
-      updateHistoryStatus('planting_layout.csv changed outside the app; saved it as a new history entry.', 'warning');
-      // Keep that warning up: only a failure to save replaces it.
-      recordAndPersist(initialPlants, OUTSIDE_EDIT_DESCRIPTION, (message, state) => {
-        if (state === 'error') updateHistoryStatus(message, state);
-      });
-    }
-
-    const plants = layoutHistoryInstance.getCurrentEntry()
-      ? toPlants(layoutHistoryInstance.getCurrentPlants())
-      : initialPlants;
     updateHistoryControls();
-    return plants;
+    return toPlants(layoutHistoryInstance.getCurrentPlants());
   }
 
   /** Record appState.plants as one undoable step and persist it. */

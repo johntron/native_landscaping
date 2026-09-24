@@ -75,10 +75,14 @@ x-app: &app
     # so user data stays exactly where it lived before the split, and the
     # deploy worktree is never written to (a dirty worktree would make the next
     # `git checkout --detach` fail, or strand what a person entered):
-    #   data/      every SQLite db, and the tracked saved-areas.export.json
-    #   projects/  planting_layout.csv, features.json, project.json, img/
-    #              uploads, index.json, and the gitignored layout-history.json
-    #              and location.json
+    #   data/      every SQLite db (app.db holds every yard since nl-3s5.3),
+    #              the yard photos under data/projects/<id>/img/, and the
+    #              tracked saved-areas.export.json
+    #   projects/  NOT written any more (nl-3s5.3). Mounted only so the
+    #              one-time tools/import-projects.mjs can read the yards as
+    #              they stood here; once that import is verified this line
+    #              goes, and /app/projects is then just the deploy tree's
+    #              tracked seed (projects/backyard), which nothing serves.
     #   catalog/   manual-corrections.tsv, appended by /api/claims-correct
     # Directories, not single files: the app writes temp-then-rename, and a
     # rename onto a single-file bind mount fails with EBUSY.

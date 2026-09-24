@@ -44,11 +44,16 @@ export function isAdminOnlyStaticPath(pathname) {
 
 // What the browser is allowed to load, and nothing else (nl-3s5.1). The repo
 // root is the served root, so anything not listed here (.env with the tunnel
-// token, data/*.db, .git, .beads, projects/*/location.json with an exact
-// address, the flora PDFs we may not redistribute) is a 404 no matter how the
-// Cloudflare Access policy in front of the site is configured. An allowlist, not
-// a denylist: a new file is private until someone decides a page needs it.
-const PROJECT_ID = '[a-z0-9][a-z0-9_-]*';
+// token, data/*.db, .git, .beads, the flora PDFs we may not redistribute) is a
+// 404 no matter how the Cloudflare Access policy in front of the site is
+// configured. An allowlist, not a denylist: a new file is private until
+// someone decides a page needs it.
+//
+// Nothing under projects/ is served (nl-3s5.3): a yard is private to its
+// owner and lives in app.db, with its photos under DATA_DIR, so it is reached
+// only through the owner-checked /api/project* routes in
+// server/routes/project.js. What is left in the repo's projects/ is seed data
+// for tools, not something a browser loads.
 const SERVABLE_PATHS = [
   /^[a-z0-9-]+\.html$/, // the pages
   /^[a-z0-9-]+\.css$/,
@@ -56,9 +61,6 @@ const SERVABLE_PATHS = [
   /^plants\.csv$/,
   /^src\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_.-]+\.js$/,
   /^(?:ecology|catalog|sourcing)\/[a-z0-9-]+\.csv$/,
-  /^projects\/index\.json$/,
-  new RegExp(`^projects/${PROJECT_ID}/(?:project\\.json|planting_layout\\.csv)$`),
-  new RegExp(`^projects/${PROJECT_ID}/img/[A-Za-z0-9_-]+\\.(?:webp|png|jpe?g|svg)$`),
   /^node_modules\/jszip\/dist\/jszip\.min\.js$/, // the HOA packet export
   // Pages link to these as "see how this was made".
   /^docs\/(?:[a-z0-9-]+\/)*[A-Za-z0-9_.-]+\.md$/,

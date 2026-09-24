@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openProject, openScratchProject, readLayoutRows } from './helpers.js';
+import { openProject, openScratchProject, readLayoutRows, readScratchLayout } from './helpers.js';
 
 // These specs assert on DOM structure rather than screenshots: the point is a
 // cheap, readable signal that the real page boots and renders the real CSV.
@@ -497,12 +497,16 @@ test.describe('setup overlay', () => {
 });
 
 test.describe('project switching', () => {
-  test('example-frontyard loads its own layout and elevations', async ({ page }) => {
-    await openProject(page, 'example-frontyard');
+  test('a second yard loads its own layout and views', async ({ page }) => {
+    // A scratch yard, read and not written: the only yard the read-only
+    // server has is backyard (nl-3s5.3 stopped tracking the others), and
+    // second-yard's four views are unlike backyard's three.
+    await openScratchProject(page, 'second-yard');
 
-    const rows = await readLayoutRows('example-frontyard');
+    const rows = await readScratchLayout('second-yard');
     await expect(page.locator('#topSvg g[data-plant-id]')).toHaveCount(rows.length);
-    await expect(page.locator('#projectSelect')).toHaveValue('example-frontyard');
+    await expect(page.locator('.view-panel')).toHaveCount(4);
+    await expect(page.locator('#projectSelect')).toHaveValue('second-yard');
   });
 
   test('a photo that covers part of the yard is placed, not stretched to fit', async ({ page }) => {
@@ -555,35 +559,13 @@ test.describe('project switching', () => {
   });
 });
 
-test.describe('hand-edited layout mistakes', () => {
-  // planting_layout.csv is edited by hand, so a repeated id is a realistic
-  // mistake. It must surface as an actionable banner naming the id and rows,
-  // not the generic "couldn't load" advice about serving over HTTP. The bad CSV
-  // is injected per-page rather than written to disk, so this cannot race the
-  // other specs that read the same project.
-  const badLayoutCsv = 'id,species_id,x_ft,y_ft\n'
-    + 'holly-corner,yaupon-holly,9.849,25.278\n'
-    + 'horseherb-fill,horseherb,8.000,3.500\n'
-    + 'holly-corner,yaupon-holly,11.000,26.000';
-
-  test('a duplicate plant id explains itself in the page', async ({ page }) => {
-    await page.route('**/projects/example-frontyard/planting_layout.csv*', (route) =>
-      route.fulfill({ status: 200, contentType: 'text/csv', body: badLayoutCsv })
-    );
-
-    await page.goto('/design.html?project=example-frontyard');
-
-    const banner = page.locator('.error-banner');
-    await expect(banner).toBeVisible();
-    await expect(banner).toContainText('Duplicate plant id "holly-corner"');
-    await expect(banner).toContainText('data rows 1 and 3');
-    await expect(banner).toContainText('Fix the layout CSV');
-    // The generic serving advice would send the user down the wrong path.
-    await expect(banner).not.toContainText('npx serve');
-  });
-
-  test('a layout with distinct ids still boots clean', async ({ page }) => {
-    await openProject(page, 'example-frontyard');
+test.describe('a yard boots clean', () => {
+  // There was a spec here for a duplicate plant id in a hand-edited
+  // planting_layout.csv. Since nl-3s5.3 the CSV is an export only: nothing
+  // reads one back, so that mistake can no longer reach the page (the import
+  // refuses a duplicate id, via parsePlantLayoutCsv, before it is stored).
+  test('with no error banner', async ({ page }) => {
+    await openProject(page, 'backyard');
 
     await expect(page.locator('.error-banner')).toHaveCount(0);
   });

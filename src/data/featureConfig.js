@@ -1,4 +1,4 @@
-import { isValidProjectId, projectDirectory } from './projectConfig.js';
+import { isValidProjectId } from './projectConfig.js';
 
 /**
  * Yard features — beds, hardscape, fences, the house footprint — are geometry in
@@ -247,29 +247,4 @@ export function serializeFeatures(config) {
       return out;
     }),
   };
-}
-
-/** Where a project's features live, alongside its config and layout. */
-export function projectFeaturesPath(projectId) {
-  return `${projectDirectory(projectId)}/features.json`;
-}
-
-/**
- * Fetch and normalize a project's features. A project that has never had any
- * has no file, and that is not an error — it loads as an empty list.
- */
-export async function loadFeatures(projectId, fetchFn, baseUri) {
-  if (!isValidProjectId(projectId)) {
-    throw new Error(`Invalid project id "${projectId}"`);
-  }
-  const path = projectFeaturesPath(projectId);
-  const url = baseUri ? new URL(path, baseUri).toString() : path;
-  const response = await fetchFn(url, { cache: 'no-store' });
-  if (response.status === 404) {
-    return normalizeFeatures(null, projectId);
-  }
-  if (!response.ok) {
-    throw new Error(`Failed to load ${path} (${response.status})`);
-  }
-  return normalizeFeatures(await response.json(), projectId);
 }

@@ -9,7 +9,7 @@
  * CSV. src/analysis/ stays pure.
  *
  * The exact coordinates never reach the CSV or git: they live in
- * projects/<id>/location.json, which is gitignored (this repo is public).
+ * a yard's location in app.db (tools/projectSite.mjs), never in git (this repo is public).
  * Only the resulting species list — which does not by itself disclose an
  * address — is committed, keyed by the project's `place` label.
  *
@@ -19,6 +19,7 @@
  */
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { readProjectSite, ownerFromArgs } from './projectSite.mjs';
 import { parseCsv } from '../src/data/csvLoader.js';
 import { openProbeCache, cached } from './usda-plants/probeCache.js';
 import {
@@ -57,27 +58,22 @@ async function main() {
   const smoke = args.includes('--smoke');
   const force = args.includes('--force');
   if (!projectId) {
-    console.error('Usage: node tools/fetch-nearby-fauna.mjs --project <id> [--smoke] [--force]');
+    console.error('Usage: node tools/fetch-nearby-fauna.mjs --project <id> [--owner <email>] [--smoke] [--force]');
     process.exit(1);
   }
 
-  const locationPath = `${ROOT}projects/${projectId}/location.json`;
-  if (!existsSync(locationPath)) {
-    console.error(
-      `${locationPath} does not exist. Create it (gitignored) with { "lat": ..., "lng": ... } or { "address": "..." }.`
-    );
+  // The place label and the location behind it live in app.db (nl-3s5.3);
+  // the location never reaches git. tools/projectSite.mjs says how to set one.
+  let site;
+  try {
+    site = readProjectSite(projectId, { ownerEmail: ownerFromArgs(args) });
+  } catch (err) {
+    console.error(err.message);
     process.exit(1);
   }
-  const location = JSON.parse(readFileSync(locationPath, 'utf8'));
+  const { place, location } = site;
   const { lat, lng } = await resolveCoordinates(location);
 
-  const projectConfigPath = `${ROOT}projects/${projectId}/project.json`;
-  const projectConfig = JSON.parse(readFileSync(projectConfigPath, 'utf8'));
-  const place = String(projectConfig.place || '').trim();
-  if (!place) {
-    console.error(`projects/${projectId}/project.json declares no "place"; add one before fetching.`);
-    process.exit(1);
-  }
 
   const radii = smoke ? [RADII_MI[Math.floor(RADII_MI.length / 2)]] : RADII_MI;
   const taxa = smoke ? [ICONIC_TAXA[0]] : ICONIC_TAXA;
@@ -167,7 +163,7 @@ async function resolveCoordinates(location) {
     return { lat: location.lat, lng: location.lng };
   }
   if (!location.address) {
-    throw new Error('location.json has neither lat/lng nor an address');
+    throw new Error('the stored location has neither lat/lng nor an address');
   }
   const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(location.address)}`;
   const response = await fetch(url, {

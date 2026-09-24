@@ -1,6 +1,6 @@
-import { promises as fs } from 'node:fs';
 import { isValidProjectId } from '../../src/data/projectConfig.js';
-import { projectIdFromUrl, resolveProjectPaths } from '../../src/data/projectPaths.js';
+import { projectIdFromUrl } from '../../src/data/projectPaths.js';
+import { findOwnedProject, parseLocation } from '../db/projectStore.js';
 import { listSpeciesObservations, listPlaces } from '../../tools/ecosystemIndexDb.js';
 import { excludeNonNative } from '../../src/analysis/establishmentMeans.js';
 import { geocodeAddress } from '../../tools/geocode.mjs';
@@ -41,31 +41,30 @@ function maybePrune() {
  * point-to-ecoregion.
  *
  * Returns true when it handled the request (a response has been sent), false
- * to let server.js try the next route module. `publicDir` is the served root,
- * which the e2e scratch server points somewhere else.
+ * to let server.js try the next route module.
  */
 export async function handleEcosystemRoutes(req, res, ctx) {
-  const { url, pathname, publicDir, db } = ctx;
+  const { url, pathname, db } = ctx;
   maybePrune();
   if (pathname === '/api/ecosystem' && req.method === 'GET') {
     try {
       const place = url.searchParams.get('place') || 'home';
       const iconicTaxon = url.searchParams.get('taxon') || undefined;
       const rows = excludeNonNative(listSpeciesObservations(db.ecosystem, { place, iconicTaxon }));
-      // location.json is gitignored and otherwise server-only; only surfaced
-      // here, per request, so the ecosystem page can link out to iNaturalist
-      // scoped to the actual site rather than a generic global search.
+      // A yard's location (app.db projects.location_json, nl-3s5.3) is
+      // server-only; surfaced here, per request, as { lat, lng } alone, so the
+      // ecosystem page can link out to iNaturalist scoped to the actual site
+      // rather than a generic global search. Only to the yard's owner: slugs
+      // are unique per owner, so an anonymous caller or anyone else simply has
+      // no yard by that slug and gets no location. The observation rows are
+      // keyed by `place`, not by yard, and stay as they were (nl-3s5.4
+      // audits this route's authorization).
       let location = null;
       const projectId = projectIdFromUrl(url);
-      if (projectId && isValidProjectId(projectId)) {
-        try {
-          const { locationFile } = resolveProjectPaths(projectId, publicDir);
-          const raw = JSON.parse(await fs.readFile(locationFile, 'utf8'));
-          if (Number.isFinite(raw.lat) && Number.isFinite(raw.lng)) {
-            location = { lat: raw.lat, lng: raw.lng };
-          }
-        } catch {
-          // No location.json for this project — links just won't be location-scoped.
+      if (ctx.user && projectId && isValidProjectId(projectId)) {
+        const raw = parseLocation(findOwnedProject(db.app, ctx.user.id, projectId));
+        if (raw && Number.isFinite(raw.lat) && Number.isFinite(raw.lng)) {
+          location = { lat: raw.lat, lng: raw.lng };
         }
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -80,7 +79,7 @@ export async function handleEcosystemRoutes(req, res, ctx) {
 
   // Address/city/ZIP -> coordinates (nl-5nm), for the saved-areas UI's
   // "enter a location" flow — same Nominatim geocode tools/fetch-ecosystem-
-  // index.mjs already uses for a project's location.json address.
+  // index.mjs already uses for a yard's stored address.
   if (pathname === '/api/geocode' && req.method === 'POST') {
     if (!enforceRateLimit(geocodeLimiter, rateLimitKeyFor(ctx, req), res)) return true;
     if (!enforceRateLimit(geocodeLimiter, GEOCODE_SHARED_KEY, res)) return true;

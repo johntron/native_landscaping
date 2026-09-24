@@ -138,19 +138,20 @@ happened to have observations for.
 **Exact coordinates never reach either CSV or git.** A project's `place` field
 (next to `ecoregion` and `site` in `project.json`) is a short label like
 `"home"` — committable, and two projects on the same property share one label
-and one fetch. The address or lat/lng behind that label lives in
-`projects/<id>/location.json`, which is gitignored (this repo is public) and
-read by the `tools/` fetch scripts and, server-side only, by `GET /api/ecosystem`.
-With `?project=`, that route returns the project's `{lat, lng}` so outbound iNaturalist
-links can be location-scoped (a deliberate, owner-requested exception). The
-coordinates still never reach git or a committed file:
+and one fetch. The address or lat/lng behind that label lives in `app.db`
+(`projects.location_json`, nl-3s5.3; it was the gitignored `location.json`), and is
+read by the `tools/` fetch scripts (through `tools/projectSite.mjs`) and, server-side
+only, by `GET /api/ecosystem`. With `?project=`, that route returns the yard's
+`{lat, lng}`, to its owner only, so outbound iNaturalist links can be
+location-scoped (a deliberate, owner-requested exception). The coordinates still
+never reach git or a committed file. Set them with:
 
-```json
-{ "address": "123 Main St, Dallas, TX 75204" }
+```bash
+node tools/project-location.mjs --project backyard --address "123 Main St, Dallas, TX 75204"
+node tools/project-location.mjs --project backyard --lat 32.81 --lng -96.79
 ```
 
-or `{ "lat": 32.81, "lng": -96.79 }` directly. A project with no `place` (or a
-`location.json` nobody has created yet) reports `not-declared` on this one
+A project with no `place` (or no location set yet) reports `not-declared` on this one
 dimension, the same "absent means undeclared, never guessed" contract as
 `ecoregion`.
 

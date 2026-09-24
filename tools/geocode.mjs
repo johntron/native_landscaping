@@ -2,7 +2,7 @@
  * Address/city/ZIP -> coordinates, via OpenStreetMap's Nominatim (free, no
  * key). Extracted from tools/fetch-ecosystem-index.mjs's resolveCoordinates
  * so the saved-areas UI (nl-5nm) can geocode a typed location the same way
- * that script already turns a project's location.json address into lat/lng,
+ * that script already turns a yard's stored address into lat/lng,
  * instead of forking a second copy of the same request.
  *
  * Cached via tools/usda-plants/probeCache.js (source 'nominatim'), same as
