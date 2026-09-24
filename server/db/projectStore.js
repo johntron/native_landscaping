@@ -10,8 +10,16 @@
 // the same yard are serialized: each save reads the cursor and appends inside
 // its own transaction, so neither entry is lost and no write is torn.
 //
-// History is the truth and the layout is the entry at the cursor. There is no
+// History is the truth and the yard is the revision at the cursor. There is no
 // stored planting_layout.csv any more; GET /api/layout exports one.
+//
+// Revisions (nl-3s5.20, migration 005): every save of the planting, the setup
+// (config) or the features appends one row to history_entries, in one stream
+// with one seq per yard, so undo and redo step across all three. Each row is a
+// full snapshot (placements, config, features), so restoring any revision is
+// one row read. projects.config_json / features_json / name are the current
+// copy, rewritten from the revision at the cursor in the same transaction as
+// every save and every cursor move.
 //
 // Photos are files, not rows: DATA_DIR/projects/<projects.id>/img/<name>,
 // outside the served root, served by GET /api/project-photo to the owner only.
@@ -141,15 +149,30 @@ export function projectIndexFor(db, ownerId) {
   return { defaultProject: projects.length ? projects[0].id : null, projects };
 }
 
+
+/** What a revision records a save of (history_entries.kind, CHECKed by migration 005). */
+export const REVISION_KINDS = Object.freeze(['planting', 'setup', 'features']);
+
+export const INITIAL_ENTRY_DESCRIPTION = 'Initial layout';
+export const SETUP_REVISION_DESCRIPTION = 'Saved views';
+export const FEATURES_REVISION_DESCRIPTION = 'Saved features';
+
+const INSERT_REVISION_SQL = `INSERT INTO history_entries
+  (project_id, seq, entry_id, description, plants_json, created_at, kind, config_json, features_json)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
 /**
  * Insert a yard. Throws on a slug the owner already has (UNIQUE), which the
  * create route reports. History starts empty unless `entries` are given (the
- * import passes the old file's).
+ * import passes the old file's). Given entries are planting revisions unless
+ * they say otherwise, and carry the yard's config and features: an imported
+ * yard has no older setup or features to give them.
  *
  * @param {import('node:sqlite').DatabaseSync} db
  * @param {{ ownerId: number, slug: string, name: string, configJson: string,
  *   featuresJson?: string | null, locationJson?: string | null,
- *   entries?: Array<{ id: string, timestamp: string, description: string, plants: object[] }>,
+ *   entries?: Array<{ id: string, timestamp: string, description: string, plants: object[],
+ *     kind?: string, configJson?: string, featuresJson?: string | null }>,
  *   cursor?: number, now?: string, visibility?: string }} project
  * @returns {number} the new projects.id
  *
@@ -178,41 +201,28 @@ export function insertProject(db, {
     )
     .run(Number(ownerId), slug, name, visibility, configJson, featuresJson, locationJson, entries.length ? cursor : -1, now, now);
   const projectRowId = Number(result.lastInsertRowid);
-  const insert = db.prepare(
-    `INSERT INTO history_entries (project_id, seq, entry_id, description, plants_json, created_at)
-     VALUES (?, ?, ?, ?, ?, ?)`
-  );
+  const insert = db.prepare(INSERT_REVISION_SQL);
   entries.forEach((entry, seq) => {
-    insert.run(projectRowId, seq, entry.id, entry.description, JSON.stringify(entry.plants), entry.timestamp);
+    insert.run(
+      projectRowId,
+      seq,
+      entry.id,
+      entry.description,
+      JSON.stringify(entry.plants),
+      entry.timestamp,
+      entry.kind || 'planting',
+      entry.configJson ?? configJson,
+      entry.featuresJson !== undefined ? entry.featuresJson : featuresJson
+    );
   });
   return projectRowId;
-}
-
-/** Replace a yard's config (and its picker name, which lives beside it). */
-export function saveProjectConfig(db, projectRowId, { name, configJson }) {
-  withTransaction(db, () => {
-    db.prepare('UPDATE projects SET name = ?, config_json = ?, updated_at = ? WHERE id = ?').run(
-      name,
-      configJson,
-      new Date().toISOString(),
-      Number(projectRowId)
-    );
-  });
-}
-
-export function saveProjectFeatures(db, projectRowId, featuresJson) {
-  withTransaction(db, () => {
-    db.prepare('UPDATE projects SET features_json = ?, updated_at = ? WHERE id = ?').run(
-      featuresJson,
-      new Date().toISOString(),
-      Number(projectRowId)
-    );
-  });
 }
 
 /**
  * Set (or with null, clear) a yard's location: `{ lat, lng }` and/or
  * `{ address }`, plus any provenance, exactly what location.json held.
+ * Not a revision: the location is not part of the design and never reaches
+ * the browser (it is set with tools/project-location.mjs).
  */
 export function saveProjectLocation(db, projectRowId, location) {
   withTransaction(db, () => {
@@ -234,18 +244,44 @@ export function parseLocation(record) {
   }
 }
 
-function readEntries(db, projectRowId) {
+/**
+ * @typedef {{ id: string, timestamp: string, description: string, kind: string,
+ *   plants: object[], configJson: string, featuresJson: string | null }} Revision
+ */
+
+function toRevision(row) {
+  return {
+    id: row.entry_id,
+    timestamp: row.created_at,
+    description: row.description,
+    kind: row.kind,
+    plants: JSON.parse(row.plants_json),
+    configJson: row.config_json,
+    featuresJson: row.features_json ?? null,
+  };
+}
+
+const REVISION_COLUMNS = 'seq, entry_id, description, plants_json, created_at, kind, config_json, features_json';
+
+/**
+ * Every revision of a yard, oldest first, with the full snapshot each holds.
+ * @returns {Revision[]}
+ */
+export function readRevisions(db, projectRowId) {
   return db
-    .prepare(
-      'SELECT seq, entry_id, description, plants_json, created_at FROM history_entries WHERE project_id = ? ORDER BY seq'
-    )
+    .prepare(`SELECT ${REVISION_COLUMNS} FROM history_entries WHERE project_id = ? ORDER BY seq`)
     .all(Number(projectRowId))
-    .map((row) => ({
-      id: row.entry_id,
-      timestamp: row.created_at,
-      description: row.description,
-      plants: JSON.parse(row.plants_json),
-    }));
+    .map(toRevision);
+}
+
+/** One revision by seq, or null: a single-row read (the O(1) restore). */
+export function readRevision(db, projectRowId, seq) {
+  const target = Number(seq);
+  if (!Number.isInteger(target)) return null;
+  const row = db
+    .prepare(`SELECT ${REVISION_COLUMNS} FROM history_entries WHERE project_id = ? AND seq = ?`)
+    .get(Number(projectRowId), target);
+  return row ? toRevision(row) : null;
 }
 
 function readCursor(db, projectRowId) {
@@ -255,29 +291,117 @@ function readCursor(db, projectRowId) {
 }
 
 /**
- * The whole undo stack: `{ entries: [{ id, timestamp, description, plants }], cursor }`,
- * cursor -1 when there are no entries.
+ * The planting view of the stack, the shape the import and older callers
+ * read: `{ entries: [{ id, timestamp, description, plants }], cursor }`,
+ * cursor -1 when there are no entries. Every revision is listed, whatever its
+ * kind; readRevisions has the kind and the setup and features of each.
  */
 export function readHistory(db, projectRowId) {
-  const entries = readEntries(db, projectRowId);
+  const entries = readRevisions(db, projectRowId).map(({ id, timestamp, description, plants }) => ({
+    id,
+    timestamp,
+    description,
+    plants,
+  }));
   const stored = readCursor(db, projectRowId);
   const cursor = entries.length ? Math.max(0, Math.min(stored, entries.length - 1)) : -1;
   return { entries, cursor };
 }
 
-/** The placements the yard shows now: the entry at the cursor, or [] with no history. */
+/** The placements the yard shows now: the revision at the cursor, or [] with no history. */
 export function currentPlacements(db, projectRowId) {
-  const { entries, cursor } = readHistory(db, projectRowId);
-  return cursor >= 0 ? entries[cursor].plants : [];
+  const cursor = readCursor(db, projectRowId);
+  const revision = cursor >= 0 ? readRevision(db, projectRowId, cursor) : null;
+  return revision ? revision.plants : [];
 }
 
-export const INITIAL_ENTRY_DESCRIPTION = 'Initial layout';
+/** The name a config declares, else `fallback`: the picker label restored with a setup. */
+function nameFromConfig(configJson, fallback) {
+  try {
+    const name = JSON.parse(configJson)?.name;
+    return typeof name === 'string' && name.trim() ? name : fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 /**
- * Record one layout change: drop the redo tail past the cursor, append
- * `entry`, and move the cursor onto it, in one transaction.
+ * Append one revision: drop the redo tail past the cursor, seed an initial
+ * revision when the stream is empty and `seed` says to, insert, move the
+ * cursor onto it, and rewrite the projects row's current copy. The caller
+ * holds the transaction.
  *
- * `previousPlants` seeds an 'Initial layout' entry when the yard has no
+ * Whatever part the save did not change is carried from the current state:
+ * the projects row's config and features (equal to the revision at the
+ * cursor, or the only copy when there is none) and the placements at the
+ * cursor ([] with no history).
+ *
+ * @param {{ kind: string, entry: { id: string, timestamp: string, description: string },
+ *   plants?: object[], configJson?: string, name?: string, featuresJson?: string | null,
+ *   seedPlants?: object[] | null }} change
+ *   `featuresJson` undefined means "carry"; null means "no features". `seedPlants`
+ *   is the initial revision's placements, or null for no seed.
+ */
+function appendRevision(db, projectRowId, { kind, entry, plants, configJson, name, featuresJson, seedPlants }) {
+  if (!REVISION_KINDS.includes(kind)) throw new Error(`Unknown revision kind "${kind}"`);
+  const id = Number(projectRowId);
+  const row = db.prepare('SELECT name, config_json, features_json, history_cursor FROM projects WHERE id = ?').get(id);
+  if (!row) throw new Error('Project not found');
+  const cursor = Number(row.history_cursor);
+  const current = cursor >= 0 ? readRevision(db, id, cursor) : null;
+  const before = {
+    plantsJson: current ? JSON.stringify(current.plants) : '[]',
+    configJson: row.config_json,
+    featuresJson: row.features_json ?? null,
+  };
+  const next = {
+    plantsJson: plants === undefined ? before.plantsJson : JSON.stringify(plants),
+    configJson: configJson === undefined ? before.configJson : configJson,
+    featuresJson: featuresJson === undefined ? before.featuresJson : featuresJson,
+    name: name ?? row.name,
+  };
+
+  let keep = Math.max(cursor + 1, 0);
+  db.prepare('DELETE FROM history_entries WHERE project_id = ? AND seq >= ?').run(id, keep);
+  const insert = db.prepare(INSERT_REVISION_SQL);
+  // The client's stack always starts with the yard it loaded, so the first
+  // save of a yard with no history seeds that state as revision 0 and both
+  // stacks keep the same indices.
+  if (keep === 0 && Array.isArray(seedPlants)) {
+    insert.run(
+      id,
+      0,
+      `${entry.id}-initial`,
+      INITIAL_ENTRY_DESCRIPTION,
+      JSON.stringify(toPlacements(seedPlants)),
+      entry.timestamp,
+      'planting',
+      before.configJson,
+      before.featuresJson
+    );
+    keep = 1;
+  }
+  insert.run(id, keep, entry.id, entry.description, next.plantsJson, entry.timestamp, kind, next.configJson, next.featuresJson);
+  db.prepare(
+    'UPDATE projects SET history_cursor = ?, name = ?, config_json = ?, features_json = ?, updated_at = ? WHERE id = ?'
+  ).run(keep, next.name, next.configJson, next.featuresJson, new Date().toISOString(), id);
+  return { entry: { ...entry, kind }, cursor: keep, count: keep + 1 };
+}
+
+/** A new revision's id, timestamp and description. */
+function revisionMeta(meta, fallbackDescription) {
+  return {
+    id: meta?.id || `entry-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    timestamp: meta?.timestamp || new Date().toISOString(),
+    description: meta?.description || fallbackDescription,
+  };
+}
+
+/**
+ * Record one layout change as a planting revision, in one transaction. The
+ * setup and features are carried from the current state.
+ *
+ * `previousPlants` seeds an 'Initial layout' revision when the yard has no
  * history yet, so the client's local stack (which starts with the layout it
  * loaded) and the stored one keep the same indices. An empty array counts: a
  * brand-new yard starts from nothing, and without that entry the first save
@@ -289,57 +413,115 @@ export const INITIAL_ENTRY_DESCRIPTION = 'Initial layout';
  */
 export function recordLayout(db, projectRowId, entry, previousPlants) {
   return withTransaction(db, () => {
-    const id = Number(projectRowId);
-    const cursor = readCursor(db, id);
-    let keep = Math.max(cursor + 1, 0);
-    db.prepare('DELETE FROM history_entries WHERE project_id = ? AND seq >= ?').run(id, keep);
-    const insert = db.prepare(
-      `INSERT INTO history_entries (project_id, seq, entry_id, description, plants_json, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    );
-    if (keep === 0 && Array.isArray(previousPlants)) {
-      insert.run(
-        id,
-        0,
-        `${entry.id}-initial`,
-        INITIAL_ENTRY_DESCRIPTION,
-        JSON.stringify(toPlacements(previousPlants)),
-        entry.timestamp
-      );
-      keep = 1;
-    }
-    insert.run(id, keep, entry.id, entry.description, JSON.stringify(entry.plants), entry.timestamp);
-    db.prepare('UPDATE projects SET history_cursor = ?, updated_at = ? WHERE id = ?').run(
-      keep,
-      new Date().toISOString(),
-      id
-    );
-    return { entry, cursor: keep, count: keep + 1 };
+    const { plants, ...meta } = entry;
+    const result = appendRevision(db, projectRowId, {
+      kind: 'planting',
+      entry: meta,
+      plants,
+      seedPlants: Array.isArray(previousPlants) ? previousPlants : null,
+    });
+    return { ...result, entry: { ...result.entry, plants } };
   });
 }
 
 /**
- * Move the cursor (undo, redo) without touching any entry.
- * @returns {{ entry: object, cursor: number }}
+ * Save a yard's config (and its picker name, which lives beside it) as a
+ * setup revision. A yard with no history is seeded first with the state
+ * before this save (no plants, the stored config and features), for the
+ * same index alignment recordLayout keeps.
+ * @param {{ name: string, configJson: string }} config
+ * @param {{ id?: string, timestamp?: string, description?: string }} [meta]
+ * @returns {{ entry: object, cursor: number, count: number }}
+ */
+export function saveProjectConfig(db, projectRowId, { name, configJson }, meta = {}) {
+  return withTransaction(db, () =>
+    appendRevision(db, projectRowId, {
+      kind: 'setup',
+      entry: revisionMeta(meta, SETUP_REVISION_DESCRIPTION),
+      configJson,
+      name,
+      seedPlants: [],
+    })
+  );
+}
+
+/**
+ * Save a yard's features as a features revision; seeded like saveProjectConfig.
+ * @returns {{ entry: object, cursor: number, count: number }}
+ */
+export function saveProjectFeatures(db, projectRowId, featuresJson, meta = {}) {
+  return withTransaction(db, () =>
+    appendRevision(db, projectRowId, {
+      kind: 'features',
+      entry: revisionMeta(meta, FEATURES_REVISION_DESCRIPTION),
+      featuresJson,
+      seedPlants: [],
+    })
+  );
+}
+
+/**
+ * Move the cursor (undo, redo) without touching any revision, and restore the
+ * setup and features of the revision it lands on into the projects row (the
+ * placements need no copy: they are always read at the cursor). One row read
+ * and one row write, whatever the distance moved.
+ * @returns {{ entry: Revision, cursor: number }}
  */
 export function moveHistoryCursor(db, projectRowId, cursor) {
   return withTransaction(db, () => {
     const id = Number(projectRowId);
     const target = Number(cursor);
-    const row = db
-      .prepare(
-        'SELECT entry_id, description, plants_json, created_at FROM history_entries WHERE project_id = ? AND seq = ?'
-      )
-      .get(id, Number.isInteger(target) ? target : -1);
-    if (!row) throw new Error('Invalid cursor');
-    db.prepare('UPDATE projects SET history_cursor = ?, updated_at = ? WHERE id = ?').run(
+    const revision = readRevision(db, id, Number.isInteger(target) ? target : -1);
+    if (!revision) throw new Error('Invalid cursor');
+    const row = db.prepare('SELECT name FROM projects WHERE id = ?').get(id);
+    db.prepare(
+      'UPDATE projects SET history_cursor = ?, name = ?, config_json = ?, features_json = ?, updated_at = ? WHERE id = ?'
+    ).run(
       target,
+      nameFromConfig(revision.configJson, row.name),
+      revision.configJson,
+      revision.featuresJson,
       new Date().toISOString(),
       id
     );
-    return {
-      entry: { id: row.entry_id, timestamp: row.created_at, description: row.description, plants: JSON.parse(row.plants_json) },
-      cursor: target,
-    };
+    return { entry: revision, cursor: target };
   });
+}
+
+/**
+ * The basename of every `background` any revision's config, or the current
+ * config, names. A photo in this set must not be swept: an undo can bring
+ * back the setup that shows it. Scans every `background` key at any depth, so
+ * a legacy config shape ({ plan, elevations }) is covered too.
+ * @returns {Set<string>}
+ */
+export function referencedBackgroundNames(db, projectRowId) {
+  const id = Number(projectRowId);
+  const texts = db
+    .prepare(
+      `SELECT config_json AS c FROM history_entries WHERE project_id = ?
+       UNION SELECT config_json AS c FROM projects WHERE id = ?`
+    )
+    .all(id, id)
+    .map((row) => row.c);
+  const names = new Set();
+  const visit = (value) => {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+    } else if (value && typeof value === 'object') {
+      for (const [key, inner] of Object.entries(value)) {
+        if (key === 'background' && typeof inner === 'string' && inner) names.add(path.basename(inner));
+        else visit(inner);
+      }
+    }
+  };
+  for (const text of texts) {
+    try {
+      visit(JSON.parse(text));
+    } catch {
+      // A config that does not parse names nothing we can keep; the sweep
+      // below only ever removes content-hashed uploads, never shipped files.
+    }
+  }
+  return names;
 }

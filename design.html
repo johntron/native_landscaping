@@ -106,6 +106,17 @@
               </select>
             </div>
           </div>
+          <!--
+            Undo and redo step through one history of plantings, setup saves
+            and feature saves (nl-3s5.20), so they show in Edit, Setup and
+            Features modes alike.
+          -->
+          <div class="history-row" id="historyRow" hidden>
+            <div class="history-controls">
+              <button id="undoLayoutBtn" class="button pill-button" type="button" disabled>Undo</button>
+              <button id="redoLayoutBtn" class="button pill-button" type="button" disabled>Redo</button>
+            </div>
+          </div>
           <!-- Populated by createSetupPanel from the project's views[]. -->
           <div class="setup-row" id="setupRow" hidden></div>
           <div class="setup-row" id="featureRow" hidden></div>
@@ -124,10 +135,6 @@
                   </span>
                 </span>
               </label>
-              <div class="history-controls">
-                <button id="undoLayoutBtn" class="button pill-button" type="button" disabled>Undo</button>
-                <button id="redoLayoutBtn" class="button pill-button" type="button" disabled>Redo</button>
-              </div>
             </div>
             <!--
               Places one plant of the chosen species at the middle of the plan

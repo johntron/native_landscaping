@@ -22,7 +22,9 @@ function defaultFetch() {
 /**
  * Fetch the saved history: the yard itself, since the layout shown is the
  * entry at the cursor (nl-3s5.3). Entries come back with their plants as
- * placements (src/data/placements.js).
+ * placements (src/data/placements.js), their `kind`, and a `config` and
+ * `features` where those differ from the entry before; an entry without the
+ * key carries the previous one's (nl-3s5.20, server/routes/project.js).
  *
  * @param {(message: string, state: string) => void} [updateStatus]
  * @param {{ projectId?: string, fetchFn?: Function }} [options]
@@ -111,9 +113,10 @@ export async function persistLayout(plants, description, updateStatus, options =
 }
 
 /**
- * Save the project's view configuration. Unlike the layout there is no history
- * stack — a view's geometry is setup, not a design decision worth undoing, and
- * the layout history machinery stays layout-only.
+ * Save the project's view configuration. The server records it as one setup
+ * revision (nl-3s5.20) and answers `{ config, index, revision: { entry, cursor } }`;
+ * call it through layoutHistoryController.commitSetup, which keeps the local
+ * stack on the same index.
  *
  * @param {object} config a normalized project config
  * @param {(message: string, state: string) => void} [updateStatus]
@@ -182,8 +185,9 @@ export async function loadProjectFeatures(updateStatus, options = {}) {
 }
 
 /**
- * Save the yard model. Like the view config and unlike the layout there is no
- * history stack — features are setup, not a design decision worth undoing.
+ * Save the yard model. The server records it as one features revision
+ * (nl-3s5.20) and answers the saved features plus `revision: { entry, cursor }`;
+ * call it through layoutHistoryController.commitFeatures.
  *
  * @param {Array<object>} features normalized features
  * @param {(message: string, state: string) => void} [updateStatus]

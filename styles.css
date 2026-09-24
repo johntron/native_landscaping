@@ -816,6 +816,16 @@ h1 {
   gap: 0.4rem;
 }
 
+/* Shared by Edit, Setup and Features modes: one history behind all three. */
+.history-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.history-row[hidden] {
+  display: none;
+}
+
 .history-status {
   font-size: 0.8rem;
   color: var(--ink-soft);

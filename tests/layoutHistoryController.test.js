@@ -8,13 +8,26 @@ import { toPlacement } from '../src/data/placements.js';
 const PLANTS_CSV = readFileSync(new URL('../plants.csv', import.meta.url), 'utf8');
 const DRAWING_CSV = readFileSync(new URL('../plant-drawing.csv', import.meta.url), 'utf8');
 
-/** A controller wired to a fake fetch that records every request. */
+/**
+ * A controller wired to a fake fetch that records every request. The fake
+ * keeps a cursor the way the server does (a move sets it; a save lands after
+ * it, or at 1 after the seeded revision 0 on an empty yard), because the
+ * controller checks the cursor each answer reports (nl-3s5.20).
+ */
 function setup(speciesCsv = PLANTS_CSV) {
   const calls = [];
+  let serverCursor = -1;
   globalThis.fetch = async (url, opts = {}) => {
     const body = opts.body ? JSON.parse(opts.body) : null;
     calls.push({ url, body });
-    const reply = url.startsWith('/api/layout') ? { entry: { id: 'server-entry' }, cursor: 99 } : { cursor: body?.cursor };
+    let reply;
+    if (url.startsWith('/api/layout')) {
+      serverCursor = serverCursor < 0 ? 1 : serverCursor + 1;
+      reply = { entry: { id: 'server-entry' }, cursor: serverCursor };
+    } else {
+      serverCursor = body?.cursor;
+      reply = { cursor: body?.cursor };
+    }
     return { ok: true, json: async () => reply };
   };
   const appState = { species: parseSpeciesCsv(speciesCsv, DRAWING_CSV), speciesSynonyms: new Map(), project: { id: 'p' }, plants: [] };
@@ -104,6 +117,7 @@ test('undo after a catalog change shows the catalog as it is now', async () => {
   await flush();
   assert.deepStrictEqual(calls.at(-1).body.plants, [{ id: 'h0', speciesId: 'yaupon-holly', x: 3, y: 1 }], 'the POST carries placements only');
   assert.deepStrictEqual(calls.at(-1).body.previousPlants, [{ id: 'h0', speciesId: 'yaupon-holly', x: 2, y: 1 }]);
+  assert.equal(controller.isDesynced(), false, 'the save landed where the stack put it');
 });
 
 test('a yard with no history yet shows nothing, and its first save seeds the server from empty', async () => {
@@ -121,4 +135,5 @@ test('a yard with no history yet shows nothing, and its first save seeds the ser
   // An empty previousPlants is sent, not dropped: the server records it as the
   // 'Initial layout' entry so both stacks keep one index (server/db/projectStore.js).
   assert.deepStrictEqual(calls[0].body.previousPlants, []);
+  assert.equal(controller.isDesynced(), false);
 });

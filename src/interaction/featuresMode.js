@@ -1,8 +1,9 @@
 /**
  * Features mode: drawing the yard model (beds, hardscape, walls, the house)
  * on the plan. Owns the feature panel, the plan's feature overlay, and the
- * edit → validate → save path for features.json. Like Setup mode, it saves
- * only when asked; there is no undo stack behind features.
+ * edit → validate → save path for the features. Like Setup mode, it saves
+ * only when asked, and each save is one revision in the yard's history
+ * (nl-3s5.20); restore is how an undo or redo shows a revision's features.
  *
  * The feature CONTROLLERS stay built by src/app.js, in rebuildViews, next to
  * the drag and setup controllers: all three kinds bind to the same SVGs and are
@@ -14,7 +15,6 @@
  */
 import { createFeaturePanel } from './featurePanel.js';
 import { normalizeFeatures } from '../data/featureConfig.js';
-import { persistFeatures } from '../data/persistence.js';
 import { clearFeatureOverlay, createFeatureShape, renderFeatureOverlay } from '../render/featureOverlay.js';
 import { createViewTransform } from '../render/viewTransform.js';
 import { resolveYardBounds } from '../render/yardBounds.js';
@@ -28,8 +28,19 @@ import { resolveYardBounds } from '../render/yardBounds.js';
  * @param {() => Array<object|null>} deps.getControllers  index-aligned with the view panels
  * @param {(viewId: string) => object|undefined} deps.liveView
  * @param {() => void} deps.render
+ * @param {(features: Array<object>, status: Function) => Promise<object|null>} deps.saveFeatures
+ *   records and persists the features as one revision (layoutHistoryController.commitFeatures)
  */
-export function createFeaturesMode({ root, appState, getProject, getViewPanels, getControllers, liveView, render }) {
+export function createFeaturesMode({
+  root,
+  appState,
+  getProject,
+  getViewPanels,
+  getControllers,
+  liveView,
+  render,
+  saveFeatures: persistRevision,
+}) {
   const featurePanel = createFeaturePanel({
     root,
     onCommit: (features) => applyFeatureEdit(features),
@@ -119,16 +130,31 @@ export function createFeaturesMode({ root, appState, getProject, getViewPanels, 
   }
 
   /**
-   * Features are setup, like the view config and unlike the layout: they save
-   * when asked rather than on every gesture, and there is no undo stack behind
-   * them. Auto-saving each drag frame would be a write per pointer release.
+   * Features save when asked rather than on every gesture, like the view
+   * config and unlike the layout: auto-saving each drag frame would be a
+   * revision per pointer release. Each save is one undoable revision.
    */
   function saveFeatures() {
-    persistFeatures(
-      appState.features,
-      (message, state) => featurePanel.setStatus(message, state),
-      { projectId: getProject().id }
-    );
+    return persistRevision(appState.features, (message, state) => featurePanel.setStatus(message, state));
+  }
+
+  /**
+   * Show a revision's features (undo, redo). `saved` is the features file
+   * the revision holds, or null for a yard that had none drawn yet.
+   * @returns {boolean} whether it was applied
+   */
+  function restoreFeatures(saved) {
+    let validated;
+    try {
+      validated = normalizeFeatures(saved ?? null, getProject().id);
+    } catch (err) {
+      featurePanel.setStatus(err.message, 'error');
+      return false;
+    }
+    appState.features = validated.features;
+    featurePanel.render(appState.features);
+    render();
+    return true;
   }
 
   return {
@@ -136,6 +162,7 @@ export function createFeaturesMode({ root, appState, getProject, getViewPanels, 
     sync: syncFeatureOverlay,
     apply: applyFeatureEdit,
     save: saveFeatures,
+    restore: restoreFeatures,
     replaceFeature,
   };
 }

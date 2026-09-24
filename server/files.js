@@ -25,16 +25,24 @@ export async function writeFileAtomic(targetFile, contents) {
 }
 
 /**
- * Drop a view's earlier uploads. Best effort: the new background is already on
- * disk and usable, so a failure to tidy up must not fail the request.
+ * Drop a view's earlier uploads, except any a revision still names: an undo
+ * can bring back the setup that shows it (nl-3s5.20). Best effort: the new
+ * background is already on disk and usable, so a failure to tidy up must not
+ * fail the request.
+ *
+ * @param {string} dir the yard's img/ directory
+ * @param {string} viewId
+ * @param {string} keepFileName the upload that just succeeded
+ * @param {Set<string>|string[]} referenced basenames any revision references
  */
-export async function removeSupersededBackgrounds(dir, viewId, keepFileName) {
+export async function removeSupersededBackgrounds(dir, viewId, keepFileName, referenced = []) {
+  const keep = new Set(referenced);
   try {
     const entries = await fs.readdir(dir);
     await Promise.all(
-      supersededBackgrounds(entries, viewId, keepFileName).map((name) =>
-        fs.rm(path.join(dir, name), { force: true })
-      )
+      supersededBackgrounds(entries, viewId, keepFileName)
+        .filter((name) => !keep.has(name))
+        .map((name) => fs.rm(path.join(dir, name), { force: true }))
     );
   } catch (err) {
     console.warn(`Could not remove superseded backgrounds in ${dir}:`, err.message);
@@ -42,21 +50,23 @@ export async function removeSupersededBackgrounds(dir, viewId, keepFileName) {
 }
 
 /**
- * Delete uploaded backgrounds no view in the just-saved config references any
- * more — the cleanup point for an upload the user abandoned by never running
- * Save views. Best effort: the config write already succeeded, so a failure
- * to tidy up img/ must not fail the request.
+ * Delete uploaded backgrounds that neither the just-saved config nor any
+ * revision in the yard's history references: the cleanup point for an upload
+ * the user abandoned by never running Save views. A photo an older revision
+ * still names is kept, so undoing back to that setup finds it (nl-3s5.20);
+ * one that only a truncated redo tail named goes on the next sweep. Best
+ * effort: the config write already succeeded, so a failure to tidy up img/
+ * must not fail the request.
+ *
+ * @param {string} projectDir the yard's directory under DATA_DIR
+ * @param {Set<string>|string[]} referenced basenames still referenced
  */
-export async function removeOrphanedBackgrounds(projectDir, config) {
+export async function removeOrphanedBackgrounds(projectDir, referenced) {
   const dir = path.join(projectDir, BACKGROUND_DIR);
   try {
-    const referenced = config.views
-      .map((view) => view.background)
-      .filter(Boolean)
-      .map((background) => path.basename(background));
     const entries = await fs.readdir(dir);
     await Promise.all(
-      orphanedBackgrounds(entries, referenced).map((name) =>
+      orphanedBackgrounds(entries, [...referenced]).map((name) =>
         fs.rm(path.join(dir, name), { force: true })
       )
     );

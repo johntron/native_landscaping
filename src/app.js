@@ -5,7 +5,9 @@ import {
   loadProjectIndex,
   projectAssetPath,
   resolveActiveProjectId,
+  serializeProjectConfig,
 } from './data/projectConfig.js';
+import { serializeFeatures } from './data/featureConfig.js';
 import { parseSpeciesCsv } from './data/plantParser.js';
 import { parseSynonymCsv } from './data/speciesResolver.js';
 import {
@@ -111,6 +113,7 @@ async function init() {
   const newProjectStatus = document.getElementById('newProjectStatus');
   const modeButtons = Array.from(document.querySelectorAll('[data-mode]'));
   const editRow = document.getElementById('editRow');
+  const historyRow = document.getElementById('historyRow');
   const setupRow = document.getElementById('setupRow');
   const featureRow = document.getElementById('featureRow');
   const viewToolbar = document.querySelector('.view-toolbar');
@@ -259,6 +262,10 @@ async function init() {
     historyStatus,
     render: () => render(),
     refreshSpeciesTable: () => refreshSpeciesTable(),
+    // Undo and redo cross setup and feature saves too (nl-3s5.20). Both modes
+    // are built further down; these run only on a click, long after.
+    onRestoreConfig: (config) => setupMode.restoreConfig(config),
+    onRestoreFeatures: (features) => featuresMode.restore(features),
   });
   const commitLayoutChange = (description) => layoutHistory.commit(description);
   const syncLayerButtons = (hiddenCount) => {
@@ -582,6 +589,7 @@ async function init() {
       button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
     });
     if (editRow) editRow.hidden = next !== 'edit';
+    if (historyRow) historyRow.hidden = next === 'view';
     if (setupRow) setupRow.hidden = next !== 'setup';
     if (featureRow) featureRow.hidden = next !== 'features';
     viewToolbar?.classList.toggle('is-setup', next === 'setup' || next === 'features');
@@ -625,6 +633,7 @@ async function init() {
     getControllers: () => featureControllers,
     liveView,
     render: () => render(),
+    saveFeatures: (features, status) => layoutHistory.commitFeatures(features, status),
   });
 
   const setupMode = createSetupMode({
@@ -639,6 +648,7 @@ async function init() {
     rebuildViews,
     render: () => render(),
     commitLayoutChange: (description) => commitLayoutChange(description),
+    saveSetup: (config, status) => layoutHistory.commitSetup(config, status),
     featuresMode,
     onProjectRenamed: (renamed) => {
       document.title = pageTitle(`Your yard: ${renamed.name}`);
@@ -715,7 +725,12 @@ async function init() {
     // the panel rebuilds its DOM outright, and doing that on every month-slider
     // frame would take the focus out of the field being typed in.
     featuresMode.panel.render(appState.features);
-    appState.plants = layoutHistory.start(historyData);
+    // The setup and features the page loaded are the base of a yard with no
+    // history yet; every stored revision carries its own.
+    appState.plants = layoutHistory.start(historyData, {
+      config: serializeProjectConfig(project),
+      features: serializeFeatures({ features: appState.features }),
+    });
     // The layout arrives after the panel is first built, and whether the yard
     // still contains it is the panel's loudest section — so it is rebuilt here
     // rather than left reporting the empty list it was born with.

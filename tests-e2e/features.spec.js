@@ -42,7 +42,11 @@ test('saving writes features.json inside the project, with the defaults dropped'
 }) => {
   const response = await request.post(featuresUrl(), { data: { features: [HOUSE] } });
   expect(response.status()).toBe(200);
-  expect(await response.json()).toEqual({ features: [HOUSE] });
+  // The saved features, plus the revision the save became (nl-3s5.20).
+  const { revision, ...body } = await response.json();
+  expect(body).toEqual({ features: [HOUSE] });
+  expect(revision.entry.kind).toBe('features');
+  expect(typeof revision.cursor).toBe('number');
 
   // Nothing normalizeFeatures would have supplied is written to the file.
   const saved = await readSavedFeatures();

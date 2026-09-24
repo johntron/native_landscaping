@@ -3,7 +3,9 @@
  * view's photograph and each elevation's camera, and repairing a design the
  * yard no longer contains. Owns the setup panel, the one-view-at-a-time setup
  * overlay, validation of every view edit, and the stranded-plant actions.
- * Like Features mode, it saves only when asked.
+ * Like Features mode, it saves only when asked, and each save is one revision
+ * in the yard's history (nl-3s5.20): undo can take it back, and
+ * restoreConfig is how an undo or redo puts a revision's setup on screen.
  *
  * The setup CONTROLLERS stay built by src/app.js, in rebuildViews, beside the
  * drag and feature controllers (see src/interaction/featuresMode.js for why),
@@ -15,7 +17,6 @@
  */
 import { createSetupPanel } from './setupPanel.js';
 import { normalizeProjectConfig, projectAssetPath, serializeProjectConfig } from '../data/projectConfig.js';
-import { persistProjectConfig } from '../data/persistence.js';
 import { compressBackgroundImage, uploadViewBackground } from '../data/backgroundUpload.js';
 import {
   clearSetupOverlay,
@@ -39,6 +40,8 @@ import { formatFileSize } from '../ui/controls.js';
  * @param {() => void} deps.rebuildViews
  * @param {() => void} deps.render
  * @param {(description: string) => void} deps.commitLayoutChange
+ * @param {(project: object, status: Function) => Promise<object|null>} deps.saveSetup
+ *   records and persists the setup as one revision (layoutHistoryController.commitSetup)
  * @param {{ apply: Function, save: Function }} deps.featuresMode
  * @param {(project: object) => void} deps.onProjectRenamed  update the page title and picker label
  */
@@ -54,6 +57,7 @@ export function createSetupMode({
   rebuildViews,
   render,
   commitLayoutChange,
+  saveSetup,
   featuresMode,
   onProjectRenamed,
 }) {
@@ -100,10 +104,8 @@ export function createSetupMode({
     },
     onSave: async () => {
       setupPanel.setStatus('Saving…', 'info');
-      const saved = await persistProjectConfig(project, (message, state) =>
-        setupPanel.setStatus(message, state)
-      );
-      if (saved) setupPanel.setStatus('Views saved', 'success');
+      const saved = await saveSetup(project, (message, state) => setupPanel.setStatus(message, state));
+      if (saved && !saved.unchanged) setupPanel.setStatus('Views saved', 'success');
     },
   });
 
@@ -130,6 +132,39 @@ export function createSetupMode({
       setupPanel.setStatus(err.message, 'error');
       return false;
     }
+    Object.assign(project, validated);
+    appState.project = project;
+    onProjectRenamed(project);
+    rebuildViews();
+    setupPanel.render(project);
+    return true;
+  }
+
+  /**
+   * Put a revision's setup on screen (undo, redo). Unlike applyViewEdit this
+   * REPLACES the project rather than merging onto it: an older setup without
+   * an ecoregion, a site, a place or a photo placement must come back
+   * without it, not with today's value showing through. `project` is
+   * mutated in place, never replaced, because app.js and this module share it.
+   *
+   * The ecology tables were loaded once for the ecoregion the page opened
+   * with; a restored setup with another ecoregion is checked against those
+   * until a reload.
+   *
+   * @param {object} config the revision's config, file shape
+   * @returns {boolean} whether it was applied
+   */
+  function restoreConfig(config) {
+    let validated;
+    try {
+      validated = normalizeProjectConfig(config, project.id);
+    } catch (err) {
+      setupPanel.setStatus(err.message, 'error');
+      return false;
+    }
+    Object.keys(project).forEach((key) => {
+      if (!(key in validated)) delete project[key];
+    });
     Object.assign(project, validated);
     appState.project = project;
     onProjectRenamed(project);
@@ -339,6 +374,7 @@ export function createSetupMode({
     panel: setupPanel,
     sync: syncSetupOverlay,
     applyViewEdit,
+    restoreConfig,
   };
 }
 

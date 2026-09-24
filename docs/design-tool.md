@@ -22,9 +22,9 @@ not in the repo:
 | what | where | how the browser gets it |
 | --- | --- | --- |
 | the yard list | `projects` rows for the caller (`owner_id`), oldest first; the oldest is the default | `GET /api/projects` |
-| the config (the yard in feet, `views[]`, optional `ecoregion`, `site`, `place`) | `projects.config_json`, stored as saved, normalized on read | `GET`/`POST /api/project` |
-| the layout and its undo stack | `history_entries` (one row per step, placements only) and `projects.history_cursor` | `GET /api/history`, `POST /api/layout`, `POST /api/history/cursor` |
-| yard features | `projects.features_json` (NULL means none drawn) | `GET`/`POST /api/features` |
+| the config (the yard in feet, `views[]`, optional `ecoregion`, `site`, `place`) | `projects.config_json` (the copy at the cursor), stored as saved, normalized on read | `GET`/`POST /api/project` |
+| the revision history behind undo/redo (planting, setup and features) | `history_entries` (one row per revision: `kind`, placements, `config_json`, `features_json`) and `projects.history_cursor` | `GET /api/history`, `POST /api/layout`, `POST /api/history/cursor` |
+| yard features | `projects.features_json` (the copy at the cursor; NULL means none drawn) | `GET`/`POST /api/features` |
 | the exact location behind `place` | `projects.location_json` | never, except `{ lat, lng }` to the owner in `/api/ecosystem` |
 | photos | files under `DATA_DIR/projects/<projects.id>/img/`, outside the served root | `GET /api/project-photo?project=<slug>&path=img/<file>` |
 
@@ -59,6 +59,34 @@ What follows from that:
   layout is the entry at the cursor. `GET /api/layout?project=<slug>` exports it
   as the CSV the file used to be (`id,species_id,x_ft,y_ft`), and nothing reads
   one back.
+- **One revision stream for the planting, the setup and the features**
+  (nl-3s5.20, migration 005). Every `POST /api/layout`, `POST /api/project` and
+  `POST /api/features` appends one revision (`kind` `planting`, `setup` or
+  `features`), and all three share one `seq` per yard, so Undo and Redo step
+  across them. Each row is a full snapshot (placements, config, features), so
+  `POST /api/history/cursor` restores any revision with one row read, and
+  rewrites `projects.config_json`, `features_json` and `name` from it in the
+  same transaction. Those columns stay the copy at the cursor, so everything
+  that reads the projects row is unchanged. A save after an undo drops the redo
+  tail, whatever its kinds: a plant move after undoing a *Save views* deletes
+  that setup revision. The first save of a yard with no history seeds revision 0
+  with the yard as it was, so the page's stack and the stored one keep the same
+  indices. Entries from before 5.20 became planting revisions carrying the
+  yard's setup and features as they were at the migration, because there was
+  no older history of either. The location is not a revision.
+- **`GET /api/history` sends `config` and `features` only where they change**
+  from the entry before (always on the first); an entry without the key carries
+  the previous one's, and `features: null` means none drawn. Every snapshot
+  would be over a megabyte for a yard with a few hundred revisions.
+- **The page and the server must agree on every index**
+  (`src/history/layoutHistoryController.js`). Every request goes through one
+  queue in the order the stack changed; each save is recorded locally when sent
+  and the server's answer annotates that entry; a refused save is taken back off
+  the stack if nothing came after it. The server's cursor is checked, never
+  adopted: if it disagrees (another tab saved, or a tab opened before a deploy),
+  the page stops offering undo and says to reload. A *Save views* or *Save
+  features* that would store what the current revision already holds sends
+  nothing, so pressing Save twice is not two undo steps.
 - **Each save is one transaction** (`BEGIN IMMEDIATE`, nothing awaited inside it,
   because `ctx.db.app` is one connection shared by every request). Two tabs saving
   the same yard are serialized: both entries land, in order, and no write is torn.
@@ -117,7 +145,12 @@ node tools/import-projects.mjs          [--projects-dir <dir>] [--slug <slug> ..
 
 **Setup mode is how a yard's config changes.** It edits the yard,
 adds/reorders/removes views, and places each view's photograph by dragging it on
-the drawing; *Save views* stores it through `POST /api/project`. (The config is
+the drawing; *Save views* stores it through `POST /api/project` as one setup
+revision, which Undo takes back (the buttons show in Edit, Setup and Features
+modes). Undo restores a setup by replacing the project, not merging onto it, so
+a field the older setup lacked comes back absent. The ecology tables are loaded
+once for the ecoregion the page opened with, so an undo that changes the
+ecoregion is checked against the old tables until a reload. (The config is
 still called `project.json` below: it is the same JSON the file held.)
 
 ### The yard, and the views derived from it
@@ -221,7 +254,8 @@ names them, with how far out each one is.
 
 **Never repaired automatically.** Resizing is exploratory — you type 6, look,
 type 8 — so a yard edit redraws and reports and touches no coordinate; only a
-button moves anything, and each press is one entry in the layout history. The
+button moves anything, and each press is one planting revision in the history
+(two when a scale or a move also saves features, one each). The
 two actions are two *intents*, not two transforms, and the panel says so:
 
 - **Scale the whole design to fit** is the "I mis-measured" correction. Every
@@ -293,7 +327,7 @@ raw body of `POST /api/view-background`, and the **server** names the file —
 `img/<view-id>-<content-hash>.webp` — so nothing a client sends becomes a path.
 The hash is not decoration: the stored `background` string has to change for the
 drawing to re-fetch anything, so a replacement photo lands on a new path and the
-view's earlier uploads are deleted. A new photo also clears `photoFt`: a
+view's earlier uploads are deleted, except any a revision still names (below). A new photo also clears `photoFt`: a
 placement describes a rectangle of a *particular* image.
 `src/data/backgroundStore.js` holds the guards; see "Uploading a background".
 
@@ -371,13 +405,13 @@ live, so a refused edit leaves the drawing on the last good state. A new wall or
 is created with a real `heightFt` on purpose: the normalizer refuses one without a
 positive height, and the first frame of a new fence must not be what trips that guard.
 Unlike a plant drag and like Setup mode, editing does **not** auto-save — press *Save
-features*.
+features*, which records one features revision that Undo can take back.
 
 Features load through `GET /api/features` and save through `POST /api/features`
 (`loadProjectFeatures` / `persistFeatures` in `src/data/persistence.js`). Most
 projects have never drawn a feature, and the endpoint answers those with an empty
-list rather than an error. Like `project.json` and unlike the layout, there is no
-undo stack — features are setup.
+list rather than an error. Each save is a revision in the yard's one history
+(nl-3s5.20); `POST /api/features` answers the saved list plus `revision`.
 
 ### Elevation orientation
 
@@ -506,6 +540,15 @@ it only checks it.
   leaves a half-written photo. Superseded uploads for that view are removed
   afterwards, best effort — the new background is already usable, so tidying up
   must not fail the request.
+- **Kept while any revision names it** (nl-3s5.20). Undo can bring back a setup
+  that shows an older photo, so neither sweep (superseded uploads on upload,
+  orphaned ones on *Save views*) deletes a file that any revision's config, or the
+  current config, references (`referencedBackgroundNames` in
+  `server/db/projectStore.js`, scanning every `background` key). An upload no
+  revision ever saved is still swept, and so is a photo whose only revisions were
+  truncated by a save after an undo, at the next sweep. A photo swept before
+  5.20 is gone; a restored setup that names a missing file draws no photo (the
+  route answers 404) rather than failing.
 
 The client-side re-encode is a second line of defence as well as a size
 reduction: the uploaded bytes are ones the canvas produced from decoded pixels,
@@ -710,10 +753,10 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
 - `src/render/*` – view configuration, SVG helpers, tooltip builder, plan view and elevation renderers.
 - `src/state/seasonalState.js` – pure logic for foliage/bloom state per month.
 - `src/interaction/dragController.js` – pointer events + hit-testing for moving plants in plan view.
-- `src/history/layoutHistory.js` – the undo/redo stack of placements; server-backed via `/api/history`.
+- `src/history/layoutHistory.js` – the undo/redo stack: one full snapshot (placements, config, features) per revision; server-backed via `/api/history`.
 - `src/history/reconcileLayout.js` – which history entry a legacy layout file was showing; used only by the import.
 - `src/data/placements.js` – a plant reduced to its placement, and `sameLayout`.
-- `src/history/layoutHistoryController.js` – the page's side of it: undo/redo buttons, the save-status line, and `commit()` (record, persist, adopt the server's entry and cursor).
+- `src/history/layoutHistoryController.js` – the page's side of it: undo/redo buttons, the save-status line, `commit()` / `commitSetup()` / `commitFeatures()` (record, persist through one queue, check the server's cursor), and restoring a revision's setup and features on undo/redo.
 - `src/state/plantEdits.js` – add, clone, and remove a plant; `src/state/yardEdits.js` – scale and
   shift features, patch a view. Pure, and unit-tested directly.
 - `src/ui/speciesHighlight.js` – the table ↔ drawing link: highlighted species, targeted and hovered plant, and `refresh()` (rebuild the table, re-grade the ecology check).

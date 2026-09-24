@@ -295,7 +295,9 @@ test('two owners with the same slug: every write by A lands on A\'s yard only', 
     };
     await ok('POST', '/api/project?project=backyard', { ...CONFIG, name: 'A renamed' });
     await ok('POST', '/api/layout?project=backyard', { plants: [placement('p9', 9)], id: 'a-entry' });
-    await ok('POST', '/api/history/cursor?project=backyard', { cursor: 0 });
+    // Revision 2 is A's rename (0 and 1 came with the yard, 3 is the layout):
+    // a cursor move restores the setup of the revision it lands on (nl-3s5.20).
+    await ok('POST', '/api/history/cursor?project=backyard', { cursor: 2 });
     await ok('POST', '/api/features?project=backyard', { features: [] });
     await ok('POST', '/api/view-background?project=backyard&view=north', WEBP, { 'content-type': 'image/webp' });
 

@@ -63,6 +63,7 @@ export const SCRATCH_PROJECTS = [
   'frontyard-save',
   'ecology-check',
   'second-yard',
+  'setup-undo',
 ];
 
 /**

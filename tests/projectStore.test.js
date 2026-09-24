@@ -213,14 +213,23 @@ test('the owner reads and saves through the routes', async () => {
       previousPlants: [],
       description: 'add',
     });
-    assert.equal(saved.json().cursor, 1);
+    // The rename was the yard's first save: it seeded revision 0 (the yard as
+    // created) and became revision 1, so the layout is revision 2 (nl-3s5.20).
+    assert.equal(saved.json().cursor, 2);
     const history = (await call(env, env.alice, 'GET', '/api/history?project=new-yard')).json();
-    assert.deepEqual(history.entries[1].plants, [placement('h1', 1.23456)]);
+    assert.deepEqual(history.entries.map((e) => e.kind), ['planting', 'setup', 'planting']);
+    assert.deepEqual(history.entries[2].plants, [placement('h1', 1.23456)]);
     const csv = await call(env, env.alice, 'GET', '/api/layout?project=new-yard');
     assert.match(csv.headers['Content-Type'], /text\/csv/);
     assert.equal(csv.body, 'id,species_id,x_ft,y_ft\nh1,yaupon-holly,1.235,1.000\n');
     const rewound = await call(env, env.alice, 'POST', '/api/history/cursor?project=new-yard', { cursor: 0 });
     assert.deepEqual(rewound.json().entry.plants, []);
+    assert.equal(rewound.json().entry.config.name, 'New yard', 'revision 0 is the yard before the rename');
+    assert.deepEqual(
+      (await call(env, env.alice, 'GET', '/api/projects')).json().projects,
+      [{ id: 'new-yard', name: 'New yard' }],
+      'undoing the rename restores the picker label too'
+    );
 
     assert.deepEqual((await call(env, env.alice, 'GET', '/api/features?project=new-yard')).json(), { features: [] });
     assert.equal((await call(env, env.alice, 'POST', '/api/features?project=new-yard', {})).statusCode, 400);

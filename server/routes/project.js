@@ -26,8 +26,9 @@ import {
   moveHistoryCursor,
   projectDataDir,
   projectIndexFor,
-  readHistory,
+  readRevisions,
   recordLayout,
+  referencedBackgroundNames,
   saveProjectConfig,
   saveProjectFeatures,
   withTransaction,
@@ -44,7 +45,17 @@ const PHOTO_TYPES = {
 /**
  * Per-project persistence for the design tool, backed by app.db
  * (server/db/projectStore.js, nl-3s5.3): the caller's yard list, config,
- * layout + undo history, features, and the yard's photos.
+ * layout, features, the one revision stream behind undo and redo, and the
+ * yard's photos.
+ *
+ * Revisions (nl-3s5.20): POST /api/layout, POST /api/project and POST
+ * /api/features each append one revision to the same stream, and POST
+ * /api/history/cursor moves along it, restoring the planting, the setup and
+ * the features of the revision it lands on. The payloads are the pre-5.20
+ * ones plus fields (kind, config, features, revision), so a tab opened before
+ * the deploy keeps working: every write it makes is a revision too, so it can
+ * lose nothing; its undo indices can only be off after another tab or a
+ * setup/features save added revisions it has not seen, which a reload fixes.
  *
  * Every route needs a signed-in caller, and every ?project=<slug> is resolved
  * among THAT caller's yards through loadOwnedProject (server/http.js): 401
@@ -137,14 +148,28 @@ export async function handleProjectRoutes(req, res, ctx) {
       const config = normalizeProjectConfig({ ...body, id: undefined }, project.slug);
       const serialized = serializeProjectConfig(config);
       // The picker label is stored beside the config, in the same write, so
-      // the two can no longer drift apart the way index.json and project.json could.
-      saveProjectConfig(db, project.id, {
+      // the two can no longer drift apart the way index.json and project.json
+      // could. Every save is a setup revision (nl-3s5.20), even one that
+      // changes nothing: the client decides whether to save at all, and the
+      // two stacks stay one index apart only if each save it sends is one
+      // revision here.
+      const revision = saveProjectConfig(db, project.id, {
         name: config.name,
         configJson: `${JSON.stringify(serialized, null, 2)}\n`,
       });
-      await removeOrphanedBackgrounds(projectDataDir(ctx.dataDir, project.id), config);
-      console.log(`Project config saved for '${project.slug}' (${config.views.length} views)`);
-      json(res, 200, { config: serialized, index: projectIndexFor(db, project.ownerId) });
+      // Photos any revision names are kept: undo can bring that setup back.
+      await removeOrphanedBackgrounds(
+        projectDataDir(ctx.dataDir, project.id),
+        referencedBackgroundNames(db, project.id)
+      );
+      console.log(
+        `Project config saved for '${project.slug}' (${config.views.length} views, revision ${revision.cursor})`
+      );
+      json(res, 200, {
+        config: serialized,
+        index: projectIndexFor(db, project.ownerId),
+        revision: { entry: revision.entry, cursor: revision.cursor },
+      });
     } catch (err) {
       console.error(err);
       json(res, 400, { error: err.message });
@@ -155,9 +180,7 @@ export async function handleProjectRoutes(req, res, ctx) {
   if (pathname === '/api/history' && req.method === 'GET') {
     const project = owned();
     if (!project) return true;
-    const history = readHistory(db, project.id);
-    // Placements only in the response, even for an entry imported unreduced.
-    json(res, 200, { entries: history.entries.map(toPlacementEntry), cursor: history.cursor });
+    json(res, 200, historyPayload(db, project.id));
     return true;
   }
 
@@ -205,8 +228,8 @@ export async function handleProjectRoutes(req, res, ctx) {
     try {
       const payload = await collectPayload(req, { requirePlants: false });
       const result = moveHistoryCursor(db, project.id, Number(payload.cursor));
-      console.log(`Layout for '${project.slug}' rewound to '${result.entry.id}' (cursor ${result.cursor})`);
-      json(res, 200, { entry: toPlacementEntry(result.entry), cursor: result.cursor });
+      console.log(`Yard '${project.slug}' moved to revision '${result.entry.id}' (cursor ${result.cursor})`);
+      json(res, 200, { entry: revisionPayload(result.entry, { config: true, features: true }), cursor: result.cursor });
     } catch (err) {
       console.error(err);
       json(res, 400, { error: err.message });
@@ -235,15 +258,18 @@ export async function handleProjectRoutes(req, res, ctx) {
     try {
       const body = await collectPayload(req, { requirePlants: false });
       // An absent features[] means "this body is not a feature list", not "no
-      // features": accepting it would erase the whole yard model, and unlike
-      // the layout there is no history to recover it from.
+      // features": accepting it would erase the whole yard model. History
+      // would keep the old list (nl-3s5.20), but a body that is not a feature
+      // list is a client bug to report, not a revision to record.
       if (!Array.isArray(body.features)) {
         throw new Error('Missing features[]');
       }
       const features = serializeFeatures(normalizeFeatures(body, project.slug));
-      saveProjectFeatures(db, project.id, `${JSON.stringify(features, null, 2)}\n`);
-      console.log(`Features saved for '${project.slug}' (${features.features.length} features)`);
-      json(res, 200, features);
+      const revision = saveProjectFeatures(db, project.id, `${JSON.stringify(features, null, 2)}\n`);
+      console.log(
+        `Features saved for '${project.slug}' (${features.features.length} features, revision ${revision.cursor})`
+      );
+      json(res, 200, { ...features, revision: { entry: revision.entry, cursor: revision.cursor } });
     } catch (err) {
       console.error(err);
       json(res, 400, { error: err.message });
@@ -318,7 +344,9 @@ export async function handleProjectRoutes(req, res, ctx) {
 
       await fs.mkdir(dir, { recursive: true });
       await writeFileAtomic(file, body);
-      await removeSupersededBackgrounds(dir, viewId, path.basename(file));
+      // Only uploads no revision names: the saved setup (and any older one
+      // undo can reach) still shows the photo this one is replacing.
+      await removeSupersededBackgrounds(dir, viewId, path.basename(file), referencedBackgroundNames(db, project.id));
 
       console.log(`Background saved for '${project.slug}' view '${viewId}' (${body.length} bytes)`);
       json(res, 200, { background: relativePath, bytes: body.length });
@@ -353,4 +381,47 @@ function makeEntry(plants, description, id) {
     description: description || 'Manual layout update',
     plants: toPlacements(plants),
   };
+}
+
+/**
+ * A revision as the client reads it: placements only, with its kind, and its
+ * config and features when asked for (parsed; features null for a yard that
+ * never drew one).
+ * @param {import('../db/projectStore.js').Revision} revision
+ */
+function revisionPayload(revision, { config = false, features = false } = {}) {
+  const out = toPlacementEntry({
+    id: revision.id,
+    timestamp: revision.timestamp,
+    description: revision.description,
+    kind: revision.kind,
+    plants: revision.plants,
+  });
+  if (config) out.config = JSON.parse(revision.configJson);
+  if (features) out.features = revision.featuresJson === null ? null : JSON.parse(revision.featuresJson);
+  return out;
+}
+
+/**
+ * GET /api/history: every revision, placements only as before, plus its kind.
+ * Storage holds a full snapshot per revision; the response sends `config` and
+ * `features` only on a revision where they differ from the one before (always
+ * on the first), and a revision without the key carries the previous one's.
+ * Sending every snapshot would be a megabyte and more per page load for a
+ * yard with a few hundred revisions. The key's presence is what counts:
+ * `features: null` means "no features", not "carried".
+ */
+function historyPayload(db, projectRowId) {
+  const revisions = readRevisions(db, projectRowId);
+  const row = db.prepare('SELECT history_cursor FROM projects WHERE id = ?').get(Number(projectRowId));
+  const stored = Number(row?.history_cursor ?? -1);
+  const cursor = revisions.length ? Math.max(0, Math.min(stored, revisions.length - 1)) : -1;
+  const entries = revisions.map((revision, index) => {
+    const previous = revisions[index - 1];
+    return revisionPayload(revision, {
+      config: !previous || previous.configJson !== revision.configJson,
+      features: !previous || previous.featuresJson !== revision.featuresJson,
+    });
+  });
+  return { entries, cursor };
 }
