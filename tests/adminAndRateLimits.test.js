@@ -22,6 +22,7 @@ import { openClaimsStore, createSchema } from '../tools/claims/claimsStore.js';
 import { handleEcosystemRoutes } from '../server/routes/ecosystem.js';
 import { handleFeedRoutes } from '../server/routes/feed.js';
 import { openAppDb } from '../server/db/appDb.js';
+import { openProbeCache } from '../tools/usda-plants/probeCache.js';
 
 /** A minimal http.ServerResponse stand-in that records what was sent. */
 function makeRes() {
@@ -248,6 +249,14 @@ function withMockFetch(handler, fn) {
   });
 }
 
+// A throwaway probe cache, same as the one server.js would open once at
+// startup and share through ctx.db.probeCache (nl-3s5.26) — these tests
+// exercise the rate limiter in front of the route, not the probe cache
+// itself, so a fresh temp-dir handle per stub is fine.
+const ecosystemProbeCacheDir = mkdtempSync(join(tmpdir(), 'admin-rate-limits-probe-cache-'));
+const ecosystemProbeCache = openProbeCache(join(ecosystemProbeCacheDir, 'probe-cache.db'));
+test.after(() => rmSync(ecosystemProbeCacheDir, { recursive: true, force: true }));
+
 function stubEcosystemRequest(pathnameAndQuery, method, body, headers) {
   const url = new URL(`http://localhost${pathnameAndQuery}`);
   const req = {
@@ -259,7 +268,7 @@ function stubEcosystemRequest(pathnameAndQuery, method, body, headers) {
     },
   };
   const res = makeRes();
-  const ctx = { url, pathname: url.pathname, publicDir: '/tmp', db: {}, user: null };
+  const ctx = { url, pathname: url.pathname, publicDir: '/tmp', db: { probeCache: ecosystemProbeCache }, user: null };
   return { req, res, ctx };
 }
 

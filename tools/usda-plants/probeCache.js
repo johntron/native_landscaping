@@ -33,6 +33,7 @@ export function openProbeCache(path = defaultProbeCachePath()) {
   mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
   db.exec("PRAGMA journal_mode = WAL");
+  db.exec("PRAGMA busy_timeout = 5000");
   db.exec(`
     CREATE TABLE IF NOT EXISTS probe_cache (
       source TEXT NOT NULL,

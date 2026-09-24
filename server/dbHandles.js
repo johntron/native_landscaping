@@ -22,6 +22,7 @@ import { existsSync } from 'node:fs';
 import { openObservationEventsDb } from '../tools/observationEventsDb.js';
 import { openEcosystemDb } from '../tools/ecosystemIndexDb.js';
 import { openClaimsStore, defaultClaimsPath } from '../tools/claims/claimsStore.js';
+import { openProbeCache } from '../tools/usda-plants/probeCache.js';
 
 export const CLAIM_STORE_NOT_BUILT_MESSAGE =
   'Claim store not built — run tools/claims/rebuild.js to create data/claims.db';
@@ -32,11 +33,16 @@ export const CLAIM_STORE_NOT_BUILT_MESSAGE =
  * @param {string} [paths.observationEvents]
  * @param {string} [paths.ecosystem]
  * @param {string} [paths.claims]
- * @returns {{observationEvents: object, ecosystem: object, claims: () => object}}
+ * @param {string} [paths.probeCache]
+ * @returns {{observationEvents: object, ecosystem: object, probeCache: object, claims: () => object}}
  */
 export function openServerDatabases(paths = {}) {
   const observationEvents = openObservationEventsDb(paths.observationEvents);
   const ecosystem = openEcosystemDb(paths.ecosystem);
+  // Opened once here rather than per-request in server/routes/ecosystem.js
+  // (nl-3s5.26): opening is cheap and side-effect-free by design, same as
+  // the two stores above.
+  const probeCache = openProbeCache(paths.probeCache);
 
   const claimsPath = paths.claims || defaultClaimsPath();
   let claimsHandle = null;
@@ -70,5 +76,5 @@ export function openServerDatabases(paths = {}) {
     return claimsHandle;
   }
 
-  return { observationEvents, ecosystem, claims };
+  return { observationEvents, ecosystem, probeCache, claims };
 }

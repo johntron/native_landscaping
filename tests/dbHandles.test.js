@@ -15,14 +15,15 @@ function tmpPaths() {
     observationEvents: join(dir, 'observation-events.db'),
     ecosystem: join(dir, 'ecosystem.db'),
     claims: join(dir, 'claims.db'),
+    probeCache: join(dir, 'probe-cache.db'),
   };
 }
 
-test('openServerDatabases eagerly opens observation events and ecosystem, each with busy_timeout set', () => {
+test('openServerDatabases eagerly opens observation events, ecosystem, and the probe cache, each with busy_timeout set', () => {
   const paths = tmpPaths();
   try {
     const db = openServerDatabases(paths);
-    for (const key of ['observationEvents', 'ecosystem']) {
+    for (const key of ['observationEvents', 'ecosystem', 'probeCache']) {
       const { timeout } = db[key].prepare('PRAGMA busy_timeout').get();
       assert.equal(timeout, 5000, `${key} should have busy_timeout set`);
     }
@@ -30,6 +31,7 @@ test('openServerDatabases eagerly opens observation events and ecosystem, each w
     // matching every other open*Db function's existing behaviour.
     assert.ok(existsSync(paths.observationEvents));
     assert.ok(existsSync(paths.ecosystem));
+    assert.ok(existsSync(paths.probeCache));
   } finally {
     rmSync(paths.dir, { recursive: true, force: true });
   }
@@ -85,6 +87,7 @@ test('openServerDatabases(), called with no path overrides, opens observation-ev
     const db = openServerDatabases();
     assert.ok(existsSync(join(dir, 'observation-events.db')), 'observation-events.db should land under DATA_DIR');
     assert.ok(existsSync(join(dir, 'ecosystem.db')), 'ecosystem.db should land under DATA_DIR');
+    assert.ok(existsSync(join(dir, 'probe-cache.db')), 'probe-cache.db should land under DATA_DIR');
 
     // Build claims.db in the same DATA_DIR and confirm db.claims() (called
     // with no override either) finds it there, not at the repo's data/.

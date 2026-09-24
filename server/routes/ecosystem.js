@@ -3,7 +3,6 @@ import { isValidProjectId } from '../../src/data/projectConfig.js';
 import { projectIdFromUrl, resolveProjectPaths } from '../../src/data/projectPaths.js';
 import { listSpeciesObservations, listPlaces } from '../../tools/ecosystemIndexDb.js';
 import { excludeNonNative } from '../../src/analysis/establishmentMeans.js';
-import { openProbeCache } from '../../tools/usda-plants/probeCache.js';
 import { geocodeAddress } from '../../tools/geocode.mjs';
 import { lookupEcoregion } from '../../tools/ecoregionLookup.mjs';
 import { KNOWN_ECOREGIONS } from '../../src/data/ecoregionInput.js';
@@ -88,8 +87,7 @@ export async function handleEcosystemRoutes(req, res, ctx) {
     try {
       const body = await collectPayload(req, { requirePlants: false });
       const query = typeof body.query === 'string' ? body.query : '';
-      const probeCache = openProbeCache();
-      const result = await geocodeAddress(query, { probeCache });
+      const result = await geocodeAddress(query, { probeCache: db.probeCache });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
     } catch (err) {
@@ -120,8 +118,7 @@ export async function handleEcosystemRoutes(req, res, ctx) {
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
         throw new Error('"lat" and "lng" query params are required and must be numbers');
       }
-      const probeCache = openProbeCache();
-      const result = await lookupEcoregion(lat, lng, { probeCache });
+      const result = await lookupEcoregion(lat, lng, { probeCache: db.probeCache });
       if (!result) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ code: null, name: null, known: false }));

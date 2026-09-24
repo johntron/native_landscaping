@@ -21,6 +21,7 @@ import { handleClaimsRoutes } from '../server/routes/claims.js';
 import { createSavedArea } from '../tools/savedAreas/savedAreasDb.js';
 import { upsertEvents } from '../tools/observationEventsDb.js';
 import { replaceTaxonRows } from '../tools/ecosystemIndexDb.js';
+import { setCached } from '../tools/usda-plants/probeCache.js';
 
 function tmpPaths() {
   const dir = mkdtempSync(join(tmpdir(), 'routes-db-handles-test-'));
@@ -146,6 +147,98 @@ test('GET /api/ecosystem/places reads ctx.db.ecosystem', async () => {
     assert.equal(handled, true);
     assert.equal(res.statusCode, 200);
     assert.deepEqual(JSON.parse(res.body).places, ['Dallas, TX']);
+  } finally {
+    rmSync(paths.dir, { recursive: true, force: true });
+  }
+});
+
+/**
+ * Minimal POST req/res + ctx, mirroring server.js's shape for a JSON body
+ * (collectPayload reads req via 'data'/'end' listeners).
+ */
+function stubPostRequest(pathnameAndQuery, body, db, publicDir) {
+  const url = new URL(`http://localhost${pathnameAndQuery}`);
+  const req = {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    on(event, cb) {
+      if (event === 'data') cb(Buffer.from(JSON.stringify(body)));
+      if (event === 'end') cb();
+    },
+  };
+  const res = {
+    statusCode: null,
+    headers: null,
+    body: '',
+    writeHead(status, headers) {
+      this.statusCode = status;
+      this.headers = headers;
+    },
+    setHeader() {},
+    end(chunk) {
+      if (chunk) this.body += chunk;
+    },
+  };
+  const ctx = { url, pathname: url.pathname, publicDir, db, user: null };
+  return { req, res, ctx };
+}
+
+test('POST /api/geocode reads ctx.db.probeCache, not a fresh handle: a value seeded through the shared handle is served with no network call', async () => {
+  const paths = tmpPaths();
+  try {
+    const db = openDb(paths);
+    setCached(db.probeCache, 'nominatim', 'search', 'Seeded City', [
+      { lat: '1.5', lon: '2.5', display_name: 'Seeded City, TX, USA', address: { city: 'Seeded City', state: 'Texas', country: 'USA' } },
+    ]);
+    const originalFetch = globalThis.fetch;
+    let fetchCalled = false;
+    globalThis.fetch = async () => {
+      fetchCalled = true;
+      return { ok: true, status: 200, json: async () => [] };
+    };
+    try {
+      const { req, res, ctx } = stubPostRequest('/api/geocode', { query: 'Seeded City' }, db, paths.dir);
+      const handled = await handleEcosystemRoutes(req, res, ctx);
+
+      assert.equal(handled, true);
+      assert.equal(res.statusCode, 200);
+      assert.equal(fetchCalled, false, 'a cache hit through ctx.db.probeCache must not touch the network');
+      const parsed = JSON.parse(res.body);
+      assert.equal(parsed.city, 'Seeded City');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  } finally {
+    rmSync(paths.dir, { recursive: true, force: true });
+  }
+});
+
+test('GET /api/ecoregion reads ctx.db.probeCache, not a fresh handle: a value seeded through the shared handle is served with no network call', async () => {
+  const paths = tmpPaths();
+  try {
+    const db = openDb(paths);
+    setCached(db.probeCache, 'cec-ecoregions', 'level1-query', '32.777,-96.797', {
+      features: [{ attributes: { LEVEL1: '9', NameL1_En: 'Great Plains' } }],
+    });
+    const originalFetch = globalThis.fetch;
+    let fetchCalled = false;
+    globalThis.fetch = async () => {
+      fetchCalled = true;
+      return { ok: true, status: 200, json: async () => ({ features: [] }) };
+    };
+    try {
+      const { req, res, ctx } = stubRequest('/api/ecoregion?lat=32.777&lng=-96.797', db, paths.dir);
+      const handled = await handleEcosystemRoutes(req, res, ctx);
+
+      assert.equal(handled, true);
+      assert.equal(res.statusCode, 200);
+      assert.equal(fetchCalled, false, 'a cache hit through ctx.db.probeCache must not touch the network');
+      const parsed = JSON.parse(res.body);
+      assert.equal(parsed.code, '9');
+      assert.equal(parsed.name, 'Great Plains');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   } finally {
     rmSync(paths.dir, { recursive: true, force: true });
   }
