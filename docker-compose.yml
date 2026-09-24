@@ -109,6 +109,11 @@ services:
       # Never set DEV_USER_EMAIL here: it is for local dev and e2e only.
       CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
       CF_ACCESS_AUD: ${CF_ACCESS_AUD:-}
+      # Hosts a state-changing request's Origin may name (nl-3s5.16,
+      # rejectCrossSite in server/http.js). Explicit rather than trusting the
+      # Host header, which the tunnel's ingress settings could rewrite. The
+      # loopback entries keep writes working from http://127.0.0.1:8080.
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-native-landscaping.johntron.com,127.0.0.1:8080,localhost:8080}
     # Loopback ONLY. Off-box reach comes solely through the Cloudflare Tunnel
     # + Access gate, same as geneology's `review` service. A bare "8080:8080"
     # binds 0.0.0.0 and would serve the app to the whole LAN with no Google

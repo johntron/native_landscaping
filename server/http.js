@@ -17,6 +17,7 @@
 // keeps every route's error handling to two lines, instead of each of ten
 // routes writing its own try/catch and status codes.
 import { isValidProjectId } from '../src/data/projectConfig.js';
+import { imageTypeForContentType } from '../src/data/backgroundStore.js';
 
 /**
  * Send a JSON response. The one place every route's response body goes
@@ -272,4 +273,145 @@ export async function collectRequestBody(req) {
     req.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
     req.on('error', reject);
   });
+}
+
+// --- Cross-site request guard (nl-3s5.16) ---------------------------------
+//
+// collectPayload() above parses any body as JSON regardless of what
+// Content-Type says, so a cross-site <form> or a fetch(..., {mode:
+// 'no-cors'}) POST — neither of which triggers a CORS preflight, and both of
+// which a browser will happily send with Content-Type: text/plain or
+// application/x-www-form-urlencoded while attaching the victim's session
+// cookie — used to reach every state-changing route. rejectCrossSite() closes
+// that gap once, centrally (called from server.js before the ROUTES loop),
+// instead of every route module repeating the check.
+
+const STATE_CHANGING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+// POST /api/view-background (server/routes/project.js) is the one
+// state-changing route that isn't a JSON envelope: src/data/backgroundUpload.js
+// POSTs the compressed image bytes as the raw body with Content-Type set to
+// the image's own MIME type, no JSON wrapper. That route already checks the
+// declared type against the sniffed bytes (imageTypeForContentType, from
+// src/data/backgroundStore.js); this guard reuses the same allowlist rather
+// than keeping a second copy that could drift from it.
+const UPLOAD_PATHNAME = '/api/view-background';
+
+/**
+ * Media type only, parameters (charset, boundary, ...) and case dropped.
+ * @param {string | string[] | undefined} header
+ * @returns {string | null}
+ */
+function mediaType(header) {
+  const value = Array.isArray(header) ? header[0] : header;
+  if (!value) return null;
+  const type = value.split(';')[0].trim().toLowerCase();
+  return type || null;
+}
+
+/**
+ * @param {string} origin
+ * @returns {string | null} the origin's host[:port], lowercased
+ */
+function hostFromOrigin(origin) {
+  try {
+    return new URL(origin).host.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+// ALLOWED_ORIGINS: an optional comma-separated allowlist of hosts (or full
+// origin URLs) this server accepts Origin requests from. Read once at
+// module load, like CF_ACCESS_TEAM_DOMAIN in server/identity.js. Unset by
+// default: the request's own Host header (below) is what cloudflared
+// forwards unmodified from the tunnel edge (see docker-compose.yml's tunnel
+// comments), so it already carries the public hostname without any extra
+// configuration. This var exists for a deployment where that stops being
+// true — a proxy in front that rewrites Host, or one server answering more
+// than one hostname — not because Host is expected to lie in this repo's
+// setup; the orchestrator should confirm live that a production request's
+// Host header does carry the tunnel's public hostname unchanged, since that
+// is the one thing here not exercised by a unit test.
+const ALLOWED_ORIGIN_HOSTS = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((entry) => entry.trim())
+  .filter(Boolean)
+  .map((entry) => (entry.includes('://') ? hostFromOrigin(entry) : entry.toLowerCase()))
+  .filter(Boolean);
+
+/**
+ * The CSRF guard for every state-changing request. Two checks, either of
+ * which can answer the request and return true:
+ *
+ * 1. Content-Type must be `application/json` (parameters ignored), or, for
+ *    the upload route, one of its three image types. This alone defeats a
+ *    plain HTML `<form>` or a `no-cors` fetch: browsers restrict such
+ *    "simple" cross-site submissions to a fixed list of content types that
+ *    does not include `application/json`, so a forged cross-site POST
+ *    either never leaves the browser with that header or never arrives
+ *    without a preflight this server doesn't answer with CORS headers.
+ *
+ * 2. When the browser sent an Origin header, its host must match this
+ *    site's own (ALLOWED_ORIGINS if set, else the request's Host header).
+ *    Modern Chrome/Firefox/Safari attach Origin to every fetch/XHR that
+ *    isn't a simple cross-origin GET — including a same-origin POST from
+ *    this app's own pages — so a forged cross-site POST driven by a browser
+ *    always has Origin too, naming the attacker's page, not ours.
+ *
+ *    A request with NO Origin header is let through by this check (not
+ *    rejected): that is what a request never driven by a browser looks
+ *    like — curl in tools/ scripts, Playwright's `request` fixture in
+ *    tests-e2e/ (it does not set Origin on same-origin calls) — and none of
+ *    those can be driven by a hostile page holding a victim's session
+ *    cookie, which is what this guard defends against. Content-Type (check
+ *    1) is what still protects that path: a script can set an arbitrary
+ *    Content-Type on its own request, but it cannot make a browser attach
+ *    `application/json` to a plain cross-site form or `no-cors` fetch.
+ *    `Sec-Fetch-Site`, sent by all three target browsers, is used as a
+ *    second signal where present even with no Origin: a value other than
+ *    `same-origin` or `none` still fails the request.
+ *
+ * @param {import('node:http').IncomingMessage} req
+ * @param {import('node:http').ServerResponse} res
+ * @param {string} pathname
+ * @returns {boolean} true once a response has been written (415 or 403);
+ *   the caller should stop handling the request.
+ */
+export function rejectCrossSite(req, res, pathname) {
+  if (!STATE_CHANGING_METHODS.has(req.method)) return false;
+
+  const contentType = mediaType(req.headers['content-type']);
+  const contentTypeOk =
+    pathname === UPLOAD_PATHNAME
+      ? imageTypeForContentType(req.headers['content-type']) !== null
+      : contentType === 'application/json';
+  if (!contentTypeOk) {
+    json(res, 415, { error: 'Unsupported Content-Type' });
+    return true;
+  }
+
+  const originHeader = req.headers.origin;
+  const origin = Array.isArray(originHeader) ? originHeader[0] : originHeader;
+
+  if (origin) {
+    const originHost = hostFromOrigin(origin);
+    const hostHeader = req.headers.host;
+    const requestHost = (Array.isArray(hostHeader) ? hostHeader[0] : hostHeader || '').toLowerCase();
+    const allowedHosts = ALLOWED_ORIGIN_HOSTS.length ? ALLOWED_ORIGIN_HOSTS : [requestHost];
+    if (!originHost || !allowedHosts.includes(originHost)) {
+      json(res, 403, { error: 'Cross-site request rejected' });
+      return true;
+    }
+    return false;
+  }
+
+  const secFetchSite = req.headers['sec-fetch-site'];
+  const site = Array.isArray(secFetchSite) ? secFetchSite[0] : secFetchSite;
+  if (site && site !== 'same-origin' && site !== 'none') {
+    json(res, 403, { error: 'Cross-site request rejected' });
+    return true;
+  }
+
+  return false;
 }

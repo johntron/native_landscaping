@@ -7,6 +7,7 @@ import { handleProjectRoutes } from './server/routes/project.js';
 import { handleEcosystemRoutes } from './server/routes/ecosystem.js';
 import { handleFeedRoutes } from './server/routes/feed.js';
 import { handleClaimsRoutes } from './server/routes/claims.js';
+import { rejectCrossSite } from './server/http.js';
 import { legacyRedirect, serveStaticFile } from './server/static.js';
 import { openAppDb } from './server/db/appDb.js';
 import { createIdentity } from './server/identity.js';
@@ -33,6 +34,10 @@ const server = http.createServer(async (req, res) => {
   const pathname = url.pathname;
   const ctx = { url, pathname, publicDir: PUBLIC_DIR, db };
   ctx.user = await identify(req, ctx.db.app); // { id, email, isAdmin } or null; not enforced here
+
+  // CSRF guard (nl-3s5.16): answered once, here, for every state-changing
+  // method, before any route sees the request. See server/http.js for why.
+  if (rejectCrossSite(req, res, pathname)) return;
 
   for (const handle of ROUTES) {
     if (await handle(req, res, ctx)) return;
