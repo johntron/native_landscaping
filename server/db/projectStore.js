@@ -54,6 +54,22 @@ export function withTransaction(db, fn) {
 }
 
 /**
+ * Every value projects.visibility may hold (enforced by triggers, migration
+ * 004). 'public' is reserved for the deferred public-view work (nl-3s5.10):
+ * the database accepts it so that bead needs no migration, but nothing
+ * assigns it yet and no route reads it.
+ */
+export const PROJECT_VISIBILITIES = Object.freeze(['private', 'public']);
+
+/**
+ * The values the application may write today. Only 'private': every route is
+ * owner-only (nl-3s5.4), so a 'public' yard would promise a read path that does
+ * not exist. No route takes a visibility from a request body; insertProject is
+ * the only writer, and it refuses anything else.
+ */
+export const ASSIGNABLE_VISIBILITIES = Object.freeze(['private']);
+
+/**
  * @typedef {{
  *   id: number, slug: string, ownerId: number, name: string, visibility: string,
  *   configJson: string, featuresJson: string | null, locationJson: string | null,
@@ -134,7 +150,7 @@ export function projectIndexFor(db, ownerId) {
  * @param {{ ownerId: number, slug: string, name: string, configJson: string,
  *   featuresJson?: string | null, locationJson?: string | null,
  *   entries?: Array<{ id: string, timestamp: string, description: string, plants: object[] }>,
- *   cursor?: number, now?: string }} project
+ *   cursor?: number, now?: string, visibility?: string }} project
  * @returns {number} the new projects.id
  *
  * Not wrapped in its own transaction: the caller decides (the create route
@@ -150,13 +166,17 @@ export function insertProject(db, {
   entries = [],
   cursor = entries.length - 1,
   now = new Date().toISOString(),
+  visibility = 'private',
 }) {
+  if (!ASSIGNABLE_VISIBILITIES.includes(visibility)) {
+    throw new Error(`Project visibility must be one of ${ASSIGNABLE_VISIBILITIES.join(', ')}`);
+  }
   const result = db
     .prepare(
-      `INSERT INTO projects (owner_id, slug, name, config_json, features_json, location_json, history_cursor, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO projects (owner_id, slug, name, visibility, config_json, features_json, location_json, history_cursor, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(Number(ownerId), slug, name, configJson, featuresJson, locationJson, entries.length ? cursor : -1, now, now);
+    .run(Number(ownerId), slug, name, visibility, configJson, featuresJson, locationJson, entries.length ? cursor : -1, now, now);
   const projectRowId = Number(result.lastInsertRowid);
   const insert = db.prepare(
     `INSERT INTO history_entries (project_id, seq, entry_id, description, plants_json, created_at)

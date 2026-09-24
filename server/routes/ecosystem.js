@@ -1,12 +1,11 @@
-import { isValidProjectId } from '../../src/data/projectConfig.js';
 import { projectIdFromUrl } from '../../src/data/projectPaths.js';
-import { findOwnedProject, parseLocation } from '../db/projectStore.js';
+import { findCallerProject, parseLocation } from '../db/projectStore.js';
 import { listSpeciesObservations, listPlaces } from '../../tools/ecosystemIndexDb.js';
 import { excludeNonNative } from '../../src/analysis/establishmentMeans.js';
 import { geocodeAddress } from '../../tools/geocode.mjs';
 import { lookupEcoregion } from '../../tools/ecoregionLookup.mjs';
 import { KNOWN_ECOREGIONS } from '../../src/data/ecoregionInput.js';
-import { collectPayload, createRateLimiter, enforceRateLimit, rateLimitKeyFor } from '../http.js';
+import { collectPayload, createRateLimiter, enforceRateLimit, loadOwnedProject, rateLimitKeyFor } from '../http.js';
 
 // /api/geocode calls Nominatim (tools/geocode.mjs). Nominatim's usage policy
 // (https://operations.osmfoundation.org/policies/nominatim/) caps usage at
@@ -47,26 +46,40 @@ export async function handleEcosystemRoutes(req, res, ctx) {
   const { url, pathname, db } = ctx;
   maybePrune();
   if (pathname === '/api/ecosystem' && req.method === 'GET') {
+    // Authorization (nl-3s5.4). Two kinds of data answer here:
+    //
+    // - The yard's location (app.db projects.location_json, nl-3s5.3), sent
+    //   as { lat, lng } alone so the page can link out to iNaturalist scoped
+    //   to the actual site. It exists only with ?project=, and ?project= is
+    //   resolved like every project route: loadOwnedProject, so 401 when
+    //   anonymous and the same 404 for a slug that is missing or someone
+    //   else's. `has`, not truthiness: an empty ?project= is a malformed slug
+    //   (404), never a quiet fallback to the public answer.
+    //
+    // - The observation rows, keyed by a `place` label, not by yard. They stay
+    //   open with or without a project. Gating them on "the caller owns a yard
+    //   whose place is this label" would protect nothing, because any user can
+    //   set their own yard's place to any label (POST /api/project). And the
+    //   same place's ecology/anchors.csv and nearby-fauna.csv (named streams
+    //   and distances from the site) are committed to the public repo and
+    //   served statically, which locates a site far better than a species
+    //   list. Only an operator running tools/fetch-ecosystem-index.mjs adds a
+    //   place to the index; no request can. The residual risk is that place
+    //   labels are one namespace across owners; an owner-keyed index would be
+    //   its own bead.
+    let location = null;
+    if (url.searchParams.has('project')) {
+      const project = loadOwnedProject(ctx, res, projectIdFromUrl(url), { findProject: findCallerProject });
+      if (!project) return true;
+      const raw = parseLocation(project);
+      if (raw && Number.isFinite(raw.lat) && Number.isFinite(raw.lng)) {
+        location = { lat: raw.lat, lng: raw.lng };
+      }
+    }
     try {
       const place = url.searchParams.get('place') || 'home';
       const iconicTaxon = url.searchParams.get('taxon') || undefined;
       const rows = excludeNonNative(listSpeciesObservations(db.ecosystem, { place, iconicTaxon }));
-      // A yard's location (app.db projects.location_json, nl-3s5.3) is
-      // server-only; surfaced here, per request, as { lat, lng } alone, so the
-      // ecosystem page can link out to iNaturalist scoped to the actual site
-      // rather than a generic global search. Only to the yard's owner: slugs
-      // are unique per owner, so an anonymous caller or anyone else simply has
-      // no yard by that slug and gets no location. The observation rows are
-      // keyed by `place`, not by yard, and stay as they were (nl-3s5.4
-      // audits this route's authorization).
-      let location = null;
-      const projectId = projectIdFromUrl(url);
-      if (ctx.user && projectId && isValidProjectId(projectId)) {
-        const raw = parseLocation(findOwnedProject(db.app, ctx.user.id, projectId));
-        if (raw && Number.isFinite(raw.lat) && Number.isFinite(raw.lng)) {
-          location = { lat: raw.lat, lng: raw.lng };
-        }
-      }
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ place, rows, location }));
     } catch (err) {

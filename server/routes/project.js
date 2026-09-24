@@ -87,6 +87,8 @@ export async function handleProjectRoutes(req, res, ctx) {
       // fields already expect the yard to be before anyone has typed a number.
       const config = normalizeProjectConfig({ name, views: [{ id: 'plan', type: 'plan' }] }, id);
       const serialized = serializeProjectConfig(config);
+      // Always the caller's own namespace (slugs are unique per owner), and
+      // always 'private': a body's `visibility` is not read (nl-3s5.4).
       withTransaction(db, () => {
         if (findOwnedProject(db, user.id, id)) throw new Error(`Project "${id}" already exists`);
         insertProject(db, {

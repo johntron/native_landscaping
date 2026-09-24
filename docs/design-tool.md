@@ -43,7 +43,17 @@ What follows from that:
 - **Every `?project=<slug>` is resolved among the caller's own yards.** Slugs are
   unique per owner, not globally. `server/http.js`'s `loadOwnedProject`, handed
   `findCallerProject`, answers 401 to an anonymous caller and the same 404 to a
-  slug that does not exist and to someone else's; admins get no bypass.
+  slug that does not exist and to someone else's; admins get no bypass. That holds
+  on every route that takes a yard, `/api/ecosystem` included, and
+  `tests/projectAuthorization.test.js` proves it route by route (nl-3s5.4). No
+  route takes a yard from a request body or the path. `/api/ecosystem`'s species
+  rows are keyed by `place`, not by yard, and stay open without `?project=`: any
+  user can give their own yard any place label, and the same place's
+  `ecology/anchors.csv` and `nearby-fauna.csv` are public already.
+- **`projects.visibility` is `'private'`.** Triggers (migration 004) let the column
+  hold only `'private'` or `'public'`, and `'public'` is reserved for the public
+  view (nl-3s5.10): the store assigns only `'private'` and no route reads a
+  visibility from a request.
 - **History is the yard.** There is no stored `planting_layout.csv` any more: the
   layout is the entry at the cursor. `GET /api/layout?project=<slug>` exports it
   as the CSV the file used to be (`id,species_id,x_ft,y_ft`), and nothing reads

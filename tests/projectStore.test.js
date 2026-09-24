@@ -285,11 +285,12 @@ test('/api/ecosystem gives a yard\'s coordinates to its owner only', async () =>
         db: { app: env.db, ecosystem: ecosystemDb },
         user,
       });
-      return res.json();
+      return res;
     };
-    assert.deepEqual((await ask(env.alice)).location, { lat: 32.5, lng: -96.5 }, 'no address, ever');
-    assert.equal((await ask(env.bob)).location, null);
-    assert.equal((await ask(null)).location, null);
+    assert.deepEqual((await ask(env.alice)).json().location, { lat: 32.5, lng: -96.5 }, 'no address, ever');
+    // Someone else's yard, or no caller: the project routes' 404 and 401 (nl-3s5.4).
+    assert.equal((await ask(env.bob)).statusCode, 404);
+    assert.equal((await ask(null)).statusCode, 401);
   } finally {
     env.cleanup();
   }
