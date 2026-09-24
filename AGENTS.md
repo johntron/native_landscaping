@@ -144,7 +144,7 @@ together, encrypted, to Google Drive: see [Backups](#backups) below.
   nobody, admins included; nl-3s5.5), the feed's per-observation
   read/dismissed flags (`feed_state`, kept out of `observation-events.db` so it survives
   a rebuild of that file), and every yard (`projects`: config, features, location, history
-  cursor, owner; `history_entries`: every undo step), since nl-3s5.3. `web`
+  cursor, owner; `history_entries`: one revision stream per yard across planting, setup and features, each a full snapshot, since nl-3s5.20; photos are kept while any revision names them), since nl-3s5.3. `web`
   opens it once at startup (`ctx.db.app`), applies migrations, seeds `OWNER_EMAIL` as
   admin, and runs the one-time legacy import below. `feed-poller` opens it with
   `openAppDbWithoutMigrating`, which never migrates, seeds or imports, and waits for
