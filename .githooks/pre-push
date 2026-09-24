@@ -1,0 +1,3 @@
+#!/bin/sh
+# See _dispatch: chains to .beads/hooks/pre-push (stdin passes through).
+exec "$(dirname -- "$0")/_dispatch" pre-push "$@"

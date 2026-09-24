@@ -1,0 +1,57 @@
+#!/bin/sh
+# Shared body of every hook in .githooks/ (nl-3s5.12). Git never runs this file
+# itself: it only runs hooks by their exact names, and each of those is a
+# two-line stub that execs this with its own name.
+#
+# 1. Chain to .beads/hooks/<name>, the beads and git-lfs hooks that
+#    core.hooksPath pointed at before .githooks/ existed. Its exit status is
+#    this hook's exit status, so a pre-commit refusal still refuses.
+# 2. After post-commit or post-merge ON BRANCH main, deploy: run
+#    tools/deploy.sh. A commit on any other branch (an agent worktree's, a
+#    feature branch) or on a detached HEAD (mid-rebase) never deploys. A
+#    fast-forward merge fires post-merge, not post-commit, so both are hooked.
+#    A deploy failure is reported loudly and never undoes the commit or merge,
+#    which is already made by the time these hooks run; re-run the deploy by
+#    hand with tools/deploy.sh.
+#
+# Enable with `npm run setup`. For tests: REWILDER_DEPLOY_CMD replaces
+# tools/deploy.sh, REWILDER_SKIP_DEPLOY=1 skips the deploy step.
+name=$1
+shift
+
+hooks_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+root=$(dirname -- "$hooks_dir")
+
+status=0
+chained="$root/.beads/hooks/$name"
+if [ -x "$chained" ]; then
+  "$chained" "$@"
+  status=$?
+fi
+
+case $name in
+  post-commit | post-merge) ;;
+  *) exit "$status" ;;
+esac
+
+branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null) || exit "$status"
+[ "$branch" = main ] || exit "$status"
+
+if [ -n "${REWILDER_SKIP_DEPLOY:-}" ]; then
+  echo "deploy: skipped (REWILDER_SKIP_DEPLOY is set); run tools/deploy.sh to deploy" >&2
+  exit "$status"
+fi
+
+deploy=${REWILDER_DEPLOY_CMD:-"$root/tools/deploy.sh"}
+echo "deploy: $name on main; running $deploy" >&2
+if ! "$deploy"; then
+  cat >&2 <<EOF
+
+########################################################################
+### The $name on main SUCCEEDED, but the DEPLOY FAILED (see above).
+### The live site is NOT running this commit. Fix the cause, then run:
+###     tools/deploy.sh
+########################################################################
+EOF
+fi
+exit "$status"

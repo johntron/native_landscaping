@@ -6,6 +6,7 @@
   "scripts": {
     "test": "node tests/run-tests.cjs",
     "serve": "node server.js",
+    "setup": "hooks=\"$(dirname \"$(git rev-parse --path-format=absolute --git-common-dir)\")/.githooks\" && test -x \"$hooks/_dispatch\" && git config core.hooksPath \"$hooks\" && echo \"core.hooksPath = $(git config --get core.hooksPath)\"",
     "test:e2e": "playwright test",
     "usda-plants:mcp": "node tools/usda-plants/mcpServer.js",
     "ecosystem:fetch": "node tools/fetch-ecosystem-index.mjs"

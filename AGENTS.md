@@ -148,43 +148,85 @@ mentions `data/`: inspect the file and ask before deleting anything there.
 
 ## Workflow
 
-### After every change: test, commit, restart
+### After every change: test, then commit (a commit on main deploys itself)
 
-Standing instruction and standing authorization from the repo owner. Do all three
+Standing instruction and standing authorization from the repo owner. Do both
 without being asked:
 
 ```bash
-npm test                     # 1. the gate
+npm test                       # 1. the gate
 git add <paths> && git commit  # 2. stage only what you changed; the tree often has unrelated edits
-docker compose restart web   # 3. restart the deployed server
 ```
 
 **This repository opts into the beads "team-maintainer" profile for commits and
-restarts only.** Committing and restarting are pre-authorized. **Pushing is not**:
+deploys only.** Committing and deploying are pre-authorized. **Pushing is not**:
 neither `git push` nor `bd dolt push` (the latter is also denied in
 `.claude/settings.json`) runs without asking first, whatever the session-close
 protocol printed by `bd prime` says. A current "do not commit" from the user still wins.
 
-The app runs in Docker: service `web` (container `native_landscaping-web-1`) on
-`127.0.0.1:8080`, repo bind-mounted at `/app`, fronted by a `cloudflared` sidecar that
-must **never** be restarted (it self-heals). A second service, `feed-poller`, runs
-`tools/schedule-feed-poll.mjs` every `FEED_POLL_INTERVAL_MINUTES` (default 30). Restart
-it too if you changed `tools/feedState/` or `tools/fetch-observation-events.mjs`.
+**Production is not this working tree.** The app runs in Docker: service `web`
+(container `native_landscaping-web-1`) on `127.0.0.1:8080`, fronted by a `cloudflared`
+sidecar that must **never** be restarted (it self-heals). A second service,
+`feed-poller`, runs `tools/schedule-feed-poll.mjs` every `FEED_POLL_INTERVAL_MINUTES`
+(default 30). Both mount a separate git worktree, `../native_landscaping-deploy`
+(a sibling of this tree; override with `DEPLOY_DIR`), detached at a commit of main.
+Only `data/`, `projects/`, `catalog/` (for `manual-corrections.tsv`) and
+`node_modules/jszip` are mounted from this tree, so what users write stays here and
+the deploy tree is never written to (it also means `projects/` is served as it stands
+here, committed or not). An uncommitted code edit is not live, and neither is a
+commit on any branch other than main. `npm run serve` and the e2e scratch server
+still run straight from this tree for local work.
 
-Node does not hot-reload. `src/` is served fresh per request, but `server.js` and
-`server/` keep the routes they booted with, so a POST to a route added since then
-returns **404, not 400**. That 404 is the sign of a stale server. **Verify the restart instead of trusting the
-command:**
+**A commit or merge on main deploys itself.** The hooks in `.githooks/` (enabled once
+per clone with `npm run setup`, which points `core.hooksPath` at this tree's
+`.githooks/` by absolute path, so worktrees on older branches keep their hooks) run
+`tools/deploy.sh` after `post-commit` and `post-merge`, but only when the current
+branch is `main`. A fast-forward merge fires `post-merge`, not `post-commit`, so both
+are hooked. Agent worktree branches and detached HEADs never deploy. The hooks chain
+to `.beads/hooks/` first, so the beads and git-lfs hooks still run. `git pull --rebase`
+onto main fires neither hook: deploy by hand afterwards.
+
+`tools/deploy.sh` (run it by hand any time: `tools/deploy.sh`):
+
+1. creates the deploy worktree if it is missing;
+2. runs `git checkout --detach` to main's tip in it, refusing if the tree has local changes;
+3. restarts `web`. It also restarts `feed-poller` when the deployed range touched code
+   the poller loads: `tools/feedState/`, `tools/savedAreas/`,
+   `tools/fetch-observation-events.mjs`, `tools/schedule-feed-poll.mjs`,
+   `tools/inatShared.mjs`, `tools/usda-plants/probeCache.js`, or `tools/*Db.js`. That
+   is the import closure of `tools/schedule-feed-poll.mjs`, so widen the list in the
+   script when the closure grows. If `docker-compose.yml` or `package*.json` changed,
+   or a container still mounts something other than the deploy tree, it runs
+   `docker compose up -d --no-deps --force-recreate web feed-poller` instead (and
+   rebuilds the image first if dependencies changed), because `restart` keeps old
+   mounts. `--no-deps` is what keeps `cloudflared` untouched;
+4. checks that `StartedAt`/`Pid` changed, that `/` answers 200, and, if the range
+   changed a served file, that the live copy matches the commit;
+5. on any failure, stops with a loud `DEPLOY FAILED`, puts the deploy tree back on its
+   previous commit and restarts on it. A failed deploy never undoes the commit; fix the
+   cause and re-run `tools/deploy.sh`.
+
+**Check that the deploy happened** instead of trusting the output:
 
 ```bash
-docker inspect native_landscaping-web-1 --format '{{.State.StartedAt}} {{.State.Pid}}'  # before and after: both must change
+git config --get core.hooksPath                        # <this tree>/.githooks, or nothing deploys
+git -C ../native_landscaping-deploy log -1 --oneline   # must match: git log -1 --oneline main
+docker inspect native_landscaping-web-1 --format '{{.State.StartedAt}} {{.State.Pid}}'  # changed since before the commit
 curl -s http://127.0.0.1:8080/<changed module> | grep <identifier only in the new code>
 ```
 
+Always run `docker compose` from this tree, never from the deploy worktree. The
+compose file pins `name: native_landscaping`, but its relative paths resolve against
+the directory it runs from. Never run a bare `docker compose up`: name the services and
+pass `--no-deps`, so `cloudflared` is left alone.
+
+Node does not hot-reload, and a commit that is not on main is not deployed. `server.js`
+and `server/` keep the routes they booted with, so a POST to a route added since then
+returns **404, not 400**. That 404 is the sign of a stale server: check the deploy.
 `docker compose ps` prints *elapsed* uptime, so a real restart looks like none hours
 later; compare `StartedAt`. `ps` is not in `node:22-slim`; use
 `docker compose exec -T web node -e`. If a change is still not live after a verified
-restart, suspect the user's open tab: the server sends `Cache-Control: no-store`, but a
+deploy, suspect the user's open tab: the server sends `Cache-Control: no-store`, but a
 page loaded before the deploy keeps its module graph until reloaded.
 
 ### Tests

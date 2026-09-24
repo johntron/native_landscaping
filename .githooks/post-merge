@@ -1,0 +1,3 @@
+#!/bin/sh
+# See _dispatch: chains to .beads/hooks/post-merge, then deploys if the branch is main.
+exec "$(dirname -- "$0")/_dispatch" post-merge "$@"

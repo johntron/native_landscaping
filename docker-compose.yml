@@ -36,8 +36,21 @@
 # points at (`http://web:8080`). That name is resolved by Docker's DNS on this
 # project's compose network, so RENAMING THIS SERVICE BREAKS THE TUNNEL unless
 # the dashboard route is changed to match.
+#
+# WHAT RUNS IN PRODUCTION (nl-3s5.12): not this working tree. `web` and
+# `feed-poller` mount a separate git worktree, detached at a commit of main, at
+# /app. tools/deploy.sh moves that worktree to main's tip and restarts them,
+# and the hooks in .githooks/ run it after every commit or merge on main.
+# Editing a file here changes nothing live until it is committed to main.
+#
+# ALWAYS RUN COMPOSE FROM THIS DIRECTORY (or with -f <this file>
+# --project-directory <this dir>), never from the deploy worktree. The project
+# is pinned by `name:` below, but relative paths (`.`, `./data`, the build
+# context, .env) resolve against the project directory, so running compose
+# from the deploy worktree would point every one of them somewhere else.
+name: native_landscaping
 
-x-app-build: &app-build
+x-app: &app
   build:
     context: .
     dockerfile_inline: |
@@ -51,45 +64,67 @@ x-app-build: &app-build
       RUN npm ci --omit=dev
       WORKDIR /app
       CMD ["node", "server.js"]
+  volumes:
+    # The code: the deploy worktree, a sibling of this tree, which
+    # tools/deploy.sh creates and moves. Override with DEPLOY_DIR in the
+    # environment. It must start with `/` or `.`: in short bind syntax a bare
+    # name is a NAMED VOLUME, not a path. It must exist before `up`, or Docker
+    # creates an empty root-owned directory there and serves nothing.
+    - ${DEPLOY_DIR:-../native_landscaping-deploy}:/app
+    # Everything the app WRITES at runtime is mounted over it from THIS tree,
+    # so user data stays exactly where it lived before the split, and the
+    # deploy worktree is never written to (a dirty worktree would make the next
+    # `git checkout --detach` fail, or strand what a person entered):
+    #   data/      every SQLite db, and the tracked saved-areas.export.json
+    #   projects/  planting_layout.csv, features.json, project.json, img/
+    #              uploads, index.json, and the gitignored layout-history.json
+    #              and location.json
+    #   catalog/   manual-corrections.tsv, appended by /api/claims-correct
+    # Directories, not single files: the app writes temp-then-rename, and a
+    # rename onto a single-file bind mount fails with EBUSY.
+    - ./data:/app/data
+    - ./projects:/app/projects
+    - ./catalog:/app/catalog
+    # server/static.js serves node_modules/jszip/dist/jszip.min.js (the HOA
+    # packet export) from /app, and the deploy worktree has no node_modules.
+    # Only jszip is mounted: the server's own imports still fall through to the
+    # image's /node_modules.
+    - ./node_modules/jszip:/app/node_modules/jszip:ro
+  restart: unless-stopped
 
 services:
   web:
-    <<: *app-build
+    <<: *app
     environment:
       # server.js defaults to 8000; the tunnel route expects 8080. It calls
       # server.listen(PORT) with no host arg, so it binds all interfaces and
       # the sidecar can reach it over the compose network.
       PORT: "8080"
-    volumes:
-      # PUBLIC_DIR defaults to cwd (/app). Mounting the project keeps edits
-      # live and keeps the app's writes — layout-history.json, and
-      # planting_layout.csv on export — on the host where they belong.
-      - .:/app
+      # Seeds the first admin in data/app.db (server/db/appDb.js). Interpolated
+      # from the gitignored .env: this repo is public, so the address never
+      # appears in a tracked file. Unset seeds nothing.
+      OWNER_EMAIL: ${OWNER_EMAIL:-}
     # Loopback ONLY. Off-box reach comes solely through the Cloudflare Tunnel
     # + Access gate, same as geneology's `review` service. A bare "8080:8080"
     # binds 0.0.0.0 and would serve the app to the whole LAN with no Google
     # SSO in front of it — defeating the point of the Access policy.
     ports:
       - "127.0.0.1:8080:8080"
-    restart: unless-stopped
 
   # Polls every saved area (tools/savedAreas/savedAreasDb.js) against
   # iNaturalist on a timer (tools/schedule-feed-poll.mjs), so the observation
   # feed (nl-1qy) fills in without anyone remembering to run
-  # tools/fetch-observation-events.mjs by hand. Same image and bind mount as
-  # `web` (via the &app-build anchor) so it reads/writes the identical
-  # data/*.db files over the same host directory — SQLite's WAL mode allows
-  # that from two processes just as it already does across `web`'s own
-  # concurrent per-request db opens. No published port: this service makes
-  # only outbound calls to iNaturalist, nothing listens.
+  # tools/fetch-observation-events.mjs by hand. Same image and mounts as `web`
+  # (via the &app anchor) so it reads/writes the identical data/*.db files over
+  # the same host directory — SQLite's WAL mode allows that from two processes
+  # just as it already does across `web`'s own concurrent per-request db opens.
+  # No published port: this service makes only outbound calls to iNaturalist,
+  # nothing listens.
   feed-poller:
-    <<: *app-build
+    <<: *app
     command: ["node", "tools/schedule-feed-poll.mjs"]
     environment:
       FEED_POLL_INTERVAL_MINUTES: "30"
-    volumes:
-      - .:/app
-    restart: unless-stopped
 
   cloudflared:
     image: cloudflare/cloudflared:latest
