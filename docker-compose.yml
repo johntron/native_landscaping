@@ -76,8 +76,11 @@ x-app: &app
     # deploy worktree is never written to (a dirty worktree would make the next
     # `git checkout --detach` fail, or strand what a person entered):
     #   data/      every SQLite db (app.db holds every yard since nl-3s5.3),
-    #              the yard photos under data/projects/<id>/img/, and the
-    #              tracked saved-areas.export.json
+    #              the yard photos under data/projects/<id>/img/, the
+    #              gitignored saved-areas.export.json, and backup-status.json,
+    #              written by the host's nightly backup timer (nl-3s5.13,
+    #              tools/backup/), which reads app.db and the photos from this
+    #              same host directory, not through a container
     #   projects/  NOT written any more (nl-3s5.3). Mounted only so the
     #              one-time tools/import-projects.mjs can read the yards as
     #              they stood here; once that import is verified this line
@@ -125,13 +128,14 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
 
-  # Polls every saved area (tools/savedAreas/savedAreasDb.js) against
-  # iNaturalist on a timer (tools/schedule-feed-poll.mjs), so the observation
-  # feed (nl-1qy) fills in without anyone remembering to run
-  # tools/fetch-observation-events.mjs by hand. Same image and mounts as `web`
-  # (via the &app anchor) so it reads/writes the identical data/*.db files over
-  # the same host directory — SQLite's WAL mode allows that from two processes
-  # just as it already does across `web`'s own concurrent per-request db opens.
+  # Polls every saved area (the saved_areas table in data/app.db, read through
+  # tools/savedAreas/savedAreasDb.js) against iNaturalist on a timer
+  # (tools/schedule-feed-poll.mjs), so the observation feed (nl-1qy) fills in
+  # without anyone remembering to run tools/fetch-observation-events.mjs by
+  # hand. It writes the events to data/observation-events.db. Same image and
+  # mounts as `web` (via the &app anchor), so it opens the same app.db over the
+  # same host directory, without migrating it (openAppDbWithoutMigrating):
+  # SQLite's WAL mode allows two processes on one file.
   # No published port: this service makes only outbound calls to iNaturalist,
   # nothing listens.
   feed-poller:

@@ -134,7 +134,8 @@ tests/, tests-e2e/    Node unit tests (the gate) and Playwright specs
 `data/*.db` files are gitignored. Most are rebuildable caches (`ecosystem.db`,
 `probe-cache.db`, `observation-events.db`, `claims.db`): re-run the matching `tools/`
 script. **One holds state a person entered by hand and cannot be rebuilt: `app.db`**,
-with the yard photos beside it under `DATA_DIR/projects/`. Back up both, together.
+with the yard photos beside it under `DATA_DIR/projects/`. Both are backed up nightly,
+together, encrypted, to Google Drive: see [Backups](#backups) below.
 
 - `app.db` (`server/db/appDb.js`, numbered migrations in `server/db/migrations/`) holds
   users, the saved monitoring areas entered through `/api/saved-areas` (`saved_areas`,
@@ -153,14 +154,17 @@ with the yard photos beside it under `DATA_DIR/projects/`. Back up both, togethe
 - Every write also exports a local snapshot of all users' saved areas (rounded
   coordinates, names, owners) to `data/saved-areas.export.json` under `DATA_DIR`. It is
   gitignored, not tracked: area names can identify people, and it holds every user's
-  areas (nl-3s5.5). It retires with the backups bead, nl-3s5.13.
+  areas (nl-3s5.5). The backups make it redundant and it is not backed up itself. Retiring
+  it means dropping the three `exportSavedAreasJson` calls in `server/routes/feed.js`, then
+  `exportPath`, `exportSavedAreasJson` and `restoreSavedAreasFromExport` in
+  `tools/savedAreas/savedAreasDb.js` and their tests.
 - **Retired:** `saved-areas.db` and `feed-state.db`. Their tables moved into `app.db`
   (nl-3s5.11): `server/db/legacyImport.js` copied them once, recorded in `app.db`'s
-  `app_meta` table, and never writes the old files. Nothing opens them any more. They
-  are safe to archive once a backup of `app.db` exists; archive each as a set (`.db`,
-  `-wal`, `-shm`) or as a `VACUUM INTO` snapshot, never the `.db` alone, because recent
-  rows may sit only in the `-wal`. `node tools/import-legacy-app-data.mjs --dry-run`
-  compares their row counts with `app.db`, read-only.
+  `app_meta` table, and never writes the old files. Nothing opens them any more. Archive
+  them once the first backup has been verified; the steps are under [Backups](#backups).
+  Never copy a `.db` alone: recent rows may sit only in its `-wal`.
+  `node tools/import-legacy-app-data.mjs --dry-run` compares their row counts with
+  `app.db`, read-only.
 - **Yard photos** are files, not rows: `DATA_DIR/projects/<projects.id>/img/` (so
   `data/projects/` by default, gitignored). Hand-uploaded and not rebuildable either:
   back them up with `app.db`, as a set, because each directory is named by the row id
@@ -173,6 +177,101 @@ with the yard photos beside it under `DATA_DIR/projects/`. Back up both, togethe
 
 A PreToolUse hook in `.claude/settings.json` blocks any `rm` whose command
 mentions `data/`: inspect the file and ask before deleting anything there.
+
+#### Backups
+
+`tools/backup/run-backup.mjs` (nl-3s5.13), run nightly at 03:30 by a **systemd user
+timer** on the host (`tools/backup/systemd/rewilder-backup.{service,timer}`). It takes a
+consistent `VACUUM INTO` snapshot of `app.db` (opened read-only, never through
+`appDb.js`) and copies `DATA_DIR/projects/` into a private temp dir. It checks
+`integrity_check` and writes a `MANIFEST.json` of sha256s and per-table row counts.
+It uploads the result to `rewilder-crypt:snapshots/<YYYY-MM-DDTHHMMSSZ>/`, with the
+manifest last as the completion marker, checks it with `rclone cryptcheck`, then prunes.
+`rewilder-crypt` is an rclone **crypt** remote over `gdrive:rewilder-backup`, so Drive
+holds only encrypted contents and encrypted file and folder names. The job refuses any
+`BACKUP_REMOTE` that is not type `crypt`.
+
+- **Why a host timer**, not a compose service: rclone and its Drive OAuth token stay on
+  the host and out of every container, and `node:22-slim` has no rclone. Lingering is on
+  for the user, so the timer runs while nobody is logged in, and `Persistent=true`
+  catches up on a night the host was off. Failures land in the journal.
+- **Config:** the owner's default `~/.config/rclone/rclone.conf` holds both `gdrive`
+  (from `rclone config`) and `rewilder-crypt` (from the setup script; keys obscured,
+  which is reversible, not encryption). The keys themselves are in the gitignored
+  `.backup-crypt.env` at the root of the dev tree (mode 600: `RCLONE_CRYPT_PASSWORD`, the
+  salt `RCLONE_CRYPT_PASSWORD2`, and the target). **The owner keeps an offline copy.
+  Without both keys every backup is unreadable.**
+- **Retention:** the newest snapshot of each of the 14 most recent days that have one,
+  plus the newest of each of the 8 most recent ISO weeks (`tools/backup/retention.js`,
+  tested in `tests/backupRetention.test.js`). A folder without a manifest is a failed
+  run, pruned once a newer complete snapshot exists. A folder whose name is not a
+  timestamp is never touched. On Drive, pruned folders go to the Drive trash
+  (ciphertext).
+- **Failure is loud:** the service exits 1 and skips the prune. It logs to
+  `journalctl --user -u rewilder-backup.service`, and `systemctl --user --failed` lists
+  it. `DATA_DIR/backup-status.json` (gitignored) records `lastSuccessAt`,
+  `lastSnapshot`, `lastError` and row counts, for a future admin page. If `lastSuccessAt`
+  is more than a day or two old, the backup is broken.
+- **Not backed up, on purpose.** `.env` holds the tunnel token and the Access settings,
+  all re-issuable from the Cloudflare dashboard. Encrypting it into the same archive
+  would widen what a leaked key exposes, for little gain. The crypt keys and
+  `rclone.conf` stay out too: a backup that needs its own key to open cannot hold that
+  key, and the gdrive token comes back by re-running `rclone config`. Caches, the
+  retired legacy dbs, and `saved-areas.export.json` are also left out.
+  `catalog/manual-corrections.tsv`, appended by `/api/claims-correct`, is tracked in
+  git, so only appends not yet committed are at risk.
+
+**One-time activation** (the owner, then the orchestrator), from the dev tree:
+
+```bash
+#   0. tools/backup/ merged to main (which deploys it); the unit runs the deploy tree's copy
+git -C ../native_landscaping-deploy ls-files tools/backup   # must list run-backup.mjs
+rclone config                                    # 1. owner: create remote `gdrive` (Google Drive, OAuth)
+tools/backup/setup-crypt-remote.sh               # 2. creates rewilder-crypt -> gdrive:rewilder-backup and
+                                                 #    .backup-crypt.env; refuses to replace an existing remote
+#   3. owner: copy .backup-crypt.env offline NOW (password manager or printout)
+mkdir -p ~/.config/systemd/user                  # 4. install the timer
+cp tools/backup/systemd/rewilder-backup.{service,timer} ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now rewilder-backup.timer
+systemctl --user start rewilder-backup.service   # 5. first run, now (blocks until done)
+journalctl --user -u rewilder-backup.service -n 30 && cat data/backup-status.json
+rclone lsd gdrive:rewilder-backup                # 6. Drive shows only encrypted names
+node tools/backup/restore.mjs list               #    the crypt view shows the snapshot
+systemctl --user list-timers rewilder-backup.timer
+```
+
+Then do a test restore against Drive (below, steps 1 to 2 only), and archive the legacy
+dbs:
+
+```bash
+d=$(date +%F); a=$(mktemp -d)
+for f in saved-areas feed-state; do
+  sqlite3 -readonly "data/$f.db" "VACUUM INTO '$a/$f.db'"   # includes rows still in the -wal
+done
+rclone copy "$a" "rewilder-crypt:archive/legacy-$d" && rclone cryptcheck "$a" "rewilder-crypt:archive/legacy-$d"
+mkdir -p ~/rewilder-legacy-$d
+for f in data/{saved-areas,feed-state}.db{,-wal,-shm}; do [ -e "$f" ] && mv "$f" ~/rewilder-legacy-$d/; done
+```
+
+**Restore.** Fetching never writes into `DATA_DIR`; putting a snapshot live is a separate,
+deliberate step. On a new host, first put back `.backup-crypt.env` from the offline
+copy, run `rclone config` for `gdrive`, then `tools/backup/setup-crypt-remote.sh` (it
+reuses the keys in the file).
+
+```bash
+node tools/backup/restore.mjs list                       # 1. pick a snapshot, or use `latest`
+r=$(mktemp -d)/snap; node tools/backup/restore.mjs fetch latest "$r"
+                                                         # 2. downloads, checks every sha256,
+                                                         #    integrity_check and per-table row counts
+docker compose stop web feed-poller                      # 3. never cloudflared
+old=~/rewilder-pre-restore-$(date +%FT%H%M); mkdir -p "$old"
+for f in app.db app.db-wal app.db-shm projects; do [ -e "data/$f" ] && mv "data/$f" "$old"/; done
+                                                         # 4. move aside, never rm; a stale -wal left
+                                                         #    beside the restored db would be replayed onto it
+cp "$r/app.db" data/app.db && cp -a "$r/projects" data/projects   # 5. db and photos as one set
+docker compose up -d --no-deps web feed-poller           # 6. then check a yard and its photos load
+```
 
 ### Identity
 

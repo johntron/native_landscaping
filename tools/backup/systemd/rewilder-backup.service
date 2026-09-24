@@ -1,0 +1,24 @@
+# Nightly encrypted off-machine backup of app.db and the yard photos (nl-3s5.13).
+# A systemd USER unit, run by rewilder-backup.timer. Install and restore steps:
+# AGENTS.md, "Data safety". Logs: journalctl --user -u rewilder-backup.service
+#
+# Runs the committed code in the deploy worktree (what production runs), against
+# the live data dir in the dev tree (what compose mounts as /app/data). Paths use
+# %h (the user's home). Node and rclone are named by absolute path because
+# linuxbrew is not on a user unit's PATH. rclone reads its default config,
+# ~/.config/rclone/rclone.conf, which holds `gdrive` and `rewilder-crypt`.
+[Unit]
+Description=Rewilder backup of app.db and yard photos to encrypted Google Drive
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Development/native_landscaping-deploy
+Environment=DATA_DIR=%h/Development/native_landscaping/data
+Environment=BACKUP_REMOTE=rewilder-crypt:
+Environment=RCLONE_BIN=/home/linuxbrew/.linuxbrew/bin/rclone
+ExecStart=/home/linuxbrew/.linuxbrew/bin/node tools/backup/run-backup.mjs
+# The snapshot of app.db sits in a 0700 temp dir for the length of the run.
+UMask=0077
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=2h

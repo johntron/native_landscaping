@@ -30,6 +30,14 @@ projects/*
 # Photos under DATA_DIR (default data/projects/<id>/img/): hand-entered, not
 # rebuildable, and never committed.
 data/projects/
+# The backup job's health signal (tools/backup/run-backup.mjs, nl-3s5.13),
+# and its temp file during the atomic rename.
+data/backup-status.json
+data/backup-status.json.tmp-*
+# The encryption keys of the backup crypt remote (tools/backup/setup-crypt-remote.sh).
+# Losing them makes every backup unreadable; leaking them opens every backup.
+# The owner keeps an offline copy. Never commit it.
+.backup-crypt.env
 
 # Beads / Dolt files (added by bd init)
 .dolt/

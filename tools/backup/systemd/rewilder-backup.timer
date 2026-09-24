@@ -1,0 +1,13 @@
+# Runs rewilder-backup.service nightly (nl-3s5.13). Persistent=true runs a missed
+# backup at the next boot if the host was off at 03:30. Needs lingering
+# (`loginctl enable-linger`, already on for this user) so it runs while logged out.
+[Unit]
+Description=Nightly Rewilder backup
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
