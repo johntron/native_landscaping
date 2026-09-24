@@ -58,6 +58,31 @@ let items = []; // accumulated across "Load more"
 let page = 1;
 let total = 0;
 
+const SIGN_IN_MESSAGE = 'Sign in to see your saved areas and feed.';
+
+/**
+ * The message to show for a failed API response. Saved areas and the feed are
+ * per-user (nl-3s5.5), so a 401 means "not signed in", and says so plainly
+ * rather than surfacing "HTTP 401". A 404 on an area id means it is gone or
+ * not yours; the server's own message says which id.
+ *
+ * @param {Response} response
+ * @param {{ error?: string } | null} [body] the parsed JSON body, when there is one
+ */
+function apiErrorMessage(response, body) {
+  if (response.status === 401) return SIGN_IN_MESSAGE;
+  return body?.error || `HTTP ${response.status}`;
+}
+
+/** Parse a JSON body, or null when the response has none (e.g. a proxy's HTML error page). */
+async function readJson(response) {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
 async function init() {
   await loadAreas();
   wireControls();
@@ -68,10 +93,11 @@ async function loadAreas() {
   let body;
   try {
     const response = await fetch('/api/saved-areas');
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    body = await response.json();
+    body = await readJson(response);
+    if (!response.ok) throw new Error(apiErrorMessage(response, body));
   } catch (err) {
     areaSelect.innerHTML = '<option value="">Failed to load areas</option>';
+    areaNote.textContent = err.message;
     console.error(err);
     return;
   }
@@ -153,8 +179,8 @@ async function onPollAreaNow() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ areaId: selectedAreaId }),
     });
-    const body = await response.json();
-    if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
+    const body = await readJson(response);
+    if (!response.ok) throw new Error(apiErrorMessage(response, body));
     const { fetched } = body.result;
     pollAreaNote.textContent = fetched
       ? `Found ${fetched} new observation${fetched === 1 ? '' : 's'}.`
@@ -284,8 +310,8 @@ async function onSubmitAreaForm(evt) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, lat, lng, radiusMi, filters }),
     });
-    const body = await response.json();
-    if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
+    const body = await readJson(response);
+    if (!response.ok) throw new Error(apiErrorMessage(response, body));
     closeAreaForm();
     // loadAreas() picks a selection from the query param/localStorage, which
     // for a brand-new area point at nothing yet — refresh the list first,
@@ -339,8 +365,8 @@ async function loadFeed({ reset }) {
   let body;
   try {
     const response = await fetch(`/api/feed?${params}`);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    body = await response.json();
+    body = await readJson(response);
+    if (!response.ok) throw new Error(apiErrorMessage(response, body));
   } catch (err) {
     feedListEl.innerHTML = `<li class="feed-empty">Failed to load feed: ${escapeHtml(err.message)}</li>`;
     console.error(err);
@@ -465,8 +491,8 @@ async function onItemAction(evt) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ areaId: selectedAreaId, observationId, ...patch }),
     });
-    const body = await response.json();
-    if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
+    const body = await readJson(response);
+    if (!response.ok) throw new Error(apiErrorMessage(response, body));
     Object.assign(item, { read: body.state.read, dismissed: body.state.dismissed });
 
     // A now-read or now-dismissed item may no longer belong in the current
@@ -478,6 +504,9 @@ async function onItemAction(evt) {
       renderItems();
     }
   } catch (err) {
+    // Shown where the reader is looking, not only in the console, so a
+    // signed-out click says why nothing changed.
+    feedCountEl.textContent = `Could not update: ${err.message}`;
     console.error(err);
   }
 }

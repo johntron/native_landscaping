@@ -14,8 +14,11 @@
 //
 // Keyed by (observation_id, area_id), matching observation_events' primary
 // key, since the same iNaturalist observation can appear in more than one
-// area's feed with independent read/dismissed state per area. Not per viewer
-// yet: see the migration's note, and nl-3s5.5.
+// area's feed with independent read/dismissed state per area. Not per viewer:
+// an area has exactly one owner (saved_areas.owner_id, nl-3s5.5), so a flag on
+// an area is that owner's. These functions trust their caller on that: every
+// web route first proves the caller owns `areaId` with getSavedAreaOwnedBy
+// (tools/savedAreas/savedAreasDb.js) and answers 404 otherwise.
 //
 // No row for a given (observation_id, area_id) means "unread, not
 // dismissed" — the default a freshly-fetched observation should show as.

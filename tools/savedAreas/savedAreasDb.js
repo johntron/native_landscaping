@@ -27,24 +27,34 @@
 //                         set, and stores whatever it's given.
 //   created_at    TEXT    ISO 8601, set on insert, never changed
 //   updated_at    TEXT    ISO 8601, set on insert and every update
-//   owner_id      INTEGER users(id), nullable: who created the area, when known.
-//                         Recorded, not enforced; nl-3s5.5 makes areas per-user.
+//   owner_id      INTEGER users(id), nullable: the one user who owns the area
+//                         (nl-3s5.5). Every web route goes through the *OwnedBy
+//                         functions below, which filter `owner_id = ?` in SQL, so
+//                         an area with a NULL owner (its user was deleted, or the
+//                         legacy import found no owner) is visible to nobody over
+//                         HTTP, admins included. The unscoped functions are for
+//                         feed-poller, which polls every area, and the export.
 import { writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { resolveDataDir } from '../../server/db/appDb.js';
 
-// This project's git repo is PUBLIC (see the .gitignore note on
-// projects/*/location.json), so unlike that file, this export is safe to
-// commit only because lat/lng are rounded to 1 decimal place (~11km) before
-// they're written — enough to recover which region an area covered, not
-// enough to pinpoint a specific address. `id` is included since it's the
-// join key the observation-event log's area_id column depends on, and
-// losing it on restore would silently orphan any already-fetched events.
+// A local, gitignored backup of every area (nl-3s5.5). It used to be tracked
+// in git, rounded to 1 decimal place so it was "safe" in a public repo, but
+// area names ("Home", a street, a park next to someone's house) can still
+// identify people, and once areas are per-user one user's snapshot would
+// publish every other user's. So it now lives only under DATA_DIR, beside
+// app.db, and is ignored by git (.gitignore: data/saved-areas.export.json).
+// It carries ownerId so a restore gives each area back to its owner instead
+// of leaving it unowned and so invisible to everyone. Coordinates stay
+// rounded: it is a last-resort record of what existed, not the backup of
+// app.db itself. `id` is included since it is the join key the
+// observation-event log's area_id column depends on, and losing it on restore
+// would silently orphan any already-fetched events.
 //
 // Resolved under DATA_DIR at call time, like app.db itself, so the e2e
-// scratch servers (which set DATA_DIR) never overwrite the tracked
-// data/saved-areas.export.json. Retires with the backups bead (nl-3s5.13).
+// scratch servers (which set DATA_DIR) never overwrite the dev one. Retires
+// with the backups bead (nl-3s5.13).
 export function exportPath() {
   return join(resolveDataDir(), 'saved-areas.export.json');
 }
@@ -136,12 +146,46 @@ function rowToArea(row) {
   };
 }
 
+/**
+ * Every area, whoever owns it. For feed-poller (tools/feedState/pollAreas.js)
+ * and the local export only: a web route must use listSavedAreasOwnedBy.
+ */
 export function listSavedAreas(db) {
   return db.prepare('SELECT * FROM saved_areas ORDER BY name').all().map(rowToArea);
 }
 
+/** One area by id, whoever owns it. Not for web routes: see getSavedAreaOwnedBy. */
 export function getSavedArea(db, id) {
   return rowToArea(db.prepare('SELECT * FROM saved_areas WHERE id = ?').get(id));
+}
+
+/**
+ * The owner-scoped functions below throw rather than fall back to "every
+ * area" when the owner is missing, so a route that forgot to pass ctx.user.id
+ * fails loudly instead of leaking every user's areas.
+ */
+function assertOwnerId(ownerId) {
+  if (!Number.isInteger(ownerId)) {
+    throw new TypeError(`ownerId must be an integer user id, got ${ownerId}`);
+  }
+}
+
+/** The areas `ownerId` owns, ordered by name. */
+export function listSavedAreasOwnedBy(db, ownerId) {
+  assertOwnerId(ownerId);
+  return db
+    .prepare('SELECT * FROM saved_areas WHERE owner_id = ? ORDER BY name')
+    .all(ownerId)
+    .map(rowToArea);
+}
+
+/**
+ * The area `id` if `ownerId` owns it, else null: a missing area and someone
+ * else's area are indistinguishable, so a route can 404 both the same way.
+ */
+export function getSavedAreaOwnedBy(db, id, ownerId) {
+  assertOwnerId(ownerId);
+  return rowToArea(db.prepare('SELECT * FROM saved_areas WHERE id = ? AND owner_id = ?').get(id, ownerId));
 }
 
 /**
@@ -167,9 +211,19 @@ export function createSavedArea(db, input, { ownerId = null } = {}) {
  * `filters` does not have to resend lat/lng/radius it never fetched, and a
  * dropped `filters` key can never silently blank out the geometry (or vice
  * versa).
+ *
+ * With `ownerId`, only an area that user owns is touched (the SELECT and the
+ * UPDATE both filter on owner_id), and someone else's area throws the same
+ * "No saved area" error as a missing one. Web routes always pass it.
+ *
+ * @param {{ ownerId?: number }} [options]
  */
-export function updateSavedArea(db, id, patch) {
-  const existing = db.prepare('SELECT * FROM saved_areas WHERE id = ?').get(id);
+export function updateSavedArea(db, id, patch, options = {}) {
+  const scoped = Object.prototype.hasOwnProperty.call(options, 'ownerId');
+  if (scoped) assertOwnerId(options.ownerId);
+  const ownerClause = scoped ? ' AND owner_id = ?' : '';
+  const ownerArgs = scoped ? [options.ownerId] : [];
+  const existing = db.prepare(`SELECT * FROM saved_areas WHERE id = ?${ownerClause}`).get(id, ...ownerArgs);
   if (!existing) {
     throw new Error(`No saved area with id "${id}"`);
   }
@@ -184,20 +238,29 @@ export function updateSavedArea(db, id, patch) {
   const now = new Date().toISOString();
   db.prepare(
     `UPDATE saved_areas SET name = ?, lat = ?, lng = ?, radius_mi = ?, filters_json = ?, updated_at = ?
-     WHERE id = ?`
-  ).run(merged.name, merged.lat, merged.lng, merged.radiusMi, JSON.stringify(merged.filters), now, id);
+     WHERE id = ?${ownerClause}`
+  ).run(merged.name, merged.lat, merged.lng, merged.radiusMi, JSON.stringify(merged.filters), now, id, ...ownerArgs);
   return getSavedArea(db, id);
 }
 
-/** Returns true if a row was deleted, false if `id` did not exist. */
-export function deleteSavedArea(db, id) {
-  const result = db.prepare('DELETE FROM saved_areas WHERE id = ?').run(id);
+/**
+ * Returns true if a row was deleted, false if `id` did not exist (or, with
+ * `ownerId`, is not that user's).
+ *
+ * @param {{ ownerId?: number }} [options]
+ */
+export function deleteSavedArea(db, id, options = {}) {
+  const scoped = Object.prototype.hasOwnProperty.call(options, 'ownerId');
+  if (scoped) assertOwnerId(options.ownerId);
+  const result = scoped
+    ? db.prepare('DELETE FROM saved_areas WHERE id = ? AND owner_id = ?').run(id, options.ownerId)
+    : db.prepare('DELETE FROM saved_areas WHERE id = ?').run(id);
   return result.changes > 0;
 }
 
 /**
- * Snapshot every saved area to a git-trackable JSON file (coordinates
- * rounded per exportPath's note above), so an accidental loss of
+ * Snapshot every saved area to a local, gitignored JSON file (coordinates
+ * rounded, owner kept; see exportPath's note above), so an accidental loss of
  * app.db — a bad `rm`, a corrupted WAL file, a wiped disk — has a
  * recoverable record of what areas existed, even though restoring from it
  * loses exact placement and re-adopts existing observation-event history
@@ -216,6 +279,7 @@ export function exportSavedAreasJson(db, path = exportPath()) {
     filters: a.filters,
     createdAt: a.createdAt,
     updatedAt: a.updatedAt,
+    ownerId: a.ownerId,
   }));
   writeFileSync(path, `${JSON.stringify({ areas }, null, 2)}\n`);
 }
@@ -229,13 +293,16 @@ export function exportSavedAreasJson(db, path = exportPath()) {
  * one re-created with different lat/lng since the snapshot) is left alone
  * rather than overwritten, so this is safe to run against a db that still
  * has some rows. Recovered rows keep only ~11km-precision coordinates —
- * exportSavedAreasJson never had the exact ones to begin with.
+ * exportSavedAreasJson never had the exact ones to begin with. Each area
+ * goes back to its exported ownerId when that user still exists in `db`;
+ * otherwise (or from an export written before owners were recorded) it is
+ * restored unowned, invisible over HTTP until someone sets owner_id by hand.
  */
 export function restoreSavedAreasFromExport(db, path = exportPath()) {
   const { areas } = JSON.parse(readFileSync(path, 'utf8'));
   const insert = db.prepare(
-    `INSERT OR IGNORE INTO saved_areas (id, name, lat, lng, radius_mi, filters_json, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT OR IGNORE INTO saved_areas (id, name, lat, lng, radius_mi, filters_json, created_at, updated_at, owner_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT id FROM users WHERE id = ?))`
   );
   let restored = 0;
   for (const a of areas) {
@@ -247,7 +314,8 @@ export function restoreSavedAreasFromExport(db, path = exportPath()) {
       a.radiusMi,
       JSON.stringify(a.filters || {}),
       a.createdAt,
-      a.updatedAt
+      a.updatedAt,
+      Number.isInteger(a.ownerId) ? a.ownerId : null
     );
     if (result.changes > 0) restored += 1;
   }

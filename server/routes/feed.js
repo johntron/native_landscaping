@@ -1,6 +1,6 @@
 import {
-  listSavedAreas,
-  getSavedArea,
+  listSavedAreasOwnedBy,
+  getSavedAreaOwnedBy,
   createSavedArea,
   updateSavedArea,
   deleteSavedArea,
@@ -10,7 +10,7 @@ import { listEvents } from '../../tools/observationEventsDb.js';
 import { setFeedState } from '../../tools/feedState/feedStateDb.js';
 import { queryFeed } from '../../tools/feedState/feed.js';
 import { pollSavedAreas } from '../../tools/feedState/pollAreas.js';
-import { collectPayload, createRateLimiter, enforceRateLimit, rateLimitKeyFor } from '../http.js';
+import { collectPayload, createRateLimiter, enforceRateLimit, json, rateLimitKeyFor, requireUser } from '../http.js';
 
 // /api/feed/refresh polls iNaturalist synchronously (via pollSavedAreas,
 // up to 3 pages). iNaturalist's API has no published per-client limit for
@@ -25,6 +25,16 @@ function maybePrune() {
 }
 
 /**
+ * The one 404 for "no such area" and "an area you don't own" (nl-3s5.5): the
+ * two must be indistinguishable, so a caller cannot probe for other users'
+ * area ids. Same reasoning as loadOwnedProject in server/http.js.
+ */
+function areaNotFound(res, areaId) {
+  json(res, 404, { error: `No saved area with id "${areaId}"` });
+  return true;
+}
+
+/**
  * The observation feed: saved monitoring areas and read/dismissed state
  * (hand-entered, so both live in data/app.db, ctx.db.app, which cannot be
  * rebuilt), the raw event log, the paged feed, and the on-demand poll.
@@ -32,38 +42,46 @@ function maybePrune() {
  * Returns true when it handled the request (a response has been sent), false
  * to let server.js try the next route module. `user` is ctx.user
  * (server/identity.js), or null.
+ *
+ * Per-user (nl-3s5.5): every route here needs a signed-in user (401
+ * otherwise) and sees only the areas that user owns, filtered in SQL by
+ * owner_id. Another user's area answers exactly like a missing one (404), for
+ * every method and for the feed, state, refresh and event-log routes that
+ * take an area id. feed_state has no owner column: it inherits the owner
+ * through area_id, so proving the caller owns the area is the whole check.
+ * Admins get no bypass: one owner per area, as with yards. Unowned areas
+ * (owner_id NULL) match no one and are invisible to everybody here, while
+ * feed-poller still polls them (it never goes through these routes).
  */
 export async function handleFeedRoutes(req, res, ctx) {
-  const { url, pathname, db, user } = ctx;
+  const { url, pathname, db } = ctx;
   maybePrune();
   // Saved monitoring areas (nl-1qy.1.2) — arbitrary center+radius areas for the
   // observation feed, independent of any yard project, so these live behind
   // their own SQLite-backed CRUD routes rather than a per-project file.
   const savedAreaMatch = pathname.match(/^\/api\/saved-areas(?:\/([^/]+))?$/);
   if (savedAreaMatch && ['GET', 'POST', 'PUT', 'DELETE'].includes(req.method)) {
+    const user = requireUser(ctx, res);
+    if (!user) return true;
     const areaId = savedAreaMatch[1] ? decodeURIComponent(savedAreaMatch[1]) : null;
     try {
       const savedAreasDb = db.app;
       if (req.method === 'GET' && !areaId) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ areas: listSavedAreas(savedAreasDb) }));
+        res.end(JSON.stringify({ areas: listSavedAreasOwnedBy(savedAreasDb, user.id) }));
         return true;
       }
       if (req.method === 'GET' && areaId) {
-        const area = getSavedArea(savedAreasDb, areaId);
-        if (!area) {
-          res.writeHead(404, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: `No saved area with id "${areaId}"` }));
-          return true;
-        }
+        const area = getSavedAreaOwnedBy(savedAreasDb, areaId, user.id);
+        if (!area) return areaNotFound(res, areaId);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ area }));
         return true;
       }
       if (req.method === 'POST' && !areaId) {
         const body = await collectPayload(req, { requirePlants: false });
-        // owner_id records who created it; nothing is scoped by it yet (nl-3s5.5).
-        const area = createSavedArea(savedAreasDb, body, { ownerId: user?.id ?? null });
+        // The creator owns it, and is the only one who will ever see it.
+        const area = createSavedArea(savedAreasDb, body, { ownerId: user.id });
         exportSavedAreasJson(savedAreasDb);
         console.log(`Saved area '${area.id}' created ('${area.name}')`);
         res.writeHead(201, { 'Content-Type': 'application/json' });
@@ -72,7 +90,9 @@ export async function handleFeedRoutes(req, res, ctx) {
       }
       if (req.method === 'PUT' && areaId) {
         const body = await collectPayload(req, { requirePlants: false });
-        const area = updateSavedArea(savedAreasDb, areaId, body);
+        // Throws "No saved area" for someone else's area too (owner_id is in
+        // the SQL), which the catch below turns into the same 404.
+        const area = updateSavedArea(savedAreasDb, areaId, body, { ownerId: user.id });
         exportSavedAreasJson(savedAreasDb);
         console.log(`Saved area '${area.id}' updated`);
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -80,12 +100,8 @@ export async function handleFeedRoutes(req, res, ctx) {
         return true;
       }
       if (req.method === 'DELETE' && areaId) {
-        const deleted = deleteSavedArea(savedAreasDb, areaId);
-        if (!deleted) {
-          res.writeHead(404, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: `No saved area with id "${areaId}"` }));
-          return true;
-        }
+        const deleted = deleteSavedArea(savedAreasDb, areaId, { ownerId: user.id });
+        if (!deleted) return areaNotFound(res, areaId);
         exportSavedAreasJson(savedAreasDb);
         console.log(`Saved area '${areaId}' deleted`);
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -112,11 +128,14 @@ export async function handleFeedRoutes(req, res, ctx) {
   // so those later routes, and any earlier manual checking, have something
   // to build on rather than the data being CLI/SQLite-only.
   if (pathname === '/api/observation-events' && req.method === 'GET') {
+    const user = requireUser(ctx, res);
+    if (!user) return true;
     try {
       const areaId = url.searchParams.get('area_id');
       if (!areaId) {
         throw new Error('Missing required area_id query param');
       }
+      if (!getSavedAreaOwnedBy(db.app, areaId, user.id)) return areaNotFound(res, areaId);
       const taxonIdParam = url.searchParams.get('taxon_id');
       const rows = listEvents(db.observationEvents, {
         areaId,
@@ -140,11 +159,15 @@ export async function handleFeedRoutes(req, res, ctx) {
   // as the thin raw-log window; this one adds the read-state join and paging
   // the UI actually needs.
   if (pathname === '/api/feed' && req.method === 'GET') {
+    const user = requireUser(ctx, res);
+    if (!user) return true;
     try {
       const areaId = url.searchParams.get('area_id');
       if (!areaId) {
         throw new Error('Missing required area_id query param');
       }
+      const area = getSavedAreaOwnedBy(db.app, areaId, user.id);
+      if (!area) return areaNotFound(res, areaId);
       const taxonIdParam = url.searchParams.get('taxon_id');
       const pageParam = url.searchParams.get('page');
       const pageSizeParam = url.searchParams.get('page_size');
@@ -156,14 +179,12 @@ export async function handleFeedRoutes(req, res, ctx) {
       let ecoregion;
       let place;
       if (lane === 'yard-relevance') {
-        const area = getSavedArea(db.app, areaId);
-        ecoregion = area?.filters?.ecoregion;
+        ecoregion = area.filters?.ecoregion;
       } else if (lane === 'rarity') {
         // Same "look it up server-side" reasoning as ecoregion above — place
         // is a per-saved-area fact (filters.place), not something the client
         // should be trusted to pass directly.
-        const area = getSavedArea(db.app, areaId);
-        place = area?.filters?.place;
+        place = area.filters?.place;
       }
       const rarityThresholdParam = url.searchParams.get('rarity_threshold');
       const rarityIncludeConservationStatus = url.searchParams.get('rarity_conservation_status') === 'true';
@@ -204,6 +225,10 @@ export async function handleFeedRoutes(req, res, ctx) {
   // resolves quickly rather than potentially crawling a well-established
   // area's full incremental backlog in one request.
   if (pathname === '/api/feed/refresh' && req.method === 'POST') {
+    const user = requireUser(ctx, res);
+    if (!user) return true;
+    // Rate limit before the ownership check, so probing area ids spends
+    // tokens too.
     if (!enforceRateLimit(refreshLimiter, rateLimitKeyFor(ctx, req), res)) return true;
     try {
       const body = await collectPayload(req, { requirePlants: false });
@@ -211,17 +236,16 @@ export async function handleFeedRoutes(req, res, ctx) {
       if (!areaId) {
         throw new Error('Body requires "areaId"');
       }
+      if (!getSavedAreaOwnedBy(db.app, areaId, user.id)) return areaNotFound(res, areaId);
+      // pollSavedAreas stays unscoped (feed-poller polls every area); the
+      // ownership check above is what limits this route to the caller's own.
       const { results } = await pollSavedAreas({
         areaIds: [areaId],
         maxPages: 3,
         appDb: db.app,
         eventsDb: db.observationEvents,
       });
-      if (!results.length) {
-        res.writeHead(404, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: `No saved area with id "${areaId}"` }));
-        return true;
-      }
+      if (!results.length) return areaNotFound(res, areaId);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ result: results[0] }));
     } catch (err) {
@@ -236,11 +260,17 @@ export async function handleFeedRoutes(req, res, ctx) {
   // Body: { areaId, observationId, read?, dismissed? } — only the flags
   // present are changed (see setFeedState's PATCH semantics).
   if (pathname === '/api/feed/state' && req.method === 'POST') {
+    const user = requireUser(ctx, res);
+    if (!user) return true;
     try {
       const body = await collectPayload(req, { requirePlants: false });
       const { areaId, observationId } = body;
       if (!areaId || observationId == null) {
         throw new Error('Body requires "areaId" and "observationId"');
+      }
+      // The flag inherits the area's owner, so owning the area is the check.
+      if (typeof areaId !== 'string' || !getSavedAreaOwnedBy(db.app, areaId, user.id)) {
+        return areaNotFound(res, areaId);
       }
       const state = setFeedState(db.app, observationId, areaId, {
         read: body.read,

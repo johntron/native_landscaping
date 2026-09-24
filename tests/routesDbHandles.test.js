@@ -38,6 +38,14 @@ function openDb(paths) {
   return { app: openAppDb({ dataDir: paths.dir, ownerEmail: '' }), ...openServerDatabases(paths) };
 }
 
+/** A users row to own the saved areas the feed routes read: they are per-user and 401 anonymous callers (nl-3s5.5). */
+function seedUser(appDb) {
+  const id = appDb
+    .prepare("INSERT INTO users (email, is_admin, created_at) VALUES ('feed-owner@example.com', 0, 'now') RETURNING id")
+    .get().id;
+  return { id, email: 'feed-owner@example.com', isAdmin: false };
+}
+
 /**
  * Minimal GET req/res + ctx a route handler needs, mirroring server.js's
  * shape. `user` defaults to null (anonymous); pass an admin user for the
@@ -66,9 +74,10 @@ test('GET /api/saved-areas reads ctx.db.app, not a fresh handle', async () => {
   const paths = tmpPaths();
   try {
     const db = openDb(paths);
-    createSavedArea(db.app, { name: 'Backyard', lat: 32.78, lng: -96.8, radiusMi: 5 });
+    const user = seedUser(db.app);
+    createSavedArea(db.app, { name: 'Backyard', lat: 32.78, lng: -96.8, radiusMi: 5 }, { ownerId: user.id });
 
-    const { req, res, ctx } = stubRequest('/api/saved-areas', db, paths.dir);
+    const { req, res, ctx } = stubRequest('/api/saved-areas', db, paths.dir, user);
     const handled = await handleFeedRoutes(req, res, ctx);
 
     assert.equal(handled, true);
@@ -85,11 +94,13 @@ test('GET /api/observation-events reads ctx.db.observationEvents', async () => {
   const paths = tmpPaths();
   try {
     const db = openDb(paths);
+    const user = seedUser(db.app);
+    const area = createSavedArea(db.app, { name: 'Backyard', lat: 32.78, lng: -96.8, radiusMi: 5 }, { ownerId: user.id });
     upsertEvents(db.observationEvents, [
-      { observation_id: 1, area_id: 'area-1', taxon_name: 'Asclepias tuberosa', observed_on: '2026-01-01', ingested_at: 't1' },
+      { observation_id: 1, area_id: area.id, taxon_name: 'Asclepias tuberosa', observed_on: '2026-01-01', ingested_at: 't1' },
     ]);
 
-    const { req, res, ctx } = stubRequest('/api/observation-events?area_id=area-1', db, paths.dir);
+    const { req, res, ctx } = stubRequest(`/api/observation-events?area_id=${area.id}`, db, paths.dir, user);
     const handled = await handleFeedRoutes(req, res, ctx);
 
     assert.equal(handled, true);
@@ -106,13 +117,12 @@ test('GET /api/feed?lane=rarity reads ctx.db.ecosystem through the rarity lane w
   const paths = tmpPaths();
   try {
     const db = openDb(paths);
-    const area = createSavedArea(db.app, {
-      name: 'Rare spot',
-      lat: 32.78,
-      lng: -96.8,
-      radiusMi: 5,
-      filters: { place: 'Dallas, TX' },
-    });
+    const user = seedUser(db.app);
+    const area = createSavedArea(
+      db.app,
+      { name: 'Rare spot', lat: 32.78, lng: -96.8, radiusMi: 5, filters: { place: 'Dallas, TX' } },
+      { ownerId: user.id }
+    );
     upsertEvents(db.observationEvents, [
       { observation_id: 30, area_id: area.id, taxon_name: 'Asclepias tuberosa', observed_on: '2026-01-01', ingested_at: 't1' },
     ]);
@@ -120,7 +130,7 @@ test('GET /api/feed?lane=rarity reads ctx.db.ecosystem through the rarity lane w
       { taxon_name: 'Asclepias tuberosa', genus: 'Asclepias', radius_mi: 10, observation_count: 3, fetched_on: '2026-01-01', source: 'test' },
     ]);
 
-    const { req, res, ctx } = stubRequest(`/api/feed?area_id=${area.id}&lane=rarity`, db, paths.dir);
+    const { req, res, ctx } = stubRequest(`/api/feed?area_id=${area.id}&lane=rarity`, db, paths.dir, user);
     const handled = await handleFeedRoutes(req, res, ctx);
 
     assert.equal(handled, true);

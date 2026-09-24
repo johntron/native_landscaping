@@ -15,6 +15,11 @@ projects/*/planting_layout.csv.bak-*
 # tools/ fetch scripts and server-side by /api/ecosystem; never committed.
 projects/*/location.json
 
+# Local backup of every user's saved monitoring areas (nl-3s5.5). Area names
+# can identify people and belong to different users, so it never reaches git;
+# written under DATA_DIR by tools/savedAreas/savedAreasDb.js.
+data/saved-areas.export.json
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db

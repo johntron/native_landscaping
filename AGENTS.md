@@ -135,7 +135,9 @@ Back it up; it is the one file that matters.
 
 - `app.db` (`server/db/appDb.js`, numbered migrations in `server/db/migrations/`) holds
   users, the saved monitoring areas entered through `/api/saved-areas` (`saved_areas`,
-  with a nullable `owner_id` foreign key to `users`), the feed's per-observation
+  with a nullable `owner_id` foreign key to `users`: each area has one owner, every
+  feed and saved-area route is scoped to it in SQL, and an unowned area is visible to
+  nobody, admins included; nl-3s5.5), the feed's per-observation
   read/dismissed flags (`feed_state`, kept out of `observation-events.db` so it survives
   a rebuild of that file), and from nl-3s5.3 onward projects and their revisions. `web`
   opens it once at startup (`ctx.db.app`), applies migrations, seeds `OWNER_EMAIL` as
@@ -144,9 +146,10 @@ Back it up; it is the one file that matters.
   `web` if the schema is behind. The migration runner is safe with both processes
   starting at once. `DATA_DIR` controls where it lives; tests and the e2e scratch server
   point it at a throwaway directory instead.
-- A redacted snapshot of the saved areas is still exported to the tracked
-  `data/saved-areas.export.json` (under `DATA_DIR`) on every write. It retires with the
-  backups bead, nl-3s5.13.
+- Every write also exports a local snapshot of all users' saved areas (rounded
+  coordinates, names, owners) to `data/saved-areas.export.json` under `DATA_DIR`. It is
+  gitignored, not tracked: area names can identify people, and it holds every user's
+  areas (nl-3s5.5). It retires with the backups bead, nl-3s5.13.
 - **Retired:** `saved-areas.db` and `feed-state.db`. Their tables moved into `app.db`
   (nl-3s5.11): `server/db/legacyImport.js` copied them once, recorded in `app.db`'s
   `app_meta` table, and never writes the old files. Nothing opens them any more. They

@@ -38,7 +38,7 @@ test('createSavedArea records ownerId as owner_id, a real foreign key to users, 
   assert.throws(() => createSavedArea(db, { name: 'Ghost', lat: 1, lng: 1, radiusMi: 1 }, { ownerId: 9999 }), /FOREIGN KEY/);
 });
 
-test('exportSavedAreasJson defaults to saved-areas.export.json under DATA_DIR, so a scratch server never overwrites the tracked one', () => {
+test('exportSavedAreasJson defaults to saved-areas.export.json under DATA_DIR, so a scratch server never overwrites the dev one', () => {
   const dataDir = tempDir();
   const db = openAppDb({ dataDir, ownerEmail: '' });
   createSavedArea(db, { name: 'Backyard', lat: 32.78412, lng: -96.79961, radiusMi: 5 });
@@ -52,7 +52,8 @@ test('exportSavedAreasJson defaults to saved-areas.export.json under DATA_DIR, s
   }
   const written = JSON.parse(readFileSync(join(dataDir, 'saved-areas.export.json'), 'utf8'));
   assert.equal(written.areas[0].name, 'Backyard');
-  assert.equal('ownerId' in written.areas[0], false, 'the tracked export keeps its fields unchanged');
+  // Local and gitignored since nl-3s5.5, so it keeps the owner for restore.
+  assert.equal(written.areas[0].ownerId, null);
 });
 
 test('createSavedArea inserts a row with a generated id and timestamps, and round-trips filters', () => {
