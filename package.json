@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Backyard seasonal visualization",
   "type": "module",
+  "engines": {
+    "node": ">=22.23 <23 || >=26"
+  },
   "scripts": {
     "test": "node tests/run-tests.cjs",
     "serve": "node server.js",
