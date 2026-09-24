@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
-import { buildScratchPublicDir, SCRATCH_DIR } from './tests-e2e/scratch-fixture.mjs';
+import path from 'node:path';
+import { buildScratchPublicDir, SCRATCH_DATA_DIR, SCRATCH_DIR } from './tests-e2e/scratch-fixture.mjs';
 
 // The e2e suite drives the real app through `node server.js`. It lives outside
 // `tests/` because `tests/run-tests.cjs` auto-runs every *.test.js there under
@@ -39,7 +40,10 @@ export default defineConfig({
   webServer: [
     {
       command: `node server.js`,
-      env: { PORT: String(PORT) },
+      // DATA_DIR keeps app.db (opened at startup regardless of which specs
+      // run against this server) inside a throwaway directory instead of the
+      // real data/, even though this server's PUBLIC_DIR is the repo itself.
+      env: { PORT: String(PORT), DATA_DIR: path.join(SCRATCH_DATA_DIR, 'main') },
       url: `http://127.0.0.1:${PORT}/index.html`,
       reuseExistingServer: !process.env.CI,
       stdout: 'ignore',
@@ -47,7 +51,13 @@ export default defineConfig({
     },
     {
       command: `node server.js`,
-      env: { PORT: String(SCRATCH_PORT), PUBLIC_DIR: SCRATCH_DIR },
+      // A second, independent throwaway app.db for the scratch server, so
+      // the two servers never open the same SQLite file at once.
+      env: {
+        PORT: String(SCRATCH_PORT),
+        PUBLIC_DIR: SCRATCH_DIR,
+        DATA_DIR: path.join(SCRATCH_DATA_DIR, 'scratch'),
+      },
       url: `http://127.0.0.1:${SCRATCH_PORT}/index.html`,
       reuseExistingServer: !process.env.CI,
       stdout: 'ignore',

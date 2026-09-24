@@ -130,12 +130,16 @@ tests/, tests-e2e/    Node unit tests (the gate) and Playwright specs
 
 `data/*.db` files are gitignored. Most are rebuildable caches (`ecosystem.db`,
 `probe-cache.db`, `observation-events.db`, `claims.db`): re-run the matching `tools/`
-script. **Two hold state a person entered by hand and cannot be rebuilt:**
+script. **Three hold state a person entered by hand and cannot be rebuilt:**
 
 - `saved-areas.db`: monitoring areas, entered through `/api/saved-areas`. A redacted
   snapshot is exported to the tracked `data/saved-areas.export.json` on every write.
 - `feed-state.db`: the feed's per-observation read/dismissed flags. It is deliberately
   kept apart from `observation-events.db` so that it survives a rebuild of that file.
+- `app.db`: identity and, from nl-3s5.3 onward, projects and their revisions
+  (`server/db/appDb.js`, opened once at startup and passed through `ctx.db.app`; its
+  numbered migrations live in `server/db/migrations/`). `DATA_DIR` controls where it
+  lives — tests and the e2e scratch server point it at a throwaway directory instead.
 
 A PreToolUse hook in `.claude/settings.json` blocks any `rm` whose command
 mentions `data/`: inspect the file and ask before deleting anything there.

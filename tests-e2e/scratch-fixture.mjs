@@ -20,6 +20,11 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
  */
 const CHECKOUT_KEY = createHash('sha256').update(REPO_ROOT).digest('hex').slice(0, 12);
 export const SCRATCH_DIR = path.join(os.tmpdir(), `native-landscaping-e2e-${CHECKOUT_KEY}`);
+// A throwaway home for app.db, so neither e2e server (playwright.config.js
+// points both at a subdirectory of this, via DATA_DIR) ever opens the real
+// data/app.db. Separate from SCRATCH_DIR because DATA_DIR and PUBLIC_DIR are
+// independent knobs on server.js — this is not part of the served document root.
+export const SCRATCH_DATA_DIR = path.join(os.tmpdir(), `native-landscaping-e2e-data-${CHECKOUT_KEY}`);
 export const SCRATCH_PROJECTS = [
   'drag-plan',
   'drag-elevation',
@@ -191,6 +196,9 @@ export function buildScratchPublicDir() {
 
   rmSync(SCRATCH_DIR, { recursive: true, force: true });
   mkdirSync(path.join(SCRATCH_DIR, 'projects'), { recursive: true });
+
+  rmSync(SCRATCH_DATA_DIR, { recursive: true, force: true });
+  mkdirSync(SCRATCH_DATA_DIR, { recursive: true });
 
   LINKED.forEach((entry) => {
     const target = path.join(REPO_ROOT, entry);

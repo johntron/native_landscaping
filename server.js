@@ -8,6 +8,7 @@ import { handleEcosystemRoutes } from './server/routes/ecosystem.js';
 import { handleFeedRoutes } from './server/routes/feed.js';
 import { handleClaimsRoutes } from './server/routes/claims.js';
 import { legacyRedirect, serveStaticFile } from './server/static.js';
+import { openAppDb } from './server/db/appDb.js';
 
 const envPort = Number(process.env.PORT);
 const PORT = Number.isFinite(envPort) ? envPort : 8000;
@@ -17,10 +18,16 @@ const PUBLIC_DIR = process.env.PUBLIC_DIR
 
 const ROUTES = [handleProjectRoutes, handleEcosystemRoutes, handleFeedRoutes, handleClaimsRoutes];
 
+// Opened once at startup, not per request. ctx.db is built as an object, one
+// handle per store, so the other local SQLite stores (nl-3s5.14: savedAreas,
+// feedState, observationEvents, ecosystem, claims) can be merged in under
+// their own keys without clobbering this one.
+const db = { app: openAppDb() };
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || '', `http://${req.headers.host}`);
   const pathname = url.pathname;
-  const ctx = { url, pathname, publicDir: PUBLIC_DIR };
+  const ctx = { url, pathname, publicDir: PUBLIC_DIR, db };
 
   for (const handle of ROUTES) {
     if (await handle(req, res, ctx)) return;
