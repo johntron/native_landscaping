@@ -312,12 +312,12 @@ test('keystone genera suggestions rank a clean site fit ahead of a mismatch, and
       'Mismatchus,9,80,,,,test\n', // ecologically stronger, but wants full sun on a part-sun site
     { ecoregion: '9' }
   );
-  const cleanFit = { ...synthetic('Cleanhostus fitus'), sunPref: 'part-sun', waterPref: 'medium', soilPref: 'clay' };
+  const cleanFit = { ...synthetic('Cleanhostus fitus'), sunPref: 'part-sun', waterPref: 'medium', soilPref: ['clay'] };
   const mismatch = {
     ...synthetic('Mismatchus badus'),
     sunPref: 'full-sun',
     waterPref: 'medium',
-    soilPref: 'clay',
+    soilPref: ['clay'],
   };
   const site = { sun: 'part-sun', water: 'medium', soil: 'clay' };
   const result = run(place('Passiflora incarnata'), {
@@ -414,12 +414,12 @@ test('larval hosts suggestions rank a clean site fit ahead of a mismatch, and sa
       'Mismatchus,9,,,test hairstreak,,test\n',
     { ecoregion: '9' }
   );
-  const cleanFit = { ...synthetic('Cleanhostus fitus'), sunPref: 'part-sun', waterPref: 'medium', soilPref: 'clay' };
+  const cleanFit = { ...synthetic('Cleanhostus fitus'), sunPref: 'part-sun', waterPref: 'medium', soilPref: ['clay'] };
   const mismatch = {
     ...synthetic('Mismatchus badus'),
     sunPref: 'full-sun',
     waterPref: 'low',
-    soilPref: 'clay',
+    soilPref: ['clay'],
   };
   const site = { sun: 'part-sun', water: 'medium', soil: 'clay' };
   const result = run(place('Salvia farinacea'), {
@@ -610,9 +610,9 @@ test('site match: a soil mismatch is a caution and does NOT drive the status', (
   // soil_pref holds one PREFERRED soil and the catalog records no tolerance, so
   // a mismatch is an unknown, not a known failure. Scoring it like a failure is
   // what made this check punitive; the caution is reported and set aside.
-  assert.equal(siteResult(planted({ soilPref: 'clay' }), { soil: 'clay' }).status, STATUSES.OK);
+  assert.equal(siteResult(planted({ soilPref: ['clay'] }), { soil: 'clay' }).status, STATUSES.OK);
 
-  const off = siteResult(planted({ soilPref: 'sandy' }), { soil: 'clay' });
+  const off = siteResult(planted({ soilPref: ['sandy'] }), { soil: 'clay' });
   assert.equal(off.status, STATUSES.OK, 'reported, not counted against the design');
   assert.ok(off.findings.some((f) => /not counted against the design/.test(f)));
   assert.ok(
@@ -621,21 +621,21 @@ test('site match: a soil mismatch is a caution and does NOT drive the status', (
   );
 
   // A real light or water failure still lands, alongside the soil caution.
-  const both = siteResult(planted({ soilPref: 'sandy', sunPref: 'shade' }), {
+  const both = siteResult(planted({ soilPref: ['sandy'], sunPref: 'shade' }), {
     soil: 'clay',
     sun: 'full-sun',
   });
   assert.equal(both.status, STATUSES.GAP, 'the sun failure still decides the status');
 
   // A multi-valued cell is a set, not a scale — the draft regional CSVs write "sandy,loamy".
-  assert.equal(siteResult(planted({ soilPref: 'sandy, clay' }), { soil: 'clay' }).status, STATUSES.OK);
+  assert.equal(siteResult(planted({ soilPref: ['sandy', 'clay'] }), { soil: 'clay' }).status, STATUSES.OK);
 });
 
 test('site match: a mismatch against a MEASURED soil set (nl-9a6) is a real gap, not a caution', () => {
   // A comma-separated soil_pref came from USDA's soil_coarse/medium/fine
   // triple, not a bare preference, so a site outside that set is a known
   // failure and should drive the status like sun/water do.
-  const off = siteResult(planted({ soilPref: 'sandy,loamy' }), { soil: 'clay' });
+  const off = siteResult(planted({ soilPref: ['sandy', 'loamy'] }), { soil: 'clay' });
   assert.equal(off.status, STATUSES.PARTIAL, 'a measured mismatch counts against the design');
   assert.ok(off.findings.some((f) => /takes sandy or loamy soil, not the clay this site has/.test(f)));
   assert.ok(
@@ -648,7 +648,7 @@ test('site match: a compound soil texture also takes its named halves (nl-5c8)',
   // 'clay-loam' is one token (the hyphen is the texture name, not a separator),
   // but it sits between clay and loam, so a site declared as either should not
   // raise a caution against a plant that lists only the compound.
-  const clayLoam = { soilPref: 'clay-loam' };
+  const clayLoam = { soilPref: ['clay-loam'] };
   assert.equal(siteResult(planted(clayLoam), { soil: 'clay-loam' }).status, STATUSES.OK);
   assert.equal(siteResult(planted(clayLoam), { soil: 'clay' }).status, STATUSES.OK);
   assert.equal(siteResult(planted(clayLoam), { soil: 'loamy' }).status, STATUSES.OK);
@@ -659,7 +659,7 @@ test('site match: a compound soil texture also takes its named halves (nl-5c8)',
 });
 
 test('site match: an undeclared axis is skipped, not guessed', () => {
-  const result = siteResult(planted({ sunPref: 'shade', waterPref: 'high', soilPref: 'sandy' }), {
+  const result = siteResult(planted({ sunPref: 'shade', waterPref: 'high', soilPref: ['sandy'] }), {
     soil: 'sandy',
   });
   assert.equal(result.status, STATUSES.OK, 'sun and water were never declared, so never checked');
@@ -673,7 +673,7 @@ test('site match: a project with no site block reports not-declared rather than 
 });
 
 test('site match: a blank preference on the plant is not a mismatch', () => {
-  const result = siteResult(planted({ sunPref: '', waterPref: '', soilPref: '' }), {
+  const result = siteResult(planted({ sunPref: '', waterPref: '', soilPref: [] }), {
     sun: 'shade',
     water: 'low',
     soil: 'clay',
@@ -684,7 +684,7 @@ test('site match: a blank preference on the plant is not a mismatch', () => {
 test('site match: a blank preference on the plant is reported, not silently skipped (nl-c58)', () => {
   // Before nl-c58, this read exactly like a perfectly matched design: no finding,
   // no caution, nothing. The site declares all three axes; the plant declares none.
-  const result = siteResult(planted({ sunPref: '', waterPref: '', soilPref: '' }), {
+  const result = siteResult(planted({ sunPref: '', waterPref: '', soilPref: [] }), {
     sun: 'shade',
     water: 'low',
     soil: 'clay',
@@ -698,7 +698,7 @@ test('site match: the summary does not claim a match when nothing was actually c
   // Before this fix the summary read "Every planted species matches the
   // declared site" here -- true of zero checked axes, and indistinguishable
   // in the collapsed panel from a design that was actually verified.
-  const result = siteResult(planted({ sunPref: '', waterPref: '', soilPref: '' }), {
+  const result = siteResult(planted({ sunPref: '', waterPref: '', soilPref: [] }), {
     sun: 'shade',
     water: 'low',
     soil: 'clay',
@@ -708,7 +708,7 @@ test('site match: the summary does not claim a match when nothing was actually c
 });
 
 test('site match: only the axes the plant leaves blank are reported as undeclared', () => {
-  const result = siteResult(planted({ sunPref: 'shade', waterPref: '', soilPref: 'clay' }), {
+  const result = siteResult(planted({ sunPref: 'shade', waterPref: '', soilPref: ['clay'] }), {
     sun: 'shade',
     water: 'low',
     soil: 'clay',

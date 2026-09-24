@@ -4,6 +4,7 @@
  * passes the container, keeping DOM lookups in src/app.js.
  */
 import { buildPlantLabel } from './labels.js';
+import { formatSoil } from './tooltip.js';
 import { formatMonthRange } from '../state/seasonalState.js';
 import { ecologicalFitNotes } from '../analysis/hostGenera.js';
 import { getGenus, getSpeciesKey } from '../utils/speciesKey.js';
@@ -76,7 +77,7 @@ export function renderSpeciesTable(container, plants, hostGenera, handlers = {})
       { value: plant.growthShape || plant.growth_shape || '' },
       { value: plant.sunPref || plant.sun_pref || '' },
       { value: plant.waterPref || plant.water_pref || '' },
-      { value: plant.soilPref || plant.soil_pref || '' },
+      { value: formatSoil(plant.soilPref ?? plant.soil_pref) },
       {
         value: formatMonthRange(
           plant.floweringMonths ||

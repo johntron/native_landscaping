@@ -30,6 +30,7 @@ not in the repo:
 
 ```
 plants.csv                       shared species catalog (all projects)
+plant-drawing.csv                how each species is drawn, keyed by plants.csv id (all projects)
 ecology/host-genera.csv          keystone/larval-host genera per ecoregion (all projects)
 ecology/plant-animal-interactions.csv  genus-keyed animal interactions (all projects)
 ecology/nearby-fauna.csv         animal species reported nearby, keyed by place
@@ -515,7 +516,7 @@ a phone photo from landing sideways.
 
 ## Plant data (CSV)
 
-`plants.csv` is the **single source of truth** for species attributes and seasonal palettes, shared by every project; each yard's layout holds per-plant coordinates (in feet) and references each species by **plants.csv's `id`**, never by botanical name. The layout is stored as history placements (below); `GET /api/layout` exports it as `planting_layout.csv`.
+`plants.csv` is the **single source of truth** for species attributes, shared by every project, and `plant-drawing.csv` beside it says how each species is drawn (below); each yard's layout holds per-plant coordinates (in feet) and references each species by **plants.csv's `id`**, never by botanical name. The layout is stored as history placements (below); `GET /api/layout` exports it as `planting_layout.csv`.
 
 Each layout row describes one plant clump or individual:
 
@@ -579,28 +580,60 @@ layouts, history, the rules and the exports:
   `<file>.bak-<timestamp>`, reports (and leaves alone) anything it cannot resolve
   confidently, and is a no-op on files already migrated.
 
-Each species row contains:
+### plants.csv is botany, plant-drawing.csv is how we draw it (nl-3s5.21)
+
+Every `plants.csv` column is identity or a claim-store field, so the claims
+exporter (`tools/claims/exportPlantsCsv.js`, `PLANTS_CSV_HEADER`) can own the
+whole file. How the design tool **draws** a species is our judgement, not a
+sourced fact, so it lives in `plant-drawing.csv` at the repo root with a `source`
+column naming its author (`tests/sourcedTables.test.js` enforces it). It sits at
+the root beside `plants.csv`, not in `catalog/`, because production mounts
+`catalog/` from the dev tree: the two halves of the catalog must always be served
+from the same commit.
+
+`parseSpeciesCsv(plantsCsv, drawingCsv)` joins them by `id` and refuses a species
+with no drawing row, a drawing row for an unknown id, a repeated id, a drawing row
+with no `source`, and a `plants.csv` that still carries a drawing column. Called
+with one argument it reads the drawing columns from the species rows themselves,
+which is what a plan bundle exported before the split holds. The plan bundle
+now carries both files.
+
+`plants.csv` columns:
 
 - `id` – the species key every layout, history entry and rule uses (see above).
 - `common_name`
 - `botanical_name`
 - `taxon_id` – the linked `taxa.id` in the claim store, or blank.
 - `growth_shape` – e.g. `mound`, `vertical`, `vase`, `arch`, `creeping`, `grass`.
-- `width_ft`, `height_ft`
+- `width_ft`, `height_ft`. `width_ft` has no claims: the store tracks it and
+  `tools/claims/unsourceableRegister.js` records why no source carries it.
 - `growing_season_months` – range or list, e.g. `3-11` or `3,4,5`.
 - `flowering_season_months`
-- `flower_color`
-- `foliage_color_spring/summer/fall/winter`
-- `sun_pref`, `water_pref` – single values.
-- `soil_pref` – an accepted-soil SET, comma-separated (e.g. `sandy,loamy,clay`);
-  `checkSoil` in `src/analysis/rules/siteMatch.js` splits on `[,/|]` and tests
-  membership. `nl-9a6` migrated the rows USDA's characteristics endpoint
+- `sun_pref`, `water_pref` – single values from `SITE_VOCABULARY`
+  (`src/data/projectConfig.js`); anything else, a list included, is a
+  `LayoutDataError` at parse.
+- `soil_pref` – an accepted-soil SET, comma-separated (e.g. `sandy,loamy,clay`).
+  `parseSpeciesCsv` splits it once into an array (`plant.soilPref`) and checks
+  every member against `SITE_VOCABULARY.soil`; an unknown or repeated member is a
+  `LayoutDataError`, never kept or dropped quietly. Consumers use the array and
+  never re-split. `nl-9a6` migrated the rows USDA's characteristics endpoint
   actually has a soil_coarse/medium/fine triple for — 23 of 56 species — to a
   real accepted set. The other 33 have no USDA characteristics record at all
   (not a fetch failure — USDA covers only ~2,200 species nationwide) and still
   hold one PREFERRED soil with no tolerance data, so rule 8's soil stopgap
   (see the comment atop `siteMatch.js`) stays in place for those.
-- Optional `dormant_color`, `flowerColor`, or alias fields handled by `plantParser`.
+- `fruit_season_months`, `fruit_load`
+
+`plant-drawing.csv` columns (`DRAWING_COLUMNS` in `src/data/plantParser.js`):
+
+- `id` – plants.csv's `id`; exactly one row per species.
+- `flower_color`, `foliage_color_spring/summer/fall/winter`, `fruit_color` – hex.
+  The claim store holds USDA flower, summer-foliage and fruit colour claims (a
+  colour name mapped to a swatch), but the hex drawn is this authored one.
+- `inflorescence`, `flower_count_hint`, `flower_zone` – the flowers as drawn.
+- `source` – who authored the row.
+
+Optional `dormant_color`, `flowerColor`, or alias fields are still handled by `plantParser`.
 
 When changing behavior, **extend the CSV schema and parsing** (see `src/data/plantParser.js`) instead of hard-coding plant properties inside rendering logic.
 

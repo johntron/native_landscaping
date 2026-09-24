@@ -2,6 +2,7 @@ import { parseCsv } from './csvLoader.js';
 import { classifyPlantLayer } from '../state/layers.js';
 import { buildSpeciesIndex, normalizeBotanicalName, resolveSpeciesRef } from './speciesResolver.js';
 import { placementExtras } from './placements.js';
+import { SITE_VOCABULARY } from './projectConfig.js';
 
 const DEFAULT_LEAF_COLOR = '#6b8e23';
 
@@ -50,20 +51,84 @@ function estimateWidthFt(heightFt, growthShape) {
 }
 
 /**
+ * The columns of plant-drawing.csv: how the design tool DRAWS a species
+ * (hex colours, the inflorescence as drawn, how many flowers and where), as
+ * opposed to plants.csv's claim-backed botany (nl-3s5.21). They are our
+ * judgement, so they live in their own table with a `source` naming the
+ * author, keyed by plants.csv `id`.
+ */
+export const DRAWING_COLUMNS = Object.freeze([
+  'flower_color',
+  'foliage_color_spring',
+  'foliage_color_summer',
+  'foliage_color_fall',
+  'foliage_color_winter',
+  'fruit_color',
+  'inflorescence',
+  'flower_count_hint',
+  'flower_zone',
+]);
+
+/**
+ * Index plant-drawing.csv by species id, checked against the species ids it
+ * must cover: exactly one row per plants.csv id, no row for an id plants.csv
+ * does not have, and a `source` on every row. "Not drawn yet" is never
+ * silently defaulted, so a species added to plants.csv without its drawing
+ * row is refused here rather than rendered in fallback colours.
+ * @param {string} drawingCsvText
+ * @param {string[]} speciesIds every id in plants.csv, in order
+ * @returns {Map<string, Record<string, string>>}
+ */
+export function parseDrawingCsv(drawingCsvText, speciesIds) {
+  const rows = parseCsv(drawingCsvText);
+  const known = new Set(speciesIds);
+  const byId = new Map();
+  rows.forEach((row, idx) => {
+    const id = String(row.id || '').trim();
+    const line = `plant-drawing.csv data row ${idx + 1}`;
+    if (!id) throw new LayoutDataError(`${line} has no id`);
+    if (byId.has(id)) throw new LayoutDataError(`Duplicate species id "${id}" in plant-drawing.csv (${line})`);
+    if (!known.has(id)) throw new LayoutDataError(`${line} draws "${id}", which is not a plants.csv species id`);
+    if (!String(row.source || '').trim()) throw new LayoutDataError(`${line} (${id}) has no source`);
+    byId.set(id, row);
+  });
+  const undrawn = speciesIds.filter((id) => !byId.has(id));
+  if (undrawn.length) {
+    throw new LayoutDataError(`plant-drawing.csv has no row for ${undrawn.map((id) => `"${id}"`).join(', ')}`);
+  }
+  return byId;
+}
+
+/**
  * Parse species-level data (no coordinates) from CSV.
  *
  * Every row must carry a unique `id`: it is the species key saved yards,
  * history, the rules and the exports reference (nl-3s5.18). A row without one
  * would be unreachable, and a repeated one would silently hand every yard that
  * names it the later row's attributes, so both are refused here.
- * @param {string} csvText
+ *
+ * `drawingCsvText` is plant-drawing.csv. When it is given, the drawing
+ * columns come from it (see parseDrawingCsv) and plants.csv must not carry
+ * any of them: two homes for one value is how they drift. When it is omitted
+ * the drawing columns are read from the species rows themselves, which is
+ * what a plan bundle exported before nl-3s5.21 (one combined plants.csv)
+ * holds; a species CSV with neither gets the fallback colours.
+ *
+ * `sun_pref`, `water_pref` and `soil_pref` are checked against
+ * SITE_VOCABULARY, the same words a project's site is declared in, because
+ * the site-match rule compares the two and an unknown word would otherwise
+ * compare as "no problem". An unknown value is a LayoutDataError, not a
+ * warning: the catalog is a committed file, so the unit gate fails before a
+ * typo can ship. `soil_pref` is a set, parsed here once into an array;
+ * sun and water are single values on a scale.
+ * @param {string} csvText plants.csv
+ * @param {string} [drawingCsvText] plant-drawing.csv
  */
-export function parseSpeciesCsv(csvText) {
+export function parseSpeciesCsv(csvText, drawingCsvText) {
   const rows = parseCsv(csvText);
   const firstRowById = new Map();
-  return rows.map((row, idx) => {
+  rows.forEach((row, idx) => {
     const botanicalName = row.botanical_name || row.botanicalName || '';
-    const normalizedBotanicalName = normalizeBotanicalName(botanicalName);
     const id = String(row.id || '').trim();
     if (!id) {
       throw new LayoutDataError(
@@ -75,6 +140,24 @@ export function parseSpeciesCsv(csvText) {
       throw new LayoutDataError(`Duplicate species id "${id}" in plants.csv (data rows ${firstRow + 1} and ${idx + 1})`);
     }
     firstRowById.set(id, idx);
+  });
+
+  let drawingById = null;
+  if (drawingCsvText !== undefined) {
+    const inline = rows.length ? DRAWING_COLUMNS.filter((col) => col in rows[0]) : [];
+    if (inline.length) {
+      throw new LayoutDataError(
+        `plants.csv carries drawing column${inline.length === 1 ? '' : 's'} ${inline.join(', ')}; those belong in plant-drawing.csv only`
+      );
+    }
+    drawingById = parseDrawingCsv(drawingCsvText, [...firstRowById.keys()]);
+  }
+
+  return rows.map((speciesRow) => {
+    const id = String(speciesRow.id).trim();
+    const row = drawingById ? { ...speciesRow, ...pickDrawing(drawingById.get(id)) } : speciesRow;
+    const botanicalName = row.botanical_name || row.botanicalName || '';
+    const normalizedBotanicalName = normalizeBotanicalName(botanicalName);
 
     const baseLeaf = row.leafColor || row.foliage_color_summer || DEFAULT_LEAF_COLOR;
     const flowerCountHint = pickNumber(row, ['flower_count_hint', 'flowerCountHint']);
@@ -97,9 +180,9 @@ export function parseSpeciesCsv(csvText) {
       leafColor: baseLeaf,
       foliageColors: buildFoliagePalette(row, baseLeaf),
       dormantColor: row.dormant_color || null,
-      sunPref: row.sun_pref || row.sunPref || '',
-      waterPref: row.water_pref || row.waterPref || '',
-      soilPref: row.soil_pref || row.soilPref || '',
+      sunPref: parseSitePref(row.sun_pref ?? row.sunPref, 'sun', id),
+      waterPref: parseSitePref(row.water_pref ?? row.waterPref, 'water', id),
+      soilPref: parseSoilPref(row.soil_pref ?? row.soilPref, id),
       width: pickNumber(row, numberFieldAliases.width),
       height: pickNumber(row, numberFieldAliases.height),
       inflorescence,
@@ -110,6 +193,58 @@ export function parseSpeciesCsv(csvText) {
       fruitLoad,
     };
   });
+}
+
+/** Only the drawing columns of a plant-drawing.csv row (never its id or source). */
+function pickDrawing(drawingRow) {
+  return Object.fromEntries(DRAWING_COLUMNS.map((col) => [col, drawingRow[col] ?? '']));
+}
+
+/**
+ * One sun or water preference: blank, or one word of SITE_VOCABULARY[axis].
+ * A list is refused too: the site-match rule grades a single requirement on
+ * a scale and has no reading for "full-sun,part-sun" yet.
+ * @param {unknown} raw
+ * @param {'sun'|'water'} axis
+ * @param {string} id species id, for the message
+ * @returns {string}
+ */
+function parseSitePref(raw, axis, id) {
+  const value = String(raw ?? '').trim().toLowerCase();
+  if (!value) return '';
+  if (!SITE_VOCABULARY[axis].includes(value)) {
+    throw new LayoutDataError(
+      `plants.csv ${id}: ${axis}_pref "${raw}" is not one of ${SITE_VOCABULARY[axis].join(', ')}` +
+        (value.includes(',') ? ' (a list is not supported for this column)' : '')
+    );
+  }
+  return value;
+}
+
+/**
+ * `soil_pref` as the set of soils a species takes, in the order written:
+ * 'sandy,loamy,clay' -> ['sandy', 'loamy', 'clay']. Blank is []. Every
+ * member must be a SITE_VOCABULARY soil; an unknown or repeated member is a
+ * LayoutDataError.
+ * @param {unknown} raw
+ * @param {string} id species id, for the message
+ * @returns {string[]}
+ */
+function parseSoilPref(raw, id) {
+  const text = String(raw ?? '').trim();
+  if (!text) return [];
+  const values = text.split(',').map((value) => value.trim().toLowerCase());
+  const seen = new Set();
+  values.forEach((value) => {
+    if (!SITE_VOCABULARY.soil.includes(value)) {
+      throw new LayoutDataError(
+        `plants.csv ${id}: soil_pref "${raw}" has "${value}", which is not one of ${SITE_VOCABULARY.soil.join(', ')}`
+      );
+    }
+    if (seen.has(value)) throw new LayoutDataError(`plants.csv ${id}: soil_pref "${raw}" lists "${value}" twice`);
+    seen.add(value);
+  });
+  return values;
 }
 
 /**
@@ -158,11 +293,12 @@ function assertUniqueIds(placements) {
  * Merge species data with per-plant layout rows into renderable plant instances.
  * @param {string} speciesCsvText plants.csv
  * @param {string} layoutCsvText planting_layout.csv
- * @param {{synonyms?: Map<string, string>}} [options] synonyms from parseSynonymCsv,
- *   consulted only for a legacy row that names its species instead of giving its id
+ * @param {{synonyms?: Map<string, string>, drawingCsv?: string}} [options] synonyms from
+ *   parseSynonymCsv, consulted only for a legacy row that names its species
+ *   instead of giving its id; drawingCsv is plant-drawing.csv (see parseSpeciesCsv)
  */
-export function buildPlantsFromCsv(speciesCsvText, layoutCsvText, { synonyms } = {}) {
-  const species = parseSpeciesCsv(speciesCsvText);
+export function buildPlantsFromCsv(speciesCsvText, layoutCsvText, { synonyms, drawingCsv } = {}) {
+  const species = parseSpeciesCsv(speciesCsvText, drawingCsv);
   const layout = parsePlantLayoutCsv(layoutCsvText);
   const index = buildSpeciesIndex(species, synonyms);
 

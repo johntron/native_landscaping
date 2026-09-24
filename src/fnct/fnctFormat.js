@@ -72,25 +72,20 @@ export function formatCatalogValue(kind, value) {
 // Every plants.csv column worth showing, in display order, with how to
 // format it. `id` and `botanical_name` are covered elsewhere in the panel
 // (the catalog-match note / the species heading) so they're left out here.
+// plants.csv holds claim-backed botany only (nl-3s5.21); how the design tool
+// DRAWS a species (hex colours, inflorescence, flower count and zone) is an
+// authored judgement in plant-drawing.csv, and a reference page does not
+// present it as a catalog fact.
 export const CATALOG_FIELD_LABELS = [
   ['common_name', 'Catalog name', 'words'],
   ['growth_shape', 'Growth shape', 'words'],
   ['growing_season_months', 'Growing season', 'months'],
   ['flowering_season_months', 'Bloom season', 'months'],
-  ['flower_color', 'Flower color', 'color'],
-  ['foliage_color_spring', 'Foliage (spring)', 'color'],
-  ['foliage_color_summer', 'Foliage (summer)', 'color'],
-  ['foliage_color_fall', 'Foliage (fall)', 'color'],
-  ['foliage_color_winter', 'Foliage (winter)', 'color'],
   ['sun_pref', 'Sun', 'words'],
   ['water_pref', 'Water', 'words'],
   ['soil_pref', 'Soil', 'words'],
   ['width_ft', 'Width', 'feet'],
   ['height_ft', 'Height', 'feet'],
-  ['inflorescence', 'Flower cluster', 'words'],
-  ['flower_count_hint', 'Approx. flower count', 'number'],
-  ['flower_zone', 'Flower zone', 'words'],
-  ['fruit_color', 'Fruit color', 'color'],
   ['fruit_season_months', 'Fruit season', 'months'],
   ['fruit_load', 'Fruit load', 'words'],
 ];

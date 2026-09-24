@@ -35,10 +35,12 @@ test.describe('the design tool downloads', () => {
     const { name, files, zip } = await downloadZip(page, '#exportBundleBtn');
     expect(name).toBe('backyard-plan.zip');
     const pngs = (await viewIds(page)).map((id) => `images/${id}-view.png`);
-    for (const file of ['plants.csv', 'planting_layout.csv', ...pngs]) {
+    for (const file of ['plants.csv', 'plant-drawing.csv', 'planting_layout.csv', ...pngs]) {
       expect(files).toContain(file);
     }
     expect(await zip.file('planting_layout.csv').async('string')).toMatch(/^id,species_id,x_ft,y_ft/);
+    // Both halves of the catalog, so the bundle reproduces the plants as drawn (nl-3s5.21).
+    expect(await zip.file('plant-drawing.csv').async('string')).toMatch(/^id,flower_color,.*,source\r?\n/);
 
     await expect(page.locator('#monthReadout')).toHaveText('October');
     await expect(page.locator('#monthSlider')).toHaveValue('10');
@@ -54,6 +56,7 @@ test.describe('the design tool downloads', () => {
       expect(files).toContain(file);
     }
     expect(files).not.toContain('plants.csv');
+    expect(files).not.toContain('plant-drawing.csv');
     expect((await zip.file('cover-letter.txt').async('string')).length).toBeGreaterThan(100);
 
     await expect(page.locator('#monthReadout')).toHaveText('October');

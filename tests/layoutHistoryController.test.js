@@ -6,6 +6,7 @@ import { createPlantFromSpecies, parseSpeciesCsv } from '../src/data/plantParser
 import { toPlacement } from '../src/data/placements.js';
 
 const PLANTS_CSV = readFileSync(new URL('../plants.csv', import.meta.url), 'utf8');
+const DRAWING_CSV = readFileSync(new URL('../plant-drawing.csv', import.meta.url), 'utf8');
 
 /** A controller wired to a fake fetch that records every request. */
 function setup(speciesCsv = PLANTS_CSV) {
@@ -16,7 +17,7 @@ function setup(speciesCsv = PLANTS_CSV) {
     const reply = url.startsWith('/api/layout') ? { entry: { id: 'server-entry' }, cursor: 99 } : { cursor: body?.cursor };
     return { ok: true, json: async () => reply };
   };
-  const appState = { species: parseSpeciesCsv(speciesCsv), speciesSynonyms: new Map(), project: { id: 'p' }, plants: [] };
+  const appState = { species: parseSpeciesCsv(speciesCsv, DRAWING_CSV), speciesSynonyms: new Map(), project: { id: 'p' }, plants: [] };
   const fakeButton = () => ({
     disabled: false,
     handler: null,
@@ -39,7 +40,7 @@ function setup(speciesCsv = PLANTS_CSV) {
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
 function plantsAt(xs, speciesCsv = PLANTS_CSV) {
-  const holly = parseSpeciesCsv(speciesCsv).find((entry) => entry.speciesId === 'yaupon-holly');
+  const holly = parseSpeciesCsv(speciesCsv, DRAWING_CSV).find((entry) => entry.speciesId === 'yaupon-holly');
   return xs.map((x, i) => createPlantFromSpecies(holly, { id: `h${i}`, x, y: 1 }));
 }
 
@@ -73,9 +74,9 @@ test('the stored cursor is honoured even when it is not the last entry', async (
 test('undo after a catalog change shows the catalog as it is now', async () => {
   // Yaupon holly's width, changed in the catalog after the entries were recorded.
   const hollyRow = PLANTS_CSV.split('\n').find((line) => line.startsWith('yaupon-holly,'));
-  assert.ok(hollyRow.includes(',10,18,umbel/head,'), 'fixture: holly is 10 ft wide, 18 ft tall');
-  const changedCsv = PLANTS_CSV.replace(hollyRow, hollyRow.replace(',10,18,umbel/head,', ',42,18,umbel/head,'));
-  assert.equal(parseSpeciesCsv(changedCsv).find((e) => e.speciesId === 'yaupon-holly').width, 42);
+  assert.ok(hollyRow.includes(',10,18,10-2,'), 'fixture: holly is 10 ft wide, 18 ft tall');
+  const changedCsv = PLANTS_CSV.replace(hollyRow, hollyRow.replace(',10,18,10-2,', ',42,18,10-2,'));
+  assert.equal(parseSpeciesCsv(changedCsv, DRAWING_CSV).find((e) => e.speciesId === 'yaupon-holly').width, 42);
 
   const { controller, appState, calls, undoButton, redoButton } = setup(changedCsv);
   // Recorded under the old catalog: full legacy objects in entry 0, placements in entry 1.

@@ -53,6 +53,7 @@ test('every page, and every file those pages reference, is served', () => {
 test('the data files the browser fetches are served', () => {
   for (const p of [
     'plants.csv',
+    'plant-drawing.csv',
     'src/app.js',
     'src/ecosystem/plantMatches.view.js',
     'ecology/anchors.csv',

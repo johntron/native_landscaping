@@ -59,6 +59,7 @@ const SERVABLE_PATHS = [
   /^[a-z0-9-]+\.css$/,
   /^favicon\.svg$/,
   /^plants\.csv$/,
+  /^plant-drawing\.csv$/, // how each species is drawn (nl-3s5.21); beside plants.csv, not under the dev-tree catalog/ mount
   /^src\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_.-]+\.js$/,
   /^(?:ecology|catalog|sourcing)\/[a-z0-9-]+\.csv$/,
   /^node_modules\/jszip\/dist\/jszip\.min\.js$/, // the HOA packet export

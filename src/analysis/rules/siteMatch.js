@@ -82,7 +82,7 @@ export default {
         plantUndeclared.water += 1;
         plantsNotFullyChecked.add(name);
       } else checked.push(checkWater(plant, ctx.site.water));
-      if (ctx.site.soil && !declaresAxis(plant.soilPref)) {
+      if (ctx.site.soil && !soilList(plant).length) {
         plantUndeclared.soil += 1;
         plantsNotFullyChecked.add(name);
       } else checked.push(checkSoil(plant, ctx.site.soil));
@@ -203,20 +203,28 @@ const SOIL_COMPOUND_EQUIVALENTS = Object.freeze({
 });
 
 /**
- * Soil is set membership: a plant lists the soils it will take, comma
- * separated. A comma-separated `soil_pref` is a MEASURED accepted set
- * (nl-9a6: USDA's soil_coarse/medium/fine triple) — a mismatch against it is
- * a real gap, same weight as sun/water. A single value is still just a
- * preference with no tolerance data behind it, so a mismatch there stays a
- * caution (see the comment atop this file).
+ * The soils a plant takes, as src/data/plantParser.js parsed them: an array
+ * of SITE_VOCABULARY soils, split and checked once there (nl-3s5.21), never
+ * re-split here. Anything else (a legacy snapshot whose species left the
+ * catalog still carries the old string) counts as undeclared, which the rule
+ * reports rather than guessing at.
+ * @returns {string[]}
+ */
+function soilList(plant) {
+  return Array.isArray(plant.soilPref) ? plant.soilPref : [];
+}
+
+/**
+ * Soil is set membership: a plant lists the soils it will take. A
+ * multi-value `soil_pref` is a MEASURED accepted set (nl-9a6: USDA's
+ * soil_coarse/medium/fine triple) — a mismatch against it is a real gap,
+ * same weight as sun/water. A single value is still just a preference with no
+ * tolerance data behind it, so a mismatch there stays a caution (see the
+ * comment atop this file).
  */
 function checkSoil(plant, siteSoil) {
   if (!siteSoil) return null;
-  const listed = String(plant.soilPref || '')
-    .toLowerCase()
-    .split(/[,/|]/)
-    .map((value) => value.trim())
-    .filter(Boolean);
+  const listed = soilList(plant);
   const measured = listed.length > 1;
   const accepted = listed.flatMap((value) => [value, ...(SOIL_COMPOUND_EQUIVALENTS[value] || [])]);
   if (!accepted.length || accepted.includes(siteSoil)) return null;

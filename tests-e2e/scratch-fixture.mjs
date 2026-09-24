@@ -258,6 +258,7 @@ const LINKED = [
   'favicon.svg',
   'src',
   'plants.csv',
+  'plant-drawing.csv', // how each species is drawn (nl-3s5.21); design.html refuses to boot without it
   'ecology',
   'catalog',
   'node_modules',

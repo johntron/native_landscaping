@@ -1,6 +1,6 @@
 /**
- * The design tool's two downloads: the plan bundle (plants.csv, the layout,
- * and a PNG per view) and the HOA submission packet (a cover letter and the
+ * The design tool's two downloads: the plan bundle (plants.csv and
+ * plant-drawing.csv, the layout, and a PNG per view) and the HOA submission packet (a cover letter and the
  * same PNGs). Both render every view in June with all layers shown and nothing
  * hovered, capture the panels, zip them, and then put the page back exactly as
  * the user left it.
@@ -26,6 +26,7 @@ const EXPORT_MONTH = 6; // June
  * @param {() => object} deps.getProject
  * @param {() => Array<{ view: object, svg: SVGSVGElement }>} deps.getViewPanels
  * @param {() => string} deps.getSpeciesCsv      the loaded plants.csv text; '' until it loads
+ * @param {() => string} deps.getDrawingCsv      the loaded plant-drawing.csv text; '' until it loads
  * @param {() => void} deps.render
  * @param {(count: number, opts?: object) => void} deps.applyHiddenLayers
  * @param {(count: number) => void} deps.syncLayerButtons
@@ -37,6 +38,7 @@ export function createExportActions({
   getProject,
   getViewPanels,
   getSpeciesCsv,
+  getDrawingCsv,
   render,
   applyHiddenLayers,
   syncLayerButtons,
@@ -122,12 +124,16 @@ export function createExportActions({
     if (isBundleExporting) return;
     if (!panelsReady()) return;
     const speciesCsv = getSpeciesCsv();
-    if (!speciesCsv) {
-      console.warn('No plants.csv loaded; cannot export bundle.');
+    const drawingCsv = getDrawingCsv();
+    if (!speciesCsv || !drawingCsv) {
+      console.warn('No plants.csv or plant-drawing.csv loaded; cannot export bundle.');
       return;
     }
     await runExport(button, 'Preparing bundle…', 'plan bundle', ({ zip, project }) => {
+      // Both halves of the catalog: parseSpeciesCsv(plants, drawing) is what
+      // reproduces the plants drawn here (nl-3s5.21).
       zip.file('plants.csv', speciesCsv);
+      zip.file('plant-drawing.csv', drawingCsv);
       zip.file('planting_layout.csv', buildLayoutCsv(appState.plants));
       return `${project.id}-plan.zip`;
     });

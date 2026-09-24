@@ -92,6 +92,7 @@ const appState = {
 };
 
 let loadedSpeciesCsv = '';
+let loadedDrawingCsv = '';
 
 async function init() {
   const monthSlider = document.getElementById('monthSlider');
@@ -287,6 +288,7 @@ async function init() {
     getProject: () => project,
     getViewPanels: () => viewPanels,
     getSpeciesCsv: () => loadedSpeciesCsv,
+    getDrawingCsv: () => loadedDrawingCsv,
     render: () => render(),
     applyHiddenLayers,
     syncLayerButtons,
@@ -682,8 +684,12 @@ async function init() {
   }
 
   try {
-    const [speciesCsv, synonymCsv, ecology] = await Promise.all([
+    const [speciesCsv, drawingCsv, synonymCsv, ecology] = await Promise.all([
       fetchCsv(new URL('plants.csv', document.baseURI)),
+      // How each species is drawn (nl-3s5.21): required, like plants.csv, since
+      // a species without its drawing row is refused rather than drawn in
+      // fallback colours.
+      fetchCsv(new URL('plant-drawing.csv', document.baseURI)),
       fetchCsv(new URL('catalog/species-synonyms.csv', document.baseURI)).catch(() => ''),
       // A missing or unreadable ecology table costs checks, not the app, so
       // this never joins the failure path above — which stops the yard
@@ -694,7 +700,8 @@ async function init() {
     appState.interactions = ecology.interactions;
     appState.nearbyFauna = ecology.nearbyFauna;
     loadedSpeciesCsv = speciesCsv;
-    appState.species = parseSpeciesCsv(speciesCsv);
+    loadedDrawingCsv = drawingCsv;
+    appState.species = parseSpeciesCsv(speciesCsv, drawingCsv);
     appState.speciesSynonyms = parseSynonymCsv(synonymCsv);
     // History is the yard (nl-3s5.3): the plants shown are the entry at its
     // cursor, built from plants.csv. There is no stored layout file to load

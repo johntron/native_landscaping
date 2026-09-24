@@ -54,7 +54,8 @@ The **HOA submission packet** export (`src/export/hoaPacket.js`) is produced fro
 ## Repo map
 
 ```
-plants.csv            the species catalog every yard renders from (the single source of truth)
+plants.csv            the species catalog every yard renders from (the single source of truth); claim-backed botany only
+plant-drawing.csv     how each species is drawn (colours, flowers), keyed by plants.csv id; our judgement, with a source
 catalog/              wider regional lists + manual-corrections.tsv; see catalog/README.md
 ecology/              sourced, genus- or place-keyed tables for the rules engine
 sourcing/             sourced nursery and plant-sale tables behind sourcing.html
@@ -76,7 +77,7 @@ tests/, tests-e2e/    Node unit tests (the gate) and Playwright specs
 - **Don't invent plant data.** Use real botanical names. Every row in a sourced table
   carries a `source`, and a value nobody has sourced stays **blank rather than
   guessed**. `tests/sourcedTables.test.js` enforces the `source` column on every
-  `ecology/` and `sourcing/` table. "Absent" is reported as undeclared, never filled with a default.
+  `ecology/` and `sourcing/` table and on `plant-drawing.csv`. "Absent" is reported as undeclared, never filled with a default.
 - **No composite scores.** The rules engine reports per dimension with no roll-up,
   because the weights would be invented. **Never emit a connectivity score, gradient,
   or weighted lines** either: anchor location and distance are facts, while "how

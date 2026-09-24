@@ -230,7 +230,7 @@ log "$base_url/ answered 200"
 # static allowlist in server/static.js is narrow), and that is fine.
 # projects/ and catalog/ are served from the dev tree's mounts, so they are skipped.
 served=$(printf '%s\n' "$changed" |
-  grep -E '^([a-z0-9-]+\.(html|css)|plants\.csv|src/.+\.js|(ecology|sourcing)/[a-z0-9-]+\.csv)$' || true)
+  grep -E '^([a-z0-9-]+\.(html|css)|plants\.csv|plant-drawing\.csv|src/.+\.js|(ecology|sourcing)/[a-z0-9-]+\.csv)$' || true)
 for path in $served; do
   git -C "$dev_root" cat-file -e "$target:$path" 2>/dev/null || continue # deleted
   expected=$(git -C "$dev_root" show "$target:$path" | sha256sum)

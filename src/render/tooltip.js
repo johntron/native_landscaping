@@ -16,12 +16,21 @@ export function buildTooltipLines(plant, state) {
     formatPositionLine(plant),
     `Sun: ${plant.sunPref}`,
     `Water: ${plant.waterPref}`,
-    `Soil: ${plant.soilPref}`,
+    `Soil: ${formatSoil(plant.soilPref)}`,
     formatBloomLine(plant),
     formatInflorescenceLine(plant, state),
     state?.isFlowering ? 'Flowering' : '',
     formatFruitLine(plant, state),
   ];
+}
+
+/**
+ * soilPref is the array plantParser.js parsed (nl-3s5.21); joined with a
+ * bare comma, it reads exactly as the plants.csv cell did. A legacy snapshot
+ * whose species left the catalog may still hold the old string.
+ */
+export function formatSoil(soilPref) {
+  return Array.isArray(soilPref) ? soilPref.join(',') : String(soilPref ?? '');
 }
 
 function formatLabelLine(plant) {

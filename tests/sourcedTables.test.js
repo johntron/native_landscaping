@@ -11,22 +11,26 @@ import { parseCsv } from '../src/data/csvLoader.js';
 const ECOLOGY_DIR = fileURLToPath(new URL('../ecology/', import.meta.url));
 const SOURCING_DIR = fileURLToPath(new URL('../sourcing/', import.meta.url));
 const CORRECTIONS = fileURLToPath(new URL('../catalog/manual-corrections.tsv', import.meta.url));
+const REPO_ROOT = fileURLToPath(new URL('../', import.meta.url));
 
 const csvIn = (dir) => readdirSync(dir).filter((name) => name.endsWith('.csv')).map((name) => ({ dir, name }));
 const ecologyTables = csvIn(ECOLOGY_DIR);
-// sourcing/ (nurseries and plant sales) is held to the same rule.
-const sourcedTables = [...ecologyTables, ...csvIn(SOURCING_DIR)];
+// sourcing/ (nurseries and plant sales) is held to the same rule, and so is
+// plant-drawing.csv (nl-3s5.21): how each species is drawn is our judgement,
+// and its source column is where that judgement names its author.
+const sourcedTables = [...ecologyTables, ...csvIn(SOURCING_DIR), { dir: REPO_ROOT, name: 'plant-drawing.csv' }];
+const labelFor = (dir) => (dir === ECOLOGY_DIR ? 'ecology' : dir === SOURCING_DIR ? 'sourcing' : 'repo root');
 
 test('ecology/ has tables to check', () => {
   assert.ok(ecologyTables.length > 0);
 });
 
 for (const { dir, name } of sourcedTables) {
-  const label = dir === ECOLOGY_DIR ? 'ecology' : 'sourcing';
-  test(`${label}/${name}: has a source column and every row fills it`, () => {
+  const label = labelFor(dir);
+  test(`${label === 'repo root' ? '' : `${label}/`}${name}: has a source column and every row fills it`, () => {
     const rows = parseCsv(readFileSync(`${dir}${name}`, 'utf8'));
     assert.ok(rows.length > 0, 'table is empty');
-    assert.ok('source' in rows[0], `no source column: every ${label}/ table must cite where its rows came from`);
+    assert.ok('source' in rows[0], `no source column: every sourced table must cite where its rows came from`);
     const unsourced = rows
       .map((row, i) => ({ line: i + 2, row }))
       .filter(({ row }) => !String(row.source ?? '').trim());

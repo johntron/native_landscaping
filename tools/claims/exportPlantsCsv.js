@@ -35,6 +35,18 @@ export const DEFAULT_OUTPUT_PATH = `${REPO_ROOT}plants.csv`;
 
 // The committed file's own column order — a fixed contract, not derived from
 // whatever ingest happens to have populated the store with today.
+//
+// Every column is identity or a claim-store field (nl-3s5.21). How the design
+// tool DRAWS a species (flower/foliage/fruit hex, inflorescence, flower count
+// and zone) is an authored judgement and lives in plant-drawing.csv, which this
+// export never writes. The store does hold USDA flower/summer-foliage/fruit
+// colour claims (a colour name mapped to a swatch by
+// tools/usda-plants/colorNames.js), but the hex the app draws is the authored
+// one, so those claims are left for checking, not exported.
+//
+// width_ft is the one field here with no claims at all: the store tracks it
+// (stoppingCondition.js BLOCKING_FIELDS) and unsourceableRegister.js records
+// why no source carries it. It stays, because the rules engine grades it.
 export const PLANTS_CSV_HEADER = [
   'id',
   'common_name',
@@ -46,20 +58,11 @@ export const PLANTS_CSV_HEADER = [
   'growth_shape',
   'growing_season_months',
   'flowering_season_months',
-  'flower_color',
-  'foliage_color_spring',
-  'foliage_color_summer',
-  'foliage_color_fall',
-  'foliage_color_winter',
   'sun_pref',
   'water_pref',
   'soil_pref',
   'width_ft',
   'height_ft',
-  'inflorescence',
-  'flower_count_hint',
-  'flower_zone',
-  'fruit_color',
   'fruit_season_months',
   'fruit_load',
 ];

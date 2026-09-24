@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openClaimsStore, createSchema } from '../tools/claims/claimsStore.js';
 import { buildPlantsCsv, PLANTS_CSV_HEADER } from '../tools/claims/exportPlantsCsv.js';
+import { DRAWING_COLUMNS } from '../src/data/plantParser.js';
 
 function tempDbPath() {
   const dir = mkdtempSync(join(tmpdir(), 'claims-export-test-'));
@@ -235,4 +236,18 @@ test('taxon_id is the exported store\'s own taxa id, and blank without an exact 
   const [, linked, ghost] = csvText.trim().split('\n').map((line) => line.split(','));
   assert.equal(linked[PLANTS_CSV_HEADER.indexOf('taxon_id')], String(taxonId));
   assert.equal(ghost[PLANTS_CSV_HEADER.indexOf('taxon_id')], '');
+});
+
+test('the export writes no drawing column, even when the store holds a colour claim (nl-3s5.21)', () => {
+  // plant-drawing.csv owns how a species is drawn. The store's USDA colour
+  // claims stay in the store for checking; they never reach plants.csv.
+  const db = makeStore();
+  const speciesId = insertTaxon(db, { name: 'Passiflora incarnata' });
+  insertClaim(db, { speciesId, field: 'flower_color', value: '#8f6fb3', source: 'usda-plants-characteristics' });
+  const identityRows = [{ id: 'native-passionflower', common_name: 'Native passionflower', botanical_name: 'Passiflora incarnata' }];
+
+  const { csvText } = buildPlantsCsv(db, identityRows);
+  const [header, dataLine] = csvText.trim().split('\n');
+  assert.deepEqual(header.split(',').filter((col) => DRAWING_COLUMNS.includes(col)), []);
+  assert.ok(!dataLine.includes('#8f6fb3'));
 });
