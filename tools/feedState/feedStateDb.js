@@ -27,6 +27,9 @@ export function openFeedStateDb(path = DEFAULT_PATH) {
   mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
   db.exec('PRAGMA journal_mode = WAL');
+  // See savedAreasDb.js's openSavedAreasDb for why (nl-3s5.14): web and
+  // feed-poller can write at the same moment.
+  db.exec('PRAGMA busy_timeout = 5000');
   db.exec(`
     CREATE TABLE IF NOT EXISTS feed_state (
       observation_id INTEGER NOT NULL,

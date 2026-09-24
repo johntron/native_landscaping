@@ -16,6 +16,12 @@ function tempDbPath() {
   return join(dir, 'claims.db');
 }
 
+test('openClaimsStore sets busy_timeout so a concurrent writer waits instead of failing immediately (nl-3s5.14)', () => {
+  const db = openClaimsStore(tempDbPath());
+  const { timeout } = db.prepare('PRAGMA busy_timeout').get();
+  assert.equal(timeout, 5000);
+});
+
 test('schema: the four tables, four claims indexes, and plantable_set view exist', () => {
   const db = openClaimsStore(tempDbPath());
   createSchema(db);

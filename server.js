@@ -10,6 +10,7 @@ import { handleClaimsRoutes } from './server/routes/claims.js';
 import { legacyRedirect, serveStaticFile } from './server/static.js';
 import { openAppDb } from './server/db/appDb.js';
 import { createIdentity } from './server/identity.js';
+import { openServerDatabases } from './server/dbHandles.js';
 
 const envPort = Number(process.env.PORT);
 const PORT = Number.isFinite(envPort) ? envPort : 8000;
@@ -22,11 +23,10 @@ const ROUTES = [handleProjectRoutes, handleEcosystemRoutes, handleFeedRoutes, ha
 // Built once so its configuration warnings log at startup (server/identity.js).
 const identify = createIdentity();
 
-// Opened once at startup, not per request. ctx.db is built as an object, one
-// handle per store, so the other local SQLite stores (nl-3s5.14: savedAreas,
-// feedState, observationEvents, ecosystem, claims) can be merged in under
-// their own keys without clobbering this one.
-const db = { app: openAppDb() };
+// Every SQLite store is opened once at startup and shared through ctx.db,
+// instead of each route opening (and leaking) a handle per request: app.db
+// (nl-3s5.23) plus the tools/ stores (nl-3s5.14, server/dbHandles.js).
+const db = { app: openAppDb(), ...openServerDatabases() };
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || '', `http://${req.headers.host}`);

@@ -64,8 +64,12 @@ function firstObservedOnByTaxon(eventsDb, areaId) {
  *   events with taxon_geoprivacy obscured/private (nl-1qy.4.3) that didn't already match on
  *   local scarcity or conservation status. Off by default, and only ever finds rows the separate
  *   protected-species fetch pass logged (see tools/fetch-observation-events.mjs).
+ * @param {object} [options.ecosystemDb] already-open handle from openEcosystemDb, used by
+ *   the 'rarity' lane instead of opening a fresh one — pass the shared ctx.db.ecosystem
+ *   handle here so a request doesn't leak a per-request handle (nl-3s5.14).
  * @param {string} [options.ecosystemDbPath] test-only override for which data/ecosystem.db
- *   file the 'rarity' lane reads (see tools/feedState/rarityTables.js).
+ *   file the 'rarity' lane reads when no `ecosystemDb` handle is given (see
+ *   tools/feedState/rarityTables.js).
  */
 export function queryFeed(eventsDb, feedStateDb, options) {
   const {
@@ -118,7 +122,7 @@ export function queryFeed(eventsDb, feedStateDb, options) {
     }
   } else if (lane === 'rarity') {
     // ecosystemDbPath is test-only — see rarityTables.js's dbPath override.
-    const tables = loadRarityTables({ place: options.place, dbPath: options.ecosystemDbPath });
+    const tables = loadRarityTables({ place: options.place, db: options.ecosystemDb, dbPath: options.ecosystemDbPath });
     if (!tables.ok) {
       warning = tables.reason;
       events = [];

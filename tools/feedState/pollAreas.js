@@ -15,16 +15,22 @@ import { createFetchJson, pollArea } from '../fetch-observation-events.mjs';
  * @param {string[]} [options.areaIds] poll only these saved areas; omitted/empty polls every saved area
  * @param {boolean} [options.force] bypass the iNaturalist response cache
  * @param {number} [options.maxPages] passed through to pollArea
+ * @param {object} [options.savedAreasDb] already-open handle from openSavedAreasDb; opens a
+ *   fresh one when omitted (the scheduler service's own process, tools/schedule-feed-poll.mjs,
+ *   has no shared handle to pass). The web server's /api/feed/refresh passes its shared
+ *   ctx.db.savedAreas handle instead of opening a new one per request (nl-3s5.14).
+ * @param {object} [options.eventsDb] already-open handle from openObservationEventsDb; same
+ *   default-to-opening behaviour as `savedAreasDb`.
  * @returns {Promise<{results: Array<{areaId: string, fetched: number, written: number}>}>}
  */
-export async function pollSavedAreas({ areaIds, force = false, maxPages } = {}) {
-  const savedAreasDb = openSavedAreasDb();
+export async function pollSavedAreas({ areaIds, force = false, maxPages, savedAreasDb: sharedSavedAreasDb, eventsDb: sharedEventsDb } = {}) {
+  const savedAreasDb = sharedSavedAreasDb || openSavedAreasDb();
   const areas = areaIds?.length
     ? areaIds.map((id) => getSavedArea(savedAreasDb, id)).filter(Boolean)
     : listSavedAreas(savedAreasDb);
   if (!areas.length) return { results: [] };
 
-  const eventsDb = openObservationEventsDb();
+  const eventsDb = sharedEventsDb || openObservationEventsDb();
   const probeCache = openProbeCache();
   const fetchJson = createFetchJson(probeCache, { force });
 

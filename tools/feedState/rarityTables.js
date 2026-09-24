@@ -14,18 +14,21 @@ import { openEcosystemDb, listSpeciesObservations } from '../ecosystemIndexDb.js
 /**
  * Build the taxon_name -> observation_count map the rarity feed lane needs,
  * for one place.
- * @param {{ place?: string, dbPath?: string }} options `dbPath` is test-only,
- *   overriding the default data/ecosystem.db location.
+ * @param {{ place?: string, db?: object, dbPath?: string }} options `db` is an
+ *   already-open handle from openEcosystemDb (what the web server passes, so
+ *   this never opens a fresh handle per request — nl-3s5.14); `dbPath` is
+ *   test-only, overriding the default data/ecosystem.db location when no
+ *   `db` handle is given.
  * @returns {{ ok: false, reason: string } | { ok: true, speciesObservations: Map<string, number> }}
  */
-export function loadRarityTables({ place, dbPath } = {}) {
+export function loadRarityTables({ place, db, dbPath } = {}) {
   const trimmed = String(place || '').trim();
   if (!trimmed) {
     return { ok: false, reason: 'This saved area has no place set — add one to use the rarity lane.' };
   }
 
-  const db = openEcosystemDb(dbPath);
-  const rows = listSpeciesObservations(db, { place: trimmed });
+  const ecosystemDb = db || openEcosystemDb(dbPath);
+  const rows = listSpeciesObservations(ecosystemDb, { place: trimmed });
   if (!rows.length) {
     return { ok: false, reason: `No local species index for place "${trimmed}" — run tools/fetch-ecosystem-index.mjs for it first.` };
   }

@@ -50,6 +50,11 @@ export function openSavedAreasDb(path = DEFAULT_PATH) {
   mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
   db.exec('PRAGMA journal_mode = WAL');
+  // web and feed-poller (tools/schedule-feed-poll.mjs) can write at the same
+  // moment; without a busy_timeout, whichever loses the race gets an
+  // immediate SQLITE_BUSY instead of waiting for the other's write to finish
+  // (nl-3s5.14).
+  db.exec('PRAGMA busy_timeout = 5000');
   db.exec(`
     CREATE TABLE IF NOT EXISTS saved_areas (
       id           TEXT PRIMARY KEY,

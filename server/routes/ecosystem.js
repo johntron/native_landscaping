@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import { isValidProjectId } from '../../src/data/projectConfig.js';
 import { projectIdFromUrl, resolveProjectPaths } from '../../src/data/projectPaths.js';
-import { openEcosystemDb, listSpeciesObservations, listPlaces } from '../../tools/ecosystemIndexDb.js';
+import { listSpeciesObservations, listPlaces } from '../../tools/ecosystemIndexDb.js';
 import { excludeNonNative } from '../../src/analysis/establishmentMeans.js';
 import { openProbeCache } from '../../tools/usda-plants/probeCache.js';
 import { geocodeAddress } from '../../tools/geocode.mjs';
@@ -18,13 +18,12 @@ import { collectPayload } from '../http.js';
  * to let server.js try the next route module. `publicDir` is the served root,
  * which the e2e scratch server points somewhere else.
  */
-export async function handleEcosystemRoutes(req, res, { url, pathname, publicDir }) {
+export async function handleEcosystemRoutes(req, res, { url, pathname, publicDir, db }) {
   if (pathname === '/api/ecosystem' && req.method === 'GET') {
     try {
       const place = url.searchParams.get('place') || 'home';
       const iconicTaxon = url.searchParams.get('taxon') || undefined;
-      const db = openEcosystemDb();
-      const rows = excludeNonNative(listSpeciesObservations(db, { place, iconicTaxon }));
+      const rows = excludeNonNative(listSpeciesObservations(db.ecosystem, { place, iconicTaxon }));
       // location.json is gitignored and otherwise server-only; only surfaced
       // here, per request, so the ecosystem page can link out to iNaturalist
       // scoped to the actual site rather than a generic global search.
@@ -114,9 +113,8 @@ export async function handleEcosystemRoutes(req, res, { url, pathname, publicDir
   // zero items for a place nobody's built an index for.
   if (pathname === '/api/ecosystem/places' && req.method === 'GET') {
     try {
-      const db = openEcosystemDb();
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ places: listPlaces(db) }));
+      res.end(JSON.stringify({ places: listPlaces(db.ecosystem) }));
     } catch (err) {
       console.error(err);
       res.writeHead(400, { 'Content-Type': 'application/json' });

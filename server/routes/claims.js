@@ -1,4 +1,3 @@
-import { openClaimsStore } from '../../tools/claims/claimsStore.js';
 import { coverageView, conflictsView } from '../../tools/claims/humanViews.js';
 import { claimsCorrect } from '../../tools/claims/claimsTools.js';
 import { collectPayload } from '../http.js';
@@ -11,7 +10,7 @@ import { collectPayload } from '../http.js';
  * to let server.js try the next route module. `publicDir` is the served root,
  * which the e2e scratch server points somewhere else.
  */
-export async function handleClaimsRoutes(req, res, { url, pathname, publicDir }) {
+export async function handleClaimsRoutes(req, res, { url, pathname, publicDir, db }) {
   // Two human-facing views over the plant-data claim store (nl-scx.10),
   // implementing docs/data-acquisition/07-mcp-introspection.md §5. Both GET
   // routes reshape the existing claims_* tool output (tools/claims/humanViews.js)
@@ -20,8 +19,7 @@ export async function handleClaimsRoutes(req, res, { url, pathname, publicDir })
   // fields have no yard/project scope, unlike every other route above.
   if (pathname === '/api/claims-coverage' && req.method === 'GET') {
     try {
-      const db = openClaimsStoreForViews();
-      const rows = coverageView(db, {
+      const rows = coverageView(db.claims(), {
         field: url.searchParams.get('field') || undefined,
         species: url.searchParams.get('species') || undefined,
       });
@@ -37,8 +35,7 @@ export async function handleClaimsRoutes(req, res, { url, pathname, publicDir })
 
   if (pathname === '/api/claims-conflicts' && req.method === 'GET') {
     try {
-      const db = openClaimsStoreForViews();
-      const rows = conflictsView(db, { field: url.searchParams.get('field') || undefined });
+      const rows = conflictsView(db.claims(), { field: url.searchParams.get('field') || undefined });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ rows }));
     } catch (err) {
@@ -60,8 +57,7 @@ export async function handleClaimsRoutes(req, res, { url, pathname, publicDir })
   if (pathname === '/api/claims-correct' && req.method === 'POST') {
     try {
       const body = await collectPayload(req, { requirePlants: false });
-      const db = openClaimsStoreForViews();
-      const result = claimsCorrect(db, {
+      const result = claimsCorrect(db.claims(), {
         species: body.species,
         field: body.field,
         value: body.value,
@@ -79,20 +75,4 @@ export async function handleClaimsRoutes(req, res, { url, pathname, publicDir })
   }
 
   return false;
-}
-
-/**
- * Opens data/claims.db for the claims_coverage/claims_conflicts/claims_correct
- * routes above, turning the raw "no such table: taxa" a missing/unbuilt store
- * throws into a message that names the fix, rather than leaking a schema
- * detail to the browser.
- */
-function openClaimsStoreForViews() {
-  const db = openClaimsStore();
-  try {
-    db.prepare('SELECT 1 FROM taxa LIMIT 1').get();
-  } catch {
-    throw new Error('Claim store not built — run tools/claims/rebuild.js to create data/claims.db');
-  }
-  return db;
 }

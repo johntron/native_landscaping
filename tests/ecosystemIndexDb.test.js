@@ -5,6 +5,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openEcosystemDb, replaceTaxonRows, listPlaces } from '../tools/ecosystemIndexDb.js';
 
+test('openEcosystemDb sets busy_timeout so a concurrent writer waits instead of failing immediately (nl-3s5.14)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ecosystem-index-test-'));
+  try {
+    const db = openEcosystemDb(join(dir, 'ecosystem.db'));
+    const { timeout } = db.prepare('PRAGMA busy_timeout').get();
+    assert.equal(timeout, 5000);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('listPlaces returns the distinct, sorted places an index has rows for', () => {
   const dir = mkdtempSync(join(tmpdir(), 'ecosystem-index-test-'));
   try {

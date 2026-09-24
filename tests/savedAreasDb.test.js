@@ -27,6 +27,12 @@ function openTempDb() {
   return openSavedAreasDb(tempDbPath());
 }
 
+test('openSavedAreasDb sets busy_timeout so a concurrent writer waits instead of failing immediately (nl-3s5.14)', () => {
+  const db = openTempDb();
+  const { timeout } = db.prepare('PRAGMA busy_timeout').get();
+  assert.equal(timeout, 5000);
+});
+
 test('createSavedArea inserts a row with a generated id and timestamps, and round-trips filters', () => {
   const db = openTempDb();
   const area = createSavedArea(db, {
