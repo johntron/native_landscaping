@@ -4,14 +4,15 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openObservationEventsDb, upsertEvents } from '../tools/observationEventsDb.js';
-import { openFeedStateDb, setFeedState } from '../tools/feedState/feedStateDb.js';
+import { setFeedState } from '../tools/feedState/feedStateDb.js';
+import { openAppDb } from '../server/db/appDb.js';
 import { queryFeed } from '../tools/feedState/feed.js';
 import { openEcosystemDb, replaceTaxonRows } from '../tools/ecosystemIndexDb.js';
 
 function tmpDbs() {
   const dir = mkdtempSync(join(tmpdir(), 'feed-test-'));
   const eventsDb = openObservationEventsDb(join(dir, 'events.db'));
-  const feedStateDb = openFeedStateDb(join(dir, 'feed-state.db'));
+  const feedStateDb = openAppDb({ dataDir: dir, ownerEmail: '' });
   return { eventsDb, feedStateDb, dir };
 }
 

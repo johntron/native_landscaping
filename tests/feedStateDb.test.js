@@ -3,23 +3,15 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { openFeedStateDb, getFeedState, listFeedStates, setFeedState } from '../tools/feedState/feedStateDb.js';
+import { openAppDb } from '../server/db/appDb.js';
+import { getFeedState, listFeedStates, setFeedState } from '../tools/feedState/feedStateDb.js';
 
 function tmpDb() {
   const dir = mkdtempSync(join(tmpdir(), 'feed-state-test-'));
-  const db = openFeedStateDb(join(dir, 'feed-state.db'));
+  // feed_state lives in app.db (nl-3s5.11).
+  const db = openAppDb({ dataDir: dir, ownerEmail: '' });
   return { db, dir };
 }
-
-test('openFeedStateDb sets busy_timeout so a concurrent writer waits instead of failing immediately (nl-3s5.14)', () => {
-  const { db, dir } = tmpDb();
-  try {
-    const { timeout } = db.prepare('PRAGMA busy_timeout').get();
-    assert.equal(timeout, 5000);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
 
 test('getFeedState defaults to unread/not-dismissed for a never-touched observation', () => {
   const { db, dir } = tmpDb();

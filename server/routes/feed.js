@@ -13,15 +13,15 @@ import { pollSavedAreas } from '../../tools/feedState/pollAreas.js';
 import { collectPayload } from '../http.js';
 
 /**
- * The observation feed: saved monitoring areas (hand-entered, so
- * data/saved-areas.db cannot be rebuilt), the raw event log, the paged feed with
- * read/dismissed state, and the on-demand poll.
+ * The observation feed: saved monitoring areas and read/dismissed state
+ * (hand-entered, so both live in data/app.db, ctx.db.app, which cannot be
+ * rebuilt), the raw event log, the paged feed, and the on-demand poll.
  *
  * Returns true when it handled the request (a response has been sent), false
- * to let server.js try the next route module. `publicDir` is the served root,
- * which the e2e scratch server points somewhere else.
+ * to let server.js try the next route module. `user` is ctx.user
+ * (server/identity.js), or null.
  */
-export async function handleFeedRoutes(req, res, { url, pathname, publicDir, db }) {
+export async function handleFeedRoutes(req, res, { url, pathname, db, user }) {
   // Saved monitoring areas (nl-1qy.1.2) — arbitrary center+radius areas for the
   // observation feed, independent of any yard project, so these live behind
   // their own SQLite-backed CRUD routes rather than a per-project file.
@@ -29,7 +29,7 @@ export async function handleFeedRoutes(req, res, { url, pathname, publicDir, db 
   if (savedAreaMatch && ['GET', 'POST', 'PUT', 'DELETE'].includes(req.method)) {
     const areaId = savedAreaMatch[1] ? decodeURIComponent(savedAreaMatch[1]) : null;
     try {
-      const savedAreasDb = db.savedAreas;
+      const savedAreasDb = db.app;
       if (req.method === 'GET' && !areaId) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ areas: listSavedAreas(savedAreasDb) }));
@@ -48,7 +48,8 @@ export async function handleFeedRoutes(req, res, { url, pathname, publicDir, db 
       }
       if (req.method === 'POST' && !areaId) {
         const body = await collectPayload(req, { requirePlants: false });
-        const area = createSavedArea(savedAreasDb, body);
+        // owner_id records who created it; nothing is scoped by it yet (nl-3s5.5).
+        const area = createSavedArea(savedAreasDb, body, { ownerId: user?.id ?? null });
         exportSavedAreasJson(savedAreasDb);
         console.log(`Saved area '${area.id}' created ('${area.name}')`);
         res.writeHead(201, { 'Content-Type': 'application/json' });
@@ -141,19 +142,19 @@ export async function handleFeedRoutes(req, res, { url, pathname, publicDir, db 
       let ecoregion;
       let place;
       if (lane === 'yard-relevance') {
-        const area = getSavedArea(db.savedAreas, areaId);
+        const area = getSavedArea(db.app, areaId);
         ecoregion = area?.filters?.ecoregion;
       } else if (lane === 'rarity') {
         // Same "look it up server-side" reasoning as ecoregion above — place
         // is a per-saved-area fact (filters.place), not something the client
         // should be trusted to pass directly.
-        const area = getSavedArea(db.savedAreas, areaId);
+        const area = getSavedArea(db.app, areaId);
         place = area?.filters?.place;
       }
       const rarityThresholdParam = url.searchParams.get('rarity_threshold');
       const rarityIncludeConservationStatus = url.searchParams.get('rarity_conservation_status') === 'true';
       const rarityIncludeProtectedSpecies = url.searchParams.get('rarity_protected_species') === 'true';
-      const result = queryFeed(db.observationEvents, db.feedState, {
+      const result = queryFeed(db.observationEvents, db.app, {
         areaId,
         taxonId: taxonIdParam != null ? Number(taxonIdParam) : undefined,
         sinceObservedOn: url.searchParams.get('since_observed_on') || undefined,
@@ -198,7 +199,7 @@ export async function handleFeedRoutes(req, res, { url, pathname, publicDir, db 
       const { results } = await pollSavedAreas({
         areaIds: [areaId],
         maxPages: 3,
-        savedAreasDb: db.savedAreas,
+        appDb: db.app,
         eventsDb: db.observationEvents,
       });
       if (!results.length) {
@@ -226,7 +227,7 @@ export async function handleFeedRoutes(req, res, { url, pathname, publicDir, db 
       if (!areaId || observationId == null) {
         throw new Error('Body requires "areaId" and "observationId"');
       }
-      const state = setFeedState(db.feedState, observationId, areaId, {
+      const state = setFeedState(db.app, observationId, areaId, {
         read: body.read,
         dismissed: body.dismissed,
       });

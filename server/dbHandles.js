@@ -2,7 +2,10 @@
 // hands back the handles for server.js to share through ctx.db, so routes
 // stop calling open*Db() (and leaking a handle) on every request (nl-3s5.14).
 //
-// Four of the five stores are opened eagerly here because opening one is
+// saved_areas and feed_state are not here: they live in app.db (nl-3s5.11),
+// which server.js opens with openAppDb and shares as ctx.db.app.
+//
+// Two of the three stores are opened eagerly here because opening one is
 // cheap and side-effect-free by design (mkdir + WAL + busy_timeout +
 // CREATE TABLE IF NOT EXISTS — see each tools/*Db.js open function).
 //
@@ -16,8 +19,6 @@
 // after the server started is picked up on the very next request, with no
 // restart required.
 import { existsSync } from 'node:fs';
-import { openSavedAreasDb } from '../tools/savedAreas/savedAreasDb.js';
-import { openFeedStateDb } from '../tools/feedState/feedStateDb.js';
 import { openObservationEventsDb } from '../tools/observationEventsDb.js';
 import { openEcosystemDb } from '../tools/ecosystemIndexDb.js';
 import { openClaimsStore, DEFAULT_PATH as CLAIMS_DEFAULT_PATH } from '../tools/claims/claimsStore.js';
@@ -28,16 +29,12 @@ export const CLAIM_STORE_NOT_BUILT_MESSAGE =
 /**
  * @param {object} [paths] per-store path overrides, for tests (never point
  *   these at the live data/ directory — see AGENTS.md's "Data safety").
- * @param {string} [paths.savedAreas]
- * @param {string} [paths.feedState]
  * @param {string} [paths.observationEvents]
  * @param {string} [paths.ecosystem]
  * @param {string} [paths.claims]
- * @returns {{savedAreas: object, feedState: object, observationEvents: object, ecosystem: object, claims: () => object}}
+ * @returns {{observationEvents: object, ecosystem: object, claims: () => object}}
  */
 export function openServerDatabases(paths = {}) {
-  const savedAreas = openSavedAreasDb(paths.savedAreas);
-  const feedState = openFeedStateDb(paths.feedState);
   const observationEvents = openObservationEventsDb(paths.observationEvents);
   const ecosystem = openEcosystemDb(paths.ecosystem);
 
@@ -73,5 +70,5 @@ export function openServerDatabases(paths = {}) {
     return claimsHandle;
   }
 
-  return { savedAreas, feedState, observationEvents, ecosystem, claims };
+  return { observationEvents, ecosystem, claims };
 }

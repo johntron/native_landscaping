@@ -130,16 +130,30 @@ tests/, tests-e2e/    Node unit tests (the gate) and Playwright specs
 
 `data/*.db` files are gitignored. Most are rebuildable caches (`ecosystem.db`,
 `probe-cache.db`, `observation-events.db`, `claims.db`): re-run the matching `tools/`
-script. **Three hold state a person entered by hand and cannot be rebuilt:**
+script. **One holds state a person entered by hand and cannot be rebuilt: `app.db`.**
+Back it up; it is the one file that matters.
 
-- `saved-areas.db`: monitoring areas, entered through `/api/saved-areas`. A redacted
-  snapshot is exported to the tracked `data/saved-areas.export.json` on every write.
-- `feed-state.db`: the feed's per-observation read/dismissed flags. It is deliberately
-  kept apart from `observation-events.db` so that it survives a rebuild of that file.
-- `app.db`: identity and, from nl-3s5.3 onward, projects and their revisions
-  (`server/db/appDb.js`, opened once at startup and passed through `ctx.db.app`; its
-  numbered migrations live in `server/db/migrations/`). `DATA_DIR` controls where it
-  lives — tests and the e2e scratch server point it at a throwaway directory instead.
+- `app.db` (`server/db/appDb.js`, numbered migrations in `server/db/migrations/`) holds
+  users, the saved monitoring areas entered through `/api/saved-areas` (`saved_areas`,
+  with a nullable `owner_id` foreign key to `users`), the feed's per-observation
+  read/dismissed flags (`feed_state`, kept out of `observation-events.db` so it survives
+  a rebuild of that file), and from nl-3s5.3 onward projects and their revisions. `web`
+  opens it once at startup (`ctx.db.app`), applies migrations, seeds `OWNER_EMAIL` as
+  admin, and runs the one-time legacy import below. `feed-poller` opens it with
+  `openAppDbWithoutMigrating`, which never migrates, seeds or imports, and waits for
+  `web` if the schema is behind. The migration runner is safe with both processes
+  starting at once. `DATA_DIR` controls where it lives; tests and the e2e scratch server
+  point it at a throwaway directory instead.
+- A redacted snapshot of the saved areas is still exported to the tracked
+  `data/saved-areas.export.json` (under `DATA_DIR`) on every write. It retires with the
+  backups bead, nl-3s5.13.
+- **Retired:** `saved-areas.db` and `feed-state.db`. Their tables moved into `app.db`
+  (nl-3s5.11): `server/db/legacyImport.js` copied them once, recorded in `app.db`'s
+  `app_meta` table, and never writes the old files. Nothing opens them any more. They
+  are safe to archive once a backup of `app.db` exists; archive each as a set (`.db`,
+  `-wal`, `-shm`) or as a `VACUUM INTO` snapshot, never the `.db` alone, because recent
+  rows may sit only in the `-wal`. `node tools/import-legacy-app-data.mjs --dry-run`
+  compares their row counts with `app.db`, read-only.
 
 A PreToolUse hook in `.claude/settings.json` blocks any `rm` whose command
 mentions `data/`: inspect the file and ask before deleting anything there.
@@ -210,8 +224,8 @@ onto main fires neither hook: deploy by hand afterwards.
 3. restarts `web`. It also restarts `feed-poller` when the deployed range touched code
    the poller loads: `tools/feedState/`, `tools/savedAreas/`,
    `tools/fetch-observation-events.mjs`, `tools/schedule-feed-poll.mjs`,
-   `tools/inatShared.mjs`, `tools/usda-plants/probeCache.js`, or `tools/*Db.js`. That
-   is the import closure of `tools/schedule-feed-poll.mjs`, so widen the list in the
+   `tools/inatShared.mjs`, `tools/usda-plants/probeCache.js`, `tools/*Db.js`, or
+   `server/db/`. That is the import closure of `tools/schedule-feed-poll.mjs`, so widen the list in the
    script when the closure grows. If `docker-compose.yml` or `package*.json` changed,
    or a container still mounts something other than the deploy tree, it runs
    `docker compose up -d --no-deps --force-recreate web feed-poller` instead (and

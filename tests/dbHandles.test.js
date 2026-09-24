@@ -11,28 +11,37 @@ function tmpPaths() {
   const dir = mkdtempSync(join(tmpdir(), 'db-handles-test-'));
   return {
     dir,
-    savedAreas: join(dir, 'saved-areas.db'),
-    feedState: join(dir, 'feed-state.db'),
     observationEvents: join(dir, 'observation-events.db'),
     ecosystem: join(dir, 'ecosystem.db'),
     claims: join(dir, 'claims.db'),
   };
 }
 
-test('openServerDatabases eagerly opens saved areas, feed state, observation events, and ecosystem, each with busy_timeout set', () => {
+test('openServerDatabases eagerly opens observation events and ecosystem, each with busy_timeout set', () => {
   const paths = tmpPaths();
   try {
     const db = openServerDatabases(paths);
-    for (const key of ['savedAreas', 'feedState', 'observationEvents', 'ecosystem']) {
+    for (const key of ['observationEvents', 'ecosystem']) {
       const { timeout } = db[key].prepare('PRAGMA busy_timeout').get();
       assert.equal(timeout, 5000, `${key} should have busy_timeout set`);
     }
     // Opening itself creates each file (mkdir + CREATE TABLE IF NOT EXISTS),
     // matching every other open*Db function's existing behaviour.
-    assert.ok(existsSync(paths.savedAreas));
-    assert.ok(existsSync(paths.feedState));
     assert.ok(existsSync(paths.observationEvents));
     assert.ok(existsSync(paths.ecosystem));
+  } finally {
+    rmSync(paths.dir, { recursive: true, force: true });
+  }
+});
+
+test('openServerDatabases no longer opens saved-areas.db or feed-state.db: those tables live in app.db (nl-3s5.11)', () => {
+  const paths = tmpPaths();
+  try {
+    const db = openServerDatabases(paths);
+    assert.equal('savedAreas' in db, false);
+    assert.equal('feedState' in db, false);
+    assert.equal(existsSync(join(paths.dir, 'saved-areas.db')), false);
+    assert.equal(existsSync(join(paths.dir, 'feed-state.db')), false);
   } finally {
     rmSync(paths.dir, { recursive: true, force: true });
   }

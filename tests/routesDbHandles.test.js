@@ -5,15 +5,16 @@
 // row comes back — which is only possible if the handler read the same
 // handle the test wrote through, not a fresh one at DEFAULT_PATH.
 //
-// GET only: POST/PUT/DELETE on /api/saved-areas call exportSavedAreasJson()
-// with the default (tracked) EXPORT_PATH, which would overwrite
-// data/saved-areas.export.json if exercised here.
+// GET only: POST/PUT/DELETE on /api/saved-areas call exportSavedAreasJson(),
+// which writes saved-areas.export.json under DATA_DIR (the repo's data/ when
+// unset), so they are not exercised here.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openServerDatabases } from '../server/dbHandles.js';
+import { openAppDb } from '../server/db/appDb.js';
 import { handleFeedRoutes } from '../server/routes/feed.js';
 import { handleEcosystemRoutes } from '../server/routes/ecosystem.js';
 import { handleClaimsRoutes } from '../server/routes/claims.js';
@@ -25,12 +26,15 @@ function tmpPaths() {
   const dir = mkdtempSync(join(tmpdir(), 'routes-db-handles-test-'));
   return {
     dir,
-    savedAreas: join(dir, 'saved-areas.db'),
-    feedState: join(dir, 'feed-state.db'),
     observationEvents: join(dir, 'observation-events.db'),
     ecosystem: join(dir, 'ecosystem.db'),
     claims: join(dir, 'claims.db'),
   };
+}
+
+/** ctx.db as server.js builds it: app.db plus the tools/ stores, all under a temp dir. */
+function openDb(paths) {
+  return { app: openAppDb({ dataDir: paths.dir, ownerEmail: '' }), ...openServerDatabases(paths) };
 }
 
 /** Minimal GET req/res + ctx a route handler needs, mirroring server.js's shape. */
@@ -53,11 +57,11 @@ function stubRequest(pathnameAndQuery, db, publicDir) {
   return { req, res, ctx };
 }
 
-test('GET /api/saved-areas reads ctx.db.savedAreas, not a fresh handle', async () => {
+test('GET /api/saved-areas reads ctx.db.app, not a fresh handle', async () => {
   const paths = tmpPaths();
   try {
-    const db = openServerDatabases(paths);
-    createSavedArea(db.savedAreas, { name: 'Backyard', lat: 32.78, lng: -96.8, radiusMi: 5 });
+    const db = openDb(paths);
+    createSavedArea(db.app, { name: 'Backyard', lat: 32.78, lng: -96.8, radiusMi: 5 });
 
     const { req, res, ctx } = stubRequest('/api/saved-areas', db, paths.dir);
     const handled = await handleFeedRoutes(req, res, ctx);
@@ -75,7 +79,7 @@ test('GET /api/saved-areas reads ctx.db.savedAreas, not a fresh handle', async (
 test('GET /api/observation-events reads ctx.db.observationEvents', async () => {
   const paths = tmpPaths();
   try {
-    const db = openServerDatabases(paths);
+    const db = openDb(paths);
     upsertEvents(db.observationEvents, [
       { observation_id: 1, area_id: 'area-1', taxon_name: 'Asclepias tuberosa', observed_on: '2026-01-01', ingested_at: 't1' },
     ]);
@@ -96,8 +100,8 @@ test('GET /api/observation-events reads ctx.db.observationEvents', async () => {
 test('GET /api/feed?lane=rarity reads ctx.db.ecosystem through the rarity lane without opening a fresh handle', async () => {
   const paths = tmpPaths();
   try {
-    const db = openServerDatabases(paths);
-    const area = createSavedArea(db.savedAreas, {
+    const db = openDb(paths);
+    const area = createSavedArea(db.app, {
       name: 'Rare spot',
       lat: 32.78,
       lng: -96.8,
@@ -127,7 +131,7 @@ test('GET /api/feed?lane=rarity reads ctx.db.ecosystem through the rarity lane w
 test('GET /api/ecosystem/places reads ctx.db.ecosystem', async () => {
   const paths = tmpPaths();
   try {
-    const db = openServerDatabases(paths);
+    const db = openDb(paths);
     replaceTaxonRows(db.ecosystem, 'Dallas, TX', 'Plantae', [
       { taxon_name: 'Asclepias tuberosa', genus: 'Asclepias', radius_mi: 10, observation_count: 3, fetched_on: '2026-01-01', source: 'test' },
     ]);
@@ -146,7 +150,7 @@ test('GET /api/ecosystem/places reads ctx.db.ecosystem', async () => {
 test('GET /api/claims-coverage against an unbuilt claim store returns the exact "not built" message, via db.claims(), and creates no file', async () => {
   const paths = tmpPaths();
   try {
-    const db = openServerDatabases(paths);
+    const db = openDb(paths);
     const { req, res, ctx } = stubRequest('/api/claims-coverage', db, paths.dir);
     const handled = await handleClaimsRoutes(req, res, ctx);
 

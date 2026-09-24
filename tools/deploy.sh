@@ -123,8 +123,9 @@ fi
 touched() { [ -n "$changed" ] && grep -Eq "$1" <<<"$changed"; }
 
 # feed-poller loads its code once at boot. This list is the import closure of
-# tools/schedule-feed-poll.mjs (checked 2026-09-23); widen it when that grows.
-FEED_POLLER_CODE='^tools/(feedState/|savedAreas/|fetch-observation-events\.mjs$|schedule-feed-poll\.mjs$|inatShared\.mjs$|usda-plants/probeCache\.js$|[^/]*Db\.js$)'
+# tools/schedule-feed-poll.mjs (checked 2026-09-23, plus server/db/ since
+# nl-3s5.11 moved saved areas into app.db); widen it when that grows.
+FEED_POLLER_CODE='^(tools/(feedState/|savedAreas/|fetch-observation-events\.mjs$|schedule-feed-poll\.mjs$|inatShared\.mjs$|usda-plants/probeCache\.js$|[^/]*Db\.js$)|server/db/)'
 restart_poller=0
 touched "$FEED_POLLER_CODE" && restart_poller=1
 

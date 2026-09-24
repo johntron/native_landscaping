@@ -33,7 +33,7 @@ export function openObservationEventsDb(path = DEFAULT_PATH) {
   mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
   db.exec('PRAGMA journal_mode = WAL');
-  // See tools/savedAreas/savedAreasDb.js's openSavedAreasDb for why
+  // busy_timeout makes a concurrent writer wait instead of failing at once
   // (nl-3s5.14): web and feed-poller can write at the same moment.
   db.exec('PRAGMA busy_timeout = 5000');
   db.exec(`

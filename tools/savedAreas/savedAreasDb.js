@@ -4,12 +4,14 @@
 // (nl-1qy.1) needs to monitor arbitrary areas — a center point + radius, with
 // per-area filter settings — that may have no yard behind them at all.
 //
-// SQLite via node:sqlite, WAL, gitignored (*.db) — same convention as
-// tools/ecosystemIndexDb.js and tools/claims/claimsStore.js. `id` is a stable
-// TEXT (UUID) primary key, chosen specifically so a sibling store (nl-1qy.1.1's
-// observation event log, area_id column) can join against it by value even
-// though it lives in its own database file — this module owns no opinion about
-// where that other table lives.
+// The saved_areas table lives in data/app.db (nl-3s5.11; schema in
+// server/db/migrations/002_saved_areas_and_feed_state.sql), so every function
+// here takes the app.db handle: ctx.db.app in the web server, or
+// openAppDbWithoutMigrating() in feed-poller. It used to be its own file,
+// data/saved-areas.db, which server/db/legacyImport.js copies in once and
+// otherwise leaves alone. `id` is a stable TEXT (UUID) primary key, so the
+// observation event log (observation-events.db, area_id column) can join
+// against it by value across database files.
 //
 // Row shape (stable, documented for that join):
 //   id            TEXT    primary key, uuid
@@ -25,13 +27,12 @@
 //                         set, and stores whatever it's given.
 //   created_at    TEXT    ISO 8601, set on insert, never changed
 //   updated_at    TEXT    ISO 8601, set on insert and every update
-import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
-import { dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+//   owner_id      INTEGER users(id), nullable: who created the area, when known.
+//                         Recorded, not enforced; nl-3s5.5 makes areas per-user.
+import { writeFileSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-
-export const DEFAULT_PATH = fileURLToPath(new URL('../../data/saved-areas.db', import.meta.url));
+import { resolveDataDir } from '../../server/db/appDb.js';
 
 // This project's git repo is PUBLIC (see the .gitignore note on
 // projects/*/location.json), so unlike that file, this export is safe to
@@ -40,34 +41,16 @@ export const DEFAULT_PATH = fileURLToPath(new URL('../../data/saved-areas.db', i
 // enough to pinpoint a specific address. `id` is included since it's the
 // join key the observation-event log's area_id column depends on, and
 // losing it on restore would silently orphan any already-fetched events.
-export const EXPORT_PATH = fileURLToPath(new URL('../../data/saved-areas.export.json', import.meta.url));
+//
+// Resolved under DATA_DIR at call time, like app.db itself, so the e2e
+// scratch servers (which set DATA_DIR) never overwrite the tracked
+// data/saved-areas.export.json. Retires with the backups bead (nl-3s5.13).
+export function exportPath() {
+  return join(resolveDataDir(), 'saved-areas.export.json');
+}
 
 function roundCoord(n) {
   return Math.round(n * 10) / 10;
-}
-
-export function openSavedAreasDb(path = DEFAULT_PATH) {
-  mkdirSync(dirname(path), { recursive: true });
-  const db = new DatabaseSync(path);
-  db.exec('PRAGMA journal_mode = WAL');
-  // web and feed-poller (tools/schedule-feed-poll.mjs) can write at the same
-  // moment; without a busy_timeout, whichever loses the race gets an
-  // immediate SQLITE_BUSY instead of waiting for the other's write to finish
-  // (nl-3s5.14).
-  db.exec('PRAGMA busy_timeout = 5000');
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS saved_areas (
-      id           TEXT PRIMARY KEY,
-      name         TEXT NOT NULL,
-      lat          REAL NOT NULL,
-      lng          REAL NOT NULL,
-      radius_mi    REAL NOT NULL,
-      filters_json TEXT NOT NULL DEFAULT '{}',
-      created_at   TEXT NOT NULL,
-      updated_at   TEXT NOT NULL
-    )
-  `);
-  return db;
 }
 
 /**
@@ -149,6 +132,7 @@ function rowToArea(row) {
     filters,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    ownerId: row.owner_id ?? null,
   };
 }
 
@@ -160,14 +144,20 @@ export function getSavedArea(db, id) {
   return rowToArea(db.prepare('SELECT * FROM saved_areas WHERE id = ?').get(id));
 }
 
-export function createSavedArea(db, input) {
+/**
+ * @param {import('node:sqlite').DatabaseSync} db app.db
+ * @param {object} input see validateSavedAreaInput
+ * @param {{ ownerId?: number | null }} [options] the creating user's id
+ *   (ctx.user.id), recorded as owner_id; omitted or null leaves it unowned
+ */
+export function createSavedArea(db, input, { ownerId = null } = {}) {
   const { name, lat, lng, radiusMi, filters } = validateSavedAreaInput(input);
   const id = randomUUID();
   const now = new Date().toISOString();
   db.prepare(
-    `INSERT INTO saved_areas (id, name, lat, lng, radius_mi, filters_json, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(id, name, lat, lng, radiusMi, JSON.stringify(filters), now, now);
+    `INSERT INTO saved_areas (id, name, lat, lng, radius_mi, filters_json, created_at, updated_at, owner_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(id, name, lat, lng, radiusMi, JSON.stringify(filters), now, now, ownerId ?? null);
   return getSavedArea(db, id);
 }
 
@@ -207,8 +197,8 @@ export function deleteSavedArea(db, id) {
 
 /**
  * Snapshot every saved area to a git-trackable JSON file (coordinates
- * rounded per EXPORT_PATH's note above), so an accidental loss of
- * saved-areas.db — a bad `rm`, a corrupted WAL file, a wiped disk — has a
+ * rounded per exportPath's note above), so an accidental loss of
+ * app.db — a bad `rm`, a corrupted WAL file, a wiped disk — has a
  * recoverable record of what areas existed, even though restoring from it
  * loses exact placement and re-adopts existing observation-event history
  * only because `id` round-trips. Callers decide when this runs (the
@@ -216,7 +206,7 @@ export function deleteSavedArea(db, id) {
  * NOT wired into the CRUD functions themselves so tests using a scratch db
  * never write to the real project path.
  */
-export function exportSavedAreasJson(db, path = EXPORT_PATH) {
+export function exportSavedAreasJson(db, path = exportPath()) {
   const areas = listSavedAreas(db).map((a) => ({
     id: a.id,
     name: a.name,
@@ -241,7 +231,7 @@ export function exportSavedAreasJson(db, path = EXPORT_PATH) {
  * has some rows. Recovered rows keep only ~11km-precision coordinates —
  * exportSavedAreasJson never had the exact ones to begin with.
  */
-export function restoreSavedAreasFromExport(db, path = EXPORT_PATH) {
+export function restoreSavedAreasFromExport(db, path = exportPath()) {
   const { areas } = JSON.parse(readFileSync(path, 'utf8'));
   const insert = db.prepare(
     `INSERT OR IGNORE INTO saved_areas (id, name, lat, lng, radius_mi, filters_json, created_at, updated_at)

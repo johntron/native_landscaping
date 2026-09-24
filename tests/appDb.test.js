@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { openAppDb, resolveDataDir, seedOwner } from '../server/db/appDb.js';
+import { openAppDb, openAppDbWithoutMigrating, AppDbNotReadyError, resolveDataDir, seedOwner } from '../server/db/appDb.js';
+import { existsSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import { runMigrations } from '../server/db/migrate.js';
 
 const MIGRATIONS_DIR = fileURLToPath(new URL('../server/db/migrations', import.meta.url));
@@ -31,16 +33,17 @@ test('resolveDataDir honours DATA_DIR and falls back to data/ under the repo', (
   }
 });
 
-test('the migration runner applies migration 001 once and records schema_version', () => {
+test('the migration runner applies every migration once and records schema_version', () => {
   const dataDir = tempDataDir();
   const db = openAppDb({ dataDir, ownerEmail: '' });
   try {
     const versions = db.prepare('SELECT version, name FROM schema_version ORDER BY version').all();
     assert.deepEqual(
       versions.map((r) => r.version),
-      [1]
+      [1, 2]
     );
     assert.match(versions[0].name, /^001_/);
+    assert.match(versions[1].name, /^002_saved_areas_and_feed_state/);
 
     const columns = db
       .prepare("SELECT name FROM pragma_table_info('users')")
@@ -65,7 +68,7 @@ test('re-running the migration runner is a no-op', () => {
     const versions = db.prepare('SELECT version FROM schema_version').all();
     assert.deepEqual(
       versions.map((r) => r.version),
-      [1]
+      [1, 2]
     );
   } finally {
     db.close();
@@ -124,6 +127,63 @@ test('pragmas are set: WAL, foreign_keys on, busy_timeout 5000', () => {
     assert.equal(db.prepare('PRAGMA busy_timeout').get().timeout, 5000);
   } finally {
     db.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('migration 002 creates saved_areas with a nullable owner_id foreign key to users, and feed_state and app_meta', () => {
+  const dataDir = tempDataDir();
+  const db = openAppDb({ dataDir, ownerEmail: '' });
+  try {
+    const cols = (t) => db.prepare(`SELECT name FROM pragma_table_info('${t}')`).all().map((r) => r.name).sort();
+    assert.deepEqual(cols('saved_areas'), [
+      'created_at', 'filters_json', 'id', 'lat', 'lng', 'name', 'owner_id', 'radius_mi', 'updated_at',
+    ]);
+    assert.deepEqual(cols('feed_state'), ['area_id', 'dismissed', 'observation_id', 'read', 'updated_at']);
+    assert.deepEqual(cols('app_meta'), ['key', 'updated_at', 'value']);
+    const fk = db.prepare("SELECT \"table\", \"from\", \"to\" FROM pragma_foreign_key_list('saved_areas')").all().map((r) => ({ ...r }));
+    assert.deepEqual(fk, [{ table: 'users', from: 'owner_id', to: 'id' }]);
+    const ownerCol = db.prepare("SELECT \"notnull\" FROM pragma_table_info('saved_areas') WHERE name = 'owner_id'").get();
+    assert.equal(ownerCol.notnull, 0);
+  } finally {
+    db.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('openAppDbWithoutMigrating refuses, without creating it, when app.db does not exist', () => {
+  const dataDir = tempDataDir();
+  try {
+    assert.throws(() => openAppDbWithoutMigrating({ dataDir }), AppDbNotReadyError);
+    assert.equal(existsSync(join(dataDir, 'app.db')), false);
+  } finally {
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('openAppDbWithoutMigrating refuses a schema behind this code, and applies nothing itself', () => {
+  const dataDir = tempDataDir();
+  try {
+    // An app.db that only ever reached migration 001.
+    const old = new DatabaseSync(join(dataDir, 'app.db'));
+    const onlyFirst = join(dataDir, 'migrations-001');
+    mkdirSync(onlyFirst);
+    copyFileSync(join(MIGRATIONS_DIR, '001_users.sql'), join(onlyFirst, '001_users.sql'));
+    runMigrations(old, onlyFirst);
+    old.close();
+
+    assert.throws(() => openAppDbWithoutMigrating({ dataDir }), (err) => err instanceof AppDbNotReadyError && /schema version 1/.test(err.message));
+    const check = new DatabaseSync(join(dataDir, 'app.db'));
+    assert.deepEqual(check.prepare('SELECT version FROM schema_version').all().map((r) => r.version), [1]);
+    check.close();
+
+    // Once web has migrated it, the same call opens it with busy_timeout set.
+    openAppDb({ dataDir, ownerEmail: '' }).close();
+    const db = openAppDbWithoutMigrating({ dataDir });
+    assert.equal(db.prepare('PRAGMA busy_timeout').get().timeout, 5000);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM saved_areas').get().n, 0);
+    db.close();
+  } finally {
     rmSync(dataDir, { recursive: true, force: true });
   }
 });

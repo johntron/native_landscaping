@@ -1,47 +1,26 @@
-// SQLite store for per-observation read/dismissed flags (nl-1qy.1.3).
+// Per-observation read/dismissed flags (nl-1qy.1.3), in the feed_state table
+// of data/app.db (nl-3s5.11; schema in
+// server/db/migrations/002_saved_areas_and_feed_state.sql). Every function
+// here takes the app.db handle (ctx.db.app). It used to be its own file,
+// data/feed-state.db, which server/db/legacyImport.js copies in once and
+// otherwise leaves alone.
 //
-// Deliberately its own database file rather than a column on
-// observation_events: the event log is rebuilt wholesale by re-running
-// tools/fetch-observation-events.mjs's upsert (see tools/observationEventsDb.js),
-// and state a person set by hand — "I already saw this" — must survive that
-// independent of whatever the fetch script does to the event row. Same
-// separation-of-concerns reasoning as area_cursor living apart from
-// observation_events in that module.
+// Deliberately NOT a column on observation_events: the event log is rebuilt
+// wholesale by re-running tools/fetch-observation-events.mjs's upsert (see
+// tools/observationEventsDb.js), and state a person set by hand — "I already
+// saw this" — must survive that independent of whatever the fetch script does
+// to the event row. Living in app.db rather than observation-events.db keeps
+// it on the hand-entered, backed-up side of that line.
 //
 // Keyed by (observation_id, area_id), matching observation_events' primary
 // key, since the same iNaturalist observation can appear in more than one
-// area's feed with independent read/dismissed state per area.
+// area's feed with independent read/dismissed state per area. Not per viewer
+// yet: see the migration's note, and nl-3s5.5.
 //
 // No row for a given (observation_id, area_id) means "unread, not
 // dismissed" — the default a freshly-fetched observation should show as.
-// Server-side (not localStorage) because this is a single-user local app
-// with no auth, and state should be consistent across devices/browsers.
-import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-export const DEFAULT_PATH = fileURLToPath(new URL('../../data/feed-state.db', import.meta.url));
-
-export function openFeedStateDb(path = DEFAULT_PATH) {
-  mkdirSync(dirname(path), { recursive: true });
-  const db = new DatabaseSync(path);
-  db.exec('PRAGMA journal_mode = WAL');
-  // See savedAreasDb.js's openSavedAreasDb for why (nl-3s5.14): web and
-  // feed-poller can write at the same moment.
-  db.exec('PRAGMA busy_timeout = 5000');
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS feed_state (
-      observation_id INTEGER NOT NULL,
-      area_id        TEXT NOT NULL,
-      read           INTEGER NOT NULL DEFAULT 0,
-      dismissed      INTEGER NOT NULL DEFAULT 0,
-      updated_at     TEXT NOT NULL,
-      PRIMARY KEY (observation_id, area_id)
-    )
-  `);
-  return db;
-}
+// Server-side (not localStorage) so state is consistent across devices and
+// browsers.
 
 function rowToState(row) {
   if (!row) return { read: false, dismissed: false, updatedAt: null };

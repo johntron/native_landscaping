@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { openAppDb } from '../server/db/appDb.js';
 import {
-  openSavedAreasDb,
   createSavedArea,
   getSavedArea,
   listSavedAreas,
@@ -19,18 +19,40 @@ function tempDir() {
   return mkdtempSync(join(tmpdir(), 'saved-areas-test-'));
 }
 
-function tempDbPath() {
-  return join(tempDir(), 'saved-areas.db');
-}
-
+// saved_areas lives in app.db (nl-3s5.11): a fresh, migrated app.db in a
+// throwaway DATA_DIR per test, never the repo's data/.
 function openTempDb() {
-  return openSavedAreasDb(tempDbPath());
+  return openAppDb({ dataDir: tempDir(), ownerEmail: '' });
 }
 
-test('openSavedAreasDb sets busy_timeout so a concurrent writer waits instead of failing immediately (nl-3s5.14)', () => {
+test('createSavedArea records ownerId as owner_id, a real foreign key to users, and defaults to unowned', () => {
   const db = openTempDb();
-  const { timeout } = db.prepare('PRAGMA busy_timeout').get();
-  assert.equal(timeout, 5000);
+  const userId = db
+    .prepare("INSERT INTO users (email, is_admin, created_at) VALUES ('a@example.com', 0, 'now') RETURNING id")
+    .get().id;
+  const owned = createSavedArea(db, { name: 'Owned', lat: 1, lng: 1, radiusMi: 1 }, { ownerId: userId });
+  const unowned = createSavedArea(db, { name: 'Unowned', lat: 1, lng: 1, radiusMi: 1 });
+  assert.equal(owned.ownerId, userId);
+  assert.equal(unowned.ownerId, null);
+  // foreign_keys is on in openAppDb, so an owner that does not exist is refused.
+  assert.throws(() => createSavedArea(db, { name: 'Ghost', lat: 1, lng: 1, radiusMi: 1 }, { ownerId: 9999 }), /FOREIGN KEY/);
+});
+
+test('exportSavedAreasJson defaults to saved-areas.export.json under DATA_DIR, so a scratch server never overwrites the tracked one', () => {
+  const dataDir = tempDir();
+  const db = openAppDb({ dataDir, ownerEmail: '' });
+  createSavedArea(db, { name: 'Backyard', lat: 32.78412, lng: -96.79961, radiusMi: 5 });
+  const saved = process.env.DATA_DIR;
+  try {
+    process.env.DATA_DIR = dataDir;
+    exportSavedAreasJson(db);
+  } finally {
+    if (saved === undefined) delete process.env.DATA_DIR;
+    else process.env.DATA_DIR = saved;
+  }
+  const written = JSON.parse(readFileSync(join(dataDir, 'saved-areas.export.json'), 'utf8'));
+  assert.equal(written.areas[0].name, 'Backyard');
+  assert.equal('ownerId' in written.areas[0], false, 'the tracked export keeps its fields unchanged');
 });
 
 test('createSavedArea inserts a row with a generated id and timestamps, and round-trips filters', () => {

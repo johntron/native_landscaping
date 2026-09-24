@@ -6,7 +6,8 @@
 // --areas-file flag stays for one-off/backfill runs against an area not yet
 // saved, or ad hoc lat/lng — see that script's header).
 import { openObservationEventsDb } from '../observationEventsDb.js';
-import { openSavedAreasDb, listSavedAreas, getSavedArea } from '../savedAreas/savedAreasDb.js';
+import { listSavedAreas, getSavedArea } from '../savedAreas/savedAreasDb.js';
+import { openAppDbWithoutMigrating } from '../../server/db/appDb.js';
 import { openProbeCache } from '../usda-plants/probeCache.js';
 import { createFetchJson, pollArea } from '../fetch-observation-events.mjs';
 
@@ -15,16 +16,17 @@ import { createFetchJson, pollArea } from '../fetch-observation-events.mjs';
  * @param {string[]} [options.areaIds] poll only these saved areas; omitted/empty polls every saved area
  * @param {boolean} [options.force] bypass the iNaturalist response cache
  * @param {number} [options.maxPages] passed through to pollArea
- * @param {object} [options.savedAreasDb] already-open handle from openSavedAreasDb; opens a
- *   fresh one when omitted (the scheduler service's own process, tools/schedule-feed-poll.mjs,
- *   has no shared handle to pass). The web server's /api/feed/refresh passes its shared
- *   ctx.db.savedAreas handle instead of opening a new one per request (nl-3s5.14).
- * @param {object} [options.eventsDb] already-open handle from openObservationEventsDb; same
- *   default-to-opening behaviour as `savedAreasDb`.
+ * @param {object} [options.appDb] already-open app.db handle, which holds saved_areas
+ *   (nl-3s5.11). The web server's /api/feed/refresh passes ctx.db.app; feed-poller
+ *   (tools/schedule-feed-poll.mjs) passes the one it opened at startup with
+ *   openAppDbWithoutMigrating. Omitted, one is opened the same way, which throws
+ *   AppDbNotReadyError if web has not created and migrated app.db yet.
+ * @param {object} [options.eventsDb] already-open handle from openObservationEventsDb;
+ *   opens a fresh one when omitted.
  * @returns {Promise<{results: Array<{areaId: string, fetched: number, written: number}>}>}
  */
-export async function pollSavedAreas({ areaIds, force = false, maxPages, savedAreasDb: sharedSavedAreasDb, eventsDb: sharedEventsDb } = {}) {
-  const savedAreasDb = sharedSavedAreasDb || openSavedAreasDb();
+export async function pollSavedAreas({ areaIds, force = false, maxPages, appDb: sharedAppDb, eventsDb: sharedEventsDb } = {}) {
+  const savedAreasDb = sharedAppDb || openAppDbWithoutMigrating();
   const areas = areaIds?.length
     ? areaIds.map((id) => getSavedArea(savedAreasDb, id)).filter(Boolean)
     : listSavedAreas(savedAreasDb);

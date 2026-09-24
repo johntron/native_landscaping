@@ -32,7 +32,7 @@ function firstObservedOnByTaxon(eventsDb, areaId) {
 
 /**
  * @param {object} eventsDb open handle from openObservationEventsDb
- * @param {object} feedStateDb open handle from openFeedStateDb
+ * @param {object} feedStateDb app.db handle (ctx.db.app), which holds feed_state
  * @param {object} options
  * @param {string} options.areaId required
  * @param {number} [options.taxonId]
