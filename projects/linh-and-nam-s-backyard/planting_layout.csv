@@ -1,10 +1,10 @@
-id,botanical_name,x_ft,y_ft
-lonicera-sempervirens-1,Lonicera sempervirens,0.926,0.517
-lonicera-sempervirens-1-copy,Lonicera sempervirens,4.623,0.603
-lonicera-sempervirens-1-copy-copy,Lonicera sempervirens,8.047,0.940
-lonicera-sempervirens-1-copy-copy-copy,Lonicera sempervirens,11.601,0.946
-lonicera-sempervirens-1-copy-copy-copy-copy,Lonicera sempervirens,15.376,0.640
-lonicera-sempervirens-1-copy-copy-copy-copy-copy,Lonicera sempervirens,19.173,0.708
-symphyotrichum-oblongifolium-1,Symphyotrichum oblongifolium,7.539,3.256
-symphyotrichum-oblongifolium-1-copy,Symphyotrichum oblongifolium,4.531,3.148
-symphyotrichum-oblongifolium-1-copy-copy,Symphyotrichum oblongifolium,4.611,5.830
+id,species_id,x_ft,y_ft
+lonicera-sempervirens-1,coral-honeysuckle,0.926,0.517
+lonicera-sempervirens-1-copy,coral-honeysuckle,4.623,0.603
+lonicera-sempervirens-1-copy-copy,coral-honeysuckle,8.047,0.940
+lonicera-sempervirens-1-copy-copy-copy,coral-honeysuckle,11.601,0.946
+lonicera-sempervirens-1-copy-copy-copy-copy,coral-honeysuckle,15.376,0.640
+lonicera-sempervirens-1-copy-copy-copy-copy-copy,coral-honeysuckle,19.173,0.708
+symphyotrichum-oblongifolium-1,aromatic-aster,7.539,3.256
+symphyotrichum-oblongifolium-1-copy,aromatic-aster,4.531,3.148
+symphyotrichum-oblongifolium-1-copy-copy,aromatic-aster,4.611,5.830

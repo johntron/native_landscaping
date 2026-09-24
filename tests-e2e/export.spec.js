@@ -38,7 +38,7 @@ test.describe('the design tool downloads', () => {
     for (const file of ['plants.csv', 'planting_layout.csv', ...pngs]) {
       expect(files).toContain(file);
     }
-    expect(await zip.file('planting_layout.csv').async('string')).toMatch(/^id,botanical_name/);
+    expect(await zip.file('planting_layout.csv').async('string')).toMatch(/^id,species_id,x_ft,y_ft/);
 
     await expect(page.locator('#monthReadout')).toHaveText('October');
     await expect(page.locator('#monthSlider')).toHaveValue('10');

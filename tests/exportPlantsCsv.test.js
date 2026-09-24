@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openClaimsStore, createSchema } from '../tools/claims/claimsStore.js';
@@ -214,28 +214,25 @@ test('a species absent from the claim store (no taxa row) exports identity colum
 });
 
 test('the header matches the committed plants.csv column order', () => {
-  assert.deepEqual(PLANTS_CSV_HEADER, [
-    'id',
-    'common_name',
-    'botanical_name',
-    'growth_shape',
-    'growing_season_months',
-    'flowering_season_months',
-    'flower_color',
-    'foliage_color_spring',
-    'foliage_color_summer',
-    'foliage_color_fall',
-    'foliage_color_winter',
-    'sun_pref',
-    'water_pref',
-    'soil_pref',
-    'width_ft',
-    'height_ft',
-    'inflorescence',
-    'flower_count_hint',
-    'flower_zone',
-    'fruit_color',
-    'fruit_season_months',
-    'fruit_load',
-  ]);
+  // Read from the file itself, so a column added to plants.csv (taxon_id,
+  // nl-3s5.18) without teaching the exporter fails here instead of being
+  // silently dropped by the next export.
+  const committed = readFileSync(new URL('../plants.csv', import.meta.url), 'utf8')
+    .split(/\r?\n/)[0]
+    .split(',');
+  assert.deepEqual(PLANTS_CSV_HEADER, committed);
+});
+
+test('taxon_id is the exported store\'s own taxa id, and blank without an exact taxa match', () => {
+  const db = makeStore();
+  const taxonId = insertTaxon(db, { name: 'Passiflora incarnata' });
+  const identityRows = [
+    { id: 'native-passionflower', common_name: 'Native passionflower', botanical_name: 'Passiflora incarnata' },
+    { id: 'ghost', common_name: 'Ghost plant', botanical_name: 'Passiflora ghostii' },
+  ];
+
+  const { csvText } = buildPlantsCsv(db, identityRows);
+  const [, linked, ghost] = csvText.trim().split('\n').map((line) => line.split(','));
+  assert.equal(linked[PLANTS_CSV_HEADER.indexOf('taxon_id')], String(taxonId));
+  assert.equal(ghost[PLANTS_CSV_HEADER.indexOf('taxon_id')], '');
 });

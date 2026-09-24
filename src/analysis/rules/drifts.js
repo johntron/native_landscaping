@@ -1,4 +1,5 @@
 import { STATUSES } from '../ecology.js';
+import { getSpeciesKey } from '../../utils/speciesKey.js';
 
 /**
  * Rule 9 — plants read as a MASS, to the eye and to a foraging insect, only
@@ -39,7 +40,7 @@ export default {
 
     const bySpecies = new Map();
     ctx.plants.forEach((plant) => {
-      const key = plant.botanicalKey;
+      const key = getSpeciesKey(plant);
       if (!bySpecies.has(key)) bySpecies.set(key, []);
       bySpecies.get(key).push(plant);
     });

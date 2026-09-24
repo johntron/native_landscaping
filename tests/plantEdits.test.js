@@ -26,7 +26,7 @@ function makeState(plants = []) {
 test('addPlantFromCatalog places one plant at the middle of the plan view', () => {
   const state = makeState();
   const before = state.plants;
-  const plant = addPlantFromCatalog(state, species[0].botanicalKey);
+  const plant = addPlantFromCatalog(state, species[0].speciesId);
   assert.equal(plant.x, 10);
   assert.equal(plant.y, 5);
   assert.equal(state.plants.length, 1);
@@ -38,7 +38,7 @@ test('addPlantFromCatalog refuses an unknown species or a project with no plan',
   assert.equal(addPlantFromCatalog(makeState(), 'no such plant'), null);
   assert.equal(addPlantFromCatalog(makeState(), ''), null);
   const noPlan = { plants: [], species, project: { views: [] } };
-  assert.equal(addPlantFromCatalog(noPlan, species[0].botanicalKey), null);
+  assert.equal(addPlantFromCatalog(noPlan, species[0].speciesId), null);
 });
 
 test('clonePlantById copies a plant beside the original with a fresh id', () => {

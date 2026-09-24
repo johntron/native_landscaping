@@ -28,8 +28,8 @@ test.describe('adding and removing plants', () => {
     const before = await planPlants(page).count();
     const savedBefore = (await readScratchLayout('plant-add')).length;
 
-    // Pick a species by its botanical name, so the assertion below names a
-    // plant the catalog actually carries.
+    // Pick a species by its plants.csv id (the select's value), so the
+    // assertion below names a plant the catalog actually carries.
     const value = await page.locator('#addPlantSelect option').first().getAttribute('value');
     await page.locator('#addPlantSelect').selectOption(value);
     await page.locator('#addPlantBtn').click();
@@ -41,8 +41,8 @@ test.describe('adding and removing plants', () => {
       .poll(async () => (await readScratchLayout('plant-add')).length, { timeout: 5000 })
       .toBe(savedBefore + 1);
 
-    // And the saved row reloads. The select's value is the normalized botanical
-    // key while the CSV carries the display name, so this is the assertion that
+    // And the saved row reloads. The select's value is the species id and the
+    // CSV's species_id column carries it back, so this is the assertion that
     // proves the write and the read agree on a real catalog row.
     await openScratchProject(page, 'plant-add');
     await expect(planPlants(page)).toHaveCount(before + 1);

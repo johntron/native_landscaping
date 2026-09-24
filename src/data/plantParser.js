@@ -1,5 +1,6 @@
 import { parseCsv } from './csvLoader.js';
 import { classifyPlantLayer } from '../state/layers.js';
+import { buildSpeciesIndex, normalizeBotanicalName, resolveSpeciesRef } from './speciesResolver.js';
 
 const DEFAULT_LEAF_COLOR = '#6b8e23';
 
@@ -49,25 +50,42 @@ function estimateWidthFt(heightFt, growthShape) {
 
 /**
  * Parse species-level data (no coordinates) from CSV.
+ *
+ * Every row must carry a unique `id`: it is the species key saved yards,
+ * history, the rules and the exports reference (nl-3s5.18). A row without one
+ * would be unreachable, and a repeated one would silently hand every yard that
+ * names it the later row's attributes, so both are refused here.
  * @param {string} csvText
  */
 export function parseSpeciesCsv(csvText) {
   const rows = parseCsv(csvText);
+  const firstRowById = new Map();
   return rows.map((row, idx) => {
     const botanicalName = row.botanical_name || row.botanicalName || '';
     const normalizedBotanicalName = normalizeBotanicalName(botanicalName);
-  const speciesEpithet = (row.species_epithet || deriveSpeciesEpithet(botanicalName) || '').toLowerCase();
-  const baseLeaf = row.leafColor || row.foliage_color_summer || DEFAULT_LEAF_COLOR;
-  const flowerCountHint = pickNumber(row, ['flower_count_hint', 'flowerCountHint']);
-  const flowerZone = normalizeFlowerZone(row.flower_zone || row.flowerZone);
-  const inflorescence = normalizeInflorescence(row.inflorescence || row.inflorescence_type || row.inflorescenceType);
-  const fruitLoad = normalizeFruitLoad(row.fruit_load || row.fruitLoad);
-  const id = row.id || normalizedBotanicalName || speciesEpithet || `species-${idx + 1}`;
-  const commonName = row.common_name || row.name || id;
+    const id = String(row.id || '').trim();
+    if (!id) {
+      throw new LayoutDataError(
+        `plants.csv data row ${idx + 1} (${botanicalName || 'no botanical name'}) has no id; every species needs a unique id`
+      );
+    }
+    const firstRow = firstRowById.get(id);
+    if (firstRow !== undefined) {
+      throw new LayoutDataError(`Duplicate species id "${id}" in plants.csv (data rows ${firstRow + 1} and ${idx + 1})`);
+    }
+    firstRowById.set(id, idx);
+
+    const baseLeaf = row.leafColor || row.foliage_color_summer || DEFAULT_LEAF_COLOR;
+    const flowerCountHint = pickNumber(row, ['flower_count_hint', 'flowerCountHint']);
+    const flowerZone = normalizeFlowerZone(row.flower_zone || row.flowerZone);
+    const inflorescence = normalizeInflorescence(row.inflorescence || row.inflorescence_type || row.inflorescenceType);
+    const fruitLoad = normalizeFruitLoad(row.fruit_load || row.fruitLoad);
+    const commonName = row.common_name || row.name || id;
 
     return {
       id,
-      speciesEpithet,
+      speciesId: id,
+      taxonId: String(row.taxon_id || '').trim(),
       botanicalKey: normalizedBotanicalName,
       commonName,
       botanicalName,
@@ -94,15 +112,20 @@ export function parseSpeciesCsv(csvText) {
 }
 
 /**
- * Parse the yard layout CSV that references species by epithet.
+ * Parse a yard's planting_layout.csv: `id,species_id,x_ft,y_ft`.
+ *
+ * `species_id` is plants.csv's `id`. A file in the pre-nl-3s5.18 shape
+ * (`id,botanical_name,x_ft,y_ft`) still loads: its name goes through the
+ * resolver (exact name, then the synonym table), never an epithet. The next
+ * save rewrites it with species ids.
  * @param {string} csvText
  */
 export function parsePlantLayoutCsv(csvText) {
   const rows = parseCsv(csvText);
   const placements = rows.map((row, idx) => ({
     id: row.id || row.name || `plant-${idx + 1}`,
-    botanicalKey: normalizeBotanicalName(row.botanical_name || row.botanicalName || ''),
-    speciesEpithet: (row.species_epithet || row.species || '').toLowerCase(),
+    speciesId: String(row.species_id || row.speciesId || '').trim(),
+    botanicalName: String(row.botanical_name || row.botanicalName || '').trim(),
     x: pickNumber(row, numberFieldAliases.x) ?? 0,
     y: pickNumber(row, numberFieldAliases.y) ?? 0,
   }));
@@ -130,61 +153,42 @@ function assertUniqueIds(placements) {
   });
 }
 
-/** {byEpithet, byBotanical} lookup maps, shared by every placement-to-species join below. */
-function indexSpeciesForLookup(species) {
-  const byEpithet = new Map();
-  const byBotanical = new Map();
-  species.forEach((entry) => {
-    if (entry.speciesEpithet) byEpithet.set(entry.speciesEpithet, entry);
-    if (entry.botanicalKey) byBotanical.set(entry.botanicalKey, entry);
-  });
-  return { byEpithet, byBotanical };
-}
-
-function lookupSpeciesEntry({ byEpithet, byBotanical }, { botanicalKey, speciesEpithet }) {
-  return (
-    (botanicalKey ? byBotanical.get(botanicalKey) : null) ||
-    (speciesEpithet ? byEpithet.get(speciesEpithet) : null) ||
-    null
-  );
-}
-
 /**
  * Merge species data with per-plant layout rows into renderable plant instances.
- * @param {string} speciesCsvText
- * @param {string} layoutCsvText
+ * @param {string} speciesCsvText plants.csv
+ * @param {string} layoutCsvText planting_layout.csv
+ * @param {{synonyms?: Map<string, string>}} [options] synonyms from parseSynonymCsv,
+ *   consulted only for a legacy row that names its species instead of giving its id
  */
-export function buildPlantsFromCsv(speciesCsvText, layoutCsvText) {
+export function buildPlantsFromCsv(speciesCsvText, layoutCsvText, { synonyms } = {}) {
   const species = parseSpeciesCsv(speciesCsvText);
   const layout = parsePlantLayoutCsv(layoutCsvText);
-  const index = indexSpeciesForLookup(species);
+  const index = buildSpeciesIndex(species, synonyms);
 
   return layout.map((placement, idx) => {
-    const botanicalKey = placement.botanicalKey || (placement.speciesEpithet ? null : '');
-    if (!botanicalKey && !placement.speciesEpithet) {
-      throw new LayoutDataError(`Layout row ${placement.id} is missing botanical_name`);
+    if (!placement.speciesId && !placement.botanicalName) {
+      throw new LayoutDataError(`Layout row ${placement.id} is missing species_id`);
     }
 
-    const speciesEntry = lookupSpeciesEntry(index, { botanicalKey, speciesEpithet: placement.speciesEpithet });
-
-    if (!speciesEntry) {
-      const missing = botanicalKey || placement.speciesEpithet || 'unknown';
-      throw new LayoutDataError(`Unknown plant "${missing}" in layout row ${placement.id}`);
+    const resolved = resolveSpeciesRef(index, placement);
+    if (!resolved) {
+      const missing = placement.speciesId
+        ? `species id "${placement.speciesId}"`
+        : `plant "${placement.botanicalName}"`;
+      throw new LayoutDataError(`Unknown ${missing} in layout row ${placement.id}`);
     }
 
-    return createPlantFromSpecies(speciesEntry, {
+    return createPlantFromSpecies(resolved.entry, {
       id: placement.id || `plant-${idx + 1}`,
       x: placement.x,
       y: placement.y,
-      botanicalKey: placement.botanicalKey,
-      speciesEpithet: placement.speciesEpithet,
     });
   });
 }
 
 /**
  * Re-derive a plant list's ATTRIBUTES from the current species catalog, keeping only
- * each plant's identity and position (id, botanical key/epithet, x, y).
+ * each plant's identity and position (id, speciesId, x, y).
  *
  * Layout history and the server's saved history entries hold full plant objects —
  * attributes included — because that is the simplest thing to snapshot for undo/redo.
@@ -196,30 +200,33 @@ export function buildPlantsFromCsv(speciesCsvText, layoutCsvText) {
  * never "what did the catalog say" — so every plant list this app is about to show
  * (on boot, and after undo/redo) goes through here first.
  *
- * A plant whose species has since been removed from the catalog is left exactly as
- * it was in the snapshot rather than dropped — better a stale plant than a vanished
- * one, and its old attributes are the only ones left to draw it with.
+ * The species is found by `speciesId`. A snapshot from before species ids
+ * (tools/migrate-species-ids.mjs adds them) falls back to its botanical name,
+ * exactly or through the synonym table, never its epithet.
+ *
+ * A plant whose species cannot be found is left exactly as it was in the snapshot
+ * rather than dropped — better a stale plant than a vanished one, and its old
+ * attributes are the only ones left to draw it with.
  *
  * @param {Array<object>} plants plant objects (from history, possibly stale)
  * @param {Array<object>} species fresh rows from parseSpeciesCsv
+ * @param {{synonyms?: Map<string, string>}} [options]
  */
-export function rehydratePlants(plants, species) {
+export function rehydratePlants(plants, species, { synonyms } = {}) {
   if (!Array.isArray(plants) || !plants.length) return plants || [];
-  const index = indexSpeciesForLookup(species);
+  const index = buildSpeciesIndex(species, synonyms);
 
   return plants.map((plant) => {
-    const speciesEntry = lookupSpeciesEntry(index, {
-      botanicalKey: plant.botanicalKey || normalizeBotanicalName(plant.botanicalName),
-      speciesEpithet: plant.speciesEpithet,
+    const resolved = resolveSpeciesRef(index, {
+      speciesId: plant.speciesId,
+      botanicalName: plant.botanicalName || plant.botanicalKey,
     });
-    if (!speciesEntry) return plant;
+    if (!resolved) return plant;
 
-    return createPlantFromSpecies(speciesEntry, {
+    return createPlantFromSpecies(resolved.entry, {
       id: plant.id,
       x: plant.x,
       y: plant.y,
-      botanicalKey: plant.botanicalKey,
-      speciesEpithet: plant.speciesEpithet,
     });
   });
 }
@@ -229,8 +236,11 @@ export function rehydratePlants(plants, species) {
  * the app holds — whether it came from planting_layout.csv or was added in the
  * browser — is minted here, so the two can never drift into different shapes.
  *
+ * The plant's `speciesId` comes from the species row and nothing else: it is
+ * what buildLayoutCsv writes and what every later load resolves by.
+ *
  * @param {Object} speciesEntry a row from parseSpeciesCsv
- * @param {{id: string, x: number, y: number, botanicalKey?: string, speciesEpithet?: string}} placement
+ * @param {{id: string, x: number, y: number}} placement
  * @returns {Object} plant, including its computed layer
  */
 export function createPlantFromSpecies(speciesEntry, placement = {}) {
@@ -238,8 +248,8 @@ export function createPlantFromSpecies(speciesEntry, placement = {}) {
     id: placement.id,
     commonName: speciesEntry.commonName,
     botanicalName: speciesEntry.botanicalName,
-    botanicalKey: speciesEntry.botanicalKey || placement.botanicalKey,
-    speciesEpithet: speciesEntry.speciesEpithet || placement.speciesEpithet,
+    speciesId: speciesEntry.speciesId || null,
+    botanicalKey: speciesEntry.botanicalKey || normalizeBotanicalName(speciesEntry.botanicalName),
     x: placement.x,
     y: placement.y,
     width: speciesEntry.width ?? estimateWidthFt(speciesEntry.height ?? 1, speciesEntry.growthShape),
@@ -363,16 +373,6 @@ function clampMonth(month) {
   if (month < 1) return 1;
   if (month > 12) return 12;
   return month;
-}
-
-function deriveSpeciesEpithet(botanicalName) {
-  if (!botanicalName) return '';
-  const parts = botanicalName.trim().split(/\s+/);
-  return parts[parts.length - 1];
-}
-
-function normalizeBotanicalName(name) {
-  return (name || '').trim().toLowerCase();
 }
 
 function normalizeFlowerZone(value) {

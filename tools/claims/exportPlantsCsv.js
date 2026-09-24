@@ -39,6 +39,10 @@ export const PLANTS_CSV_HEADER = [
   'id',
   'common_name',
   'botanical_name',
+  // The taxa row this species links to (nl-3s5.18): written from the store
+  // being exported, so it always names a row of THAT store. See
+  // tools/link-species-taxa.mjs for why it is a link, not a key.
+  'taxon_id',
   'growth_shape',
   'growing_season_months',
   'flowering_season_months',
@@ -166,6 +170,8 @@ export function buildPlantsCsv(db, identityRows, { commercialStatus = COMMERCIAL
       let raw;
       if (IDENTITY_COLUMNS.includes(col)) {
         raw = row[col] || '';
+      } else if (col === 'taxon_id') {
+        raw = taxon ? String(taxon.id) : ''; // exact-name match only, blank otherwise
       } else if (taxon) {
         raw = resolveCultivarAware(db, taxon, col, commercialStatus);
       } else {

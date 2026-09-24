@@ -1,4 +1,5 @@
 import { STATUSES } from '../ecology.js';
+import { getSpeciesKey } from '../../utils/speciesKey.js';
 
 /**
  * Rule 12 — the opposite mistake from rule 9's drifts. A same-species pair
@@ -34,7 +35,7 @@ export default {
     }
 
     const declaredWidth = (plant) => {
-      const entry = ctx.species.find((row) => row.botanicalKey === plant.botanicalKey);
+      const entry = ctx.species.find((row) => getSpeciesKey(row) === getSpeciesKey(plant));
       const width = Number(entry?.width);
       return width > 0 ? width : null;
     };
@@ -48,7 +49,7 @@ export default {
       for (let j = i + 1; j < plants.length; j += 1) {
         const a = plants[i];
         const b = plants[j];
-        if (a.botanicalKey === b.botanicalKey) continue; // same species: rule 9's territory, not this rule's
+        if (getSpeciesKey(a) === getSpeciesKey(b)) continue; // same species: rule 9's territory, not this rule's
         const widthA = declaredWidth(a);
         const widthB = declaredWidth(b);
         if (widthA === null || widthB === null) {

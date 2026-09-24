@@ -30,8 +30,8 @@ async function runPersistenceTest() {
   assert.strictEqual(Array.isArray(historyData.entries) ? historyData.entries.length : 0, 1);
   assert.strictEqual(historyStatusMessages[0].state, 'success');
 
-  const earlierPlants = [{ id: 'match-plant', botanicalName: 'Match', x: 1, y: 2 }];
-  const laterPlants = [{ id: 'future-plant', botanicalName: 'Future', x: 3, y: 4 }];
+  const earlierPlants = [{ id: 'match-plant', speciesId: 'match', botanicalName: 'Match', x: 1, y: 2 }];
+  const laterPlants = [{ id: 'future-plant', speciesId: 'future', botanicalName: 'Future', x: 3, y: 4 }];
   const matchCsv = buildLayoutCsv(laterPlants);
   const historyMatch = await loadLayoutHistory(null, {
     layoutCsv: matchCsv,
@@ -49,7 +49,7 @@ async function runPersistenceTest() {
   assert.strictEqual(Array.isArray(historyMatch.entries) ? historyMatch.entries.length : 0, 2);
   assert.strictEqual(historyMatch.cursor, 1);
 
-  const mismatchCsv = buildLayoutCsv([{ id: 'mismatch', botanicalName: 'Mismatch', x: 9, y: 8 }]);
+  const mismatchCsv = buildLayoutCsv([{ id: 'mismatch', speciesId: 'mismatch', botanicalName: 'Mismatch', x: 9, y: 8 }]);
   const mismatchStatus = [];
   const mismatchResult = await loadLayoutHistory(
     (msg, state) => mismatchStatus.push({ msg, state }),

@@ -1,6 +1,6 @@
 import { serializeProjectConfig } from './projectConfig.js';
 import { normalizeFeatures, serializeFeatures } from './featureConfig.js';
-import { buildLayoutCsv } from './layoutExporter.js';
+import { tryBuildLayoutCsv } from './layoutExporter.js';
 
 const DEFAULT_DESCRIPTION = 'Manual layout update';
 
@@ -259,7 +259,7 @@ export function historyMatchesLayout(entries, cursor, layoutCsv) {
   if (index < 0 || index >= entries.length) return false;
   const entry = entries[index];
   if (!entry || !Array.isArray(entry.plants)) return false;
-  const entryCsv = buildLayoutCsv(entry.plants).trim();
+  const entryCsv = (tryBuildLayoutCsv(entry.plants) || '').trim();
   const layoutText = (layoutCsv || '').trim();
   return Boolean(entryCsv && layoutText && entryCsv === layoutText);
 }
@@ -271,7 +271,7 @@ function findHistoryEntryIndexByLayout(entries, layoutCsv) {
   for (let i = entries.length - 1; i >= 0; i -= 1) {
     const entry = entries[i];
     if (!entry || !Array.isArray(entry.plants)) continue;
-    const entryCsv = buildLayoutCsv(entry.plants).trim();
+    const entryCsv = (tryBuildLayoutCsv(entry.plants) || '').trim();
     if (entryCsv && entryCsv === normalized) {
       return i;
     }

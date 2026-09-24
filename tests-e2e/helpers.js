@@ -8,7 +8,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 /** The write-safe server; see scratch-fixture.mjs. */
 export const SCRATCH_BASE = `http://127.0.0.1:${(Number(process.env.E2E_PORT) || 8123) + 1}`;
 
-/** Parse a project's planting_layout.csv into {id, botanicalName, xFt, yFt} rows. */
+/** Parse a project's planting_layout.csv (id,species_id,x_ft,y_ft) into {id, speciesId, xFt, yFt} rows. */
 export async function readLayoutRows(projectId) {
   const csv = await readFile(
     path.join(REPO_ROOT, 'projects', projectId, 'planting_layout.csv'),
@@ -19,10 +19,10 @@ export async function readLayoutRows(projectId) {
     .slice(1) // drop header
     .filter((line) => line.trim())
     .map((line) => {
-      const [id, botanicalName, xFt, yFt] = line.split(',');
+      const [id, speciesId, xFt, yFt] = line.split(',');
       return {
         id,
-        botanicalName: (botanicalName || '').trim(),
+        speciesId: (speciesId || '').trim(),
         xFt: Number.parseFloat(xFt),
         yFt: Number.parseFloat(yFt),
       };

@@ -173,7 +173,9 @@ const FRONTYARD_SAVE_VIEWS = {
 /** Files the app is served from; symlinked so the specs test the real source. */
 // `ecology` carries host-genera.csv. Without it the scratch root 404s that
 // fetch and the three genus-dependent checks silently report "not declared" —
-// a spec asserting on them would fail for the wrong reason.
+// a spec asserting on them would fail for the wrong reason. `catalog` carries
+// species-synonyms.csv, which design.html fetches on boot (nl-3s5.18); without
+// it every scratch page logs a 404 and fails the "boots clean" assertions.
 const LINKED = [
   'index.html',
   'design.html',
@@ -184,6 +186,7 @@ const LINKED = [
   'src',
   'plants.csv',
   'ecology',
+  'catalog',
   'node_modules',
 ];
 

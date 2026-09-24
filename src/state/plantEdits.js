@@ -31,23 +31,21 @@ export function clonePlantById(state, plantId) {
  * Place one plant of the chosen species at the middle of the plan view — the
  * one spot guaranteed to be on the drawing, from which it can be dragged.
  * @param {{ plants: object[], species: object[], project: object }} state  src/app.js's appState
- * @param {string} botanicalKey the select's value: a normalized botanical name
+ * @param {string} speciesId the select's value: plants.csv's `id` for the species
  * @returns {Object|null} the new plant, or null if the species or plan view is gone
  */
-export function addPlantFromCatalog(state, botanicalKey) {
-  const key = String(botanicalKey || '');
+export function addPlantFromCatalog(state, speciesId) {
+  const key = String(speciesId || '');
   if (!key) return null;
-  const speciesEntry = state.species.find(
-    (entry) => (entry.botanicalKey || entry.botanicalName) === key
-  );
-  // buildLayoutCsv writes botanicalName and buildPlantsFromCsv matches on it, so
-  // a species without one would write a row that cannot be read back.
-  if (!speciesEntry || !speciesEntry.botanicalName) return null;
+  // buildLayoutCsv writes speciesId and buildPlantsFromCsv resolves by it, so the
+  // match is on the id alone: never on a name that could be renamed.
+  const speciesEntry = state.species.find((entry) => entry.speciesId === key);
+  if (!speciesEntry) return null;
   const planView = state.project?.views?.find((view) => view.type === 'plan');
   if (!planView) return null;
   const { originFt, extentFt } = createViewTransform(planView);
   const plant = createPlantFromSpecies(speciesEntry, {
-    id: buildNewPlantId(state.plants, speciesEntry.botanicalName),
+    id: buildNewPlantId(state.plants, speciesEntry.botanicalName || speciesEntry.speciesId),
     x: originFt.x + extentFt.width / 2,
     y: originFt.y + extentFt.height / 2,
   });

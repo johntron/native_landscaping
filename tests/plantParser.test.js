@@ -9,6 +9,8 @@ import {
   rehydratePlants,
 } from '../src/data/plantParser.js';
 import { buildLayoutCsv } from '../src/data/layoutExporter.js';
+import { parseSynonymCsv } from '../src/data/speciesResolver.js';
+import { readFileSync } from 'node:fs';
 
 const speciesHeader = 'id,common_name,botanical_name,growing_season_months,flowering_season_months,foliage_color_spring,foliage_color_summer,foliage_color_fall,foliage_color_winter,flower_color,width_ft,height_ft,growth_shape';
 
@@ -83,7 +85,7 @@ test('throws when layout references unknown species', () => {
 
   assert.throws(
     () => buildPlantsFromCsv(speciesCsv, layoutCsv),
-    /Unknown plant "nonexistent plant" in layout row missing/
+    /Unknown plant "Nonexistent plant" in layout row missing/
   );
 });
 
@@ -181,9 +183,9 @@ test('content mistakes are LayoutDataError so the UI can name the real reason', 
 
 test('a plant built from the catalog round-trips through the layout CSV', () => {
   // The payoff of sharing one builder: a plant added in the browser has to
-  // survive being written to planting_layout.csv and read back, and the two
-  // sides key on different fields (buildLayoutCsv writes botanicalName,
-  // buildPlantsFromCsv matches on the normalized botanicalKey).
+  // survive being written to planting_layout.csv and read back. Both sides key
+  // on the species id (buildLayoutCsv writes speciesId, buildPlantsFromCsv
+  // resolves species_id).
   const speciesCsv = `${speciesHeader}\n`
     + 'c,Autumn sage,Salvia greggii,3-11,3-11,,#4d8c4d,,,red,3,4,mound';
   const species = parseSpeciesCsv(speciesCsv);
@@ -244,4 +246,110 @@ test('rehydratePlants leaves a plant alone if its species left the catalog', () 
   const stillThere = rehydratePlants(snapshot, []);
 
   assert.deepStrictEqual(stillThere, snapshot);
+});
+
+/**
+ * nl-3s5.18: a saved yard names its species by plants.csv `id`, never by
+ * botanical name, so a rename in plants.csv cannot orphan it, and no code path
+ * finds a species by epithet alone.
+ */
+const REPO_PLANTS_CSV = readFileSync(new URL('../plants.csv', import.meta.url), 'utf8');
+const REPO_SYNONYMS = parseSynonymCsv(
+  readFileSync(new URL('../catalog/species-synonyms.csv', import.meta.url), 'utf8')
+);
+const SHIPPED_PROJECTS = ['backyard', 'example-frontyard', 'linh-and-nam-s-backyard', 'walkway'];
+
+/** Rename one species' botanical_name in plants.csv text, leaving its id alone. */
+function renameInCatalog(csvText, speciesId, newName) {
+  const lines = csvText.split(/\r?\n/);
+  const idx = lines.findIndex((line) => line.startsWith(`${speciesId},`));
+  assert.ok(idx > 0, `plants.csv has no ${speciesId}`);
+  const cells = lines[idx].split(',');
+  cells[2] = newName; // id,common_name,botanical_name,...
+  lines[idx] = cells.join(',');
+  return lines.join('\n');
+}
+
+const renderedShape = (plants) =>
+  plants.map((p) => ({ id: p.id, speciesId: p.speciesId, x: p.x, y: p.y, width: p.width, height: p.height, growthShape: p.growthShape }));
+
+test('renaming every species in plants.csv leaves every shipped yard rendering the same plants', () => {
+  const renamedCatalog = parseSpeciesCsv(REPO_PLANTS_CSV).reduce(
+    (text, entry) => renameInCatalog(text, entry.speciesId, `Renamedus ${entry.speciesId.toLowerCase()}`),
+    REPO_PLANTS_CSV
+  );
+  // Sanity: the rename really did take every old name away.
+  const renamedNames = new Set(parseSpeciesCsv(renamedCatalog).map((e) => e.botanicalName));
+  assert.ok(!renamedNames.has('Ilex vomitoria'));
+
+  SHIPPED_PROJECTS.forEach((project) => {
+    const layout = readFileSync(new URL(`../projects/${project}/planting_layout.csv`, import.meta.url), 'utf8');
+    assert.match(layout, /^id,species_id,x_ft,y_ft/, `${project} layout is keyed by species_id`);
+    const before = buildPlantsFromCsv(REPO_PLANTS_CSV, layout);
+    const after = buildPlantsFromCsv(renamedCatalog, layout);
+    assert.ok(before.length > 0);
+    assert.deepStrictEqual(renderedShape(after), renderedShape(before), project);
+    after.forEach((plant) => assert.match(plant.botanicalName, /^Renamedus /, 'attributes come from the renamed row'));
+  });
+});
+
+test('a history snapshot survives a rename too: rehydratePlants resolves by speciesId', () => {
+  const species = parseSpeciesCsv(REPO_PLANTS_CSV);
+  const holly = species.find((e) => e.speciesId === 'yaupon-holly');
+  const snapshot = [createPlantFromSpecies(holly, { id: 'holly-1', x: 3, y: 4 })];
+
+  const renamed = parseSpeciesCsv(renameInCatalog(REPO_PLANTS_CSV, 'yaupon-holly', 'Ilex renamedii'));
+  const [restored] = rehydratePlants(snapshot, renamed);
+
+  assert.equal(restored.speciesId, 'yaupon-holly');
+  assert.equal(restored.botanicalName, 'Ilex renamedii', 're-derived from the catalog, not left stale');
+  assert.equal(restored.x, 3);
+});
+
+test('no path finds a species by epithet alone', () => {
+  // Callicarpa americana is in plants.csv; "Foo americana" shares only its epithet.
+  const legacyLayout = 'id,botanical_name,x_ft,y_ft\nimpostor,Foo americana,1,1';
+  assert.throws(() => buildPlantsFromCsv(REPO_PLANTS_CSV, legacyLayout, { synonyms: REPO_SYNONYMS }), /Unknown plant "Foo americana"/);
+
+  // An old layout with a species_epithet column and no usable name finds nothing either.
+  const epithetOnly = 'id,species_epithet,x_ft,y_ft\nberry,americana,1,1';
+  assert.throws(() => buildPlantsFromCsv(REPO_PLANTS_CSV, epithetOnly), LayoutDataError);
+
+  // A history snapshot carrying only an epithet is left as it was, not re-pointed.
+  const species = parseSpeciesCsv(REPO_PLANTS_CSV);
+  const stale = { id: 'old', botanicalName: 'Foo americana', speciesEpithet: 'americana', x: 0, y: 0 };
+  assert.deepStrictEqual(rehydratePlants([stale], species, { synonyms: REPO_SYNONYMS }), [stale]);
+
+  // A variety is not rescued by its parent species, or vice versa.
+  assert.throws(
+    () => buildPlantsFromCsv(REPO_PLANTS_CSV, 'id,botanical_name,x_ft,y_ft\nv,Ilex vomitoria var. chiapensis,1,1'),
+    LayoutDataError
+  );
+});
+
+test('a legacy botanical_name layout still loads: exact name, then the committed synonym table', () => {
+  const legacy = 'id,botanical_name,x_ft,y_ft\n'
+    + 'holly,Ilex vomitoria,1,1\n'
+    + 'sumac,Rhus trilobata,2,2';
+  const plants = buildPlantsFromCsv(REPO_PLANTS_CSV, legacy, { synonyms: REPO_SYNONYMS });
+  assert.deepStrictEqual(plants.map((p) => p.speciesId), ['yaupon-holly', 'fragrant-sumac']);
+
+  // Without the synonym table the old name is refused, not guessed.
+  assert.throws(() => buildPlantsFromCsv(REPO_PLANTS_CSV, legacy), /Unknown plant "Rhus trilobata"/);
+});
+
+test('species_id is authoritative: an unknown id is an error, not rescued by a name beside it', () => {
+  const layout = 'id,species_id,botanical_name,x_ft,y_ft\nghost,no-such-species,Ilex vomitoria,1,1';
+  assert.throws(() => buildPlantsFromCsv(REPO_PLANTS_CSV, layout), /Unknown species id "no-such-species"/);
+});
+
+test('plants.csv species ids are required and unique', () => {
+  assert.throws(
+    () => parseSpeciesCsv(`${speciesHeader}\n,Nameless,Salvia greggii,3-11,3-11,,,,,red,3,3,mound`),
+    /has no id/
+  );
+  assert.throws(
+    () => parseSpeciesCsv(`${speciesHeader}\nsage,A,Salvia greggii,,,,,,,,3,3,mound\nsage,B,Salvia farinacea,,,,,,,,3,3,mound`),
+    /Duplicate species id "sage"/
+  );
 });

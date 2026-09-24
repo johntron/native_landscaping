@@ -432,18 +432,62 @@ a phone photo from landing sideways.
 
 ## Plant data (CSV)
 
-`plants.csv` is the **single source of truth** for species attributes and seasonal palettes, shared by every project; each project's `projects/<slug>/planting_layout.csv` holds per-plant coordinates (in feet) and must reference species via `botanical_name` (with optional `species_epithet`).
+`plants.csv` is the **single source of truth** for species attributes and seasonal palettes, shared by every project; each project's `projects/<slug>/planting_layout.csv` holds per-plant coordinates (in feet) and references each species by **plants.csv's `id`**, never by botanical name.
 
 Each layout row describes one plant clump or individual:
 
-- `id`
-- `botanical_name`
+```
+id,species_id,x_ft,y_ft
+beautyberry-east,beautyberry,11.825,16.566
+```
+
+- `id` – the plant's own id, unique within the layout.
+- `species_id` – plants.csv's `id` for the species (a slug such as `fragrant-sumac`).
 - `x_ft`, `y_ft` – offsets in feet from the yard origin (SW corner).
+
+### Species are keyed by id, not by name (nl-3s5.18)
+
+Botanical names change: the flora renames things (`ecology/fnct-name-changes.csv`
+exists for that reason), and a yard keyed by name turned into "Unknown plant" the
+day a plants.csv row was corrected, while the old epithet-only fallback could land
+on the wrong species altogether. So plants.csv's `id` is the only species key in
+layouts, history, the rules and the exports:
+
+- **Plants carry `speciesId`.** `createPlantFromSpecies` copies it from the species
+  row; `buildLayoutCsv` writes it and **refuses** a plant without one, rather than
+  write a row nothing can read back. `getSpeciesKey` (the grouping key for
+  highlighting, the rules engine and the HOA species list) is the lower-cased
+  `speciesId`. Never `.id`, which on a plant is the plant's own id.
+- **History entries** in `layout-history.json` are full plant snapshots, each with
+  its `speciesId`. `rehydratePlants` re-derives attributes by that id. A snapshot
+  from before species ids falls back to its botanical name, as below.
+- **plants.csv ids are required and unique**; `parseSpeciesCsv` throws otherwise.
+  Renaming an `id` orphans every yard that uses it, so don't. Renaming a
+  `botanical_name` is safe (`tests/plantParser.test.js` proves it).
+- **Name matching survives only for legacy input** (a `botanical_name` layout column,
+  an old history snapshot, an import), all in `src/data/speciesResolver.js`: the full
+  name exactly, then `catalog/species-synonyms.csv`. **Never** by epithet, and never
+  by stripping a variety or cultivar to reach its parent. The synonym table is
+  generated from the claim store's `taxa.resolves_to` by
+  `tools/link-species-taxa.mjs`, because browser code cannot query SQLite.
+- **`plants.csv`'s `taxon_id`** links each row to `taxa.id` in `data/claims.db`
+  (exact-name match only, blank otherwise). It is a link into the store, never a key a yard uses:
+  taxa ids are autoincrement values assigned in seeding order, so reordering
+  plants.csv and rebuilding the store renumbers them. Re-run
+  `node tools/link-species-taxa.mjs` after a rebuild; the claims exporter writes the
+  same column.
+- **Migrating old files:** `node tools/migrate-species-ids.mjs <projects-dir> --dry-run`,
+  then without `--dry-run`. It rewrites old-shape `planting_layout.csv` files and adds
+  `speciesId` to history snapshots, backs up each changed file to
+  `<file>.bak-<timestamp>`, reports (and leaves alone) anything it cannot resolve
+  confidently, and is a no-op on files already migrated.
 
 Each species row contains:
 
+- `id` – the species key every layout, history entry and rule uses (see above).
 - `common_name`
 - `botanical_name`
+- `taxon_id` – the linked `taxa.id` in the claim store, or blank.
 - `growth_shape` – e.g. `mound`, `vertical`, `vase`, `arch`, `creeping`, `grass`.
 - `width_ft`, `height_ft`
 - `growing_season_months` – range or list, e.g. `3-11` or `3,4,5`.
@@ -529,6 +573,7 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
 - `src/interaction/featuresMode.js` – Features mode itself: the panel, the plan overlay, and edit → validate → save for features.json. The controllers stay built in `app.js`'s `rebuildViews` beside the drag and setup controllers.
 - `src/interaction/featurePanel.js`, `src/interaction/featureController.js`, `src/render/featureOverlay.js` – Features mode's list, plan-only drag handles, and selection outline.
 - `src/data/plantParser.js` – merges species/layout CSVs, normalizes month specs, aliases, and seasonal palettes.
+- `src/data/speciesResolver.js` – the one place a layout row, history snapshot or import finds its species: id, then exact name, then the synonym table.
 - `src/data/layoutExporter.js` – converts in-memory plants back to CSV with consistent precision/escaping.
 - `src/render/*` – view configuration, SVG helpers, tooltip builder, plan view and elevation renderers.
 - `src/state/seasonalState.js` – pure logic for foliage/bloom state per month.

@@ -85,12 +85,11 @@ function stackingPriority(entry, axisKey) {
   }
   const plant = entry?.plant;
   if (!plant) return DEFAULT_BAND;
-  // On east/west elevations (y axis horizontal), force Callirhoe involucrata to render last so it stays in front.
-  if (axisKey === 'y') {
-    const botanical = (plant.botanicalName || plant.botanical_name || '').toLowerCase();
-    if (botanical === 'callirhoe involucrata') {
-      return 2;
-    }
+  // On east/west elevations (y axis horizontal), force winecup (Callirhoe
+  // involucrata) to render last so it stays in front. Keyed by plants.csv id so
+  // a rename of the botanical name cannot silently drop the override (nl-3s5.18).
+  if (axisKey === 'y' && plant.speciesId === 'winecup') {
+    return 2;
   }
   return DEFAULT_BAND;
 }

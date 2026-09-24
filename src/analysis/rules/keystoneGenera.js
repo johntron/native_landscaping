@@ -1,5 +1,5 @@
 import { STATUSES } from '../ecology.js';
-import { getGenus } from '../../utils/speciesKey.js';
+import { getGenus, getSpeciesKey } from '../../utils/speciesKey.js';
 import { describeHostGeneraRow } from '../hostGenera.js';
 import { siteFitProblems, pickSiteAware, describeSiteFit } from './siteMatch.js';
 
@@ -140,7 +140,7 @@ function measureArea(ctx, keystoneNames) {
   let totalArea = 0;
   let excluded = 0;
   ctx.plants.forEach((plant) => {
-    const declared = ctx.species.find((entry) => entry.botanicalKey === plant.botanicalKey);
+    const declared = ctx.species.find((entry) => getSpeciesKey(entry) === getSpeciesKey(plant));
     const width = Number(declared?.width);
     if (!(width > 0)) {
       excluded += 1;

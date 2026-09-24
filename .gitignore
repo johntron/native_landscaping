@@ -4,6 +4,10 @@ node_modules/
 test-results/
 playwright-report/
 layout-history.json
+# Backups tools/migrate-species-ids.mjs writes beside each file it changes.
+# History is hand-entered and partly someone else's yard: never commit it.
+layout-history.json.bak-*
+projects/*/planting_layout.csv.bak-*
 .env
 
 # Exact addresses/coordinates behind each project's `place` label. This repo

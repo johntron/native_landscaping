@@ -561,10 +561,10 @@ test.describe('hand-edited layout mistakes', () => {
   // not the generic "couldn't load" advice about serving over HTTP. The bad CSV
   // is injected per-page rather than written to disk, so this cannot race the
   // other specs that read the same project.
-  const badLayoutCsv = 'id,botanical_name,x_ft,y_ft\n'
-    + 'holly-corner,Ilex vomitoria,9.849,25.278\n'
-    + 'horseherb-fill,Calyptocarpus vialis,8.000,3.500\n'
-    + 'holly-corner,Ilex vomitoria,11.000,26.000';
+  const badLayoutCsv = 'id,species_id,x_ft,y_ft\n'
+    + 'holly-corner,yaupon-holly,9.849,25.278\n'
+    + 'horseherb-fill,horseherb,8.000,3.500\n'
+    + 'holly-corner,yaupon-holly,11.000,26.000';
 
   test('a duplicate plant id explains itself in the page', async ({ page }) => {
     await page.route('**/projects/example-frontyard/planting_layout.csv*', (route) =>

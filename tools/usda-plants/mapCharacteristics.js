@@ -80,11 +80,11 @@ function stripHtml(s) {
 // USDA italicizes each name part and leaves the taxonomic author outside the
 // tag: "<i>Callicarpa americana</i> L.", or for an infraspecific taxon
 // "<i>Achillea millefolium</i> L. var. <i>occidentalis</i> DC.". plants.csv's
-// botanical_name is the name without authors — planting_layout.csv rows match
-// species by it, and src/utils/speciesKey.js keys off it alone (species_epithet
-// is never consulted once a botanical name is present) — so it has to carry
-// the infraspecific epithet too, or a variety and its parent species collide
-// on one key. The full citation is preserved in usda_scientific_name_full.
+// botanical_name is the name without authors. Saved yards key on plants.csv's
+// `id`, but a legacy layout or an import still resolves by this exact name
+// (src/data/speciesResolver.js), so it has to carry the infraspecific epithet
+// too, or a variety and its parent species collide on one name. The full
+// citation is preserved in usda_scientific_name_full.
 function binomialOf(scientificNameHtml) {
   if (!scientificNameHtml) return stripHtml(scientificNameHtml);
   const parts = [...scientificNameHtml.matchAll(/(?:\b(var\.|subsp\.|ssp\.|f\.)\s*)?<i>(.*?)<\/i>/g)];

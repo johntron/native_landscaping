@@ -13,6 +13,7 @@ import {
   LayoutDataError,
 } from './data/plantParser.js';
 import { buildLayoutCsv } from './data/layoutExporter.js';
+import { parseSynonymCsv } from './data/speciesResolver.js';
 import {
   loadLayoutHistory,
   loadProjectFeatures,
@@ -66,6 +67,11 @@ const appState = {
   // of every project that has never drawn one. See src/data/featureConfig.js.
   features: [],
   species: [], // the shared plants.csv catalog, for placing plants not yet in the layout
+  // catalog/species-synonyms.csv as normalized name -> species id. Consulted only
+  // for a legacy layout row or history entry that names its species instead of
+  // carrying its id (src/data/speciesResolver.js). Empty if the file fails to
+  // load, which costs only those legacy rows, never a yard saved by id.
+  speciesSynonyms: new Map(),
   // The genus-keyed ecology table, filtered to this project's ecoregion. Starts
   // empty and STAYS empty if ecology/host-genera.csv fails to load, which makes
   // the three genus-dependent rules report "not declared" instead of taking the
@@ -492,14 +498,14 @@ async function init() {
   function initAddPlantControl() {
     if (!addPlantSelect || !addPlantButton) return;
     const options = appState.species
-      .filter((entry) => entry.botanicalName)
+      .filter((entry) => entry.speciesId && entry.botanicalName)
       .sort((a, b) =>
         (a.commonName || a.botanicalName).localeCompare(b.commonName || b.botanicalName)
       );
     addPlantSelect.innerHTML = '';
     options.forEach((entry) => {
       const option = document.createElement('option');
-      option.value = entry.botanicalKey || entry.botanicalName;
+      option.value = entry.speciesId;
       option.textContent = entry.commonName
         ? `${entry.commonName} (${entry.botanicalName})`
         : entry.botanicalName;
@@ -666,9 +672,10 @@ async function init() {
   }
 
   try {
-    const [speciesCsv, layoutCsv, ecology] = await Promise.all([
+    const [speciesCsv, layoutCsv, synonymCsv, ecology] = await Promise.all([
       fetchCsv(new URL('plants.csv', document.baseURI)),
       fetchCsv(new URL(projectLayoutPath(project.id), document.baseURI)),
+      fetchCsv(new URL('catalog/species-synonyms.csv', document.baseURI)).catch(() => ''),
       // A missing or unreadable ecology table costs checks, not the app, so
       // this never joins the failure path above — which stops the yard
       // rendering at all. loadEcologyTables owns that tolerance.
@@ -679,7 +686,10 @@ async function init() {
     appState.nearbyFauna = ecology.nearbyFauna;
     loadedSpeciesCsv = speciesCsv;
     appState.species = parseSpeciesCsv(speciesCsv);
-    const initialPlants = buildPlantsFromCsv(speciesCsv, layoutCsv);
+    appState.speciesSynonyms = parseSynonymCsv(synonymCsv);
+    const initialPlants = buildPlantsFromCsv(speciesCsv, layoutCsv, {
+      synonyms: appState.speciesSynonyms,
+    });
     const layoutCsvSnapshot = buildLayoutCsv(initialPlants);
     const historyData = await loadLayoutHistory(layoutHistory.updateStatus, {
       layoutCsv: layoutCsvSnapshot,

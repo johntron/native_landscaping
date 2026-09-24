@@ -1,0 +1,6 @@
+synonym,species_id,accepted_name,source
+Achillea millefolium,western-yarrow,Achillea millefolium var. occidentalis,"claims.db taxa.resolves_to, set by name reconciliation against Diggs, Lipscomb & O'Kennon 1999 (tools/claims/nameReconciliation.js)"
+Asclepias asperula subsp. capricornu,antelope-horns,Asclepias asperula,"claims.db taxa.resolves_to, set by name reconciliation against Diggs, Lipscomb & O'Kennon 1999 (tools/claims/nameReconciliation.js)"
+Asclepias tuberosa subsp. interior,butterfly-milkweed,Asclepias tuberosa,"claims.db taxa.resolves_to, set by name reconciliation against Diggs, Lipscomb & O'Kennon 1999 (tools/claims/nameReconciliation.js)"
+Aster oblongifolius,aromatic-aster,Symphyotrichum oblongifolium,"claims.db taxa.resolves_to, set by name reconciliation against Diggs, Lipscomb & O'Kennon 1999 (tools/claims/nameReconciliation.js)"
+Rhus trilobata,fragrant-sumac,Rhus aromatica,"claims.db taxa.resolves_to, set by name reconciliation against Diggs, Lipscomb & O'Kennon 1999 (tools/claims/nameReconciliation.js)"

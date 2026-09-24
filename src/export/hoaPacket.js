@@ -1,3 +1,5 @@
+import { getSpeciesKey } from '../utils/speciesKey.js';
+
 /**
  * Cover letter for an HOA/ARC submission packet — plain text so it opens
  * anywhere, meant to accompany the plan/elevation PNGs and species list the
@@ -65,7 +67,7 @@ export function buildHoaCoverLetter({ projectName, species, preparedOn }) {
 export function summarizePlacedSpecies(plants) {
   const byKey = new Map();
   plants.forEach((plant) => {
-    const key = plant.botanicalKey || plant.botanicalName;
+    const key = getSpeciesKey(plant);
     if (!key) return;
     const existing = byKey.get(key);
     if (existing) {

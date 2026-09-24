@@ -1,4 +1,5 @@
 import { STATUSES } from '../ecology.js';
+import { getSpeciesKey } from '../../utils/speciesKey.js';
 import { PLANT_LAYERS, classifyPlantLayer, classifyDeclaredLayer } from '../../state/layers.js';
 
 /**
@@ -37,7 +38,7 @@ export default {
     // exactly nl-c58's failure mode, so this rule re-derives the layer from
     // the raw catalog row via classifyDeclaredLayer, which returns null rather
     // than guessing when neither shape nor height is genuinely declared.
-    const speciesByKey = new Map(ctx.species.map((s) => [s.botanicalKey, s]));
+    const speciesByKey = new Map(ctx.species.map((s) => [getSpeciesKey(s), s]));
     const speciesPerLayer = new Map(PLANT_LAYERS.map((layer) => [layer, 0]));
     let undeclaredCount = 0;
     ctx.placedSpecies.forEach((entry) => {
@@ -46,7 +47,7 @@ export default {
       // (createPlantFromSpecies). Falling back to it would silently
       // reintroduce nl-c58 for any plant whose species row isn't in ctx.species.
       // classifyDeclaredLayer handles `undefined` correctly on its own.
-      const declared = speciesByKey.get(entry.botanicalKey);
+      const declared = speciesByKey.get(getSpeciesKey(entry));
       const layer = classifyDeclaredLayer(declared);
       if (!layer) {
         undeclaredCount += 1;
