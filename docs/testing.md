@@ -51,6 +51,26 @@ on port `8123` (override with `E2E_PORT`) and drives the real `design.html` in C
   (Playwright wipes that at run start), and it is built only in the main process: the
   config is loaded once per worker too, and eight workers racing on one directory tear it
   apart mid-run.
+- **Both e2e servers point `DATA_DIR` at a throwaway directory** (`SCRATCH_DATA_DIR` in
+  `tests-e2e/scratch-fixture.mjs`), separate subdirectories for the main and scratch
+  server so the two never open the same SQLite file at once. This covers every
+  gitignored cache DB the server opens, not just `app.db`: `data/observation-events.db`,
+  `data/ecosystem.db`, `data/claims.db`, and `data/probe-cache.db` (opened per request by
+  `/api/geocode` and `/api/ecoregion`) all resolve their default path through
+  `tools/dataDir.js`'s `resolveDataDir()`, the same function `server/db/appDb.js`
+  re-exports. No e2e server ever reads or writes the repo's real `data/`.
+  - **Consequence: the main e2e server's `ecosystem.db` and `observation-events.db` start
+    empty**, even though its `PUBLIC_DIR` is the repo itself. This is a deliberate
+    trade-off, not an oversight: none of the specs in `tests-e2e/` assert on
+    iNaturalist-derived content (nearby species/fauna matches, the feed, or
+    `claims-coverage.html`/`claims-conflicts.html`). `habitatNearby.spec.js` (which does
+    touch `ecosystem.html`, its "Habitat nearby" section) and `ecology.spec.js` (the
+    ecology check panel on `design.html`) both read from the *committed*
+    `ecology/anchors.csv` and `ecology/host-genera.csv`, not from `data/ecosystem.db`. If
+    a future spec needs real cached observation data, seed it explicitly (copy or
+    symlink a fixture `.db` into `SCRATCH_DATA_DIR` in `scratch-fixture.mjs`) rather than
+    pointing `DATA_DIR` back at the repo's `data/`, which the running deploy also writes
+    to.
 - **Aim pointer gestures where the app's own hit test looks**, via `dragInPanel` /
   `plantPointerTarget` in `tests-e2e/helpers.js`. Plan views hit-test geometrically and
   the label sits on the plant centre; elevations hit-test through the DOM and their labels

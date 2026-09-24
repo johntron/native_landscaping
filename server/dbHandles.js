@@ -21,7 +21,7 @@
 import { existsSync } from 'node:fs';
 import { openObservationEventsDb } from '../tools/observationEventsDb.js';
 import { openEcosystemDb } from '../tools/ecosystemIndexDb.js';
-import { openClaimsStore, DEFAULT_PATH as CLAIMS_DEFAULT_PATH } from '../tools/claims/claimsStore.js';
+import { openClaimsStore, defaultClaimsPath } from '../tools/claims/claimsStore.js';
 
 export const CLAIM_STORE_NOT_BUILT_MESSAGE =
   'Claim store not built — run tools/claims/rebuild.js to create data/claims.db';
@@ -38,7 +38,7 @@ export function openServerDatabases(paths = {}) {
   const observationEvents = openObservationEventsDb(paths.observationEvents);
   const ecosystem = openEcosystemDb(paths.ecosystem);
 
-  const claimsPath = paths.claims || CLAIMS_DEFAULT_PATH;
+  const claimsPath = paths.claims || defaultClaimsPath();
   let claimsHandle = null;
 
   /**

@@ -8,12 +8,12 @@
 // from nl-3s5.3 onward projects and revisions. It is the one file to back up.
 import { DatabaseSync } from 'node:sqlite';
 import { existsSync, mkdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runMigrations, currentSchemaVersion, latestMigrationVersion } from './migrate.js';
 import { importLegacyData } from './legacyImport.js';
+import { resolveDataDir } from '../../tools/dataDir.js';
 
-const DEFAULT_DATA_DIR = fileURLToPath(new URL('../../data', import.meta.url));
 const MIGRATIONS_DIR = fileURLToPath(new URL('./migrations', import.meta.url));
 
 /**
@@ -21,11 +21,12 @@ const MIGRATIONS_DIR = fileURLToPath(new URL('./migrations', import.meta.url));
  * scratch server point at a throwaway directory instead of the repo's real
  * data/ — see tests-e2e/scratch-fixture.mjs and playwright.config.js, which
  * set DATA_DIR alongside PUBLIC_DIR for the scratch server. Falls back to
- * data/ under the repo, matching every other tools/*Db.js store.
+ * data/ under the repo, matching every other tools/*Db.js store. Re-exported
+ * here so existing importers of server/db/appDb.js's resolveDataDir keep
+ * working; the actual logic lives in tools/dataDir.js, shared with every
+ * gitignored cache DB the server opens (nl-3s5.27).
  */
-export function resolveDataDir(dataDir = process.env.DATA_DIR) {
-  return dataDir ? resolve(dataDir) : DEFAULT_DATA_DIR;
-}
+export { resolveDataDir };
 
 /**
  * Open data/app.db with WAL, foreign keys on, and a busy timeout so a

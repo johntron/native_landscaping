@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openServerDatabases, CLAIM_STORE_NOT_BUILT_MESSAGE } from '../server/dbHandles.js';
 import { openClaimsStore, createSchema } from '../tools/claims/claimsStore.js';
+import { openProbeCache } from '../tools/usda-plants/probeCache.js';
 
 function tmpPaths() {
   const dir = mkdtempSync(join(tmpdir(), 'db-handles-test-'));
@@ -69,6 +70,48 @@ test('db.claims() throws the same message, and still does not cache, when the fi
     assert.throws(() => db.claims(), /Claim store not built/, 'a second call must not cache the failure either');
   } finally {
     rmSync(paths.dir, { recursive: true, force: true });
+  }
+});
+
+// nl-3s5.27: openServerDatabases() with NO path overrides is exactly what
+// server.js calls at startup. Every store it opens must honour DATA_DIR, and
+// unset DATA_DIR must still mean the repo's real data/ — the two halves of
+// this bead's deliverable.
+test('openServerDatabases(), called with no path overrides, opens observation-events.db and ecosystem.db under DATA_DIR', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'db-handles-datadir-test-'));
+  const savedEnv = process.env.DATA_DIR;
+  process.env.DATA_DIR = dir;
+  try {
+    const db = openServerDatabases();
+    assert.ok(existsSync(join(dir, 'observation-events.db')), 'observation-events.db should land under DATA_DIR');
+    assert.ok(existsSync(join(dir, 'ecosystem.db')), 'ecosystem.db should land under DATA_DIR');
+
+    // Build claims.db in the same DATA_DIR and confirm db.claims() (called
+    // with no override either) finds it there, not at the repo's data/.
+    const claimsDb = openClaimsStore(join(dir, 'claims.db'));
+    createSchema(claimsDb);
+    assert.doesNotThrow(() => db.claims().prepare('SELECT 1 FROM taxa LIMIT 1').get());
+  } finally {
+    if (savedEnv === undefined) delete process.env.DATA_DIR;
+    else process.env.DATA_DIR = savedEnv;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// The probe cache isn't part of openServerDatabases (server/routes/ecosystem.js
+// opens it per request, nl-3s5.26), but it must honour DATA_DIR the same way,
+// since it's a store the server opens.
+test('openProbeCache(), called with no path override, opens probe-cache.db under DATA_DIR', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'probe-cache-datadir-test-'));
+  const savedEnv = process.env.DATA_DIR;
+  process.env.DATA_DIR = dir;
+  try {
+    openProbeCache();
+    assert.ok(existsSync(join(dir, 'probe-cache.db')), 'probe-cache.db should land under DATA_DIR');
+  } finally {
+    if (savedEnv === undefined) delete process.env.DATA_DIR;
+    else process.env.DATA_DIR = savedEnv;
+    rmSync(dir, { recursive: true, force: true });
   }
 });
 

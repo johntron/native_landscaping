@@ -5,12 +5,17 @@
 // Both the fetch script and server.js's /api/ecosystem route open this file.
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import { resolveDataDir } from './dataDir.js';
 
-const DEFAULT_PATH = fileURLToPath(new URL('../data/ecosystem.db', import.meta.url));
+// A function, not a module-level constant: DATA_DIR (tools/dataDir.js) must
+// be resolved at OPEN time, since tests set process.env.DATA_DIR after this
+// module is already imported (nl-3s5.27).
+export function defaultEcosystemPath(dataDir) {
+  return join(resolveDataDir(dataDir), 'ecosystem.db');
+}
 
-export function openEcosystemDb(path = DEFAULT_PATH) {
+export function openEcosystemDb(path = defaultEcosystemPath()) {
   mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
   db.exec('PRAGMA journal_mode = WAL');

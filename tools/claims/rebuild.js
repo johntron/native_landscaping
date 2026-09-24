@@ -3,7 +3,7 @@
 // else in the epic (ingest, export, MCP tools) can proceed without this.
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
-import { openClaimsStore, createSchema, DEFAULT_PATH } from './claimsStore.js';
+import { openClaimsStore, createSchema, defaultClaimsPath } from './claimsStore.js';
 import { seedPlantableCore } from './taxaSeed.js';
 import { replayManualCorrections } from './correctionsReplay.js';
 import { loadCorpusText, buildFloraIndex, buildGenusDictionary } from './floraCorpus.js';
@@ -14,7 +14,7 @@ import { parseCsv } from '../../src/data/csvLoader.js';
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
 export function rebuildClaimsStore({
-  dbPath = DEFAULT_PATH,
+  dbPath = defaultClaimsPath(),
   plantsCsvPath = `${REPO_ROOT}plants.csv`,
   blacklandCsvPath = `${REPO_ROOT}catalog/blackland-prairie-natives.csv`,
   correctionsPath = `${REPO_ROOT}catalog/manual-corrections.tsv`,

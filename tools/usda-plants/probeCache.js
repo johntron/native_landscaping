@@ -12,16 +12,24 @@
 
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+import { resolveDataDir } from "../dataDir.js";
 
-// Repo-root-relative, not cwd-relative: an MCP stdio server's cwd is
-// whatever the client happened to launch it from, not reliably the repo
-// root, so a bare "data/probe-cache.db" would scatter cache files around
-// the filesystem depending on who started the server.
-const DEFAULT_PATH = fileURLToPath(new URL("../../data/probe-cache.db", import.meta.url));
+// Repo-root-relative (via resolveDataDir), not cwd-relative: an MCP stdio
+// server's cwd is whatever the client happened to launch it from, not
+// reliably the repo root, so a bare "data/probe-cache.db" would scatter
+// cache files around the filesystem depending on who started the server.
+// Also honours DATA_DIR (nl-3s5.27), the same as every other tools/*Db.js
+// store, so a server opening this at request time (server/routes/ecosystem.js's
+// openProbeCache() calls) picks up a scratch DATA_DIR without that route
+// file needing to know about it. A function, not a module-level constant:
+// DATA_DIR must be resolved at OPEN time, since tests set
+// process.env.DATA_DIR after this module is already imported.
+export function defaultProbeCachePath(dataDir) {
+  return join(resolveDataDir(dataDir), "probe-cache.db");
+}
 
-export function openProbeCache(path = DEFAULT_PATH) {
+export function openProbeCache(path = defaultProbeCachePath()) {
   mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
   db.exec("PRAGMA journal_mode = WAL");

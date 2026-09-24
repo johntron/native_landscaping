@@ -18,10 +18,15 @@
 // rather than accidentally global.
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import { resolveDataDir } from './dataDir.js';
 
-const DEFAULT_PATH = fileURLToPath(new URL('../data/observation-events.db', import.meta.url));
+// A function, not a module-level constant: DATA_DIR (tools/dataDir.js) must
+// be resolved at OPEN time, since tests set process.env.DATA_DIR after this
+// module is already imported (nl-3s5.27).
+export function defaultObservationEventsPath(dataDir) {
+  return join(resolveDataDir(dataDir), 'observation-events.db');
+}
 
 function addColumnIfMissing(db, table, column, type) {
   const existing = db.prepare(`PRAGMA table_info(${table})`).all();
@@ -29,7 +34,7 @@ function addColumnIfMissing(db, table, column, type) {
   db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
 }
 
-export function openObservationEventsDb(path = DEFAULT_PATH) {
+export function openObservationEventsDb(path = defaultObservationEventsPath()) {
   mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
   db.exec('PRAGMA journal_mode = WAL');
