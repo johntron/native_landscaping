@@ -144,6 +144,23 @@ script. **Three hold state a person entered by hand and cannot be rebuilt:**
 A PreToolUse hook in `.claude/settings.json` blocks any `rm` whose command
 mentions `data/`: inspect the file and ask before deleting anything there.
 
+### Identity
+
+The site sits behind Cloudflare Access (Google SSO). `server/identity.js` verifies the
+`Cf-Access-Jwt-Assertion` JWT (RS256 only, audience, issuer, expiry) against the team's
+certs, fetched and cached by `tools/accessCerts.js`, and attaches `ctx.user`
+(`{ id, email, isAdmin }`, or `null`) to every request. A verified email gets a `users`
+row in `app.db` on first sight: Access policy membership is the invite list. The
+`Cf-Access-Authenticated-User-Email` header is never trusted, because anything on the
+host can reach the server directly and forge it. Identity is attached, not yet enforced.
+
+- `CF_ACCESS_TEAM_DOMAIN` (e.g. `myteam.cloudflareaccess.com`) and `CF_ACCESS_AUD` (the
+  Access application's AUD tag) configure it. Unset, or with the certs unreachable,
+  every request is anonymous (fail closed); a warning logs at startup.
+- `DEV_USER_EMAIL` makes every request that user with no JWT, for local dev and the
+  Playwright servers (`playwright.config.js`). **Never set it in production.** It logs
+  loudly at startup and is ignored whenever either `CF_ACCESS_*` var is set.
+
 ---
 
 ## Workflow

@@ -9,6 +9,7 @@ import { handleFeedRoutes } from './server/routes/feed.js';
 import { handleClaimsRoutes } from './server/routes/claims.js';
 import { legacyRedirect, serveStaticFile } from './server/static.js';
 import { openAppDb } from './server/db/appDb.js';
+import { createIdentity } from './server/identity.js';
 
 const envPort = Number(process.env.PORT);
 const PORT = Number.isFinite(envPort) ? envPort : 8000;
@@ -17,6 +18,9 @@ const PUBLIC_DIR = process.env.PUBLIC_DIR
   : path.resolve(process.cwd());
 
 const ROUTES = [handleProjectRoutes, handleEcosystemRoutes, handleFeedRoutes, handleClaimsRoutes];
+
+// Built once so its configuration warnings log at startup (server/identity.js).
+const identify = createIdentity();
 
 // Opened once at startup, not per request. ctx.db is built as an object, one
 // handle per store, so the other local SQLite stores (nl-3s5.14: savedAreas,
@@ -28,6 +32,7 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || '', `http://${req.headers.host}`);
   const pathname = url.pathname;
   const ctx = { url, pathname, publicDir: PUBLIC_DIR, db };
+  ctx.user = await identify(req, ctx.db.app); // { id, email, isAdmin } or null; not enforced here
 
   for (const handle of ROUTES) {
     if (await handle(req, res, ctx)) return;

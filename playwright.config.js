@@ -11,6 +11,16 @@ const PORT = Number(process.env.E2E_PORT) || 8123;
 const SCRATCH_PORT = PORT + 1;
 buildScratchPublicDir();
 
+// Both servers run as a fixed dev identity (server/identity.js), so specs keep
+// working once routes start requiring a user (nl-3s5.15). Playwright merges
+// webServer.env over process.env, and the dev identity is ignored whenever the
+// Cloudflare Access vars are set, so blank them rather than inherit a shell's.
+const E2E_IDENTITY_ENV = {
+  DEV_USER_EMAIL: 'e2e@example.com',
+  CF_ACCESS_TEAM_DOMAIN: '',
+  CF_ACCESS_AUD: '',
+};
+
 export default defineConfig({
   testDir: './tests-e2e',
   fullyParallel: true,
@@ -43,7 +53,7 @@ export default defineConfig({
       // DATA_DIR keeps app.db (opened at startup regardless of which specs
       // run against this server) inside a throwaway directory instead of the
       // real data/, even though this server's PUBLIC_DIR is the repo itself.
-      env: { PORT: String(PORT), DATA_DIR: path.join(SCRATCH_DATA_DIR, 'main') },
+      env: { PORT: String(PORT), DATA_DIR: path.join(SCRATCH_DATA_DIR, 'main'), ...E2E_IDENTITY_ENV },
       url: `http://127.0.0.1:${PORT}/index.html`,
       reuseExistingServer: !process.env.CI,
       stdout: 'ignore',
@@ -57,6 +67,7 @@ export default defineConfig({
         PORT: String(SCRATCH_PORT),
         PUBLIC_DIR: SCRATCH_DIR,
         DATA_DIR: path.join(SCRATCH_DATA_DIR, 'scratch'),
+        ...E2E_IDENTITY_ENV,
       },
       url: `http://127.0.0.1:${SCRATCH_PORT}/index.html`,
       reuseExistingServer: !process.env.CI,
