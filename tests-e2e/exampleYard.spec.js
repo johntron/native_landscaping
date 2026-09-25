@@ -46,6 +46,8 @@ test('the example opens read-only: View only, no plant actions, and the viewer\'
   await expect(page.locator('#detailSheet')).toBeVisible();
   await expect(page.locator('#detailSheetCloneBtn')).toBeHidden();
   await expect(page.locator('#detailSheetRemoveBtn')).toBeHidden();
+  // The lifecycle editor (nl-3s5.22) is an edit too: hidden on the example.
+  await expect(page.locator('.plant-lifecycle')).toBeHidden();
   await page.keyboard.press('Escape');
 
   await page.mouse.click(target.x, target.y, { button: 'right' });
