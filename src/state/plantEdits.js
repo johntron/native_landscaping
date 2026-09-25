@@ -8,6 +8,7 @@ import { createViewTransform } from '../render/viewTransform.js';
 import { createPlantFromSpecies } from '../data/plantParser.js';
 import { classifyPlantLayer } from './layers.js';
 import { buildCloneId, buildNewPlantId } from './plantIds.js';
+import { LIFECYCLE_KEYS, lifecycleOf, validateLifecycle, withLifecycle } from '../data/plantLifecycle.js';
 
 export function clonePlantById(state, plantId) {
   if (!plantId) return null;
@@ -16,8 +17,12 @@ export function clonePlantById(state, plantId) {
   const planView = state.project.views.find((view) => view.type === 'plan');
   const { originFt, extentFt } = createViewTransform(planView);
   const offset = 1.1;
+  // A clone is a new plant in the plan: it is not in the ground yet and came
+  // from nowhere, whatever the plant it was copied from records (nl-3s5.22).
+  const copied = { ...source };
+  LIFECYCLE_KEYS.forEach((key) => delete copied[key]);
   const clone = {
-    ...source,
+    ...copied,
     id: buildCloneId(state.plants, source.id),
     x: clampFeet(source.x + offset, originFt.x, originFt.x + extentFt.width),
     y: clampFeet(source.y + offset * 0.6, originFt.y, originFt.y + extentFt.height),
@@ -64,6 +69,37 @@ export function removePlantById(state, plantId) {
   if (remaining.length === state.plants.length) return false;
   state.plants = remaining;
   return true;
+}
+
+/**
+ * Set one plant's lifecycle (status, planting date, source). `fields` is
+ * merged over the plant's current lifecycle, so the panel can send only what
+ * changed; switching to planned drops the date. The result is checked with
+ * validateLifecycle first, and a refused edit changes nothing.
+ * @param {{ plants: object[] }} state
+ * @param {string} plantId
+ * @param {{ status?: string, plantedOn?: string, source?: object|null }} fields
+ * @param {{ today?: string }} [options] passed to validateLifecycle
+ * @returns {{ plant: object|null, problems: string[] }} the new plant, or null
+ *   with the problems (none when the plant is gone or nothing changed)
+ */
+export function setPlantLifecycle(state, plantId, fields, options) {
+  const id = String(plantId ?? '');
+  const index = state.plants.findIndex((plant) => String(plant.id) === id);
+  if (!id || index < 0) return { plant: null, problems: [] };
+  const current = state.plants[index];
+  const merged = { ...lifecycleOf(current), ...fields };
+  if (merged.status !== 'planted') merged.plantedOn = '';
+  const problems = validateLifecycle(merged, options);
+  if (problems.length) return { plant: null, problems };
+  const next = withLifecycle(current, merged);
+  if (JSON.stringify(lifecycleOf(next)) === JSON.stringify(lifecycleOf(current))) {
+    return { plant: null, problems: [] };
+  }
+  const plants = [...state.plants];
+  plants[index] = next;
+  state.plants = plants;
+  return { plant: next, problems: [] };
 }
 
 function clampFeet(value, min, max) {

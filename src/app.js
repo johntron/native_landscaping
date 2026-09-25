@@ -41,6 +41,7 @@ import { createSpeciesHighlight } from './ui/speciesHighlight.js';
 import { patchView } from './state/yardEdits.js';
 import { addPlantFromCatalog, clonePlantById, removePlantById } from './state/plantEdits.js';
 import { createPlantMenu } from './interaction/plantMenu.js';
+import { createPlantLifecyclePanel } from './interaction/plantLifecyclePanel.js';
 import { PROJECT_QUERY_PARAM, initNewProjectForm, initProjectPicker } from './ui/projectPicker.js';
 import { initExampleBanner } from './ui/exampleBanner.js';
 import {
@@ -569,6 +570,17 @@ async function init() {
     });
   }
 
+  // Status, planting date and source (nl-3s5.22): each edit is one planting
+  // revision through the same commit as a drag.
+  const lifecyclePanel = createPlantLifecyclePanel({
+    sheet: detailSheet,
+    appState,
+    onCommit: (description) => {
+      render();
+      refreshSpeciesTable();
+      commitLayoutChange(description);
+    },
+  });
   const { open: openDetailSheet, close: closeDetailSheet } = createDetailSheet({
     elements: {
       sheet: detailSheet,
@@ -581,6 +593,7 @@ async function init() {
     },
     appState,
     setTargetedPlant,
+    lifecyclePanel,
   });
 
   if (detailSheetCloneBtn) {
@@ -797,6 +810,8 @@ async function init() {
     });
     setupMode.sync();
     featuresMode.sync();
+    // An undo or redo can change the open plant's status under the sheet.
+    lifecyclePanel.refresh();
   };
 
   monthSlider.addEventListener('input', (e) => {

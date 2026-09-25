@@ -221,7 +221,11 @@ test('the owner reads and saves through the routes', async () => {
     assert.deepEqual(history.entries[2].plants, [placement('h1', 1.23456)]);
     const csv = await call(env, env.alice, 'GET', '/api/layout?project=new-yard');
     assert.match(csv.headers['Content-Type'], /text\/csv/);
-    assert.equal(csv.body, 'id,species_id,x_ft,y_ft\nh1,yaupon-holly,1.235,1.000\n');
+    assert.equal(
+      csv.body,
+      'id,species_id,x_ft,y_ft,status,planted_on,source,source_nursery,source_sale_organizer,source_sale_event,source_sale_date\n' +
+        'h1,yaupon-holly,1.235,1.000,planned,,,,,,\n'
+    );
     const rewound = await call(env, env.alice, 'POST', '/api/history/cursor?project=new-yard', { cursor: 0 });
     assert.deepEqual(rewound.json().entry.plants, []);
     assert.equal(rewound.json().entry.config.name, 'New yard', 'revision 0 is the yard before the rename');

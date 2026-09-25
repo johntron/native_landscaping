@@ -2,6 +2,7 @@ import { parseCsv } from './csvLoader.js';
 import { classifyPlantLayer } from '../state/layers.js';
 import { buildSpeciesIndex, normalizeBotanicalName, resolveSpeciesRef } from './speciesResolver.js';
 import { placementExtras } from './placements.js';
+import { lifecycleFromCsvRow } from './plantLifecycle.js';
 import { SITE_VOCABULARY } from './projectConfig.js';
 
 const DEFAULT_LEAF_COLOR = '#6b8e23';
@@ -248,7 +249,9 @@ function parseSoilPref(raw, id) {
 }
 
 /**
- * Parse a yard's planting_layout.csv: `id,species_id,x_ft,y_ft`.
+ * Parse a yard's planting_layout.csv: `id,species_id,x_ft,y_ft`, then the
+ * lifecycle columns (`status,planted_on,source,...`; nl-3s5.22), which a file
+ * from before them lacks and then reads as planned with no source.
  *
  * `species_id` is plants.csv's `id`. A file in the pre-nl-3s5.18 shape
  * (`id,botanical_name,x_ft,y_ft`) still loads: its name goes through the
@@ -264,6 +267,7 @@ export function parsePlantLayoutCsv(csvText) {
     botanicalName: String(row.botanical_name || row.botanicalName || '').trim(),
     x: pickNumber(row, numberFieldAliases.x) ?? 0,
     y: pickNumber(row, numberFieldAliases.y) ?? 0,
+    ...lifecycleFromCsvRow(row),
   }));
 
   assertUniqueIds(placements);
@@ -315,10 +319,11 @@ export function buildPlantsFromCsv(speciesCsvText, layoutCsvText, { synonyms, dr
       throw new LayoutDataError(`Unknown ${missing} in layout row ${placement.id}`);
     }
 
+    // The row's lifecycle rides along as placement extras; its speciesId and
+    // botanicalName do not, because the resolved species supplies both.
     return createPlantFromSpecies(resolved.entry, {
+      ...placement,
       id: placement.id || `plant-${idx + 1}`,
-      x: placement.x,
-      y: placement.y,
     });
   });
 }

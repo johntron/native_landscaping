@@ -6,10 +6,16 @@
  * time, through createPlantFromSpecies(species, placement).
  *
  * Other fields on a placement are carried through untouched, so a later bead
- * can add per-plant facts (a lifecycle `status`, a `source`) without another
- * change to the (de)serialisers. What is stripped is a fixed list of species
- * attributes, SPECIES_ATTRIBUTE_KEYS; tests/placements.test.js fails if
- * createPlantFromSpecies grows a key that list does not name.
+ * can add per-plant facts without another change to the (de)serialisers. What
+ * is stripped is a fixed list of species attributes, SPECIES_ATTRIBUTE_KEYS;
+ * tests/placements.test.js fails if createPlantFromSpecies grows a key that
+ * list does not name.
+ *
+ * The lifecycle keys (`status`, `plantedOn`, `source`; nl-3s5.22) are the one
+ * set of extras that is checked: toPlacement keeps them only in the canonical
+ * form src/data/plantLifecycle.js normalizeLifecycle gives, so neither the
+ * client's snapshot nor the server's reduction of a POST /api/layout body can
+ * store a status that is not one of the two, or a date that is not a date.
  *
  * One exception: an object with no `speciesId` is a legacy snapshot from before
  * nl-3s5.18 (or a stray test row) that nothing could resolve. It is kept
@@ -19,6 +25,7 @@
  * Pure: no DOM, no fetch. The server and the migration tool import it too.
  */
 import { formatLayoutNumber } from './layoutExporter.js';
+import { LIFECYCLE_KEYS, normalizeLifecycle } from './plantLifecycle.js';
 
 /** The fields every placement has. */
 export const PLACEMENT_CORE_KEYS = Object.freeze(['id', 'speciesId', 'x', 'y']);
@@ -86,12 +93,15 @@ function cloneValue(value) {
 export function toPlacement(plant) {
   if (!plant || typeof plant !== 'object') return plant;
   if (!plant.speciesId) return cloneValue(plant);
+  const extras = placementExtras(plant);
+  LIFECYCLE_KEYS.forEach((key) => delete extras[key]);
   return {
     id: plant.id,
     speciesId: plant.speciesId,
     x: plant.x,
     y: plant.y,
-    ...cloneValue(placementExtras(plant)),
+    ...cloneValue(extras),
+    ...normalizeLifecycle(plant),
   };
 }
 
@@ -118,7 +128,10 @@ export function toPlacementEntry(entry) {
  * it: the same plants in the same order, each with the same id and speciesId,
  * at the same coordinates once written with the layout file's own number
  * format. This is exactly the comparison the old CSV-text match made
- * (buildLayoutCsv on both sides), without building the text. A list with a
+ * (buildLayoutCsv on both sides), without building the text. It reads only
+ * those four columns, not the lifecycle ones the CSV has carried since
+ * nl-3s5.22: it exists for the import's reconcile of legacy layout files,
+ * which never had them. A list with a
  * plant lacking a speciesId never matches, since it has no layout row.
  * @param {Array<object>} a
  * @param {Array<object>} b

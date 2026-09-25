@@ -64,6 +64,7 @@ export const SCRATCH_PROJECTS = [
   'ecology-check',
   'second-yard',
   'setup-undo',
+  'plant-lifecycle',
 ];
 
 /**
@@ -262,6 +263,7 @@ const LINKED = [
   'plant-drawing.csv', // how each species is drawn (nl-3s5.21); design.html refuses to boot without it
   'ecology',
   'catalog',
+  'sourcing', // nurseries and plant sales, offered as a plant's source in the detail sheet (nl-3s5.22)
   'node_modules',
 ];
 

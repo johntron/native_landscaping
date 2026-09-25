@@ -241,9 +241,12 @@ test('optional placement fields ride through createPlantFromSpecies and back', a
   const { toPlacement } = await import('../src/data/placements.js');
   const species = parseSpeciesCsv(`${speciesHeader}\n`
     + 'c,Autumn sage,Salvia greggii,3-11,3-11,,,,,red,3,3,mound');
-  const placement = { id: 'sage-1', speciesId: 'c', x: 5, y: 5, status: 'planned', source: { nursery: 'x' } };
+  const placement = {
+    id: 'sage-1', speciesId: 'c', x: 5, y: 5,
+    status: 'planted', plantedOn: '2026-04-18', source: { name: 'Big Box #123' }, note: { any: 'shape' },
+  };
   const plant = createPlantFromSpecies(species[0], placement);
-  assert.equal(plant.status, 'planned');
+  assert.equal(plant.status, 'planted');
   assert.equal(plant.width, 3, 'species attributes still come from the catalog');
   assert.deepStrictEqual(toPlacement(plant), placement);
   // A species attribute on the placement never beats the catalog's.

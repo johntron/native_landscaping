@@ -57,8 +57,8 @@ What follows from that:
   visibility from a request.
 - **History is the yard.** There is no stored `planting_layout.csv` any more: the
   layout is the entry at the cursor. `GET /api/layout?project=<slug>` exports it
-  as the CSV the file used to be (`id,species_id,x_ft,y_ft`), and nothing reads
-  one back.
+  as the CSV the file used to be (`id,species_id,x_ft,y_ft`, now followed by
+  the lifecycle columns below), and nothing reads one back.
 - **One revision stream for the planting, the setup and the features**
   (nl-3s5.20, migration 005). Every `POST /api/layout`, `POST /api/project` and
   `POST /api/features` appends one revision (`kind` `planting`, `setup` or
@@ -564,13 +564,50 @@ a phone photo from landing sideways.
 Each layout row describes one plant clump or individual:
 
 ```
-id,species_id,x_ft,y_ft
-beautyberry-east,beautyberry,11.825,16.566
+id,species_id,x_ft,y_ft,status,planted_on,source,source_nursery,source_sale_organizer,source_sale_event,source_sale_date
+beautyberry-east,beautyberry,11.825,16.566,planted,2026-04-18,Native Gardeners,Native Gardeners,,,
 ```
 
 - `id` – the plant's own id, unique within the layout.
 - `species_id` – plants.csv's `id` for the species (a slug such as `fragrant-sumac`).
 - `x_ft`, `y_ft` – offsets in feet from the yard origin (SW corner).
+- `status` … `source_sale_date` – the plant's lifecycle (below). A file with only
+  the first four columns still loads, every plant planned.
+
+### Planned and planted (nl-3s5.22)
+
+A placement may carry three optional fields, owned by `src/data/plantLifecycle.js`:
+
+- `status`: `'planted'`, or absent for planned (the default, so every placement
+  saved before this had its canonical form already). Only the two states exist;
+  a future one (`'removed'`) must be added to `LIFECYCLE_STATUSES` before anything
+  writes it, because until then it is dropped and the plant reads as planned.
+- `plantedOn`: `YYYY-MM-DD`, optional, only on a planted plant. JSON keys are
+  camelCase like `speciesId`; the CSV column is `planted_on`, like `species_id`.
+- `source`: `{ name, ref? }`. `name` is free text that can name anywhere ("a
+  neighbour's division", "Big Box #123"), cleaned of control characters and cut
+  to 120 characters, and always escaped when shown. `ref` is set only when the
+  person clicks a suggestion from `sourcing/nurseries.csv` or
+  `sourcing/plant-sales.csv`. Those tables have no id column, so a ref names its
+  row by the row's own values: `{ table: 'nurseries', name }` or
+  `{ table: 'plant-sales', organizer, event, startDate }`. A ref that no longer
+  resolves (sale rows are pruned each season) is normal, and only the name shows.
+  Typed text is never matched on anyone's behalf.
+
+Two checks: `normalizeLifecycle` is structural, never throws and never reads the
+clock, and runs inside `toPlacement`, so the client's snapshot, the server's
+reduction of a `POST /api/layout` body and every history read keep only canonical
+values (an invalid one is dropped). `validateLifecycle` adds "not in the future"
+(against the viewer's local date) and is what the detail sheet's lifecycle
+section (`src/interaction/plantLifecyclePanel.js`) runs before it commits. Every
+edit there is one planting revision, so Undo takes it back. A clone starts
+planned, with no source.
+
+In the drawings a planned plant keeps its month's colours and draws its outline
+dashed; a planted one draws it solid (`src/render/plantStatus.js`, presentation
+attributes so the exported PNGs match); a plant is the same elements either way,
+only its outline's dash differs. The HOA letter counts how many of each
+species are already planted and, when any are, says what the two outlines mean.
 
 ### Species are keyed by id, not by name (nl-3s5.18)
 

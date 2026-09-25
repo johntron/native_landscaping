@@ -35,18 +35,18 @@ async function runLayoutHistoryTest() {
   // and a legacy full-object seed is reduced the same way.
   const fullPlant = {
     id: 'p1', speciesId: 'sp', commonName: 'Stale', botanicalName: 'Stalus', width: 3,
-    growingMonths: [3, 4], foliageColors: { spring: '#000' }, layer: 2, x: 1, y: 2, status: 'planned',
+    growingMonths: [3, 4], foliageColors: { spring: '#000' }, layer: 2, x: 1, y: 2, status: 'planted',
   };
   const placementHistory = createLayoutHistory([], { seedEntries: [{ id: 's', plants: [fullPlant] }] });
-  assert.deepStrictEqual(placementHistory.getCurrentPlants(), [{ id: 'p1', speciesId: 'sp', x: 1, y: 2, status: 'planned' }]);
+  assert.deepStrictEqual(placementHistory.getCurrentPlants(), [{ id: 'p1', speciesId: 'sp', x: 1, y: 2, status: 'planted' }]);
   placementHistory.record([{ ...fullPlant, x: 5 }], { description: 'moved' });
-  assert.deepStrictEqual(placementHistory.getCurrentPlants(), [{ id: 'p1', speciesId: 'sp', x: 5, y: 2, status: 'planned' }]);
-  assert.deepStrictEqual(placementHistory.undo(), [{ id: 'p1', speciesId: 'sp', x: 1, y: 2, status: 'planned' }]);
+  assert.deepStrictEqual(placementHistory.getCurrentPlants(), [{ id: 'p1', speciesId: 'sp', x: 5, y: 2, status: 'planted' }]);
+  assert.deepStrictEqual(placementHistory.undo(), [{ id: 'p1', speciesId: 'sp', x: 1, y: 2, status: 'planted' }]);
   // The server's copy of the entry is adopted, its plants reduced too.
   placementHistory.redo();
   placementHistory.annotateCurrentEntry({ id: 'server-id', plants: [fullPlant] });
   assert.strictEqual(placementHistory.getCurrentEntry().id, 'server-id');
-  assert.deepStrictEqual(placementHistory.getCurrentEntry().plants, [{ id: 'p1', speciesId: 'sp', x: 1, y: 2, status: 'planned' }]);
+  assert.deepStrictEqual(placementHistory.getCurrentEntry().plants, [{ id: 'p1', speciesId: 'sp', x: 1, y: 2, status: 'planted' }]);
   assert.strictEqual(placementHistory.getEntries()[1].description, 'moved');
 }
 

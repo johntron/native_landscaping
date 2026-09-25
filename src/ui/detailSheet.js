@@ -16,9 +16,11 @@ import { getGenus } from '../utils/speciesKey.js';
  * @param {{ sheet, title, lines, ecology, ecologyLines, fauna, faunaLines }} deps.elements
  * @param {object} deps.appState          read for plants, month, project, and the ecology indexes
  * @param {(plantId: string) => void} deps.setTargetedPlant
+ * @param {{ open: (plantId: string) => void }} [deps.lifecyclePanel]  the status/date/source
+ *   section (src/interaction/plantLifecyclePanel.js), shown for the opened plant
  * @returns {{ open: (plantId: string) => void, close: () => void }}
  */
-export function createDetailSheet({ elements, appState, setTargetedPlant }) {
+export function createDetailSheet({ elements, appState, setTargetedPlant, lifecyclePanel }) {
   const {
     sheet: detailSheet,
     title: detailSheetTitle,
@@ -70,6 +72,7 @@ export function createDetailSheet({ elements, appState, setTargetedPlant }) {
     }
     detailSheet.dataset.plantId = plantId;
     detailSheet.hidden = false;
+    lifecyclePanel?.open(plantId);
     setTargetedPlant(plantId);
   };
 

@@ -9,6 +9,7 @@ import { pointInPolygon, nearestFeature } from './geometry.js';
 import { buildPlantLabel } from './labels.js';
 import { buildFruitCenters } from './fruitPlacement.js';
 import { buildSmoothPath } from './pathUtils.js';
+import { outlineStatusAttributes, plantStatus } from './plantStatus.js';
 
 const HIGHLIGHT_COLOR = '#ef7d1a';
 const HIGHLIGHT_OUTLINE_OPACITY = 0.9;
@@ -54,10 +55,12 @@ export function renderTopView(svg, plantStates, view, options = {}) {
     const isHighlighted = Boolean(normalizedHighlightKey && speciesKey === normalizedHighlightKey);
     const isTargeted = normalizedTargetId && String(plant.id) === normalizedTargetId;
     const isHovered = normalizedHoveredId && String(plant.id) === normalizedHoveredId;
+    const status = plantStatus(plant);
     const group = createSvgElement('g', {
       'data-name': plant.commonName,
       'data-plant-id': plant.id,
       'data-species-key': speciesKey,
+      'data-status': status,
     });
     const { x: cx, y: cy } = transform.planToViewBox(plant);
     let effectiveWidth = plant.width;
@@ -85,6 +88,7 @@ export function renderTopView(svg, plantStates, view, options = {}) {
       color: state.foliageColor,
       rng,
       outlinePoints: canopyPoints,
+      status,
     });
 
     if (state.flowerColor) {
@@ -177,7 +181,7 @@ export function renderTopView(svg, plantStates, view, options = {}) {
   climbWarnings.forEach((target) => appendClimbWarningRing(svg, target));
 }
 
-function renderFoliageDome(group, { cx, cy, radius, color, rng, outlinePoints }) {
+function renderFoliageDome(group, { cx, cy, radius, color, rng, outlinePoints, status }) {
   const points = outlinePoints || buildWavyCirclePoints(cx, cy, radius, rng);
   const d = buildSmoothPath(points);
 
@@ -219,8 +223,8 @@ function renderFoliageDome(group, { cx, cy, radius, color, rng, outlinePoints })
     d,
     fill: 'none',
     stroke: darkenHex(color, 0.55),
-    'stroke-width': Math.max(radius * 0.06, 0.8),
     'stroke-linejoin': 'round',
+    ...outlineStatusAttributes(status, Math.max(radius * 0.06, 0.8)),
   });
   group.appendChild(outline);
 }

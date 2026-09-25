@@ -1,4 +1,14 @@
-export const LAYOUT_HEADER = ['id', 'species_id', 'x_ft', 'y_ft'];
+import { LIFECYCLE_CSV_COLUMNS, lifecycleCsvCells } from './plantLifecycle.js';
+
+/**
+ * planting_layout.csv's columns: where each plant stands, then its lifecycle
+ * (nl-3s5.22: status, planted_on, and the free-text source with the sourcing/
+ * row it was linked to, if any). The file is the person's own record of their
+ * yard, so it carries everything they entered about each plant. A file with
+ * only the first four columns still loads (src/data/plantParser.js).
+ */
+export const LAYOUT_POSITION_HEADER = Object.freeze(['id', 'species_id', 'x_ft', 'y_ft']);
+export const LAYOUT_HEADER = Object.freeze([...LAYOUT_POSITION_HEADER, ...LIFECYCLE_CSV_COLUMNS]);
 
 /**
  * Convert the current in-memory plants into a planting_layout.csv payload.
@@ -27,6 +37,7 @@ export function buildLayoutCsv(plants) {
       escapeCell(plant.speciesId),
       formatLayoutNumber(plant.x),
       formatLayoutNumber(plant.y),
+      ...lifecycleCsvCells(plant).map(escapeCell),
     ].join(','));
   });
 
@@ -47,6 +58,6 @@ export function formatLayoutNumber(value) {
 function escapeCell(value) {
   if (value === undefined || value === null) return '';
   const str = String(value);
-  if (!/[",\n]/.test(str)) return str;
+  if (!/[",\r\n]/.test(str)) return str;
   return `"${str.replace(/"/g, '""')}"`;
 }

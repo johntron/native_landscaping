@@ -37,11 +37,58 @@ test('a full plant reduces to exactly { id, speciesId, x, y }', () => {
 });
 
 test('unknown optional fields ride through untouched, and the input is never shared', () => {
-  const source = { nursery: 'Example', receipt: [1, 2] };
-  const plant = { ...createPlantFromSpecies(holly, { id: 'h', x: 0, y: 0 }), status: 'planted', source };
+  const receipt = { store: 'Example', lines: [1, 2] };
+  const plant = { ...createPlantFromSpecies(holly, { id: 'h', x: 0, y: 0 }), receipt };
   const placement = toPlacement(plant);
-  assert.deepStrictEqual(placement, { id: 'h', speciesId: 'yaupon-holly', x: 0, y: 0, status: 'planted', source });
+  assert.deepStrictEqual(placement, { id: 'h', speciesId: 'yaupon-holly', x: 0, y: 0, receipt });
+  assert.notEqual(placement.receipt, receipt);
+});
+
+test('lifecycle fields are kept in canonical form, never shared, and invalid values are dropped (nl-3s5.22)', () => {
+  const source = { name: 'Native Gardeners', ref: { table: 'nurseries', name: 'Native Gardeners' } };
+  const plant = {
+    ...createPlantFromSpecies(holly, { id: 'h', x: 0, y: 0 }),
+    status: 'planted',
+    plantedOn: '2026-04-18',
+    source,
+  };
+  const placement = toPlacement(plant);
+  assert.deepStrictEqual(placement, { id: 'h', speciesId: 'yaupon-holly', x: 0, y: 0, status: 'planted', plantedOn: '2026-04-18', source });
   assert.notEqual(placement.source, source);
+  assert.notEqual(placement.source.ref, source.ref);
+  assert.deepStrictEqual(toPlacement(placement), placement, 'normalizing twice changes nothing');
+
+  const bare = { id: 'h', speciesId: 'yaupon-holly', x: 0, y: 0 };
+  const cases = [
+    // planned is the default and is stored as no key at all
+    [{ status: 'planned' }, {}],
+    // a status nothing writes yet (a future 'removed') is dropped, so reads as planned
+    [{ status: 'removed', plantedOn: '2026-01-01' }, {}],
+    [{ status: 'PLANTED' }, {}],
+    // a date only on a planted plant, and only a real one
+    [{ plantedOn: '2026-04-18' }, {}],
+    [{ status: 'planted', plantedOn: '2026-02-30' }, { status: 'planted' }],
+    [{ status: 'planted', plantedOn: '4/18/2026' }, { status: 'planted' }],
+    [{ status: 'planted', plantedOn: 20260418 }, { status: 'planted' }],
+    // free text is cleaned and capped, never required to match anything
+    [{ source: { name: '  Big Box\n#123\u0000 ' } }, { source: { name: 'Big Box #123' } }],
+    [{ source: { name: 'x'.repeat(500) } }, { source: { name: 'x'.repeat(120) } }],
+    [{ source: { name: '<img src=x onerror=alert(1)>' } }, { source: { name: '<img src=x onerror=alert(1)>' } }],
+    [{ source: { name: '' } }, {}],
+    [{ source: 'a string' }, {}],
+    [{ source: { nursery: 'no name' } }, {}],
+    // a malformed ref is dropped and the name kept
+    [{ source: { name: 'n', ref: { table: 'nurseries' } } }, { source: { name: 'n' } }],
+    [{ source: { name: 'n', ref: { table: 'shops', name: 'n' } } }, { source: { name: 'n' } }],
+    [{ source: { name: 'n', ref: { table: 'plant-sales', organizer: 'o', event: 'e', startDate: 'soon' } } }, { source: { name: 'n' } }],
+    [
+      { source: { name: 'n', ref: { table: 'plant-sales', organizer: 'o', event: 'e', startDate: '2026-10-17', extra: 1 } } },
+      { source: { name: 'n', ref: { table: 'plant-sales', organizer: 'o', event: 'e', startDate: '2026-10-17' } } },
+    ],
+  ];
+  cases.forEach(([fields, expected]) => {
+    assert.deepStrictEqual(toPlacement({ ...bare, ...fields }), { ...bare, ...expected }, JSON.stringify(fields));
+  });
 });
 
 test('a snapshot with no speciesId is kept verbatim, not trimmed', () => {

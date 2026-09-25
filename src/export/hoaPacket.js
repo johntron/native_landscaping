@@ -1,4 +1,5 @@
 import { getSpeciesKey } from '../utils/speciesKey.js';
+import { lifecycleOf, STATUS_PLANTED } from '../data/plantLifecycle.js';
 
 /**
  * Cover letter for an HOA/ARC submission packet — plain text so it opens
@@ -47,8 +48,15 @@ export function buildHoaCoverLetter({ projectName, species, preparedOn }) {
   add(`SPECIES LIST (${species.length} species)`);
   species.forEach((entry) => {
     const name = entry.commonName ? `${entry.commonName} (${entry.botanicalName})` : entry.botanicalName;
-    add(`- ${name}${entry.count > 1 ? ` × ${entry.count}` : ''}`);
+    add(`- ${name}${entry.count > 1 ? ` × ${entry.count}` : ''}${plantedNote(entry)}`);
   });
+  if (species.some((entry) => entry.plantedCount)) {
+    add('');
+    add(
+      `In the drawings, a plant already in the ground is outlined solid and a proposed ` +
+        `plant is outlined dashed.`
+    );
+  }
   add('');
   add(
     `This letter states what the statute says; it is not legal advice and does not cover ` +
@@ -62,25 +70,36 @@ export function buildHoaCoverLetter({ projectName, species, preparedOn }) {
 /**
  * One row per distinct species actually placed, counted like the ecology
  * engine counts them (src/analysis/ecology.js dedupeBySpecies) — a drift of
- * nineteen asters is one line, not nineteen.
+ * nineteen asters is one line, not nineteen. `plantedCount` is how many of
+ * them are marked planted (nl-3s5.22); the rest are proposed.
  */
 export function summarizePlacedSpecies(plants) {
   const byKey = new Map();
   plants.forEach((plant) => {
     const key = getSpeciesKey(plant);
     if (!key) return;
+    const isPlanted = lifecycleOf(plant).status === STATUS_PLANTED;
     const existing = byKey.get(key);
     if (existing) {
       existing.count += 1;
+      if (isPlanted) existing.plantedCount += 1;
     } else {
       byKey.set(key, {
         commonName: plant.commonName || '',
         botanicalName: plant.botanicalName || '',
         count: 1,
+        plantedCount: isPlanted ? 1 : 0,
       });
     }
   });
   return [...byKey.values()].sort((a, b) =>
     (a.commonName || a.botanicalName).localeCompare(b.commonName || b.botanicalName)
   );
+}
+
+/** ' (2 already planted)', or '' when none of a species is in the ground yet. */
+function plantedNote({ count, plantedCount }) {
+  if (!plantedCount) return '';
+  if (plantedCount < count) return ` (${plantedCount} already planted)`;
+  return count > 1 ? ' (all already planted)' : ' (already planted)';
 }

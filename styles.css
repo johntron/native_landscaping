@@ -1683,6 +1683,127 @@ select {
   justify-content: flex-end;
 }
 
+/* The plant's lifecycle in the detail sheet (nl-3s5.22). Chrome: the status
+   toggle is the ordinary cyan .chip, and nothing here glows. Planned and
+   planted are told apart in the drawing by the outline (dashed or solid,
+   src/render/plantStatus.js), and the key here says so in words. */
+.plant-lifecycle {
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.plant-lifecycle[hidden],
+.plant-lifecycle [hidden] {
+  display: none;
+}
+
+.plant-lifecycle__heading {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.plant-lifecycle__key {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--ink-muted);
+}
+
+.plant-lifecycle__status {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.plant-lifecycle__status-button[data-lifecycle-status="planned"]:not(.is-active) {
+  border-style: dashed;
+}
+
+.plant-lifecycle__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.plant-lifecycle__label {
+  font-size: 0.8rem;
+  color: var(--ink-muted);
+}
+
+.plant-lifecycle__input {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--rule-strong);
+  border-radius: 4px;
+  background: var(--surface-card);
+  color: var(--ink);
+}
+
+.plant-lifecycle__input:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.plant-lifecycle__linked {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+
+.plant-lifecycle__link,
+.plant-lifecycle__unlink {
+  color: var(--accent);
+}
+
+.plant-lifecycle__unlink,
+.plant-lifecycle__suggestion {
+  font: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.plant-lifecycle__unlink {
+  text-decoration: underline;
+}
+
+.plant-lifecycle__suggestions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.plant-lifecycle__suggestion {
+  text-align: left;
+  color: var(--accent-deep);
+}
+
+.plant-lifecycle__suggestion:hover,
+.plant-lifecycle__suggestion:focus-visible {
+  text-decoration: underline;
+}
+
+.plant-lifecycle__suggestion-detail {
+  color: var(--ink-muted);
+}
+
+.plant-lifecycle__message {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--danger);
+}
+
 @media (min-width: 640px) {
   .detail-sheet {
     align-items: center;
