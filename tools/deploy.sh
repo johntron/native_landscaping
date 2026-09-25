@@ -123,9 +123,14 @@ fi
 touched() { [ -n "$changed" ] && grep -Eq "$1" <<<"$changed"; }
 
 # feed-poller loads its code once at boot. This list is the import closure of
-# tools/schedule-feed-poll.mjs (checked 2026-09-23, plus server/db/ since
-# nl-3s5.11 moved saved areas into app.db); widen it when that grows.
-FEED_POLLER_CODE='^(tools/(feedState/|savedAreas/|fetch-observation-events\.mjs$|schedule-feed-poll\.mjs$|inatShared\.mjs$|usda-plants/probeCache\.js$|[^/]*Db\.js$)|server/db/)'
+# tools/schedule-feed-poll.mjs, walked from its static imports 2026-09-24
+# (nl-3s5.6 added the nearby-index queue: fetch-ecosystem-index.mjs,
+# ecosystemIndexQueue.js, projectSite.mjs, geocode.mjs and
+# src/analysis/establishmentMeans.js; server/db/projectStore.js already pulled
+# in src/data/ and tools/dataDir.js, which the earlier list missed). All of
+# src/data/ rather than its three files: projectStore.js grows imports there,
+# and a needless poller restart costs nothing. Widen it when that grows.
+FEED_POLLER_CODE='^(tools/(feedState/|savedAreas/|fetch-observation-events\.mjs$|fetch-ecosystem-index\.mjs$|ecosystemIndexQueue\.js$|projectSite\.mjs$|geocode\.mjs$|dataDir\.js$|schedule-feed-poll\.mjs$|inatShared\.mjs$|usda-plants/probeCache\.js$|[^/]*Db\.js$)|server/db/|src/data/|src/analysis/establishmentMeans\.js$)'
 restart_poller=0
 touched "$FEED_POLLER_CODE" && restart_poller=1
 

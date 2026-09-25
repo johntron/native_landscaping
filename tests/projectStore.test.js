@@ -288,9 +288,9 @@ test('/api/ecosystem gives a yard\'s coordinates to its owner only', async () =>
   const env = setup();
   try {
     addYard(env.db, env.alice, 'y', { locationJson: JSON.stringify({ lat: 32.5, lng: -96.5, address: 'somewhere' }) });
-    const ecosystemDb = { prepare: () => ({ all: () => [] }) };
+    const ecosystemDb = { prepare: () => ({ all: () => [], get: () => undefined }) }; // no index built yet
     const ask = async (user) => {
-      const url = new URL('http://localhost/api/ecosystem?place=home&project=y');
+      const url = new URL('http://localhost/api/ecosystem?project=y');
       const res = makeRes();
       await handleEcosystemRoutes(makeReq('GET'), res, {
         url,

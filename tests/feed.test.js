@@ -174,7 +174,7 @@ test('queryFeed lane=rarity narrows to events with a known local count and attac
   try {
     const ecosystemDbPath = join(dir, 'ecosystem.db');
     const ecosystemDb = openEcosystemDb(ecosystemDbPath);
-    replaceTaxonRows(ecosystemDb, 'Dallas, TX', 'Plantae', [
+    replaceTaxonRows(ecosystemDb, 1, 'Plantae', [
       { taxon_name: 'Asclepias tuberosa', genus: 'Asclepias', radius_mi: 10, observation_count: 3, fetched_on: '2026-01-01', source: 'test' },
     ]);
 
@@ -186,6 +186,7 @@ test('queryFeed lane=rarity narrows to events with a known local count and attac
       areaId: 'area-rare',
       lane: 'rarity',
       place: 'Dallas, TX',
+      indexProjectId: 1,
       ecosystemDbPath,
     });
     assert.equal(result.total, 1);
@@ -202,7 +203,7 @@ test('queryFeed lane=rarity honors rarityThreshold', () => {
   try {
     const ecosystemDbPath = join(dir, 'ecosystem.db');
     const ecosystemDb = openEcosystemDb(ecosystemDbPath);
-    replaceTaxonRows(ecosystemDb, 'Dallas, TX', 'Plantae', [
+    replaceTaxonRows(ecosystemDb, 1, 'Plantae', [
       { taxon_name: 'Asclepias tuberosa', genus: 'Asclepias', radius_mi: 10, observation_count: 50, fetched_on: '2026-01-01', source: 'test' },
     ]);
     upsertEvents(eventsDb, [
@@ -212,6 +213,7 @@ test('queryFeed lane=rarity honors rarityThreshold', () => {
       areaId: 'area-rare2',
       lane: 'rarity',
       place: 'Dallas, TX',
+      indexProjectId: 1,
       ecosystemDbPath,
       rarityThreshold: 10,
     });
@@ -228,7 +230,7 @@ test('queryFeed lane=rarity surfaces conservation-status and protected-species f
     const ecosystemDb = openEcosystemDb(ecosystemDbPath);
     // Needs at least one row so loadRarityTables treats the place as indexed;
     // neither event below matches it on taxon_name, so local-scarcity never fires.
-    replaceTaxonRows(ecosystemDb, 'Dallas, TX', 'Plantae', [
+    replaceTaxonRows(ecosystemDb, 1, 'Plantae', [
       { taxon_name: 'Asclepias tuberosa', genus: 'Asclepias', radius_mi: 10, observation_count: 3, fetched_on: '2026-01-01', source: 'test' },
     ]);
     upsertEvents(eventsDb, [
@@ -240,6 +242,7 @@ test('queryFeed lane=rarity surfaces conservation-status and protected-species f
       areaId: 'area-rare3',
       lane: 'rarity',
       place: 'Dallas, TX',
+      indexProjectId: 1,
       ecosystemDbPath,
     });
     assert.equal(offResult.total, 0, 'both facts stay hidden until their toggles are on');
@@ -248,6 +251,7 @@ test('queryFeed lane=rarity surfaces conservation-status and protected-species f
       areaId: 'area-rare3',
       lane: 'rarity',
       place: 'Dallas, TX',
+      indexProjectId: 1,
       ecosystemDbPath,
       rarityIncludeConservationStatus: true,
       rarityIncludeProtectedSpecies: true,

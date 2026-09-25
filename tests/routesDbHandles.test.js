@@ -20,7 +20,8 @@ import { handleEcosystemRoutes } from '../server/routes/ecosystem.js';
 import { handleClaimsRoutes } from '../server/routes/claims.js';
 import { createSavedArea } from '../tools/savedAreas/savedAreasDb.js';
 import { upsertEvents } from '../tools/observationEventsDb.js';
-import { replaceTaxonRows } from '../tools/ecosystemIndexDb.js';
+import { locationKey, markBuildFinished, markBuildStarted, replaceTaxonRows } from '../tools/ecosystemIndexDb.js';
+import { insertProject } from '../server/db/projectStore.js';
 import { setCached } from '../tools/usda-plants/probeCache.js';
 
 function tmpPaths() {
@@ -44,6 +45,26 @@ function seedUser(appDb) {
     .prepare("INSERT INTO users (email, is_admin, created_at) VALUES ('feed-owner@example.com', 0, 'now') RETURNING id")
     .get().id;
   return { id, email: 'feed-owner@example.com', isAdmin: false };
+}
+
+/**
+ * A yard owned by `ownerId` with a place label and a location, and a built
+ * nearby index holding `rows` (nl-3s5.6: the index is keyed by yard).
+ * @returns {number} the yard's projects.id
+ */
+function seedIndexedYard(db, ownerId, { slug, place, rows }) {
+  const location = { lat: 32.78, lng: -96.8 };
+  const id = insertProject(db.app, {
+    ownerId,
+    slug,
+    name: slug,
+    configJson: JSON.stringify({ name: slug, place }),
+    locationJson: JSON.stringify(location),
+  });
+  markBuildStarted(db.ecosystem, id, locationKey(location));
+  replaceTaxonRows(db.ecosystem, id, 'Plantae', rows);
+  markBuildFinished(db.ecosystem, id, { state: 'ready', fetchedOn: '2026-01-01' });
+  return id;
 }
 
 /**
@@ -126,9 +147,11 @@ test('GET /api/feed?lane=rarity reads ctx.db.ecosystem through the rarity lane w
     upsertEvents(db.observationEvents, [
       { observation_id: 30, area_id: area.id, taxon_name: 'Asclepias tuberosa', observed_on: '2026-01-01', ingested_at: 't1' },
     ]);
-    replaceTaxonRows(db.ecosystem, 'Dallas, TX', 'Plantae', [
-      { taxon_name: 'Asclepias tuberosa', genus: 'Asclepias', radius_mi: 10, observation_count: 3, fetched_on: '2026-01-01', source: 'test' },
-    ]);
+    seedIndexedYard(db, user.id, {
+      slug: 'dallas-yard',
+      place: 'Dallas, TX',
+      rows: [{ taxon_name: 'Asclepias tuberosa', genus: 'Asclepias', radius_mi: 10, observation_count: 3, fetched_on: '2026-01-01', source: 'test' }],
+    });
 
     const { req, res, ctx } = stubRequest(`/api/feed?area_id=${area.id}&lane=rarity`, db, paths.dir, user);
     const handled = await handleFeedRoutes(req, res, ctx);
@@ -143,17 +166,58 @@ test('GET /api/feed?lane=rarity reads ctx.db.ecosystem through the rarity lane w
   }
 });
 
-test('GET /api/ecosystem/places reads ctx.db.ecosystem', async () => {
+test('GET /api/feed?lane=rarity never reads another owner’s index, even under the same place label (nl-3s5.6)', async () => {
   const paths = tmpPaths();
   try {
     const db = openDb(paths);
-    replaceTaxonRows(db.ecosystem, 'Dallas, TX', 'Plantae', [
-      { taxon_name: 'Asclepias tuberosa', genus: 'Asclepias', radius_mi: 10, observation_count: 3, fetched_on: '2026-01-01', source: 'test' },
+    const user = seedUser(db.app);
+    const other = db.app
+      .prepare("INSERT INTO users (email, is_admin, created_at) VALUES ('other@example.com', 0, 'now') RETURNING id")
+      .get().id;
+    seedIndexedYard(db, other, {
+      slug: 'their-yard',
+      place: 'home',
+      rows: [{ taxon_name: 'Asclepias tuberosa', genus: 'Asclepias', radius_mi: 10, observation_count: 3, fetched_on: '2026-01-01', source: 'test' }],
+    });
+    const area = createSavedArea(
+      db.app,
+      { name: 'Mine', lat: 32.78, lng: -96.8, radiusMi: 5, filters: { place: 'home' } },
+      { ownerId: user.id }
+    );
+    upsertEvents(db.observationEvents, [
+      { observation_id: 31, area_id: area.id, taxon_name: 'Asclepias tuberosa', observed_on: '2026-01-01', ingested_at: 't1' },
     ]);
 
-    const { req, res, ctx } = stubRequest('/api/ecosystem/places', db, paths.dir);
-    const handled = await handleEcosystemRoutes(req, res, ctx);
+    const { req, res, ctx } = stubRequest(`/api/feed?area_id=${area.id}&lane=rarity`, db, paths.dir, user);
+    await handleFeedRoutes(req, res, ctx);
+    const parsed = JSON.parse(res.body);
+    assert.equal(parsed.total, 0);
+    assert.match(parsed.warning, /No local species index/);
+  } finally {
+    rmSync(paths.dir, { recursive: true, force: true });
+  }
+});
 
+test('GET /api/ecosystem/places lists only the caller’s own indexed places, from ctx.db.ecosystem', async () => {
+  const paths = tmpPaths();
+  try {
+    const db = openDb(paths);
+    const user = seedUser(db.app);
+    const other = db.app
+      .prepare("INSERT INTO users (email, is_admin, created_at) VALUES ('other@example.com', 0, 'now') RETURNING id")
+      .get().id;
+    const rows = [{ taxon_name: 'Asclepias tuberosa', genus: 'Asclepias', radius_mi: 10, observation_count: 3, fetched_on: '2026-01-01', source: 'test' }];
+    seedIndexedYard(db, user.id, { slug: 'mine', place: 'Dallas, TX', rows });
+    seedIndexedYard(db, other, { slug: 'theirs', place: 'Austin, TX', rows });
+    // A yard of the caller's with no index yet is not "indexed".
+    insertProject(db.app, { ownerId: user.id, slug: 'new', name: 'new', configJson: JSON.stringify({ place: 'Plano, TX' }) });
+
+    const anonymous = stubRequest('/api/ecosystem/places', db, paths.dir);
+    await handleEcosystemRoutes(anonymous.req, anonymous.res, anonymous.ctx);
+    assert.equal(anonymous.res.statusCode, 401);
+
+    const { req, res, ctx } = stubRequest('/api/ecosystem/places', db, paths.dir, user);
+    const handled = await handleEcosystemRoutes(req, res, ctx);
     assert.equal(handled, true);
     assert.equal(res.statusCode, 200);
     assert.deepEqual(JSON.parse(res.body).places, ['Dallas, TX']);

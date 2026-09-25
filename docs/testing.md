@@ -77,7 +77,8 @@ on port `8123` (override with `E2E_PORT`) and drives the real `design.html` in C
   `tools/dataDir.js`'s `resolveDataDir()`, the same function `server/db/appDb.js`
   re-exports. No e2e server ever reads or writes the repo's real `data/`.
   - **Consequence: the main e2e server's `ecosystem.db` and `observation-events.db` start
-    empty**, even though its `PUBLIC_DIR` is the repo itself. This is a deliberate
+    empty**, even though its `PUBLIC_DIR` is the repo itself. Its yards have no location
+    either, so `nearbyIndexState.spec.js` asserts the page's "no location set" state. This is a deliberate
     trade-off, not an oversight: none of the specs in `tests-e2e/` assert on
     iNaturalist-derived content (nearby species/fauna matches, the feed, or
     `claims-coverage.html`/`claims-conflicts.html`). `habitatNearby.spec.js` (which does

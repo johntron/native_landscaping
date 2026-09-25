@@ -52,8 +52,11 @@ function firstObservedOnByTaxon(eventsDb, areaId) {
  *   area's `filters.ecoregion`. Missing/unmatched ecoregion returns zero items plus `warning`
  *   rather than throwing, matching computePlantMatches' "report, don't guess" bail-out.
  * @param {string} [options.place] required when lane is 'rarity' — the saved area's
- *   `filters.place`, matched against data/ecosystem.db's species_observations.place. Missing
- *   place, or no local index for it, returns zero items plus `warning` the same way.
+ *   `filters.place`. Missing place, or no local index for it, returns zero items plus
+ *   `warning` the same way.
+ * @param {number|null} [options.indexProjectId] when lane is 'rarity', the yard whose
+ *   nearby-species index the place resolved to among the area owner's own yards
+ *   (tools/feedState/rarityTables.js resolveRarityProject; nl-3s5.6). null: none.
  * @param {number} [options.rarityThreshold] when lane is 'rarity', drop events whose local
  *   observation_count exceeds this; omitted, every event with a known local count is surfaced
  *   (a facet, not an invented cutoff — see src/analysis/rarity.js).
@@ -122,7 +125,12 @@ export function queryFeed(eventsDb, feedStateDb, options) {
     }
   } else if (lane === 'rarity') {
     // ecosystemDbPath is test-only — see rarityTables.js's dbPath override.
-    const tables = loadRarityTables({ place: options.place, db: options.ecosystemDb, dbPath: options.ecosystemDbPath });
+    const tables = loadRarityTables({
+      place: options.place,
+      projectId: options.indexProjectId,
+      db: options.ecosystemDb,
+      dbPath: options.ecosystemDbPath,
+    });
     if (!tables.ok) {
       warning = tables.reason;
       events = [];

@@ -36,6 +36,7 @@ import { COPY_NAME, EXAMPLE_NAME, findGeoKeys, snapshotFromOwnerYard, writeExamp
 import { createRateLimiter, EXAMPLE_READ_ONLY_ERROR } from '../server/http.js';
 import { handleProjectRoutes } from '../server/routes/project.js';
 import { handleEcosystemRoutes } from '../server/routes/ecosystem.js';
+import { locationKey, markBuildFinished, markBuildStarted, openEcosystemDb, replaceTaxonRows } from '../tools/ecosystemIndexDb.js';
 import { serveStaticFile } from '../server/static.js';
 
 const PHOTO = 'img/top.webp';
@@ -76,7 +77,9 @@ function setup() {
   env.bob = upsertUser(db, 'bob@example.com');
   env.aliceYardId = addYard(env, env.alice, 'alice-yard');
   env.bobYardId = addYard(env, env.bob, 'bob-yard');
+  env.ecosystem = openEcosystemDb(join(dataDir, 'ecosystem.db'));
   env.cleanup = () => {
+    env.ecosystem.close();
     db.close();
     rmSync(dataDir, { recursive: true, force: true });
   };
@@ -115,9 +118,25 @@ function makeRes() {
   };
 }
 
-// Empty rows, so /api/ecosystem needs no ecosystem.db; the place rows are not
-// what this test is about.
-const ECOSYSTEM_DB = { prepare: () => ({ all: () => [] }) };
+/** Build a yard's nearby index for the location addYard gives every yard (nl-3s5.6). */
+function buildIndex(env, projectId, taxonNames) {
+  const key = locationKey({ lat: 32.5, lng: -96.5 });
+  markBuildStarted(env.ecosystem, projectId, key);
+  replaceTaxonRows(
+    env.ecosystem,
+    projectId,
+    'Plantae',
+    taxonNames.map((taxon_name) => ({
+      taxon_name,
+      genus: taxon_name.split(' ')[0],
+      radius_mi: 1,
+      observation_count: 3,
+      fetched_on: '2026-01-01',
+      source: 'test',
+    }))
+  );
+  markBuildFinished(env.ecosystem, projectId, { state: 'ready', fetchedOn: '2026-01-01' });
+}
 
 /** Route the request the way server.js does: the first handler that takes it answers. */
 async function call(env, user, method, pathAndQuery, body, headers) {
@@ -126,7 +145,7 @@ async function call(env, user, method, pathAndQuery, body, headers) {
     url,
     pathname: url.pathname,
     dataDir: env.dataDir,
-    db: { app: env.db, ecosystem: ECOSYSTEM_DB },
+    db: { app: env.db, ecosystem: env.ecosystem },
     user,
     // A fresh limiter per call unless the test brings its own: user ids repeat
     // across these throwaway databases, so the module's shared one would
@@ -188,7 +207,7 @@ const ROUTES = [
   { method: 'POST', path: '/api/features', body: () => ({ features: [] }) },
   { method: 'GET', path: '/api/project-photo', query: `&path=${encodeURIComponent(PHOTO)}` },
   { method: 'POST', path: '/api/view-background', query: '&view=plan', body: () => WEBP, headers: { 'content-type': 'image/webp' } },
-  { method: 'GET', path: '/api/ecosystem', query: '&place=home' },
+  { method: 'GET', path: '/api/ecosystem' },
 ];
 
 for (const route of ROUTES) {
@@ -484,18 +503,44 @@ test('the static fallback never serves a yard photo under DATA_DIR, even when DA
 
 // --- /api/ecosystem -----------------------------------------------------------------
 
-test('/api/ecosystem: place rows are open without a project; ?project= is owner-only, even empty', async () => {
+test('/api/ecosystem: per yard, owner-only, even empty; a place label reaches nobody else’s rows (nl-3s5.6)', async () => {
   const env = setup();
   try {
-    const open = await call(env, null, 'GET', '/api/ecosystem?place=home');
-    assert.equal(open.statusCode, 200);
-    assert.deepEqual(open.json(), { place: 'home', rows: [], location: null });
+    // No yard, no rows: the old open ?place= read is gone.
+    assert.equal((await call(env, null, 'GET', '/api/ecosystem?place=home')).statusCode, 400);
+    assert.equal((await call(env, env.alice, 'GET', '/api/ecosystem?place=home')).statusCode, 400);
 
-    assert.equal((await call(env, null, 'GET', '/api/ecosystem?place=home&project=')).statusCode, 401);
-    assert.equal((await call(env, env.alice, 'GET', '/api/ecosystem?place=home&project=')).statusCode, 404);
+    assert.equal((await call(env, null, 'GET', '/api/ecosystem?project=')).statusCode, 401);
+    assert.equal((await call(env, env.alice, 'GET', '/api/ecosystem?project=')).statusCode, 404);
 
-    const own = await call(env, env.bob, 'GET', '/api/ecosystem?place=home&project=bob-yard');
-    assert.deepEqual(own.json().location, { lat: 32.5, lng: -96.5 }, 'the owner gets lat/lng and never the address');
+    // Bob has a location and no index yet: queued, no rows.
+    let own = (await call(env, env.bob, 'GET', '/api/ecosystem?project=bob-yard')).json();
+    assert.deepEqual(own.location, { lat: 32.5, lng: -96.5 }, 'the owner gets lat/lng and never the address');
+    assert.deepEqual(own.index, { state: 'queued', fetchedOn: null });
+    assert.deepEqual(own.rows, []);
+
+    // Both yards say place "home". Bob's index is Bob's alone.
+    buildIndex(env, env.bobYardId, ['Asclepias tuberosa']);
+    own = (await call(env, env.bob, 'GET', '/api/ecosystem?project=bob-yard&place=elsewhere')).json();
+    assert.deepEqual(own.index, { state: 'ready', fetchedOn: '2026-01-01' });
+    assert.deepEqual(own.rows.map((r) => r.taxon_name), ['Asclepias tuberosa']);
+    assert.equal('project_id' in own.rows[0], false, 'the row key is not sent');
+    const alice = (await call(env, env.alice, 'GET', '/api/ecosystem?project=alice-yard&place=home')).json();
+    assert.deepEqual(alice.rows, [], "Alice's yard with the same place label shows none of Bob's rows");
+    assert.equal(alice.index.state, 'queued');
+
+    // A yard with no location says so.
+    env.db.prepare('UPDATE projects SET location_json = NULL WHERE id = ?').run(env.aliceYardId);
+    assert.deepEqual((await call(env, env.alice, 'GET', '/api/ecosystem?project=alice-yard')).json().index, {
+      state: 'no-location',
+      fetchedOn: null,
+    });
+
+    // Bob moves: the old site's rows stop showing until the new site is built.
+    env.db.prepare('UPDATE projects SET location_json = ? WHERE id = ?').run(JSON.stringify({ lat: 33, lng: -97 }), env.bobYardId);
+    own = (await call(env, env.bob, 'GET', '/api/ecosystem?project=bob-yard')).json();
+    assert.equal(own.index.state, 'queued');
+    assert.deepEqual(own.rows, []);
   } finally {
     env.cleanup();
   }
@@ -614,16 +659,25 @@ test("the example never returns a location, and the owner's real backyard stays 
   try {
     assert.equal(findExampleProject(env.db).locationJson, null);
     for (const user of [env.alice, env.carol]) {
-      const res = await call(env, user, 'GET', `/api/ecosystem?place=home&project=${EXAMPLE_SLUG}`);
+      const res = await call(env, user, 'GET', `/api/ecosystem?project=${EXAMPLE_SLUG}`);
       assert.equal(res.statusCode, 200);
       assert.equal(res.json().location, null, `as ${user.email}`);
     }
     // The second lock: even a location written into the row by hand is not sent.
     env.db.prepare('UPDATE projects SET location_json = ? WHERE id = ?').run(JSON.stringify({ lat: 1, lng: 2 }), env.exampleId);
-    assert.equal((await call(env, env.alice, 'GET', `/api/ecosystem?place=home&project=${EXAMPLE_SLUG}`)).json().location, null);
+    assert.equal((await call(env, env.alice, 'GET', `/api/ecosystem?project=${EXAMPLE_SLUG}`)).json().location, null);
+
+    // The example shows the index of the yard it was refreshed from (Carol's
+    // backyard), read-only, still with no location (nl-3s5.6).
+    assert.equal((await call(env, env.alice, 'GET', `/api/ecosystem?project=${EXAMPLE_SLUG}`)).json().index.state, 'queued');
+    buildIndex(env, env.carolYardId, ['Cercis canadensis']);
+    const shown = (await call(env, env.bob, 'GET', `/api/ecosystem?project=${EXAMPLE_SLUG}`)).json();
+    assert.equal(shown.index.state, 'ready');
+    assert.deepEqual(shown.rows.map((r) => r.taxon_name), ['Cercis canadensis']);
+    assert.equal(shown.location, null);
 
     // Nothing the example serves carries the source's address or coordinates.
-    for (const path of ['/api/project', '/api/history', '/api/features', '/api/layout']) {
+    for (const path of ['/api/project', '/api/history', '/api/features', '/api/layout', '/api/ecosystem']) {
       const body = String((await call(env, env.alice, 'GET', `${path}?project=${EXAMPLE_SLUG}`)).body);
       assert.equal(/somewhere|32\.5|-96\.5/.test(body), false, `${path} leaks the source location`);
     }

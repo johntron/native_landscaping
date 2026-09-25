@@ -48,9 +48,10 @@ What follows from that:
   on every route that takes a yard, `/api/ecosystem` included, and
   `tests/projectAuthorization.test.js` proves it route by route (nl-3s5.4). No
   route takes a yard from a request body or the path. `/api/ecosystem`'s species
-  rows are keyed by `place`, not by yard, and stay open without `?project=`: any
-  user can give their own yard any place label, and the same place's
-  `ecology/anchors.csv` and `nearby-fauna.csv` are public already.
+  rows are keyed by yard (app.db `projects.id`, nl-3s5.6), never by the free-text
+  `place` label, so `?project=` is required and no label one user types reaches
+  another's rows. The shared example shows the index of the yard it was refreshed
+  from, with no location. See [the nearby-species index](ecology-rules.md#the-nearby-species-index-dataecosystemdb).
 - **`projects.visibility` is `'private'`.** Triggers (migration 004) let the column
   hold only `'private'` or `'public'`, and `'public'` is reserved for the public
   view (nl-3s5.10): the store assigns only `'private'` and no route reads a

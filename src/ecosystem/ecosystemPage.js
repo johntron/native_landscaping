@@ -6,7 +6,7 @@
  */
 import { loadProjectIndex, loadProjectConfig, resolveActiveProjectId } from '../data/projectConfig.js';
 import { fetchCsv, parseCsv } from '../data/csvLoader.js';
-import { computePlantMatches, renderPlantMatchItem, escapeHtml } from './plantMatches.view.js';
+import { computePlantMatches, escapeHtml, fetchObservationRows } from './plantMatches.view.js';
 import { pageTitle } from '../ui/siteRoute.js';
 import { candidateSize, formatDistance, groupAnchors, kindLabel } from '../analysis/anchors.js';
 
@@ -30,6 +30,7 @@ const habitatCreditEl = document.getElementById('habitatNearbyCredit');
 let allRows = [];
 let sortKey = 'observation_count';
 let sortDir = -1;
+let indexNote = ''; // said beside the count when the rows shown are from a build that did not finish
 let siteLocation = null; // { lat, lng } for the active project, if one is set in app.db and the viewer owns the yard — used to scope outbound iNaturalist links
 
 async function load() {
@@ -56,19 +57,17 @@ async function load() {
   const place = String(project.place || '').trim();
   if (titleEl) titleEl.textContent = `What’s nearby: ${project.name}`;
   document.title = pageTitle(`What’s nearby: ${project.name}`);
-  if (!place) {
-    rowsEl.innerHTML = `<tr><td colspan="7">"${project.name}" declares no "place" — add one before indexing.</td></tr>`;
-    return;
-  }
-  // Independent of the species index below: a missing anchors table costs this
-  // section, never the page.
-  renderHabitatNearby(place).catch((err) => console.warn('Habitat anchors unavailable', err));
+  // Streams and green space are still keyed by the place label (committed
+  // ecology/anchors.csv); the species index is keyed by the yard itself
+  // (nl-3s5.6), so a yard with no label still gets its species. Independent
+  // of the index below: a missing anchors table costs this section, never
+  // the page.
+  if (place) renderHabitatNearby(place).catch((err) => console.warn('Habitat anchors unavailable', err));
   if (noteEl) {
-    noteEl.innerHTML = `Species reported on iNaturalist near "${place}", banded by how far each taxon
-      plausibly ranges to find a newly planted specimen. See
-      <a href="tools/fetch-ecosystem-index.mjs">tools/fetch-ecosystem-index.mjs</a> for how the
-      index is built and refreshed
-      (<code>docker compose exec web npm run ecosystem:fetch -- --project ${project.id}</code>).
+    noteEl.innerHTML = `Species reported on iNaturalist near this yard, banded by how far each taxon
+      plausibly ranges to find a newly planted specimen. The index is built in the background once
+      the yard has a location (see
+      <a href="tools/fetch-ecosystem-index.mjs">tools/fetch-ecosystem-index.mjs</a>).
       Species iNaturalist itself hides the true location of (protected raptors, poaching-targeted
       plants — e.g. Bald Eagle) are left out entirely, since their public coordinates are a randomized
       point that can be tens of miles off, making any radius label for them meaningless. Species
@@ -77,16 +76,18 @@ async function load() {
       non-native).`;
   }
 
-  const response = await fetch(
-    `/api/ecosystem?place=${encodeURIComponent(place)}&${PROJECT_QUERY_PARAM}=${encodeURIComponent(project.id)}`
-  );
-  if (!response.ok) {
-    rowsEl.innerHTML = `<tr><td colspan="7">Failed to load (${response.status}). Run <code>docker compose exec web npm run ecosystem:fetch -- --project ${project.id}</code> first.</td></tr>`;
+  const { rows, location, index, waiting, error } = await fetchObservationRows(project);
+  if (error || waiting) {
+    rowsEl.replaceChildren(messageRow(error || waiting, index?.state));
+    countEl.textContent = '';
+    if (plantMatchesNoteEl) plantMatchesNoteEl.textContent = error || waiting;
     return;
   }
-  const body = await response.json();
-  allRows = body.rows || [];
-  siteLocation = body.location || null;
+  allRows = rows;
+  siteLocation = location || null;
+  if (index?.state === 'failed') {
+    indexNote = 'the last refresh of this index did not finish; it is retried automatically';
+  }
 
   const taxa = [...new Set(allRows.map((r) => r.iconic_taxon))].sort();
   taxonFilter.innerHTML =
@@ -130,7 +131,7 @@ function render() {
     return String(av).localeCompare(String(bv)) * sortDir;
   });
 
-  countEl.textContent = `${filtered.length} of ${allRows.length} species`;
+  countEl.textContent = `${filtered.length} of ${allRows.length} species${indexNote ? ` · ${indexNote}` : ''}`;
   rowsEl.innerHTML = filtered
     .map(
       (r) => `<tr>
@@ -144,6 +145,18 @@ function render() {
       </tr>`
     )
     .join('');
+}
+
+/** One full-width table row carrying a sentence; `state` lets tests and styles tell "building…" from "no location". */
+function messageRow(text, state) {
+  const tr = document.createElement('tr');
+  const td = document.createElement('td');
+  td.colSpan = 7;
+  td.className = 'ecosystem-index-state';
+  if (state) td.dataset.indexState = state;
+  td.textContent = text;
+  tr.appendChild(td);
+  return tr;
 }
 
 /** Hotlinked from iNaturalist's own CDN; the fetch script already excludes "all rights reserved" photos, keeping only openly-licensed ones. Attribution (required by most of those licenses) is kept in the title tooltip. */

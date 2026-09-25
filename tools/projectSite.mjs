@@ -54,20 +54,25 @@ export function findYard(db, slug, { ownerEmail = process.env.OWNER_EMAIL } = {}
 }
 
 /**
- * The place label and location the fetch scripts need, or a thrown message
- * saying which is missing and how to set it.
+ * The yard's id, place label and location the fetch scripts need, or a thrown
+ * message saying which is missing and how to set it.
+ *
+ * The nearby-species index is keyed by the yard's id (nl-3s5.6), so
+ * tools/fetch-ecosystem-index.mjs passes `requirePlace: false`; the scripts
+ * that still write place-keyed committed tables (nearby fauna, anchors) keep
+ * requiring one.
  *
  * @param {string} slug
- * @param {{ ownerEmail?: string, dataDir?: string }} [options]
- * @returns {{ place: string, location: { lat?: number, lng?: number, address?: string } }}
+ * @param {{ ownerEmail?: string, dataDir?: string, requirePlace?: boolean }} [options]
+ * @returns {{ projectId: number, place: string, location: { lat?: number, lng?: number, address?: string } }}
  */
-export function readProjectSite(slug, { ownerEmail, dataDir } = {}) {
+export function readProjectSite(slug, { ownerEmail, dataDir, requirePlace = true } = {}) {
   const db = openAppDbReadOnly(dataDir);
   try {
     const project = findYard(db, slug, { ownerEmail: ownerEmail ?? process.env.OWNER_EMAIL });
     const config = JSON.parse(project.configJson);
     const place = String(config.place || '').trim();
-    if (!place) {
+    if (!place && requirePlace) {
       throw new Error(`Yard "${slug}" declares no "place"; add one before fetching.`);
     }
     const location = parseLocation(project);
@@ -77,7 +82,7 @@ export function readProjectSite(slug, { ownerEmail, dataDir } = {}) {
           `node tools/project-location.mjs --project ${slug} --lat <lat> --lng <lng>  (or --address "...")`
       );
     }
-    return { place, location };
+    return { projectId: project.id, place, location };
   } finally {
     db.close();
   }

@@ -155,6 +155,48 @@ A project with no `place` (or no location set yet) reports `not-declared` on thi
 dimension, the same "absent means undeclared, never guessed" contract as
 `ecoregion`.
 
+## The nearby-species index: `data/ecosystem.db`
+
+The "What's nearby" page, its drawer, and the feed's rarity lane read species
+reported on iNaturalist near a yard from `data/ecosystem.db`, a gitignored,
+rebuildable cache (`tools/ecosystemIndexDb.js`). Since nl-3s5.6 it is **keyed by
+yard**, app.db `projects.id`, not by the `place` label, which any owner can set to
+anything:
+
+- `project_species_observations`: one row per (yard, iconic taxon, species), at
+  the nearest radius band it was found in.
+- `project_index_builds`: one row per yard, `building | ready | failed`, with a
+  one-way fingerprint of the location it was built for (`locationKey`, never the
+  location itself). A yard whose location changes is due again, and its old
+  site's rows stop showing at once.
+
+**Built without manual steps.** `feed-poller` runs the queue
+(`tools/ecosystemIndexQueue.js`) after the saved-area poll on every tick: every
+yard with a location and no index for it, oldest first. The queue is derived from
+the two databases, not stored, so nothing has to enqueue a job when a location is
+saved. Judgement calls, labelled as such in the module: at most one build that
+touched the network per tick (a build served entirely from the probe cache costs
+iNaturalist nothing and does not count), a failed build retried after 1 h,
+doubling to a day, and a `building` row older than an hour treated as abandoned.
+`GET /api/ecosystem?project=` returns `index: { state, fetchedOn }`, with state
+`no-location | queued | building | ready | failed`; the page and drawer say
+"no location set" or "Building…" instead of showing an empty table. A forced
+refresh is still `node tools/fetch-ecosystem-index.mjs --project <slug> --force`.
+
+**The rarity lane** resolves a saved area's `filters.place` among the area
+owner's own yards only (case-insensitive), taking the oldest with a built index.
+`GET /api/ecosystem/places` lists the caller's own indexed place labels.
+
+**The example yard** has no location, so no index of its own. It shows the
+index of the owner's yard it was refreshed from (the `projectId` that
+`tools/refresh-example-yard.mjs` records in `app_meta.example_yard`), with
+`location: null`.
+
+The pre-nl-3s5.6 place-keyed table, `species_observations`, is no longer read or
+created. `tools/rekey-ecosystem-index.mjs --place <label>` copies one place's old
+rows to its owner's located yards once; a database that still has the table keeps
+it, so the previous code works after a rollback.
+
 ## Habitat anchors: `ecology/anchors.csv`
 
 Part of the pivot away from a per-parcel habitat score (nl-3hi) toward

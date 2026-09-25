@@ -41,7 +41,7 @@ same order.
 | page | entry | what it is for |
 | --- | --- | --- |
 | `index.html` | `src/patchnetwork/` | **Start here.** The homeowner-facing argument, led by the PLANTS memory aid, with the keystone-genus screen ("What belongs here") and the invasives list. Needs no project; its handoff section opens a yard in `design.html`. |
-| `ecosystem.html` | `src/ecosystem/` | **What's nearby**: streams and green space near the site ("Habitat nearby", from `ecology/anchors.csv`: name and straight-line distance only, OSM green space marked not checked), plants and animals reported on iNaturalist nearby, and the plant genera that would serve them. Also available as a drawer (`src/ui/ecosystemDrawer.js`) on any page with `?project=`; both compute matches through `src/ecosystem/plantMatches.view.js`. |
+| `ecosystem.html` | `src/ecosystem/` | **What's nearby**: streams and green space near the site ("Habitat nearby", from `ecology/anchors.csv`: name and straight-line distance only, OSM green space marked not checked), plants and animals reported on iNaturalist nearby (a per-yard index `feed-poller` builds once the yard has a location; [docs/ecology-rules.md](docs/ecology-rules.md#the-nearby-species-index-dataecosystemdb)), and the plant genera that would serve them. Also available as a drawer (`src/ui/ecosystemDrawer.js`) on any page with `?project=`; both compute matches through `src/ecosystem/plantMatches.view.js`. |
 | `feed.html` | `src/feed/` | **New sightings**: new iNaturalist records in saved monitoring areas, flagged for invasives, rarity, and yard relevance. |
 | `design.html` | `src/app.js` | **Your yard**, the design tool: a planting drawn month by month in a plan and compass elevations, graded by the ecological rules engine. Scoped by `?project=<slug>`. See [docs/design-tool.md](docs/design-tool.md). |
 | `sourcing.html` | `src/sourcing/` | **Buy plants**: dated native plant sales around DFW (upcoming vs. recently held, split by the viewer's local date) and the NPSOT NICE! partner nurseries of the Dallas, North Central and Trinity Forks chapters, from the sourced tables in `sourcing/`. Sale dates go stale: re-check each organizer's page and bump `checked_on` each spring and fall. |
@@ -343,9 +343,11 @@ onto main fires neither hook: deploy by hand afterwards.
 2. runs `git checkout --detach` to main's tip in it, refusing if the tree has local changes;
 3. restarts `web`. It also restarts `feed-poller` when the deployed range touched code
    the poller loads: `tools/feedState/`, `tools/savedAreas/`,
-   `tools/fetch-observation-events.mjs`, `tools/schedule-feed-poll.mjs`,
-   `tools/inatShared.mjs`, `tools/usda-plants/probeCache.js`, `tools/*Db.js`, or
-   `server/db/`. That is the import closure of `tools/schedule-feed-poll.mjs`, so widen the list in the
+   `tools/fetch-observation-events.mjs`, `tools/fetch-ecosystem-index.mjs`,
+   `tools/ecosystemIndexQueue.js`, `tools/projectSite.mjs`, `tools/geocode.mjs`,
+   `tools/dataDir.js`, `tools/schedule-feed-poll.mjs`, `tools/inatShared.mjs`,
+   `tools/usda-plants/probeCache.js`, `tools/*Db.js`, `server/db/`, `src/data/`, or
+   `src/analysis/establishmentMeans.js`. That is the import closure of `tools/schedule-feed-poll.mjs`, so widen the list in the
    script when the closure grows. If `docker-compose.yml` or `package*.json` changed,
    or a container still mounts something other than the deploy tree, it runs
    `docker compose up -d --no-deps --force-recreate web feed-poller` instead (and

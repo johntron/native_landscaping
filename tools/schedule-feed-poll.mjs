@@ -29,9 +29,19 @@
  * APP_DB_RETRY_SECONDS, so a deploy that restarts both services at once
  * sorts itself out within seconds instead of crashing or waiting a full tick.
  * DATA_DIR relocates app.db here exactly as it does for web.
+ *
+ * Each tick also builds the nearby-species index of any yard that has a
+ * location and no index for it yet (nl-3s5.6, tools/ecosystemIndexQueue.js),
+ * at most one network-touching build per tick, after the saved areas. The two
+ * jobs fail independently: a failed index build never skips the feed poll,
+ * and the reverse.
  */
 import { pollSavedAreas } from './feedState/pollAreas.js';
 import { openAppDbWithoutMigrating, AppDbNotReadyError } from '../server/db/appDb.js';
+import { openEcosystemDb } from './ecosystemIndexDb.js';
+import { runIndexQueue } from './ecosystemIndexQueue.js';
+import { buildAndRecordEcosystemIndex } from './fetch-ecosystem-index.mjs';
+import { openProbeCache } from './usda-plants/probeCache.js';
 
 const DEFAULT_INTERVAL_MINUTES = 30;
 const intervalMinutes = Number(process.env.FEED_POLL_INTERVAL_MINUTES) || DEFAULT_INTERVAL_MINUTES;
@@ -55,8 +65,7 @@ async function openAppDbWhenReady() {
   }
 }
 
-async function tick(appDb) {
-  const startedAt = new Date().toISOString();
+async function pollFeed(appDb, startedAt) {
   try {
     const { results } = await pollSavedAreas({ appDb });
     if (!results.length) {
@@ -72,11 +81,37 @@ async function tick(appDb) {
   }
 }
 
+async function buildDueIndexes(appDb, ecosystemDb, probeCache, startedAt) {
+  try {
+    const { due, built } = await runIndexQueue({
+      appDb,
+      ecosystemDb,
+      build: (project) =>
+        buildAndRecordEcosystemIndex({ projectId: project.id, location: project.location, db: ecosystemDb, probeCache }),
+    });
+    if (!due) return;
+    const summary = built
+      .map((b) => `yard #${b.projectId} (${b.reason}): ${b.state}, ${b.rows} rows, ${b.networkRequests} request(s)`)
+      .join('; ');
+    console.log(`[${startedAt}] nearby index: ${due} yard(s) due — ${summary || 'none built this tick'}`);
+  } catch (err) {
+    console.error(`[${startedAt}] nearby index build failed:`, err);
+  }
+}
+
+async function tick(appDb, ecosystemDb, probeCache) {
+  const startedAt = new Date().toISOString();
+  await pollFeed(appDb, startedAt);
+  await buildDueIndexes(appDb, ecosystemDb, probeCache, startedAt);
+}
+
 async function main() {
   console.log(`feed-poller starting — polling every ${intervalMinutes} minute(s)`);
   const appDb = await openAppDbWhenReady();
+  const ecosystemDb = openEcosystemDb();
+  const probeCache = openProbeCache();
   for (;;) {
-    await tick(appDb);
+    await tick(appDb, ecosystemDb, probeCache);
     await sleep(intervalMs);
   }
 }

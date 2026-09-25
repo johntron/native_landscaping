@@ -74,9 +74,15 @@ export function initEcosystemDrawer() {
   async function fill() {
     try {
       const project = await resolveProject();
-      const { rows, error } = await fetchObservationRows(project);
-      if (error) {
-        body.innerHTML = `<p class="data-note">${error}</p>`;
+      const { rows, error, waiting } = await fetchObservationRows(project);
+      if (error || waiting) {
+        // "Building…" and "no location set" are states, not failures: shown
+        // plainly, and the next open asks again (nl-3s5.6).
+        const p = document.createElement('p');
+        p.className = 'data-note';
+        p.textContent = error || waiting;
+        body.replaceChildren(p);
+        if (waiting) loaded = false;
         return;
       }
       body.innerHTML = groups(await computePlantMatches(project, rows), project);

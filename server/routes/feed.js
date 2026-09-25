@@ -9,6 +9,7 @@ import {
 import { listEvents } from '../../tools/observationEventsDb.js';
 import { setFeedState } from '../../tools/feedState/feedStateDb.js';
 import { queryFeed } from '../../tools/feedState/feed.js';
+import { resolveRarityProject } from '../../tools/feedState/rarityTables.js';
 import { pollSavedAreas } from '../../tools/feedState/pollAreas.js';
 import { collectPayload, createRateLimiter, enforceRateLimit, json, rateLimitKeyFor, requireUser } from '../http.js';
 
@@ -178,6 +179,7 @@ export async function handleFeedRoutes(req, res, ctx) {
       // threaded through as a query param the client could spoof or omit.
       let ecoregion;
       let place;
+      let indexProjectId = null;
       if (lane === 'yard-relevance') {
         ecoregion = area.filters?.ecoregion;
       } else if (lane === 'rarity') {
@@ -185,6 +187,14 @@ export async function handleFeedRoutes(req, res, ctx) {
         // is a per-saved-area fact (filters.place), not something the client
         // should be trusted to pass directly.
         place = area.filters?.place;
+        // The index is per yard (nl-3s5.6): the label is resolved among the
+        // area owner's own yards only, never another owner's.
+        indexProjectId = resolveRarityProject({
+          appDb: db.app,
+          ecosystemDb: db.ecosystem,
+          ownerId: area.ownerId,
+          place,
+        });
       }
       const rarityThresholdParam = url.searchParams.get('rarity_threshold');
       const rarityIncludeConservationStatus = url.searchParams.get('rarity_conservation_status') === 'true';
@@ -201,6 +211,7 @@ export async function handleFeedRoutes(req, res, ctx) {
         lane,
         ecoregion,
         place,
+        indexProjectId,
         ecosystemDb: db.ecosystem,
         rarityThreshold: rarityThresholdParam != null ? Number(rarityThresholdParam) : undefined,
         rarityIncludeConservationStatus,

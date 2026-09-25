@@ -35,18 +35,48 @@ export async function resolveProject() {
   return loadProjectConfig(resolved.id, fetch, document.baseURI);
 }
 
-/** The nearby-observation index for a project, or a reason it is unavailable. */
+/**
+ * The nearby-observation index for a project, or a reason it is unavailable.
+ *
+ * The index is per yard (nl-3s5.6): it needs a location, not a place label,
+ * and feed-poller builds it on its own once a location is set. `index.state`
+ * says where that stands (no-location | queued | building | ready | failed);
+ * `waiting` is the sentence to show instead of rows while there are none to
+ * show, or null.
+ *
+ * @returns {Promise<{ rows: object[], location?: object | null, index?: { state: string, fetchedOn: string | null }, waiting?: string | null, error?: string }>}
+ */
 export async function fetchObservationRows(project) {
-  const place = String(project.place || '').trim();
-  if (!place) return { rows: [], error: `"${project.name}" declares no "place" in project.json.` };
-  const response = await fetch(
-    `/api/ecosystem?place=${encodeURIComponent(place)}&${PROJECT_QUERY_PARAM}=${encodeURIComponent(project.id)}`
-  );
+  const response = await fetch(`/api/ecosystem?${PROJECT_QUERY_PARAM}=${encodeURIComponent(project.id)}`);
   if (!response.ok) {
-    return { rows: [], error: `The nearby index has not been built for this project yet (${response.status}).` };
+    return { rows: [], error: `The nearby index could not be loaded (${response.status}).` };
   }
   const body = await response.json();
-  return { rows: body.rows || [], location: body.location || null };
+  const rows = body.rows || [];
+  const index = body.index || { state: 'ready', fetchedOn: null };
+  return { rows, location: body.location || null, index, waiting: describeIndexWait(index, rows, project) };
+}
+
+/**
+ * What to say while a yard's index has no rows to show, or null when it has
+ * rows (or is built and simply found nothing, which the empty table says).
+ * Shared by the page and the drawer so they never disagree.
+ */
+export function describeIndexWait(index, rows, project) {
+  const name = project?.name ? `“${project.name}”` : 'This yard';
+  switch (index?.state) {
+    case 'no-location':
+      return `${name} has no location set, so there is nothing to be near yet. Once a location is set, its index of species reported nearby builds automatically.`;
+    case 'queued':
+    case 'building':
+      return `Building the index of species reported near ${name}… It is fetched from iNaturalist in the background and usually appears within half an hour. Reload to check.`;
+    case 'failed':
+      return rows.length
+        ? null
+        : `The last attempt to build the index for ${name} did not finish. It is retried automatically; reload later to check.`;
+    default:
+      return null;
+  }
 }
 
 export function renderPlantMatchItem({ genus, hostGeneraRow, associatedFauna, nearbySpecies }) {

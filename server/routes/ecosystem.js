@@ -1,11 +1,12 @@
 import { projectIdFromUrl } from '../../src/data/projectPaths.js';
 import { findCallerProject, findExampleFor, findExampleProject, parseLocation } from '../db/projectStore.js';
-import { listSpeciesObservations, listPlaces } from '../../tools/ecosystemIndexDb.js';
+import { indexStatus, listSpeciesObservations, locationKey } from '../../tools/ecosystemIndexDb.js';
+import { exampleIndexSource, listOwnerProjectSites } from '../db/projectSites.js';
 import { excludeNonNative } from '../../src/analysis/establishmentMeans.js';
 import { geocodeAddress } from '../../tools/geocode.mjs';
 import { lookupEcoregion } from '../../tools/ecoregionLookup.mjs';
 import { KNOWN_ECOREGIONS } from '../../src/data/ecoregionInput.js';
-import { collectPayload, createRateLimiter, enforceRateLimit, loadReadableProject, rateLimitKeyFor } from '../http.js';
+import { collectPayload, createRateLimiter, enforceRateLimit, loadReadableProject, rateLimitKeyFor, requireUser } from '../http.js';
 
 // /api/geocode calls Nominatim (tools/geocode.mjs). Nominatim's usage policy
 // (https://operations.osmfoundation.org/policies/nominatim/) caps usage at
@@ -46,50 +47,65 @@ export async function handleEcosystemRoutes(req, res, ctx) {
   const { url, pathname, db } = ctx;
   maybePrune();
   if (pathname === '/api/ecosystem' && req.method === 'GET') {
-    // Authorization (nl-3s5.4). Two kinds of data answer here:
+    // Keyed by yard (nl-3s5.6), so ?project= is required and resolved like
+    // every project read route: loadReadableProject, so 401 when anonymous and
+    // the same 404 for a slug that is missing or someone else's. The rows
+    // belong to that yard alone (data/ecosystem.db is keyed by app.db
+    // projects.id), so no label a user can type reaches another owner's rows.
+    // The old ?place= parameter is ignored.
     //
-    // - The yard's location (app.db projects.location_json, nl-3s5.3), sent
-    //   as { lat, lng } alone so the page can link out to iNaturalist scoped
-    //   to the actual site. It exists only with ?project=, and ?project= is
-    //   resolved like every project read route: loadReadableProject, so 401
-    //   when anonymous and the same 404 for a slug that is missing or someone
-    //   else's. `has`, not truthiness: an empty ?project= is a malformed slug
-    //   (404), never a quiet fallback to the public answer.
+    // Three things answer here:
     //
-    // - The observation rows, keyed by a `place` label, not by yard. They stay
-    //   open with or without a project. Gating them on "the caller owns a yard
-    //   whose place is this label" would protect nothing, because any user can
-    //   set their own yard's place to any label (POST /api/project). And the
-    //   same place's ecology/anchors.csv and nearby-fauna.csv (named streams
-    //   and distances from the site) are committed to the public repo and
-    //   served statically, which locates a site far better than a species
-    //   list. Only an operator running tools/fetch-ecosystem-index.mjs adds a
-    //   place to the index; no request can. The residual risk is that place
-    //   labels are one namespace across owners; an owner-keyed index would be
-    //   its own bead.
+    // - `rows`: the yard's nearby species, native or unassessed only
+    //   (excludeNonNative). Empty until its index is built, and empty while a
+    //   moved yard's index rebuilds, so an old site's species never show.
+    // - `index`: { state, fetchedOn }, where state is no-location | queued |
+    //   building | ready | failed (tools/ecosystemIndexDb.js indexStatus).
+    //   feed-poller builds queued yards (tools/ecosystemIndexQueue.js). The
+    //   build's error text is never sent: a geocoder's message can quote the
+    //   address back.
+    // - `location`: the yard's { lat, lng } alone, for its owner, so the page
+    //   can link out to iNaturalist scoped to the actual site.
     //
-    // - The shared example yard (nl-3s5.24) resolves here for any signed-in
-    //   user, like every read route, and its location is null whatever the
-    //   row holds: the refresh never writes one, and this is the second lock.
-    let location = null;
-    if (url.searchParams.has('project')) {
-      const project = loadReadableProject(ctx, res, projectIdFromUrl(url), {
-        findProject: findCallerProject,
-        findExample: findExampleFor,
-      });
-      if (!project) return true;
-      const isExample = project.id === findExampleProject(ctx.db.app)?.id;
-      const raw = isExample ? null : parseLocation(project);
-      if (raw && Number.isFinite(raw.lat) && Number.isFinite(raw.lng)) {
-        location = { lat: raw.lat, lng: raw.lng };
-      }
+    // The shared example yard (nl-3s5.24) is readable by any signed-in user
+    // and has no location of its own. It shows the index of the owner's yard it
+    // was refreshed from (exampleIndexSource), read-only, with location null:
+    // the species list is what the owner chose to share, the coordinates are
+    // not.
+    if (!url.searchParams.has('project')) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'The nearby index is per yard: pass ?project=<slug>' }));
+      return true;
     }
+    const project = loadReadableProject(ctx, res, projectIdFromUrl(url), {
+      findProject: findCallerProject,
+      findExample: findExampleFor,
+    });
+    if (!project) return true;
     try {
-      const place = url.searchParams.get('place') || 'home';
+      const isExample = project.id === findExampleProject(ctx.db.app)?.id;
+      const indexed = isExample ? exampleIndexSource(ctx.db.app) : project;
+      const site = indexed ? parseLocation(indexed) : null;
+      const status = indexed
+        ? indexStatus(db.ecosystem, indexed.id, locationKey(site))
+        : { state: 'no-location', rowsApply: false, fetchedOn: null };
       const iconicTaxon = url.searchParams.get('taxon') || undefined;
-      const rows = excludeNonNative(listSpeciesObservations(db.ecosystem, { place, iconicTaxon }));
+      const rows = status.rowsApply
+        ? excludeNonNative(listSpeciesObservations(db.ecosystem, { projectId: indexed.id, iconicTaxon }))
+        : [];
+      let location = null;
+      if (!isExample && site && Number.isFinite(site.lat) && Number.isFinite(site.lng)) {
+        location = { lat: site.lat, lng: site.lng };
+      }
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ place, rows, location }));
+      res.end(
+        JSON.stringify({
+          project: project.slug,
+          rows: rows.map(({ project_id, ...row }) => row),
+          location,
+          index: { state: status.state, fetchedOn: status.fetchedOn },
+        })
+      );
     } catch (err) {
       console.error(err);
       res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -155,15 +171,24 @@ export async function handleEcosystemRoutes(req, res, ctx) {
     return true;
   }
 
-  // Which places already have a local iNaturalist species index (data/
-  // ecosystem.db, built by tools/fetch-ecosystem-index.mjs) — lets the
-  // saved-areas UI tell "indexed" from "not indexed yet" for a place name
-  // it's suggesting (nl-5nm), instead of the rarity lane silently returning
-  // zero items for a place nobody's built an index for.
+  // The place labels of the CALLER'S OWN yards whose nearby-species index is
+  // built (nl-5nm, owner-scoped since nl-3s5.6): the saved-areas UI suggests a
+  // place for an area's rarity lane and says whether it is indexed. The rarity
+  // lane resolves an area's place among its owner's yards the same way
+  // (tools/feedState/rarityTables.js), so a label here is always one the lane
+  // can use, and another owner's labels never appear.
   if (pathname === '/api/ecosystem/places' && req.method === 'GET') {
+    const user = requireUser(ctx, res);
+    if (!user) return true;
     try {
+      const places = new Set();
+      for (const site of listOwnerProjectSites(db.app, user.id)) {
+        if (!site.place) continue;
+        const status = indexStatus(db.ecosystem, site.id, locationKey(site.location));
+        if (status.rowsApply) places.add(site.place);
+      }
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ places: listPlaces(db.ecosystem) }));
+      res.end(JSON.stringify({ places: [...places].sort() }));
     } catch (err) {
       console.error(err);
       res.writeHead(400, { 'Content-Type': 'application/json' });
