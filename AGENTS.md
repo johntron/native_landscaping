@@ -59,7 +59,7 @@ plant-drawing.csv     how each species is drawn (colours, flowers), keyed by pla
 catalog/              wider regional lists + manual-corrections.tsv; see catalog/README.md
 ecology/              sourced, genus- or place-keyed tables for the rules engine
 sourcing/             sourced nursery and plant-sale tables behind sourcing.html
-projects/backyard/    the one yard still in git: seed for the shared example (yards live in app.db)
+projects/backyard/    the one yard still in git: seeds the shared example at startup only when none exists (yards live in app.db)
 src/                  browser code: one folder per page, plus shared analysis/, data/, render/, ui/
 tools/                everything that calls a third-party API, the claim store, the usda-plants MCP server
 server.js, server/     the HTTP server: server.js dispatches to server/routes/{project,ecosystem,feed,claims}.js, then static files
@@ -100,7 +100,11 @@ tests/, tests-e2e/    Node unit tests (the gate) and Playwright specs
 - Exact addresses and coordinates never reach git. A project's `place` is a short
   label; the address behind it is in `app.db` (`projects.location_json`), set with
   `tools/project-location.mjs`. Yards themselves are private to their owner and live in
-  `app.db` too, not in the repo (nl-3s5.3).
+  `app.db` too, not in the repo (nl-3s5.3). The one exception is the shared read-only
+  example yard (nl-3s5.24): a location-free copy of the owner's backyard, owned by the
+  system user `example@rewilder.invalid`, readable by any signed-in user, refreshed with
+  `tools/refresh-example-yard.mjs`. It keeps the backyard's place label, so viewers see
+  that place's nearby habitat and species (owner decision 2026-09-24).
 - The NCTX flora PDFs may be downloaded but not redistributed. They stay local
   (`docs/data-acquisition/corpus/*.pdf` is gitignored); the extracted text is what
   code reads.
@@ -169,7 +173,7 @@ together, encrypted, to Google Drive: see [Backups](#backups) below.
   `data/projects/` by default, gitignored). Hand-uploaded and not rebuildable either:
   back them up with `app.db`, as a set, because each directory is named by the row id
   it belongs to. They are outside the served root; `GET /api/project-photo` serves
-  them to the yard's owner only.
+  them to the yard's owner only, plus the shared example yard's to any signed-in user.
 - **Retired:** `projects/<slug>/` as the store. `tools/import-projects.mjs` copied the
   yards into `app.db` once (recorded as `legacy_import.projects`) and never writes the
   files; web does not run it on start. See

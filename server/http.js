@@ -12,6 +12,11 @@
 //   const project = loadOwnedProject(ctx, res, slug, { findProject });
 //   if (!project) return true;
 //
+// Since nl-3s5.24 the project routes use loadReadableProject (the caller's own
+// yard, or the shared example read-only) and loadWritableProject (the caller's
+// own yard; 403 for the example) instead; loadOwnedProject remains the
+// owner-only primitive.
+//
 // This mirrors the existing route convention (return true once the request
 // has been answered, so server.js's ROUTES loop stops trying handlers) and
 // keeps every route's error handling to two lines, instead of each of ten
