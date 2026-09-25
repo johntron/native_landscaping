@@ -34,6 +34,7 @@ import {
   currentPlacements,
   findCallerProject,
   findExampleFor,
+  findExampleProject,
   findOwnedProject,
   insertProject,
   moveHistoryCursor,
@@ -46,6 +47,13 @@ import {
   saveProjectFeatures,
   withTransaction,
 } from '../db/projectStore.js';
+import {
+  fitsQuota,
+  photoDirSizeBytes,
+  photoQuotaBytes,
+  photoUsageBytes,
+  quotaExceededBody,
+} from '../db/photoQuota.js';
 
 const PHOTO_TYPES = {
   '.webp': 'image/webp',
@@ -107,6 +115,17 @@ export async function handleProjectRoutes(req, res, ctx) {
     return true;
   }
 
+  // Photo storage usage (nl-3s5.17): owner-scoped, so the Setup panel can
+  // show "Photos: X of Y MB" without exposing anyone else's usage.
+  if (pathname === '/api/me/storage' && req.method === 'GET') {
+    const user = requireUser(ctx, res);
+    if (!user) return true;
+    const capBytes = photoQuotaBytes();
+    const usedBytes = await photoUsageBytes(db, ctx.dataDir, user.id);
+    json(res, 200, { usedBytes, capBytes });
+    return true;
+  }
+
   // "Copy to my yards" (nl-3s5.24): the example as a new private yard of the
   // caller's, with a fresh slug, one revision and its photos. The body is not
   // read: the source is always the example and the owner always the caller.
@@ -118,6 +137,19 @@ export async function handleProjectRoutes(req, res, ctx) {
     if (!enforceRateLimit(ctx.copyExampleLimiter || copyExampleLimiter, rateLimitKeyFor(ctx, req), res)) return true;
     req.resume();
     try {
+      // The example's photos count against the caller's quota too, checked
+      // before copying (copyExampleToOwner throws NO_EXAMPLE itself when
+      // there is none, so skipping the check then is fine).
+      const example = findExampleProject(db);
+      if (example) {
+        const incomingBytes = await photoDirSizeBytes(path.join(projectDataDir(ctx.dataDir, example.id), 'img'));
+        const usedBytes = await photoUsageBytes(db, ctx.dataDir, user.id);
+        const capBytes = photoQuotaBytes();
+        if (!fitsQuota(usedBytes, incomingBytes, capBytes)) {
+          json(res, 413, quotaExceededBody(usedBytes, incomingBytes, capBytes));
+          return true;
+        }
+      }
       const { slug } = copyExampleToOwner(db, { dataDir: ctx.dataDir, ownerId: user.id });
       console.log(`Example yard copied to '${slug}' for user ${user.id}`);
       json(res, 200, { id: slug, index: projectPickerFor(db, user.id) });
@@ -391,6 +423,22 @@ export async function handleProjectRoutes(req, res, ctx) {
         throw new Error('Image bytes do not match the declared image type');
       }
 
+      // Per-user total quota (nl-3s5.17), checked before anything is written.
+      // usedBytes counts every photo already on disk for this owner, including
+      // (for a re-upload of the same view) the file this upload is about to
+      // supersede — so a replacement right at the cap can be refused even
+      // though the old photo is about to be swept. That is the safe side of
+      // the trade-off: checking after the sweep would mean deleting a photo
+      // before knowing the replacement fits.
+      const capBytes = photoQuotaBytes();
+      const usedBytes = await photoUsageBytes(db, ctx.dataDir, project.ownerId);
+      if (!fitsQuota(usedBytes, body.length, capBytes)) {
+        const err = new Error('Photo storage limit reached');
+        err.code = 'QUOTA_EXCEEDED';
+        err.body = quotaExceededBody(usedBytes, body.length, capBytes);
+        throw err;
+      }
+
       const contentHash = crypto.createHash('sha256').update(body).digest('hex').slice(0, 12);
       const { dir, file, relativePath } = resolveBackgroundTarget({
         projectDir: projectDataDir(ctx.dataDir, project.id),
@@ -406,17 +454,24 @@ export async function handleProjectRoutes(req, res, ctx) {
       await removeSupersededBackgrounds(dir, viewId, path.basename(file), referencedBackgroundNames(db, project.id));
 
       console.log(`Background saved for '${project.slug}' view '${viewId}' (${body.length} bytes)`);
-      json(res, 200, { background: relativePath, bytes: body.length });
+      // The exact figure after the sweep above, not usedBytes + body.length:
+      // a re-upload's superseded file is now gone, so the two can differ.
+      const photoUsage = {
+        usedBytes: await photoUsageBytes(db, ctx.dataDir, project.ownerId),
+        capBytes,
+      };
+      json(res, 200, { background: relativePath, bytes: body.length, photoUsage });
     } catch (err) {
       console.error(err);
       const tooLarge = err.code === 'PAYLOAD_TOO_LARGE';
-      res.writeHead(tooLarge ? 413 : 400, {
+      const quotaExceeded = err.code === 'QUOTA_EXCEEDED';
+      res.writeHead(tooLarge || quotaExceeded ? 413 : 400, {
         'Content-Type': 'application/json',
         // The rest of an oversized body is never read, so the connection
         // cannot be reused; say so and hang up once the error is delivered.
         ...(tooLarge ? { Connection: 'close' } : {}),
       });
-      res.end(JSON.stringify({ error: err.message }), () => {
+      res.end(JSON.stringify(quotaExceeded ? err.body : { error: err.message }), () => {
         if (tooLarge) req.destroy();
       });
     }

@@ -4,6 +4,7 @@ import {
 } from '../render/elevationOrientation.js';
 import { SITE_VOCABULARY } from '../data/projectConfig.js';
 import { resolveEcoregionInput, KNOWN_ECOREGIONS } from '../data/ecoregionInput.js';
+import { formatFileSize } from '../ui/controls.js';
 
 /**
  * The Setup-mode control panel: the yard, a list of the project's views, and a
@@ -46,6 +47,7 @@ export function createSetupPanel({
       getSelectedId: () => '',
       getShow: () => ({ plants: false, features: false }),
       setStatus: () => {},
+      setStorage: () => {},
     };
   }
 
@@ -59,6 +61,10 @@ export function createSetupPanel({
     // against a photo being framed. Forced on while a resize has stranded
     // something, because then the plants ARE the subject.
     show: { plants: false, features: false },
+    // The caller's total photo usage (nl-3s5.17), set from outside via
+    // setStorage: { usedBytes, capBytes } | null. Null is "not known yet or
+    // not available" and renders nothing rather than a wrong number.
+    storage: null,
   };
 
   function render(project) {
@@ -202,8 +208,28 @@ export function createSetupPanel({
     );
     grid.appendChild(uploadField(view));
     wrap.appendChild(grid);
+    const storage = storageLine();
+    if (storage) wrap.appendChild(storage);
     wrap.appendChild(buildPhoto(view, patch));
     return wrap;
+  }
+
+  /**
+   * "Photos: X of Y MB used" near the upload field. Absent until the first
+   * setStorage() call lands (setupMode.js fetches it once and after every
+   * upload), and again if that ever fails — the number is a courtesy, not
+   * load-bearing, so a missing one shows nothing rather than a stale guess.
+   */
+  function storageLine() {
+    if (!state.storage) return null;
+    const { usedBytes, capBytes } = state.storage;
+    const near = capBytes > 0 && usedBytes / capBytes >= 0.9;
+    const line = el(
+      'p',
+      `setup-panel__hint setup-panel__storage${near ? ' setup-panel__storage--near' : ''}`,
+      `Photos: ${formatFileSize(usedBytes)} of ${formatFileSize(capBytes)} used across your yards.`
+    );
+    return line;
   }
 
   /**
@@ -611,6 +637,11 @@ export function createSetupPanel({
     }),
     setStatus: (message, stateName) => {
       state.status = message ? { message, state: stateName || 'info' } : null;
+      rerender();
+    },
+    /** @param {{ usedBytes: number, capBytes: number } | null} usage */
+    setStorage: (usage) => {
+      state.storage = usage || null;
       rerender();
     },
   };

@@ -17,7 +17,7 @@
  */
 import { createSetupPanel } from './setupPanel.js';
 import { normalizeProjectConfig, projectAssetPath, serializeProjectConfig } from '../data/projectConfig.js';
-import { compressBackgroundImage, uploadViewBackground } from '../data/backgroundUpload.js';
+import { compressBackgroundImage, fetchPhotoUsage, uploadViewBackground } from '../data/backgroundUpload.js';
 import {
   clearSetupOverlay,
   renderSetupOverlay,
@@ -79,12 +79,15 @@ export function createSetupMode({
       try {
         const { blob, contentType, width, height } = await compressBackgroundImage(file);
         setupPanel.setStatus(`Uploading ${formatFileSize(blob.size)}…`, 'info');
-        const background = await uploadViewBackground({
+        const { background, photoUsage } = await uploadViewBackground({
           projectId: project.id,
           viewId,
           blob,
           contentType,
         });
+        // The server's own tally after this upload (nl-3s5.17) — no need for
+        // a second round trip to refresh the panel's usage line.
+        if (photoUsage) setupPanel.setStorage(photoUsage);
         // The photo is on disk either way, but if the candidate views[] is
         // refused the panel is still showing the old background — and
         // applyViewEdit has already explained why. Reporting success over the
@@ -107,6 +110,13 @@ export function createSetupMode({
       const saved = await saveSetup(project, (message, state) => setupPanel.setStatus(message, state));
       if (saved && !saved.unchanged) setupPanel.setStatus('Views saved', 'success');
     },
+  });
+
+  // The usage line starts blank (setupPanel.setStorage(null) is the default)
+  // until this lands; every upload afterwards refreshes it from the upload's
+  // own response instead of fetching again.
+  fetchPhotoUsage().then((usage) => {
+    if (usage) setupPanel.setStorage(usage);
   });
 
   /**

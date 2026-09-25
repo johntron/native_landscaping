@@ -115,7 +115,14 @@ export async function compressBackgroundImage(file, options = {}) {
  * from the view id and a hash of the content, so nothing the client could put
  * in a filename ever reaches the filesystem.
  *
- * @returns {Promise<string>} the new background path, relative to the project
+ * A 413 (the per-user photo storage quota, nl-3s5.17, or the flat per-upload
+ * size cap) carries a server-composed message naming what is used, what the
+ * cap is, and what to do — surfaced as-is via `err.message`, same as any
+ * other upload failure.
+ *
+ * @returns {Promise<{ background: string, photoUsage: { usedBytes: number, capBytes: number } | null }>}
+ *   the new background path, relative to the project, and the caller's photo
+ *   storage usage after this upload (absent on a server too old to send it).
  */
 export async function uploadViewBackground({ projectId, viewId, blob, contentType, fetchFn }) {
   const doFetch = fetchFn || (typeof fetch === 'function' ? fetch : globalThis.fetch);
@@ -136,7 +143,26 @@ export async function uploadViewBackground({ projectId, viewId, blob, contentTyp
   if (!data || typeof data.background !== 'string') {
     throw new Error('Server did not return a background path');
   }
-  return data.background;
+  return { background: data.background, photoUsage: data.photoUsage || null };
+}
+
+/**
+ * The caller's photo storage usage: `GET /api/me/storage`, owner-scoped.
+ * @returns {Promise<{ usedBytes: number, capBytes: number } | null>} null on
+ *   any failure (anonymous, offline, ...) — a missing usage line is better
+ *   than a broken panel.
+ */
+export async function fetchPhotoUsage(fetchFn) {
+  const doFetch = fetchFn || (typeof fetch === 'function' ? fetch : globalThis.fetch);
+  if (!doFetch) return null;
+  try {
+    const response = await doFetch('/api/me/storage', { cache: 'no-store' });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return Number.isFinite(data?.usedBytes) && Number.isFinite(data?.capBytes) ? data : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

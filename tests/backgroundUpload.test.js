@@ -114,22 +114,62 @@ test('refuses a source file too large to be worth decoding', async () => {
 test('posts the bytes as the raw body, with no filename anywhere', async () => {
   const calls = [];
   const blob = { size: 1234, type: 'image/webp' };
-  const background = await uploadViewBackground({
+  const result = await uploadViewBackground({
     projectId: 'backyard',
     viewId: 'south',
     blob,
     contentType: 'image/webp',
     fetchFn: async (url, opts) => {
       calls.push({ url, opts });
-      return { ok: true, json: async () => ({ background: 'img/south-abc123.webp' }) };
+      return {
+        ok: true,
+        json: async () => ({
+          background: 'img/south-abc123.webp',
+          photoUsage: { usedBytes: 3_000_000, capBytes: 50 * 1024 * 1024 },
+        }),
+      };
     },
   });
 
-  assert.equal(background, 'img/south-abc123.webp');
+  assert.equal(result.background, 'img/south-abc123.webp');
+  assert.deepEqual(result.photoUsage, { usedBytes: 3_000_000, capBytes: 50 * 1024 * 1024 });
   assert.equal(calls[0].url, '/api/view-background?project=backyard&view=south');
   assert.equal(calls[0].opts.method, 'POST');
   assert.equal(calls[0].opts.headers['Content-Type'], 'image/webp');
   assert.equal(calls[0].opts.body, blob);
+});
+
+test('a server with no photoUsage in its response (older code) leaves it null', async () => {
+  const result = await uploadViewBackground({
+    projectId: 'backyard',
+    viewId: 'south',
+    blob: { size: 1 },
+    contentType: 'image/webp',
+    fetchFn: async () => ({ ok: true, json: async () => ({ background: 'img/south-abc123.webp' }) }),
+  });
+  assert.equal(result.photoUsage, null);
+});
+
+test('a quota-exceeded (413) upload surfaces the server’s used/cap message', async () => {
+  await assert.rejects(
+    () =>
+      uploadViewBackground({
+        projectId: 'backyard',
+        viewId: 'south',
+        blob: { size: 5 * 1024 * 1024 },
+        contentType: 'image/webp',
+        fetchFn: async () => ({
+          ok: false,
+          status: 413,
+          json: async () => ({
+            error: 'Photo storage limit reached: 48.0 MB of 50.0 MB used, and this photo needs 5.0 MB more.',
+            used: 48 * 1024 * 1024,
+            cap: 50 * 1024 * 1024,
+          }),
+        }),
+      }),
+    /Photo storage limit reached/
+  );
 });
 
 test('surfaces the server’s own explanation when an upload is rejected', async () => {

@@ -2197,6 +2197,14 @@ select {
   color: var(--ink-faint);
 }
 
+/* Photo storage usage (nl-3s5.17), shown near the upload field. Ordinary
+   hint colour until the caller is close to their cap, when it takes the same
+   warning colour the yard-note above uses. */
+.setup-panel__storage--near {
+  color: var(--signal-strong);
+  font-weight: 600;
+}
+
 /* Calibration against the background photo. The red matches the measuring
    segment drawn on the canvas, so the panel and the drawing read as one tool. */
 .setup-panel__ruler,

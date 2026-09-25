@@ -234,6 +234,7 @@ test('every project route in the handler is covered by the table above', async (
     covered.add('GET /api/projects');
     covered.add('POST /api/projects');
     covered.add('POST /api/projects/copy-example'); // its own tests, below
+    covered.add('GET /api/me/storage'); // its own tests, below
     const source = readFileSync(new URL('../server/routes/project.js', import.meta.url), 'utf-8');
     const found = [...source.matchAll(/pathname === '([^']+)' && req\.method === '([A-Z]+)'/g)].map(
       ([, path, method]) => `${method} ${path}`
@@ -259,6 +260,37 @@ test('GET /api/projects lists only the caller\'s yards, and 401s anonymous', asy
       defaultProject: 'bob-yard',
       projects: [{ id: 'bob-yard', name: 'bob-yard' }],
     });
+  } finally {
+    env.cleanup();
+  }
+});
+
+test('GET /api/me/storage is owner-scoped: sums only the caller\'s own yards, 401s anonymous', async () => {
+  const env = setup();
+  try {
+    assert.equal((await call(env, null, 'GET', '/api/me/storage')).statusCode, 401);
+
+    const alice = await call(env, env.alice, 'GET', '/api/me/storage');
+    assert.equal(alice.statusCode, 200);
+    const aliceBody = alice.json();
+    assert.equal(typeof aliceBody.usedBytes, 'number');
+    assert.equal(typeof aliceBody.capBytes, 'number');
+    assert.equal(aliceBody.usedBytes, WEBP.length, 'exactly her one yard\'s one photo');
+
+    // Bob's own yard has the same single photo; the two totals must not
+    // add up into each other.
+    const bob = await call(env, env.bob, 'GET', '/api/me/storage');
+    assert.equal(bob.json().usedBytes, WEBP.length);
+    assert.equal(bob.json().capBytes, aliceBody.capBytes, 'same configured cap for everyone');
+
+    // A second yard of Alice's, with a second photo, is counted too.
+    const secondId = addYard(env, env.alice, 'alice-second');
+    assert.equal(
+      (await call(env, env.alice, 'GET', '/api/me/storage')).json().usedBytes,
+      WEBP.length * 2,
+      'summed across both of her yards'
+    );
+    void secondId;
   } finally {
     env.cleanup();
   }
@@ -384,6 +416,47 @@ test('/api/view-background cannot write outside the caller\'s own img/ directory
       assert.equal(res.statusCode, 404, project);
     }
     assert.deepEqual(snapshot(env), before, 'no file written anywhere');
+  } finally {
+    env.cleanup();
+  }
+});
+
+test('POST /api/view-background: an upload that would exceed PHOTO_QUOTA_MB gets 413 and writes nothing', async () => {
+  const env = setup();
+  const originalQuota = process.env.PHOTO_QUOTA_MB;
+  // Below what addYard's own 'top.webp' already uses, so usage alone exceeds
+  // the cap and any upload — of any size — is refused.
+  process.env.PHOTO_QUOTA_MB = String((WEBP.length - 1) / (1024 * 1024));
+  try {
+    const before = snapshot(env);
+    const res = await call(env, env.bob, 'POST', '/api/view-background?project=bob-yard&view=plan', WEBP, {
+      'content-type': 'image/webp',
+    });
+    assert.equal(res.statusCode, 413, res.body);
+    const body = res.json();
+    assert.match(body.error, /Photo storage limit reached/);
+    assert.equal(typeof body.used, 'number');
+    assert.equal(typeof body.cap, 'number');
+    assert.deepEqual(snapshot(env), before, 'nothing written or recorded on a quota-exceeded upload');
+  } finally {
+    if (originalQuota === undefined) delete process.env.PHOTO_QUOTA_MB;
+    else process.env.PHOTO_QUOTA_MB = originalQuota;
+    env.cleanup();
+  }
+});
+
+test('POST /api/view-background: usage after a successful upload is reported in the response', async () => {
+  const env = setup();
+  try {
+    const res = await call(env, env.bob, 'POST', '/api/view-background?project=bob-yard&view=north', WEBP, {
+      'content-type': 'image/webp',
+    });
+    assert.equal(res.statusCode, 200, res.body);
+    const body = res.json();
+    assert.ok(body.photoUsage, 'response includes photoUsage');
+    // bob-yard already had one photo (top.webp, from addYard) before this upload.
+    assert.equal(body.photoUsage.usedBytes, WEBP.length * 2);
+    assert.equal(typeof body.photoUsage.capBytes, 'number');
   } finally {
     env.cleanup();
   }
@@ -670,6 +743,28 @@ test('POST /api/projects/copy-example: a private copy in the caller\'s namespace
       exampleBefore.history.filter((h) => h.project_id === env.exampleId)
     );
   } finally {
+    env.cleanup();
+  }
+});
+
+test('POST /api/projects/copy-example: exceeding PHOTO_QUOTA_MB gets 413 and copies nothing', async () => {
+  const env = setupWithExample();
+  const originalQuota = process.env.PHOTO_QUOTA_MB;
+  // The example carries one photo (top.webp, WEBP.length bytes); a cap below
+  // that plus Alice's own existing usage (also one WEBP.length photo) refuses
+  // the copy outright.
+  process.env.PHOTO_QUOTA_MB = String((WEBP.length * 2 - 1) / (1024 * 1024));
+  try {
+    const before = snapshot(env);
+    const res = await call(env, env.alice, 'POST', '/api/projects/copy-example', {});
+    assert.equal(res.statusCode, 413, res.body);
+    const body = res.json();
+    assert.match(body.error, /Photo storage limit reached/);
+    assert.deepEqual(snapshot(env), before, 'no yard, no revision, no file created');
+    assert.equal(findOwnedProject(env.db, env.alice.id, 'example-yard'), null);
+  } finally {
+    if (originalQuota === undefined) delete process.env.PHOTO_QUOTA_MB;
+    else process.env.PHOTO_QUOTA_MB = originalQuota;
     env.cleanup();
   }
 });
