@@ -780,3 +780,15 @@ test('the shipped example yard declares an ecoregion and a site', () => {
   assert.equal(config.ecoregion, '9', 'backyard ecoregion');
   assert.ok(config.site?.sun && config.site?.water && config.site?.soil, 'backyard site');
 });
+
+test('normalizeProjectIndex keeps the example yard\'s readOnly flag, and adds it to nothing else (nl-3s5.24)', () => {
+  const index = normalizeProjectIndex({
+    defaultProject: 'example',
+    projects: [{ id: 'mine', name: 'Mine', readOnly: 'yes' }, { id: 'example', name: 'Example yard', readOnly: true }],
+  });
+  assert.deepEqual(index.projects, [
+    { id: 'mine', name: 'Mine' },
+    { id: 'example', name: 'Example yard', readOnly: true },
+  ]);
+  assert.equal(index.defaultProject, 'example');
+});

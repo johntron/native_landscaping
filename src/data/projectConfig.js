@@ -54,7 +54,7 @@ export function isValidProjectId(id) {
  * An empty list is legitimate — a person who has not made a yard yet — and
  * comes back with a null default rather than an error.
  * @param {any} raw
- * @returns {{ defaultProject: string | null, projects: Array<{ id: string, name: string }> }}
+ * @returns {{ defaultProject: string | null, projects: Array<{ id: string, name: string, readOnly?: true }> }}
  */
 export function normalizeProjectIndex(raw) {
   const entries = Array.isArray(raw?.projects) ? raw.projects : [];
@@ -63,7 +63,11 @@ export function normalizeProjectIndex(raw) {
       const id = typeof entry === 'string' ? entry : entry?.id;
       if (!isValidProjectId(id)) return null;
       const name = (typeof entry === 'object' && entry?.name) || id;
-      return { id, name: String(name) };
+      // The shared example yard (nl-3s5.24) comes marked read-only; the flag
+      // is kept only where set, so an ordinary entry stays { id, name }.
+      return typeof entry === 'object' && entry?.readOnly === true
+        ? { id, name: String(name), readOnly: true }
+        : { id, name: String(name) };
     })
     .filter(Boolean);
 

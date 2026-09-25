@@ -22,7 +22,8 @@
 // every save and every cursor move.
 //
 // Photos are files, not rows: DATA_DIR/projects/<projects.id>/img/<name>,
-// outside the served root, served by GET /api/project-photo to the owner only.
+// outside the served root, served by GET /api/project-photo to the owner only
+// (and, for the shared example yard alone, to every signed-in user; nl-3s5.24).
 // Keyed by the numeric id rather than the slug, so two owners' yards with the
 // same slug never share a directory.
 import path from 'node:path';
@@ -132,6 +133,77 @@ export function findProjectById(db, projectRowId) {
 export function findCallerProject(ctx, slug) {
   if (!ctx.user) return null;
   return findOwnedProject(ctx.db.app, ctx.user.id, slug);
+}
+
+// --- The shared example yard (nl-3s5.24) ------------------------------------
+//
+// One yard every signed-in user may READ: a copy of the owner's backyard with
+// no location, owned by a system user no person can sign in as (the .invalid
+// TLD is reserved by RFC 2606, so no Google account, and so no Cloudflare
+// Access identity, can carry it). It is found by exactly one lookup, owner
+// email plus slug, and that lookup is the whole allowlist: no visibility
+// value, no admin flag, no other yard is ever readable by a non-owner. Writes
+// to it are refused by row id whoever asks (server/http.js loadWritableProject),
+// so only tools/refresh-example-yard.mjs and the startup seed change it
+// (server/db/exampleYard.js).
+
+/** The system user that owns the example. Never an admin (exampleYard.js ensures is_admin 0). */
+export const EXAMPLE_OWNER_EMAIL = 'example@rewilder.invalid';
+
+/** The example's slug, which is how every client addresses it: ?project=example. */
+export const EXAMPLE_SLUG = 'example';
+
+/**
+ * Slugs a person may not give a new yard (POST /api/projects), so
+ * ?project=example keeps meaning the shared example. A yard a user made with
+ * one before this rule existed still resolves as theirs first (see
+ * loadReadableProject), and the picker then leaves the shared one out.
+ */
+export const RESERVED_SLUGS = Object.freeze([EXAMPLE_SLUG]);
+
+/** @returns {ProjectRecord | null} the shared example, or null when none has been seeded. */
+export function findExampleProject(db) {
+  const row = db
+    .prepare(
+      `SELECT ${PROJECT_COLUMNS} FROM projects
+       WHERE owner_id = (SELECT id FROM users WHERE email = ?) AND slug = ?`
+    )
+    .get(EXAMPLE_OWNER_EMAIL, EXAMPLE_SLUG);
+  return toRecord(row);
+}
+
+/**
+ * The `findExample` server/http.js's loadReadableProject and
+ * loadWritableProject are handed: the shared example when `slug` names it,
+ * otherwise null. The only way a caller reaches a yard they do not own.
+ * @param {{ db: { app: import('node:sqlite').DatabaseSync } }} ctx
+ * @param {string} slug
+ */
+export function findExampleFor(ctx, slug) {
+  if (slug !== EXAMPLE_SLUG) return null;
+  return findExampleProject(ctx.db.app);
+}
+
+/**
+ * The yard picker as GET /api/projects sends it: the caller's own yards
+ * (projectIndexFor), then the shared example marked `readOnly: true`. A caller
+ * with no yards of their own lands on the example (it is the default). Left
+ * out when no example exists, and when the caller already has a yard with the
+ * example's slug (theirs wins at ?project=example, so listing both would show
+ * two entries that open the same yard).
+ */
+export function projectPickerFor(db, userId) {
+  const own = projectIndexFor(db, userId);
+  const example = findExampleProject(db);
+  if (!example) return own;
+  if (example.ownerId === Number(userId)) {
+    return { ...own, projects: own.projects.map((p) => (p.id === EXAMPLE_SLUG ? { ...p, readOnly: true } : p)) };
+  }
+  if (own.projects.some((p) => p.id === EXAMPLE_SLUG)) return own;
+  return {
+    defaultProject: own.defaultProject ?? EXAMPLE_SLUG,
+    projects: [...own.projects, { id: EXAMPLE_SLUG, name: example.name, readOnly: true }],
+  };
 }
 
 /**

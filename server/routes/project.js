@@ -16,16 +16,29 @@ import {
   resolveBackgroundTarget,
   sniffImageType,
 } from '../../src/data/backgroundStore.js';
-import { collectPayload, collectBinaryBody, json, loadOwnedProject, requireUser } from '../http.js';
-import { writeFileAtomic, removeSupersededBackgrounds, removeOrphanedBackgrounds } from '../files.js';
 import {
+  collectPayload,
+  collectBinaryBody,
+  createRateLimiter,
+  enforceRateLimit,
+  json,
+  loadReadableProject,
+  loadWritableProject,
+  rateLimitKeyFor,
+  requireUser,
+} from '../http.js';
+import { writeFileAtomic, removeSupersededBackgrounds, removeOrphanedBackgrounds } from '../files.js';
+import { copyExampleToOwner } from '../db/exampleYard.js';
+import {
+  RESERVED_SLUGS,
   currentPlacements,
   findCallerProject,
+  findExampleFor,
   findOwnedProject,
   insertProject,
   moveHistoryCursor,
   projectDataDir,
-  projectIndexFor,
+  projectPickerFor,
   readRevisions,
   recordLayout,
   referencedBackgroundNames,
@@ -41,6 +54,12 @@ const PHOTO_TYPES = {
   '.jpeg': 'image/jpeg',
   '.svg': 'image/svg+xml',
 };
+
+// POST /api/projects/copy-example writes a yard and copies its photos, so it
+// is throttled per caller. Judgement call, not a measured limit: 5 copies in
+// a burst, then one a minute, is far more than a person starting a yard needs
+// and bounds a script looping on it to a few hundred KB a minute.
+export const copyExampleLimiter = createRateLimiter({ capacity: 5, refillPerSecond: 1 / 60 });
 
 /**
  * Per-project persistence for the design tool, backed by app.db
@@ -58,10 +77,14 @@ const PHOTO_TYPES = {
  * setup/features save added revisions it has not seen, which a reload fixes.
  *
  * Every route needs a signed-in caller, and every ?project=<slug> is resolved
- * among THAT caller's yards through loadOwnedProject (server/http.js): 401
+ * among THAT caller's yards (server/http.js loadReadableProject / loadWritableProject): 401
  * when anonymous, the same 404 for a slug that does not exist and one that
  * belongs to someone else. Slugs are unique per owner, so there is no other
- * way to resolve one.
+ * way to resolve one, with one exception (nl-3s5.24): ?project=example, when
+ * the caller has no yard of that name, resolves to the shared example yard,
+ * which every READ route serves to any signed-in user and every WRITE route
+ * refuses with 403 (loadReadableProject / loadWritableProject). It has no
+ * location to leak: the example's location_json is always NULL.
  *
  * Returns true when it handled the request (a response has been sent), false
  * to let server.js try the next route module.
@@ -69,13 +92,43 @@ const PHOTO_TYPES = {
 export async function handleProjectRoutes(req, res, ctx) {
   const { url, pathname } = ctx;
   const db = ctx.db.app;
-  const owned = () => loadOwnedProject(ctx, res, projectIdFromUrl(url), { findProject: findCallerProject });
+  // Reads resolve the caller's own yard or the shared example (nl-3s5.24);
+  // writes resolve the same way and then refuse the example with 403.
+  const deps = { findProject: findCallerProject, findExample: findExampleFor };
+  const readable = () => loadReadableProject(ctx, res, projectIdFromUrl(url), deps);
+  const writable = () => loadWritableProject(ctx, res, projectIdFromUrl(url), deps);
 
-  // The caller's yard picker (replaces the static projects/index.json).
+  // The caller's yard picker (replaces the static projects/index.json): their
+  // own yards, then the shared example marked readOnly (nl-3s5.24).
   if (pathname === '/api/projects' && req.method === 'GET') {
     const user = requireUser(ctx, res);
     if (!user) return true;
-    json(res, 200, projectIndexFor(db, user.id));
+    json(res, 200, projectPickerFor(db, user.id));
+    return true;
+  }
+
+  // "Copy to my yards" (nl-3s5.24): the example as a new private yard of the
+  // caller's, with a fresh slug, one revision and its photos. The body is not
+  // read: the source is always the example and the owner always the caller.
+  if (pathname === '/api/projects/copy-example' && req.method === 'POST') {
+    const user = requireUser(ctx, res);
+    if (!user) return true;
+    // Sampled pruning, as server/routes/ecosystem.js does for its limiters.
+    if (Math.random() < 0.01) copyExampleLimiter.prune();
+    if (!enforceRateLimit(ctx.copyExampleLimiter || copyExampleLimiter, rateLimitKeyFor(ctx, req), res)) return true;
+    req.resume();
+    try {
+      const { slug } = copyExampleToOwner(db, { dataDir: ctx.dataDir, ownerId: user.id });
+      console.log(`Example yard copied to '${slug}' for user ${user.id}`);
+      json(res, 200, { id: slug, index: projectPickerFor(db, user.id) });
+    } catch (err) {
+      if (err.code === 'NO_EXAMPLE') {
+        json(res, 404, { error: err.message });
+      } else {
+        console.error(err);
+        json(res, 500, { error: 'Could not copy the example yard' });
+      }
+    }
     return true;
   }
 
@@ -91,6 +144,9 @@ export async function handleProjectRoutes(req, res, ctx) {
           'Project id must start with a lowercase letter or digit, and contain only ' +
             'lowercase letters, digits, "-", or "_"'
         );
+      }
+      if (RESERVED_SLUGS.includes(id)) {
+        throw new Error(`"${id}" is reserved for the shared example yard; choose another name`);
       }
       // No yardFt/views geometry supplied: normalizeProjectConfig fills in
       // the same defaults a hand-created project.json with just a plan view
@@ -110,7 +166,7 @@ export async function handleProjectRoutes(req, res, ctx) {
         });
       });
       console.log(`Project '${id}' created for user ${user.id}`);
-      json(res, 200, { index: projectIndexFor(db, user.id), config: serialized });
+      json(res, 200, { index: projectPickerFor(db, user.id), config: serialized });
     } catch (err) {
       console.error(err);
       json(res, 400, { error: err.message });
@@ -120,7 +176,7 @@ export async function handleProjectRoutes(req, res, ctx) {
 
   // The config as it was saved; the client normalizes it, as it did the file.
   if (pathname === '/api/project' && req.method === 'GET') {
-    const project = owned();
+    const project = readable();
     if (!project) return true;
     try {
       json(res, 200, JSON.parse(project.configJson));
@@ -132,7 +188,7 @@ export async function handleProjectRoutes(req, res, ctx) {
   }
 
   if (pathname === '/api/project' && req.method === 'POST') {
-    const project = owned();
+    const project = writable();
     if (!project) return true;
     try {
       const body = await collectPayload(req, { requirePlants: false });
@@ -167,7 +223,7 @@ export async function handleProjectRoutes(req, res, ctx) {
       );
       json(res, 200, {
         config: serialized,
-        index: projectIndexFor(db, project.ownerId),
+        index: projectPickerFor(db, project.ownerId),
         revision: { entry: revision.entry, cursor: revision.cursor },
       });
     } catch (err) {
@@ -178,7 +234,7 @@ export async function handleProjectRoutes(req, res, ctx) {
   }
 
   if (pathname === '/api/history' && req.method === 'GET') {
-    const project = owned();
+    const project = readable();
     if (!project) return true;
     json(res, 200, historyPayload(db, project.id));
     return true;
@@ -187,7 +243,7 @@ export async function handleProjectRoutes(req, res, ctx) {
   // The layout the yard shows now (the entry at the cursor), as the CSV that
   // used to be stored. An export only: nothing reads it back.
   if (pathname === '/api/layout' && req.method === 'GET') {
-    const project = owned();
+    const project = readable();
     if (!project) return true;
     try {
       const csv = buildLayoutCsv(currentPlacements(db, project.id));
@@ -205,7 +261,7 @@ export async function handleProjectRoutes(req, res, ctx) {
   }
 
   if (pathname === '/api/layout' && req.method === 'POST') {
-    const project = owned();
+    const project = writable();
     if (!project) return true;
     try {
       // The body is read before the transaction starts: nothing awaits
@@ -223,7 +279,7 @@ export async function handleProjectRoutes(req, res, ctx) {
   }
 
   if (pathname === '/api/history/cursor' && req.method === 'POST') {
-    const project = owned();
+    const project = writable();
     if (!project) return true;
     try {
       const payload = await collectPayload(req, { requirePlants: false });
@@ -238,7 +294,7 @@ export async function handleProjectRoutes(req, res, ctx) {
   }
 
   if (pathname === '/api/features' && req.method === 'GET') {
-    const project = owned();
+    const project = readable();
     if (!project) return true;
     try {
       // A yard that has never drawn a feature has none stored, and that is
@@ -253,7 +309,7 @@ export async function handleProjectRoutes(req, res, ctx) {
   }
 
   if (pathname === '/api/features' && req.method === 'POST') {
-    const project = owned();
+    const project = writable();
     if (!project) return true;
     try {
       const body = await collectPayload(req, { requirePlants: false });
@@ -277,10 +333,11 @@ export async function handleProjectRoutes(req, res, ctx) {
     return true;
   }
 
-  // A yard's photo, to its owner only. Photos live under DATA_DIR, outside
-  // the served root, so this is the only way to reach one.
+  // A yard's photo, to its owner only (or, for the shared example alone, to
+  // any signed-in user). Photos live under DATA_DIR, outside the served root,
+  // so this is the only way to reach one.
   if (pathname === '/api/project-photo' && req.method === 'GET') {
-    const project = owned();
+    const project = readable();
     if (!project) return true;
     const target = resolveProjectPhoto(projectDataDir(ctx.dataDir, project.id), url.searchParams.get('path') || '');
     let body = null;
@@ -309,9 +366,9 @@ export async function handleProjectRoutes(req, res, ctx) {
   }
 
   if (pathname === '/api/view-background' && req.method === 'POST') {
-    const project = owned();
+    const project = writable();
     if (!project) {
-      req.resume(); // drain the unread body so the 401/404 reaches the client
+      req.resume(); // drain the unread body so the 401/403/404 reaches the client
       return true;
     }
     try {

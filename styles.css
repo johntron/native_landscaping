@@ -1431,6 +1431,43 @@ select {
   color: var(--danger-soft);
 }
 
+/* The shared example yard (nl-3s5.24): read only, with the way out. Chrome,
+   so apparatus colours and no glow. */
+.example-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.6rem;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--rule-cool);
+  border-radius: 6px;
+  background-color: var(--accent-wash);
+  font-size: 0.88rem;
+  color: var(--ink-deep);
+}
+
+.example-banner[hidden],
+.mode-switch__btn[hidden],
+.detail-sheet__actions .pill-button[hidden] {
+  /* The read-only example hides the modes and plant actions that would save;
+     their own display rules would otherwise beat the attribute. */
+  display: none;
+}
+
+.example-banner__sep {
+  color: var(--ink-faint);
+}
+
+.example-banner__status {
+  font-size: 0.8rem;
+  color: var(--ink-muted);
+}
+
+.example-banner__status[data-state='error'] {
+  color: var(--danger-soft);
+}
+
 /* Individual view containers share common styles. */
 .view {
   position: relative;

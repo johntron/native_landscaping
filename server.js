@@ -10,6 +10,7 @@ import { handleClaimsRoutes } from './server/routes/claims.js';
 import { rejectCrossSite } from './server/http.js';
 import { legacyRedirect, serveStaticFile, isAdminOnlyStaticPath } from './server/static.js';
 import { openAppDb, resolveDataDir } from './server/db/appDb.js';
+import { seedExampleYardIfMissing } from './server/db/exampleYard.js';
 import { createIdentity } from './server/identity.js';
 import { openServerDatabases } from './server/dbHandles.js';
 import { resolveRequestLogMode, shouldLogRequest, formatRequestLog } from './server/requestLog.js';
@@ -33,6 +34,17 @@ const identify = createIdentity();
 // instead of each route opening (and leaking) a handle per request: app.db
 // (nl-3s5.23) plus the tools/ stores (nl-3s5.14, server/dbHandles.js).
 const db = { app: openAppDb({ dataDir: DATA_DIR }), ...openServerDatabases() };
+
+// The shared read-only example yard (nl-3s5.24): seeded from the tracked
+// projects/backyard when there is none yet, never overwritten here (the owner
+// re-copies it from their live yard with tools/refresh-example-yard.mjs).
+// Here rather than in openAppDb, so tests and tools that open app.db get no
+// extra user or yard.
+{
+  const seeded = seedExampleYardIfMissing(db.app, { dataDir: DATA_DIR });
+  if (seeded.status === 'created') console.log(`app.db: seeded the example yard from projects/backyard (${seeded.plants} plants)`);
+  else if (seeded.status === 'failed') console.warn(`app.db: could not seed the example yard: ${seeded.error}`);
+}
 
 // REQUEST_LOG=all|api|off, default 'api': see server/requestLog.js for why
 // 'api' (skip static-asset 200s, keep everything else) is the quiet default.

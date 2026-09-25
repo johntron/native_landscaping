@@ -42,6 +42,7 @@ import { patchView } from './state/yardEdits.js';
 import { addPlantFromCatalog, clonePlantById, removePlantById } from './state/plantEdits.js';
 import { createPlantMenu } from './interaction/plantMenu.js';
 import { PROJECT_QUERY_PARAM, initNewProjectForm, initProjectPicker } from './ui/projectPicker.js';
+import { initExampleBanner } from './ui/exampleBanner.js';
 import {
   clampMonthValue,
   initMonthSlider,
@@ -78,6 +79,8 @@ const appState = {
   // the local-fauna-support rule and the per-plant detail sheet section.
   interactions: emptyInteractionsIndex(),
   nearbyFauna: emptyNearbyFaunaIndex(),
+  // True on the shared example yard (nl-3s5.24): nothing may save.
+  readOnly: false,
   month: new Date().getMonth() + 1,
   zoom: DEFAULT_ZOOM,
   mode: 'view',
@@ -142,6 +145,10 @@ async function init() {
 
   let projectIndex;
   let project;
+  // The shared example yard (nl-3s5.24) is read-only: the server refuses
+  // every write to it with 403, and the page offers no way to make one. Set
+  // from the picker entry the server marked, before anything is wired.
+  let readOnly = false;
   try {
     projectIndex = await loadProjectIndex(fetch, document.baseURI);
     if (!projectIndex.projects.length) {
@@ -162,6 +169,11 @@ async function init() {
       projectIndex
     );
     project = await loadProjectConfig(resolved.id, fetch, document.baseURI);
+    readOnly = Boolean(projectIndex.projects.find((entry) => entry.id === resolved.id)?.readOnly);
+    // Published for every module handed appState (the plant panel, the detail
+    // sheet) and for CSS: any control that saves checks this and stays out.
+    appState.readOnly = readOnly;
+    if (readOnly) document.body.dataset.readOnly = 'true';
     if (resolved.fellBack && projectNotice) {
       projectNotice.hidden = false;
       projectNotice.textContent = `Unknown project "${resolved.requestedId}" — showing ${project.name}.`;
@@ -178,10 +190,24 @@ async function init() {
     return;
   }
   appState.project = project;
-  document.title = pageTitle(`Your yard: ${project.name}`);
+  const titleText = readOnly ? `${project.name} (read only)` : `Your yard: ${project.name}`;
+  document.title = pageTitle(titleText);
   const projectTitle = document.getElementById('projectTitle');
   if (projectTitle) {
-    projectTitle.textContent = `Your yard: ${project.name}`;
+    projectTitle.textContent = titleText;
+  }
+  if (readOnly) {
+    initExampleBanner({
+      banner: document.getElementById('exampleBanner'),
+      button: document.getElementById('copyExampleBtn'),
+      status: document.getElementById('copyExampleStatus'),
+    });
+    // View is the only mode: Edit, Setup and Features all save.
+    modeButtons.forEach((button) => {
+      button.hidden = button.dataset.mode !== 'view';
+    });
+    if (detailSheetCloneBtn) detailSheetCloneBtn.hidden = true;
+    if (detailSheetRemoveBtn) detailSheetRemoveBtn.hidden = true;
   }
 
   const navEcosystemLink = document.getElementById('navEcosystemLink');
@@ -581,7 +607,7 @@ async function init() {
    * belongs to the setup controller, so the plant controllers stay locked.
    */
   function applyMode(mode) {
-    const next = MODES.includes(mode) ? mode : 'view';
+    const next = !readOnly && MODES.includes(mode) ? mode : 'view';
     appState.mode = next;
     modeButtons.forEach((button) => {
       const isActive = button.dataset.mode === next;
@@ -609,7 +635,9 @@ async function init() {
     dragControllers.forEach((controller) => controller?.setLocked?.(next !== 'edit'));
     setupMode.sync();
     featuresMode.sync();
-    persistMode(next);
+    // Not over the example: its forced View must not become the mode the
+    // viewer's own yards open in.
+    if (!readOnly) persistMode(next);
   }
 
 
@@ -802,6 +830,8 @@ async function init() {
     event.preventDefault();
     const plantId = group.getAttribute('data-plant-id');
     setTargetedPlant(plantId);
+    // The menu's two actions (clone, remove) both change the yard.
+    if (readOnly) return;
     plantMenu.show({
       x: event.clientX,
       y: event.clientY,

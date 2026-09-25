@@ -1,11 +1,11 @@
 import { projectIdFromUrl } from '../../src/data/projectPaths.js';
-import { findCallerProject, parseLocation } from '../db/projectStore.js';
+import { findCallerProject, findExampleFor, findExampleProject, parseLocation } from '../db/projectStore.js';
 import { listSpeciesObservations, listPlaces } from '../../tools/ecosystemIndexDb.js';
 import { excludeNonNative } from '../../src/analysis/establishmentMeans.js';
 import { geocodeAddress } from '../../tools/geocode.mjs';
 import { lookupEcoregion } from '../../tools/ecoregionLookup.mjs';
 import { KNOWN_ECOREGIONS } from '../../src/data/ecoregionInput.js';
-import { collectPayload, createRateLimiter, enforceRateLimit, loadOwnedProject, rateLimitKeyFor } from '../http.js';
+import { collectPayload, createRateLimiter, enforceRateLimit, loadReadableProject, rateLimitKeyFor } from '../http.js';
 
 // /api/geocode calls Nominatim (tools/geocode.mjs). Nominatim's usage policy
 // (https://operations.osmfoundation.org/policies/nominatim/) caps usage at
@@ -51,8 +51,8 @@ export async function handleEcosystemRoutes(req, res, ctx) {
     // - The yard's location (app.db projects.location_json, nl-3s5.3), sent
     //   as { lat, lng } alone so the page can link out to iNaturalist scoped
     //   to the actual site. It exists only with ?project=, and ?project= is
-    //   resolved like every project route: loadOwnedProject, so 401 when
-    //   anonymous and the same 404 for a slug that is missing or someone
+    //   resolved like every project read route: loadReadableProject, so 401
+    //   when anonymous and the same 404 for a slug that is missing or someone
     //   else's. `has`, not truthiness: an empty ?project= is a malformed slug
     //   (404), never a quiet fallback to the public answer.
     //
@@ -67,11 +67,19 @@ export async function handleEcosystemRoutes(req, res, ctx) {
     //   place to the index; no request can. The residual risk is that place
     //   labels are one namespace across owners; an owner-keyed index would be
     //   its own bead.
+    //
+    // - The shared example yard (nl-3s5.24) resolves here for any signed-in
+    //   user, like every read route, and its location is null whatever the
+    //   row holds: the refresh never writes one, and this is the second lock.
     let location = null;
     if (url.searchParams.has('project')) {
-      const project = loadOwnedProject(ctx, res, projectIdFromUrl(url), { findProject: findCallerProject });
+      const project = loadReadableProject(ctx, res, projectIdFromUrl(url), {
+        findProject: findCallerProject,
+        findExample: findExampleFor,
+      });
       if (!project) return true;
-      const raw = parseLocation(project);
+      const isExample = project.id === findExampleProject(ctx.db.app)?.id;
+      const raw = isExample ? null : parseLocation(project);
       if (raw && Number.isFinite(raw.lat) && Number.isFinite(raw.lng)) {
         location = { lat: raw.lat, lng: raw.lng };
       }

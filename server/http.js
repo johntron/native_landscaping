@@ -113,6 +113,67 @@ export function loadOwnedProject(ctx, res, slug, { findProject }) {
 }
 
 /**
+ * Resolve ?project=<slug> for a READ: the caller's own yard, or else the one
+ * shared example yard (nl-3s5.24), or the same 401/404 loadOwnedProject gives.
+ *
+ * The example is an explicit allowlist of one, supplied as `findExample(ctx,
+ * slug) -> record | null` (server/db/projectStore.js findExampleFor, which
+ * answers only for the example's slug). It is not a visibility value and not
+ * an admin bypass: every other yard that is not the caller's stays the
+ * identical 404. The caller's own yard is tried first, so a yard a user made
+ * with the example's slug before the slug was reserved stays theirs.
+ *
+ * @param {{ user: import('../server/identity.js').User | null }} ctx
+ * @param {import('node:http').ServerResponse} res
+ * @param {string} slug
+ * @param {{ findProject: (ctx: object, slug: string) => ({ id: number, slug: string, ownerId: number } | null),
+ *   findExample: (ctx: object, slug: string) => ({ id: number, slug: string, ownerId: number } | null) }} deps
+ * @returns {{ id: number, slug: string, ownerId: number } | null}
+ */
+export function loadReadableProject(ctx, res, slug, { findProject, findExample }) {
+  const user = requireUser(ctx, res);
+  if (!user) return null;
+  if (isValidProjectId(slug)) {
+    const own = findProject(ctx, slug);
+    if (own && own.ownerId === user.id) return own;
+    const example = findExample(ctx, slug);
+    if (example) return example;
+  }
+  json(res, 404, { error: 'Project not found' });
+  return null;
+}
+
+/** The body every write to the example yard gets. */
+export const EXAMPLE_READ_ONLY_ERROR = 'The example yard is read-only. Copy it to your yards to change it.';
+
+/**
+ * Resolve ?project=<slug> for a WRITE: exactly loadReadableProject, then 403
+ * when the yard it resolved to is the shared example, whoever the caller is
+ * (even a session as the example's system owner). Compared by row id, so a
+ * user's own yard that shares the example's slug stays writable and a copy
+ * of the example is an ordinary yard.
+ *
+ * 403, not 404: the example's existence is not a secret (every signed-in
+ * user sees it in the picker), and "read-only" is the answer that tells the
+ * client what to do next. Any other yard not the caller's is still the 404.
+ *
+ * @param {{ user: import('../server/identity.js').User | null }} ctx
+ * @param {import('node:http').ServerResponse} res
+ * @param {string} slug
+ * @param {Parameters<typeof loadReadableProject>[3]} deps
+ */
+export function loadWritableProject(ctx, res, slug, deps) {
+  const project = loadReadableProject(ctx, res, slug, deps);
+  if (!project) return null;
+  const example = deps.findExample(ctx, slug);
+  if (example && example.id === project.id) {
+    json(res, 403, { error: EXAMPLE_READ_ONLY_ERROR });
+    return null;
+  }
+  return project;
+}
+
+/**
  * An in-memory token-bucket rate limiter, keyed per caller (a user id, or a
  * remote address for anonymous requests — see `rateLimitKeyFor`).
  *

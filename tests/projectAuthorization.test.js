@@ -22,12 +22,18 @@ import { openAppDb } from '../server/db/appDb.js';
 import { upsertUser } from '../server/identity.js';
 import {
   ASSIGNABLE_VISIBILITIES,
+  EXAMPLE_OWNER_EMAIL,
+  EXAMPLE_SLUG,
   PROJECT_VISIBILITIES,
+  findExampleProject,
   findOwnedProject,
   insertProject,
   projectDataDir,
   projectIndexFor,
+  readRevisions,
 } from '../server/db/projectStore.js';
+import { COPY_NAME, EXAMPLE_NAME, findGeoKeys, snapshotFromOwnerYard, writeExampleYard } from '../server/db/exampleYard.js';
+import { createRateLimiter, EXAMPLE_READ_ONLY_ERROR } from '../server/http.js';
 import { handleProjectRoutes } from '../server/routes/project.js';
 import { handleEcosystemRoutes } from '../server/routes/ecosystem.js';
 import { serveStaticFile } from '../server/static.js';
@@ -116,7 +122,17 @@ const ECOSYSTEM_DB = { prepare: () => ({ all: () => [] }) };
 /** Route the request the way server.js does: the first handler that takes it answers. */
 async function call(env, user, method, pathAndQuery, body, headers) {
   const url = new URL(`http://localhost${pathAndQuery}`);
-  const ctx = { url, pathname: url.pathname, dataDir: env.dataDir, db: { app: env.db, ecosystem: ECOSYSTEM_DB }, user };
+  const ctx = {
+    url,
+    pathname: url.pathname,
+    dataDir: env.dataDir,
+    db: { app: env.db, ecosystem: ECOSYSTEM_DB },
+    user,
+    // A fresh limiter per call unless the test brings its own: user ids repeat
+    // across these throwaway databases, so the module's shared one would
+    // carry one test's copies into the next.
+    copyExampleLimiter: env.copyExampleLimiter || createRateLimiter(),
+  };
   const res = makeRes();
   for (const handle of [handleProjectRoutes, handleEcosystemRoutes]) {
     if (await handle(makeReq(method, body, headers), res, ctx)) return res;
@@ -217,6 +233,7 @@ test('every project route in the handler is covered by the table above', async (
     const covered = new Set(ROUTES.map((r) => `${r.method} ${r.path}`));
     covered.add('GET /api/projects');
     covered.add('POST /api/projects');
+    covered.add('POST /api/projects/copy-example'); // its own tests, below
     const source = readFileSync(new URL('../server/routes/project.js', import.meta.url), 'utf-8');
     const found = [...source.matchAll(/pathname === '([^']+)' && req\.method === '([A-Z]+)'/g)].map(
       ([, path, method]) => `${method} ${path}`
@@ -443,5 +460,237 @@ test('visibility: the database allows private and public, the application assign
     assert.equal(findOwnedProject(env.db, env.bob.id, 'bob-yard').visibility, 'public');
   } finally {
     env.cleanup();
+  }
+});
+
+// --- the shared example yard (nl-3s5.24) -----------------------------------------
+//
+// Carol (the site owner, an admin) has a backyard with a location; the example
+// is refreshed from it. Alice and Bob are ordinary users. The example is the
+// only yard a non-owner can read, it is read-only to everyone, and its
+// location is never returned.
+
+function setupWithExample() {
+  const env = setup();
+  env.carol = upsertUser(env.db, 'carol@example.com');
+  env.db.prepare('UPDATE users SET is_admin = 1 WHERE id = ?').run(env.carol.id);
+  env.carolYardId = addYard(env, env.carol, 'backyard');
+  const { snapshot, provenance, revisionTimestamp } = snapshotFromOwnerYard(env.db, {
+    dataDir: env.dataDir,
+    ownerEmail: 'carol@example.com',
+    slug: 'backyard',
+  });
+  const written = writeExampleYard(env.db, { dataDir: env.dataDir, snapshot, provenance, revisionTimestamp });
+  assert.equal(written.status, 'created');
+  env.exampleId = written.projectId;
+  return env;
+}
+
+const READ_ROUTES = ROUTES.filter((r) => r.method === 'GET');
+const WRITE_ROUTES = ROUTES.filter((r) => r.method !== 'GET');
+
+test('the example: every read route answers any signed-in user, and 401s anonymous', async () => {
+  const env = setupWithExample();
+  try {
+    const before = snapshot(env);
+    for (const route of READ_ROUTES) {
+      const label = `${route.method} ${route.path}`;
+      const path = `${route.path}?project=${EXAMPLE_SLUG}${route.query || ''}`;
+      assert.equal((await call(env, null, route.method, path)).statusCode, 401, `${label} anonymous`);
+      for (const user of [env.alice, env.bob, env.carol]) {
+        const res = await call(env, user, route.method, path);
+        assert.ok(res.statusCode >= 200 && res.statusCode < 300, `${label} as ${user.email}: ${res.statusCode} ${res.body}`);
+      }
+    }
+    assert.deepEqual(snapshot(env), before, 'reading the example changes nothing');
+
+    const config = (await call(env, env.alice, 'GET', `/api/project?project=${EXAMPLE_SLUG}`)).json();
+    assert.equal(config.name, EXAMPLE_NAME);
+    const history = (await call(env, env.alice, 'GET', `/api/history?project=${EXAMPLE_SLUG}`)).json();
+    assert.equal(history.entries.length, 1, 'the example holds one revision');
+    assert.deepEqual(history.entries[0].plants, [placement('p1', 2)], "the source's state at its cursor");
+  } finally {
+    env.cleanup();
+  }
+});
+
+test('the example: every write route answers 403 to everyone, its own system owner included, and changes nothing', async () => {
+  const env = setupWithExample();
+  try {
+    const before = snapshot(env);
+    const systemOwner = upsertUser(env.db, EXAMPLE_OWNER_EMAIL);
+    assert.equal(systemOwner.isAdmin, false, 'the system owner is never an admin');
+    for (const route of WRITE_ROUTES) {
+      const label = `${route.method} ${route.path}`;
+      const path = `${route.path}?project=${EXAMPLE_SLUG}${route.query || ''}`;
+      assert.equal((await call(env, null, route.method, path, route.body?.(), route.headers || JSON_HEADERS)).statusCode, 401);
+      for (const user of [env.alice, env.carol, systemOwner]) {
+        const res = await call(env, user, route.method, path, route.body?.(), route.headers || JSON_HEADERS);
+        assert.equal(res.statusCode, 403, `${label} as ${user.email}`);
+        assert.deepEqual(res.json(), { error: EXAMPLE_READ_ONLY_ERROR });
+      }
+    }
+    assert.deepEqual(snapshot(env), before, 'no write reached the example, its history or its photos');
+  } finally {
+    env.cleanup();
+  }
+});
+
+test("the example never returns a location, and the owner's real backyard stays 404 to everyone else", async () => {
+  const env = setupWithExample();
+  try {
+    assert.equal(findExampleProject(env.db).locationJson, null);
+    for (const user of [env.alice, env.carol]) {
+      const res = await call(env, user, 'GET', `/api/ecosystem?place=home&project=${EXAMPLE_SLUG}`);
+      assert.equal(res.statusCode, 200);
+      assert.equal(res.json().location, null, `as ${user.email}`);
+    }
+    // The second lock: even a location written into the row by hand is not sent.
+    env.db.prepare('UPDATE projects SET location_json = ? WHERE id = ?').run(JSON.stringify({ lat: 1, lng: 2 }), env.exampleId);
+    assert.equal((await call(env, env.alice, 'GET', `/api/ecosystem?place=home&project=${EXAMPLE_SLUG}`)).json().location, null);
+
+    // Nothing the example serves carries the source's address or coordinates.
+    for (const path of ['/api/project', '/api/history', '/api/features', '/api/layout']) {
+      const body = String((await call(env, env.alice, 'GET', `${path}?project=${EXAMPLE_SLUG}`)).body);
+      assert.equal(/somewhere|32\.5|-96\.5/.test(body), false, `${path} leaks the source location`);
+    }
+    for (const r of readRevisions(env.db, env.exampleId)) {
+      assert.deepEqual(findGeoKeys([JSON.parse(r.configJson), r.plants, JSON.parse(r.featuresJson ?? 'null')]), []);
+    }
+
+    // Carol's own backyard is hers alone, exactly as before.
+    for (const route of ROUTES) {
+      const res = await call(env, env.alice, route.method, `${route.path}?project=backyard${route.query || ''}`, route.body?.(), route.headers || JSON_HEADERS);
+      assert.equal(res.statusCode, 404, `${route.method} ${route.path}`);
+    }
+    // Nor can the example's numeric id or its owner's other slugs be used to reach anything.
+    assert.equal((await call(env, env.alice, 'GET', `/api/project?project=${env.exampleId}`)).statusCode, 404);
+    assert.equal((await call(env, env.alice, 'GET', `/api/project?project=Example`)).statusCode, 404);
+  } finally {
+    env.cleanup();
+  }
+});
+
+test('the picker lists the caller\'s yards plus the example, which is the default for a caller with none', async () => {
+  const env = setupWithExample();
+  try {
+    assert.deepEqual((await call(env, env.alice, 'GET', '/api/projects')).json(), {
+      defaultProject: 'alice-yard',
+      projects: [
+        { id: 'alice-yard', name: 'alice-yard' },
+        { id: EXAMPLE_SLUG, name: EXAMPLE_NAME, readOnly: true },
+      ],
+    });
+    const dave = upsertUser(env.db, 'dave@example.com');
+    assert.deepEqual((await call(env, dave, 'GET', '/api/projects')).json(), {
+      defaultProject: EXAMPLE_SLUG,
+      projects: [{ id: EXAMPLE_SLUG, name: EXAMPLE_NAME, readOnly: true }],
+    });
+  } finally {
+    env.cleanup();
+  }
+});
+
+test("a user's own 'example' yard does not collide with the shared one", async () => {
+  const env = setupWithExample();
+  try {
+    // New yards cannot take the slug.
+    const refused = await call(env, env.alice, 'POST', '/api/projects', { id: EXAMPLE_SLUG, name: 'Mine' });
+    assert.equal(refused.statusCode, 400);
+    assert.match(refused.json().error, /reserved/);
+
+    // One made before the slug was reserved stays its owner's, for reads and writes.
+    const ownId = addYard(env, env.bob, EXAMPLE_SLUG);
+    const exampleBefore = {
+      row: env.db.prepare('SELECT * FROM projects WHERE id = ?').get(env.exampleId),
+      history: env.db.prepare('SELECT * FROM history_entries WHERE project_id = ?').all(env.exampleId),
+    };
+    const own = await call(env, env.bob, 'GET', `/api/history?project=${EXAMPLE_SLUG}`);
+    assert.equal(own.json().entries.length, 2, "Bob sees his own two-revision yard, not the example's one");
+    const saved = await call(env, env.bob, 'POST', `/api/layout?project=${EXAMPLE_SLUG}`, { plants: [placement('p1', 7)], id: 'bob-own' });
+    assert.equal(saved.statusCode, 200, saved.body);
+    assert.equal(readRevisions(env.db, ownId).at(-1).id, 'bob-own');
+    assert.deepEqual(
+      {
+        row: env.db.prepare('SELECT * FROM projects WHERE id = ?').get(env.exampleId),
+        history: env.db.prepare('SELECT * FROM history_entries WHERE project_id = ?').all(env.exampleId),
+      },
+      exampleBefore,
+      'the shared example is untouched'
+    );
+    // His picker lists his own 'example' once, not a second entry for the shared one.
+    assert.deepEqual((await call(env, env.bob, 'GET', '/api/projects')).json().projects.map((p) => p.id), ['bob-yard', EXAMPLE_SLUG]);
+    assert.equal((await call(env, env.bob, 'GET', '/api/projects')).json().projects[1].readOnly, undefined);
+    // Everyone else still reads the shared example there.
+    assert.equal((await call(env, env.alice, 'GET', `/api/history?project=${EXAMPLE_SLUG}`)).json().entries.length, 1);
+    assert.equal((await call(env, env.alice, 'POST', `/api/layout?project=${EXAMPLE_SLUG}`, { plants: [] })).statusCode, 403);
+  } finally {
+    env.cleanup();
+  }
+});
+
+// --- copy to my yards ------------------------------------------------------------
+
+test('POST /api/projects/copy-example: a private copy in the caller\'s namespace, with its photos and no location', async () => {
+  const env = setupWithExample();
+  try {
+    assert.equal((await call(env, null, 'POST', '/api/projects/copy-example', {})).statusCode, 401);
+    const exampleBefore = snapshot(env);
+
+    const res = await call(env, env.alice, 'POST', '/api/projects/copy-example', {});
+    assert.equal(res.statusCode, 200, res.body);
+    assert.equal(res.json().id, 'example-yard');
+    assert.deepEqual(res.json().index.projects.map((p) => p.id), ['alice-yard', 'example-yard', EXAMPLE_SLUG]);
+
+    const copy = findOwnedProject(env.db, env.alice.id, 'example-yard');
+    assert.equal(copy.visibility, 'private');
+    assert.equal(copy.name, COPY_NAME);
+    assert.equal(copy.locationJson, null);
+    assert.equal(JSON.parse(copy.configJson).id, 'example-yard');
+    const revisions = readRevisions(env.db, copy.id);
+    assert.equal(revisions.length, 1, 'one revision');
+    assert.equal(copy.historyCursor, 0);
+    assert.deepEqual(revisions[0].plants, readRevisions(env.db, env.exampleId)[0].plants);
+    assert.deepEqual(readdirSync(join(projectDataDir(env.dataDir, copy.id), 'img')), ['top.webp']);
+
+    // The copy is an ordinary yard of Alice's: she can write it, Bob cannot see it.
+    assert.equal((await call(env, env.alice, 'POST', '/api/layout?project=example-yard', { plants: [placement('p1', 9)] })).statusCode, 200);
+    assert.equal((await call(env, env.bob, 'GET', '/api/project?project=example-yard')).statusCode, 404);
+    assert.equal((await call(env, env.alice, 'GET', '/api/project-photo?project=example-yard&path=img/top.webp')).statusCode, 200);
+
+    // A second copy takes the next free slug; the example itself never moved.
+    assert.equal((await call(env, env.alice, 'POST', '/api/projects/copy-example', {})).json().id, 'example-yard-2');
+    const after = snapshot(env);
+    assert.deepEqual(
+      after.projects.filter((p) => p.id === env.exampleId),
+      exampleBefore.projects.filter((p) => p.id === env.exampleId)
+    );
+    assert.deepEqual(
+      after.history.filter((h) => h.project_id === env.exampleId),
+      exampleBefore.history.filter((h) => h.project_id === env.exampleId)
+    );
+  } finally {
+    env.cleanup();
+  }
+});
+
+test('POST /api/projects/copy-example is rate limited, and 404s when there is no example', async () => {
+  const env = setupWithExample();
+  try {
+    env.copyExampleLimiter = createRateLimiter({ capacity: 2, refillPerSecond: 0.001 });
+    assert.equal((await call(env, env.bob, 'POST', '/api/projects/copy-example', {})).statusCode, 200);
+    assert.equal((await call(env, env.bob, 'POST', '/api/projects/copy-example', {})).statusCode, 200);
+    const limited = await call(env, env.bob, 'POST', '/api/projects/copy-example', {});
+    assert.equal(limited.statusCode, 429);
+    assert.equal(projectIndexFor(env.db, env.bob.id).projects.length, 3, 'the refused copy made nothing');
+  } finally {
+    env.cleanup();
+  }
+  const bare = setup();
+  try {
+    assert.equal((await call(bare, bare.alice, 'POST', '/api/projects/copy-example', {})).statusCode, 404);
+    assert.equal((await call(bare, bare.alice, 'GET', `/api/project?project=${EXAMPLE_SLUG}`)).statusCode, 404);
+  } finally {
+    bare.cleanup();
   }
 });
