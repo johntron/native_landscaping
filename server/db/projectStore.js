@@ -293,8 +293,11 @@ export function insertProject(db, {
 /**
  * Set (or with null, clear) a yard's location: `{ lat, lng }` and/or
  * `{ address }`, plus any provenance, exactly what location.json held.
- * Not a revision: the location is not part of the design and never reaches
- * the browser (it is set with tools/project-location.mjs).
+ * Not a revision: the location is not part of the design, lives in its own
+ * column, and never enters history_entries. It is set by the operator with
+ * tools/project-location.mjs, or by the owner in Setup mode through POST
+ * /api/project-location (nl-3s5.30, see setProjectLocation). Only its owner
+ * ever sees it, and then only rounded.
  */
 export function saveProjectLocation(db, projectRowId, location) {
   withTransaction(db, () => {
@@ -304,6 +307,38 @@ export function saveProjectLocation(db, projectRowId, location) {
       Number(projectRowId)
     );
   });
+}
+
+/** The provenance a location saved from Setup mode carries. */
+export const SETUP_LOCATION_SOURCE = 'design tool Setup (geocoded via Nominatim)';
+
+/**
+ * Store an owner-confirmed geocode as the yard's location, in exactly the shape
+ * tools/project-location.mjs --lat/--lng writes: `{ lat, lng, source }`, full
+ * precision, nothing else. Not the typed query and not the geocoder's display
+ * name, which would put a street address at rest for no reader: the index
+ * builder and the queue fingerprint (tools/ecosystemIndexDb.js locationKey)
+ * read lat and lng only, so feed-poller picks a new or moved location up with
+ * no extra wiring (nl-3s5.6). Returns what it stored.
+ *
+ * @param {import('node:sqlite').DatabaseSync} db
+ * @param {number} projectRowId
+ * @param {{ lat: number, lng: number }} point
+ */
+export function setProjectLocation(db, projectRowId, { lat, lng }) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+    throw new Error('A location needs a latitude and longitude in range');
+  }
+  // Second lock behind the routes' 403: the shared example never has a
+  // location, whoever asks.
+  const owner = db
+    .prepare('SELECT u.email FROM projects p JOIN users u ON u.id = p.owner_id WHERE p.id = ?')
+    .get(Number(projectRowId));
+  if (!owner) throw new Error('No such yard');
+  if (owner.email === EXAMPLE_OWNER_EMAIL) throw new Error('The example yard never has a location');
+  const location = { lat, lng, source: SETUP_LOCATION_SOURCE };
+  saveProjectLocation(db, projectRowId, location);
+  return location;
 }
 
 /** The parsed location, or null when none was ever set. */

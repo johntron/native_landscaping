@@ -26,6 +26,12 @@ import {
 } from '../render/setupOverlay.js';
 import { featurePoints, patchView, round2, scaleFeatures, translateFeaturesInside } from '../state/yardEdits.js';
 import { formatFileSize } from '../ui/controls.js';
+import {
+  clearProjectLocation,
+  fetchProjectLocation,
+  previewProjectLocation,
+  saveProjectLocation,
+} from '../data/projectLocation.js';
 
 /**
  * @param {object} deps
@@ -105,6 +111,49 @@ export function createSetupMode({
         setupPanel.setStatus(err.message || 'Background upload failed', 'error');
       }
     },
+    // The yard's location (nl-3s5.30): saved on its own, immediately, not by
+    // "Save views" and not as a revision. See setupPanel's buildLocation.
+    onLocationPreview: async (text) => {
+      setupPanel.setLocation({ busy: true, preview: null, message: { text: 'Looking it up…', state: 'info' } });
+      const { ok, status, data } = await previewProjectLocation(project.id, text);
+      if (!ok) {
+        setupPanel.setLocation({ busy: false, message: { text: locationError(status, data), state: 'error' } });
+        return;
+      }
+      setupPanel.setLocation({
+        busy: false,
+        message: null,
+        preview: { query: text, displayName: data.match.displayName, lat: data.match.lat, lng: data.match.lng, region: data.region },
+      });
+    },
+    onLocationSave: async (text) => {
+      setupPanel.setLocation({ busy: true, message: { text: 'Saving the location…', state: 'info' } });
+      const { ok, status, data } = await saveProjectLocation(project.id, text);
+      if (!ok) {
+        setupPanel.setLocation({ busy: false, message: { text: locationError(status, data), state: 'error' } });
+        return;
+      }
+      setupPanel.setLocation({
+        busy: false,
+        current: data.location,
+        region: data.region,
+        preview: null,
+        text: '',
+        message: savedMessage(data),
+      });
+    },
+    onLocationClear: async () => {
+      if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+        if (!window.confirm("Clear this yard's location? What's nearby will have nothing to show until one is set again.")) return;
+      }
+      setupPanel.setLocation({ busy: true, message: { text: 'Clearing…', state: 'info' } });
+      const { ok, status, data } = await clearProjectLocation(project.id);
+      if (!ok) {
+        setupPanel.setLocation({ busy: false, message: { text: locationError(status, data), state: 'error' } });
+        return;
+      }
+      setupPanel.setLocation({ busy: false, current: null, region: null, preview: null, message: { text: 'Location cleared.', state: 'success' } });
+    },
     onSave: async () => {
       setupPanel.setStatus('Saving…', 'info');
       const saved = await saveSetup(project, (message, state) => setupPanel.setStatus(message, state));
@@ -118,6 +167,46 @@ export function createSetupMode({
   fetchPhotoUsage().then((usage) => {
     if (usage) setupPanel.setStorage(usage);
   });
+
+  // The location section starts at "Checking…" until this answers. The shared
+  // example answers null (Setup mode is not offered on it anyway).
+  fetchProjectLocation(project.id).then(({ ok, data }) => {
+    setupPanel.setLocation(
+      ok
+        ? { loaded: true, current: data.location || null, region: data.region || null }
+        : { loaded: true, message: { text: "Could not read this yard's location.", state: 'error' } }
+    );
+  });
+
+  /** What the server said, in words for the owner. */
+  function locationError(status, data) {
+    if (status === 429) {
+      const wait = Number(data?.retryAfterSeconds) || 1;
+      return `Too many lookups at once. Wait ${wait} second${wait === 1 ? '' : 's'} and try again.`;
+    }
+    return data?.error || 'That did not work. Try again.';
+  }
+
+  /**
+   * After a save: the nearby index is built by the background poller, one
+   * yard at a time, so say when to expect it instead of leaving What's
+   * nearby to look broken.
+   */
+  function savedMessage(data) {
+    const minutes = Number(data?.pollMinutes) || 30;
+    const state = data?.index?.state;
+    const link = { text: "Open What's nearby", href: `ecosystem.html?project=${encodeURIComponent(project.id)}` };
+    if (state === 'ready' || state === 'building') {
+      return { text: "Location saved. It is the same point as before, so What's nearby keeps what it has.", state: 'success', link };
+    }
+    return {
+      text:
+        `Location saved. What's nearby shows "Building the index…" until the background ` +
+        `poller builds it: usually within ${minutes} minutes, longer if other yards are waiting.`,
+      state: 'success',
+      link,
+    };
+  }
 
   /**
    * Validate a candidate project the same way a reload would, then swap it in.

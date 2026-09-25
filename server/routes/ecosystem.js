@@ -15,14 +15,17 @@ import { collectPayload, createRateLimiter, enforceRateLimit, loadReadableProjec
 // "client" is this server, not each visitor, so besides the per-caller bucket
 // every geocode also draws from one shared bucket (GEOCODE_SHARED_KEY): two
 // users together still stay under 1/s. Cache hits draw too (conservative).
-const GEOCODE_SHARED_KEY = 'upstream:nominatim';
-const geocodeLimiter = createRateLimiter({ capacity: 1, refillPerSecond: 1 });
+// Exported for POST /api/project-location/preview (server/routes/project.js,
+// nl-3s5.30), which geocodes through the same two buckets so the 1/s cap holds
+// across both routes.
+export const GEOCODE_SHARED_KEY = 'upstream:nominatim';
+export const geocodeLimiter = createRateLimiter({ capacity: 1, refillPerSecond: 1 });
 
 // /api/ecoregion calls the CEC ArcGIS FeatureServer (tools/ecoregionLookup.mjs),
 // which publishes no rate limit. Judgement call: sized to give the design
 // tool's location flow (one lookup per address entered, occasionally retried)
 // comfortable headroom while still bounding a runaway client.
-const ecoregionLimiter = createRateLimiter({ capacity: 10, refillPerSecond: 1 });
+export const ecoregionLimiter = createRateLimiter({ capacity: 10, refillPerSecond: 1 });
 
 // Sampled pruning (nl-3s5.7): every request that hits either limiter has a
 // small chance of also sweeping idle buckets, so memory doesn't grow one

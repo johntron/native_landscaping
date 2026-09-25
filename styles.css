@@ -2205,6 +2205,75 @@ select {
   font-weight: 600;
 }
 
+/* The yard's location (nl-3s5.30). An out-of-region verdict is a warning,
+   not an error, so it takes the warn tone (never amber: amber is data). */
+.setup-panel__location {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.setup-panel__location-current,
+.setup-panel__location-found {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+.setup-panel__location-found {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.setup-panel__location-row,
+.setup-panel__location-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.setup-panel__location-row .setup-panel__field {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.setup-panel__location-match {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--rule-cool);
+  border-radius: 7px;
+}
+
+.setup-panel__location-warning {
+  margin: 0;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.78rem;
+  color: var(--warn);
+  background-color: var(--warn-wash);
+  border-radius: 6px;
+}
+
+.setup-panel__location-message {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--ink-muted);
+}
+
+.setup-panel__location-message[data-state="error"] {
+  color: var(--danger-soft);
+}
+
+.setup-panel__location-message[data-state="success"] {
+  color: var(--green);
+}
+
+.setup-panel__location-clear {
+  align-self: flex-start;
+}
+
 /* Calibration against the background photo. The red matches the measuring
    segment drawn on the canvas, so the panel and the drawing read as one tool. */
 .setup-panel__ruler,

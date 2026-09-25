@@ -66,7 +66,7 @@ export function describeIndexWait(index, rows, project) {
   const name = project?.name ? `“${project.name}”` : 'This yard';
   switch (index?.state) {
     case 'no-location':
-      return `${name} has no location set, so there is nothing to be near yet. Once a location is set, its index of species reported nearby builds automatically.`;
+      return `${name} has no location set, so there is nothing to be near yet. Set one under Setup on Your yard (the Location section), and its index of species reported nearby builds automatically.`;
     case 'queued':
     case 'building':
       return `Building the index of species reported near ${name}… It is fetched from iNaturalist in the background and usually appears within half an hour. Reload to check.`;

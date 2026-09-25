@@ -98,7 +98,8 @@ tests/, tests-e2e/    Node unit tests (the gate) and Playwright specs
 ### Privacy and licensing (this repo is public)
 
 - Exact addresses and coordinates never reach git. A project's `place` is a short
-  label; the address behind it is in `app.db` (`projects.location_json`), set with
+  label; the address behind it is in `app.db` (`projects.location_json`), set by the
+  yard's owner in Setup mode (nl-3s5.30) or by the operator with
   `tools/project-location.mjs`. Yards themselves are private to their owner and live in
   `app.db` too, not in the repo (nl-3s5.3). The one exception is the shared read-only
   example yard (nl-3s5.24): a location-free copy of the owner's backyard, owned by the

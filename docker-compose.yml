@@ -109,6 +109,9 @@ services:
       # server.listen(PORT) with no host arg, so it binds all interfaces and
       # the sidecar can reach it over the compose network.
       PORT: "8080"
+      # The Setup panel tells a user when nearby species will appear (nl-3s5.30),
+      # so web reads the same poll interval feed-poller runs on.
+      FEED_POLL_INTERVAL_MINUTES: ${FEED_POLL_INTERVAL_MINUTES:-30}
       # Seeds the first admin in data/app.db (server/db/appDb.js). Interpolated
       # from the gitignored .env: this repo is public, so the address never
       # appears in a tracked file. Unset seeds nothing.
@@ -144,7 +147,7 @@ services:
     <<: *app
     command: ["node", "tools/schedule-feed-poll.mjs"]
     environment:
-      FEED_POLL_INTERVAL_MINUTES: "30"
+      FEED_POLL_INTERVAL_MINUTES: ${FEED_POLL_INTERVAL_MINUTES:-30}
 
   cloudflared:
     image: cloudflare/cloudflared:latest

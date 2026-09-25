@@ -28,6 +28,12 @@ import {
   requireUser,
 } from '../http.js';
 import { writeFileAtomic, removeSupersededBackgrounds, removeOrphanedBackgrounds } from '../files.js';
+import { geocodeAddress } from '../../tools/geocode.mjs';
+import { lookupEcoregion } from '../../tools/ecoregionLookup.mjs';
+import { getCached } from '../../tools/usda-plants/probeCache.js';
+import { indexStatus, locationKey } from '../../tools/ecosystemIndexDb.js';
+import { coveredRegionVerdict } from '../../src/analysis/coveredRegion.js';
+import { GEOCODE_SHARED_KEY, ecoregionLimiter, geocodeLimiter } from './ecosystem.js';
 import { copyExampleToOwner } from '../db/exampleYard.js';
 import {
   RESERVED_SLUGS,
@@ -38,6 +44,7 @@ import {
   findOwnedProject,
   insertProject,
   moveHistoryCursor,
+  parseLocation,
   projectDataDir,
   projectPickerFor,
   readRevisions,
@@ -45,6 +52,8 @@ import {
   referencedBackgroundNames,
   saveProjectConfig,
   saveProjectFeatures,
+  saveProjectLocation,
+  setProjectLocation,
   withTransaction,
 } from '../db/projectStore.js';
 import {
@@ -70,6 +79,24 @@ const PHOTO_TYPES = {
 export const copyExampleLimiter = createRateLimiter({ capacity: 5, refillPerSecond: 1 / 60 });
 
 /**
+ * The location each caller last looked up for each of their yards (nl-3s5.30),
+ * keyed `${userId}:${projectId}`: a save must repeat the caller's OWN pending
+ * preview. Checking the probe cache alone would not do: it is server-wide, so
+ * a save that succeeded for any cached text would tell one user whether
+ * anyone else had looked that address up. In memory only; a restart just
+ * means looking up again.
+ */
+export const pendingLocationPreviews = new Map();
+/** Judgement: long enough to read the match and decide, short enough not to linger. */
+export const LOCATION_PREVIEW_TTL_MS = 15 * 60 * 1000;
+
+function prunePendingPreviews(pending, now = Date.now()) {
+  for (const [key, entry] of pending) {
+    if (now - entry.at > LOCATION_PREVIEW_TTL_MS) pending.delete(key);
+  }
+}
+
+/**
  * Per-project persistence for the design tool, backed by app.db
  * (server/db/projectStore.js, nl-3s5.3): the caller's yard list, config,
  * layout, features, the one revision stream behind undo and redo, and the
@@ -92,7 +119,8 @@ export const copyExampleLimiter = createRateLimiter({ capacity: 5, refillPerSeco
  * the caller has no yard of that name, resolves to the shared example yard,
  * which every READ route serves to any signed-in user and every WRITE route
  * refuses with 403 (loadReadableProject / loadWritableProject). It has no
- * location to leak: the example's location_json is always NULL.
+ * location to leak: the example's location_json is always NULL, and the
+ * location routes answer it with null even if a row were edited by hand.
  *
  * Returns true when it handled the request (a response has been sent), false
  * to let server.js try the next route module.
@@ -365,6 +393,159 @@ export async function handleProjectRoutes(req, res, ctx) {
     return true;
   }
 
+  // --- the yard's location (nl-3s5.30) -------------------------------------
+  //
+  // The owner sets it in Setup mode in two steps, so a wrong geocode match is
+  // never saved silently: POST .../preview geocodes what they typed and shows
+  // the match, then POST /api/project-location with the same text saves it.
+  // Stored only in projects.location_json, in the CLI's shape
+  // (setProjectLocation), never in the config or a revision. What goes back
+  // to the browser is the owner's own, rounded (roundForOwner). Nothing here
+  // logs the typed text, the match or a coordinate: the request log prints
+  // the path alone, and the lines below print the slug and an outcome.
+
+  // Whether the yard has a location, rounded, and whether it is inside the
+  // region the data covers. The shared example answers null (it never has
+  // one), like /api/ecosystem does. Not rate-limited: it reads only the
+  // caller's own saved point, whose ecoregion the save already cached, so it
+  // reaches the CEC service at most once per saved point.
+  if (pathname === '/api/project-location' && req.method === 'GET') {
+    const project = readable();
+    if (!project) return true;
+    const isExample = project.id === findExampleProject(db)?.id;
+    const site = isExample ? null : parseLocation(project);
+    if (!site) {
+      json(res, 200, { location: null, region: null });
+      return true;
+    }
+    if (!Number.isFinite(site.lat) || !Number.isFinite(site.lng)) {
+      // An address-only location the operator set with the CLI: resolved to
+      // coordinates when the index is built, so there is nothing to round yet.
+      json(res, 200, { location: { set: true, lat: null, lng: null }, region: null });
+      return true;
+    }
+    json(res, 200, { location: { set: true, ...roundForOwner(site) }, region: await regionFor(ctx, site) });
+    return true;
+  }
+
+  // Step one: geocode the typed text and show the match. Writes nothing.
+  // Draws from the same two Nominatim buckets as /api/geocode (per caller,
+  // and one shared by the whole server), after the owner check so a 401, 403
+  // or 404 never spends the shared token.
+  const pendingPreviews = ctx.pendingLocationPreviews || pendingLocationPreviews;
+  if (pathname.startsWith('/api/project-location') && Math.random() < 0.01) prunePendingPreviews(pendingPreviews);
+
+  if (pathname === '/api/project-location/preview' && req.method === 'POST') {
+    const project = writable();
+    if (!project) {
+      req.resume();
+      return true;
+    }
+    const limiter = ctx.geocodeLimiter || geocodeLimiter;
+    if (!enforceRateLimit(limiter, rateLimitKeyFor(ctx, req), res) || !enforceRateLimit(limiter, GEOCODE_SHARED_KEY, res)) {
+      req.resume();
+      return true;
+    }
+    let query;
+    try {
+      query = locationQuery(await collectPayload(req, { requirePlants: false }));
+    } catch (err) {
+      json(res, 400, { error: err.message });
+      return true;
+    }
+    let match;
+    try {
+      match = await geocodeAddress(query, { probeCache: ctx.db.probeCache });
+    } catch (err) {
+      geocodeFailed(res, project, err);
+      return true;
+    }
+    pendingPreviews.set(`${ctx.user.id}:${project.id}`, { query, at: Date.now() });
+    console.log(`Location previewed for '${project.slug}'`);
+    json(res, 200, {
+      match: { displayName: match.displayName, ...roundForOwner(match) },
+      region: await regionFor(ctx, match),
+    });
+    return true;
+  }
+
+  // Step two: save what the owner confirmed, or clear it with { clear: true }.
+  // The body carries the same text again, never coordinates, and it must be
+  // one the preview already geocoded: the save is a probe-cache read, so it
+  // never reaches Nominatim and needs no Nominatim token, and a client cannot
+  // skip the confirmation step. "Already geocoded" means by this caller, for
+  // this yard (pendingLocationPreviews), not merely cached by anyone. Per-caller throttled on the ecoregion bucket,
+  // since a save may make one CEC lookup (normally a cache hit too).
+  if (pathname === '/api/project-location' && req.method === 'POST') {
+    const project = writable();
+    if (!project) {
+      req.resume();
+      return true;
+    }
+    if (!enforceRateLimit(ctx.ecoregionLimiter || ecoregionLimiter, rateLimitKeyFor(ctx, req), res)) {
+      req.resume();
+      return true;
+    }
+    let body;
+    try {
+      body = await collectPayload(req, { requirePlants: false });
+    } catch (err) {
+      json(res, 400, { error: err.message });
+      return true;
+    }
+    const pendingKey = `${ctx.user.id}:${project.id}`;
+    if (body.clear === true) {
+      pendingPreviews.delete(pendingKey);
+      saveProjectLocation(db, project.id, null);
+      console.log(`Location cleared for '${project.slug}'`);
+      json(res, 200, { location: null, region: null, index: { state: 'no-location' }, pollMinutes: pollMinutes() });
+      return true;
+    }
+    let query;
+    try {
+      query = locationQuery(body);
+    } catch (err) {
+      json(res, 400, { error: err.message });
+      return true;
+    }
+    // The caller's own pending preview of this exact text, and (so the save
+    // is certain to be a cache read) its cached answer. One 409 for every
+    // miss, so the answer says nothing about anyone else's lookups.
+    const pending = pendingPreviews.get(pendingKey);
+    const fresh = pending && pending.query === query && Date.now() - pending.at <= LOCATION_PREVIEW_TTL_MS;
+    if (!fresh || !ctx.db.probeCache || !getCached(ctx.db.probeCache, 'nominatim', 'search', query)) {
+      json(res, 409, { error: 'Look the address up first, check the match, then save it.' });
+      return true;
+    }
+    let match;
+    try {
+      match = await geocodeAddress(query, { probeCache: ctx.db.probeCache });
+    } catch (err) {
+      geocodeFailed(res, project, err);
+      return true;
+    }
+    let location;
+    try {
+      location = setProjectLocation(db, project.id, match);
+    } catch (err) {
+      console.warn(`Location not saved for '${project.slug}'`);
+      json(res, 400, { error: err.message });
+      return true;
+    }
+    pendingPreviews.delete(pendingKey);
+    console.log(`Location saved for '${project.slug}'`);
+    // Whatever the queue will make of it: 'queued' for a new or moved point,
+    // the existing state when the same point was saved again.
+    const { state } = indexStatus(ctx.db.ecosystem, project.id, locationKey(location));
+    json(res, 200, {
+      location: { set: true, ...roundForOwner(location) },
+      region: await regionFor(ctx, location),
+      index: { state },
+      pollMinutes: pollMinutes(),
+    });
+    return true;
+  }
+
   // A yard's photo, to its owner only (or, for the shared example alone, to
   // any signed-in user). Photos live under DATA_DIR, outside the served root,
   // so this is the only way to reach one.
@@ -479,6 +660,63 @@ export async function handleProjectRoutes(req, res, ctx) {
   }
 
   return false;
+}
+
+/** Judgement: an address, a place or a ZIP fits easily; longer is not an address. */
+const MAX_LOCATION_QUERY_CHARS = 200;
+
+/** The typed text, trimmed exactly as tools/geocode.mjs trims its cache key. */
+function locationQuery(body) {
+  const query = typeof body?.query === 'string' ? body.query.trim() : '';
+  if (!query) throw new Error('Type an address, a town, or a ZIP code');
+  if (query.length > MAX_LOCATION_QUERY_CHARS) throw new Error('That is too long to be an address');
+  return query;
+}
+
+/**
+ * What the owner's own UI gets back: coordinates rounded to 3 decimals, about
+ * 110 m north-south. Enough to tell the right neighbourhood from a wrong town,
+ * or a map pin, and no finer than that: the full-precision point stays in
+ * app.db, where the index builder reads it.
+ */
+function roundForOwner({ lat, lng }) {
+  const round3 = (n) => Math.round(n * 1000) / 1000;
+  return { lat: round3(lat), lng: round3(lng) };
+}
+
+/**
+ * The covered-region verdict (src/analysis/coveredRegion.js). A failed or
+ * empty ecoregion lookup is passed on as null, which the verdict reports as
+ * unchecked, never as outside and never as a refusal.
+ */
+async function regionFor(ctx, { lat, lng }) {
+  let ecoregion = null;
+  try {
+    if (ctx.db.probeCache) ecoregion = await lookupEcoregion(lat, lng, { probeCache: ctx.db.probeCache });
+  } catch {
+    ecoregion = null; // the message can quote the coordinates; not logged
+  }
+  return coveredRegionVerdict({ lat, lng }, ecoregion);
+}
+
+/**
+ * A geocode that failed, answered without quoting the typed text back into a
+ * log: tools/geocode.mjs's "found nothing for ..." message does. The owner's
+ * own response may say what happened, in words that do not repeat it either.
+ */
+function geocodeFailed(res, project, err) {
+  const nothing = /found nothing/i.test(String(err?.message));
+  console.warn(`Location lookup for '${project.slug}' ${nothing ? 'found no match' : 'failed'}`);
+  if (nothing) {
+    json(res, 422, { error: 'No match for that. Try adding the town and state, or a ZIP code.' });
+  } else {
+    json(res, 502, { error: 'The address lookup is not answering right now. Try again in a minute.' });
+  }
+}
+
+/** feed-poller's cadence (tools/schedule-feed-poll.mjs), for "within the next poll". */
+function pollMinutes() {
+  return Number(process.env.FEED_POLL_INTERVAL_MINUTES) || 30;
 }
 
 /**

@@ -40,6 +40,9 @@ export function createSetupPanel({
   onResolveConflicts,
   getPlants,
   getFeatures,
+  onLocationPreview,
+  onLocationSave,
+  onLocationClear,
 }) {
   if (!root) {
     return {
@@ -48,6 +51,8 @@ export function createSetupPanel({
       getShow: () => ({ plants: false, features: false }),
       setStatus: () => {},
       setStorage: () => {},
+      setLocation: () => {},
+      getLocation: () => ({}),
     };
   }
 
@@ -65,6 +70,19 @@ export function createSetupPanel({
     // setStorage: { usedBytes, capBytes } | null. Null is "not known yet or
     // not available" and renders nothing rather than a wrong number.
     storage: null,
+    // The yard's location (nl-3s5.30). Saved on its own, straight to the
+    // server, not through "Save views": it is not part of the design and
+    // never enters a revision. Kept here, not in the DOM, because every
+    // setStatus rebuilds the panel: the typed text and a pending match must
+    // survive that. setLocation(patch) merges into it from setupMode.
+    //   loaded   whether the first read has answered
+    //   current  { set, lat, lng } rounded by the server, or null
+    //   region   the covered-region verdict for `current`, or null
+    //   text     what is in the address box
+    //   preview  { query, displayName, lat, lng, region } awaiting confirmation
+    //   busy     a request is in flight
+    //   message  { text, state } under the section
+    location: { loaded: false, current: null, region: null, text: '', preview: null, busy: false, message: null },
   };
 
   function render(project) {
@@ -357,9 +375,134 @@ export function createSetupPanel({
           'yard wants a proportionally larger margin.'
       )
     );
+    wrap.appendChild(buildLocation());
     wrap.appendChild(buildEcology());
     wrap.appendChild(buildShowToggles());
     return wrap;
+  }
+
+  /**
+   * Where the yard is (nl-3s5.30), so What's nearby can show what is seen
+   * around it. Two steps, so a wrong geocode match is never saved silently:
+   * "Look up" shows the match the server found, and only "Save this location"
+   * stores it. What is shown is the matched place's name (only while
+   * confirming; it is not stored) and the coordinates rounded to 3 decimals,
+   * about a city block: enough to see the match is the right neighbourhood
+   * and not a same-named street in another town, and no more than that.
+   */
+  function buildLocation() {
+    const loc = state.location;
+    const lookUp = () => {
+      const text = loc.text.trim();
+      if (!text || loc.busy) return;
+      onLocationPreview?.(text);
+    };
+    const wrap = el('div', 'setup-panel__location');
+    wrap.appendChild(el('h3', 'setup-panel__heading', 'Location'));
+    wrap.appendChild(
+      el(
+        'p',
+        'setup-panel__hint',
+        "Where the yard is, so What's nearby can show the plants and animals seen around it. " +
+          'Private to you: it is never shown to anyone else, never saved with the design, and ' +
+          'shown here only rounded.'
+      )
+    );
+
+    const current = el('p', 'setup-panel__location-current');
+    if (!loc.loaded) {
+      current.textContent = 'Checking…';
+    } else if (!loc.current) {
+      current.textContent = 'No location set yet.';
+    } else if (Number.isFinite(loc.current.lat) && Number.isFinite(loc.current.lng)) {
+      current.textContent = `Set: ${formatPoint(loc.current)} (rounded).`;
+    } else {
+      current.textContent = 'Set, as an address (coordinates are worked out when the nearby index is built).';
+    }
+    current.dataset.locationSet = loc.current ? 'true' : 'false';
+    wrap.appendChild(current);
+    if (loc.current && loc.region && !loc.preview) wrap.appendChild(regionNote(loc.region));
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = loc.text;
+    input.placeholder = 'Street address, town, or ZIP';
+    input.autocomplete = 'street-address';
+    input.maxLength = 200;
+    input.className = 'setup-panel__location-input';
+    input.addEventListener('input', (event) => {
+      loc.text = event.target.value;
+    });
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        lookUp();
+      }
+    });
+    const row = el('div', 'setup-panel__location-row');
+    row.appendChild(field(loc.current ? 'Move it to' : 'Address', input));
+    const lookUpButton = button('Look up', 'button pill-button setup-panel__location-lookup', () => lookUp());
+    lookUpButton.disabled = loc.busy;
+    row.appendChild(lookUpButton);
+    wrap.appendChild(row);
+
+    if (loc.preview) {
+      const confirm = el('div', 'setup-panel__location-match');
+      confirm.appendChild(el('p', 'setup-panel__location-found', `Found: ${loc.preview.displayName}`));
+      confirm.appendChild(
+        el('p', 'setup-panel__hint', `${formatPoint(loc.preview)} (rounded). Is this the yard?`)
+      );
+      if (loc.preview.region) confirm.appendChild(regionNote(loc.preview.region));
+      const actions = el('div', 'setup-panel__location-actions');
+      const save = button('Save this location', 'button pill-button setup-panel__location-save', () =>
+        onLocationSave?.(loc.preview.query)
+      );
+      save.disabled = loc.busy;
+      actions.appendChild(save);
+      actions.appendChild(
+        button('Not it', 'button pill-button setup-panel__location-discard', () => {
+          loc.preview = null;
+          loc.message = null;
+          rerender();
+        })
+      );
+      confirm.appendChild(actions);
+      wrap.appendChild(confirm);
+    }
+
+    if (loc.current && !loc.preview) {
+      const clear = button('Clear location', 'button pill-button setup-panel__location-clear', () => onLocationClear?.());
+      clear.disabled = loc.busy;
+      wrap.appendChild(clear);
+    }
+
+    if (loc.message) {
+      const message = el('p', 'setup-panel__location-message', loc.message.text);
+      message.dataset.state = loc.message.state;
+      if (loc.message.link) {
+        message.appendChild(document.createTextNode(' '));
+        const link = el('a', '', loc.message.link.text);
+        link.href = loc.message.link.href;
+        message.appendChild(link);
+      }
+      wrap.appendChild(message);
+    }
+    return wrap;
+  }
+
+  /**
+   * The covered-region verdict as the server worded it. "outside" is a
+   * warning, set apart so it is not read past; the others are plain hints.
+   */
+  function regionNote(region) {
+    const outside = region.status === 'outside';
+    const note = el(
+      'p',
+      outside ? 'setup-panel__location-warning' : 'setup-panel__hint',
+      outside ? `Outside the covered region. ${region.message}` : region.message
+    );
+    note.dataset.region = region.status;
+    return note;
   }
 
   /**
@@ -644,6 +787,12 @@ export function createSetupPanel({
       state.storage = usage || null;
       rerender();
     },
+    /** Merge into the location section's state (see state.location) and redraw. */
+    setLocation: (patch) => {
+      Object.assign(state.location, patch);
+      rerender();
+    },
+    getLocation: () => ({ ...state.location }),
   };
 }
 
@@ -831,6 +980,11 @@ function selectField(labelText, value, options, onChange) {
   });
   select.addEventListener('change', (event) => onChange(event.target.value));
   return field(labelText, select);
+}
+
+/** A rounded point as the server sent it: 3 decimals, signed, no hemisphere letters. */
+function formatPoint({ lat, lng }) {
+  return `${Number(lat).toFixed(3)}, ${Number(lng).toFixed(3)}`;
 }
 
 /** Feet are authored to a hundredth; a full float in a form field is noise. */

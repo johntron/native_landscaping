@@ -25,7 +25,7 @@ not in the repo:
 | the config (the yard in feet, `views[]`, optional `ecoregion`, `site`, `place`) | `projects.config_json` (the copy at the cursor), stored as saved, normalized on read | `GET`/`POST /api/project` |
 | the revision history behind undo/redo (planting, setup and features) | `history_entries` (one row per revision: `kind`, placements, `config_json`, `features_json`) and `projects.history_cursor` | `GET /api/history`, `POST /api/layout`, `POST /api/history/cursor` |
 | yard features | `projects.features_json` (the copy at the cursor; NULL means none drawn) | `GET`/`POST /api/features` |
-| the exact location behind `place` | `projects.location_json` | never, except `{ lat, lng }` to the owner in `/api/ecosystem` |
+| the exact location behind `place` | `projects.location_json` (`{ lat, lng, source }`; never in a revision) | never, except to the owner: `{ lat, lng }` in `/api/ecosystem`, rounded to 3 decimals in `/api/project-location` |
 | photos | files under `DATA_DIR/projects/<projects.id>/img/`, outside the served root | `GET /api/project-photo?project=<slug>&path=img/<file>` |
 
 ```
@@ -103,7 +103,20 @@ which gives it one plan view and no history. Slugs must match
 `^[a-z0-9][a-z0-9_-]*$`; the photo path a view names is held to
 `img/<name>.(webp|png|jpg|jpeg|svg)` (`src/data/projectPaths.js`).
 
-**A yard's location** is set with `node tools/project-location.mjs --project <slug>
+**A yard's location** is set by its owner in Setup mode's *Location* section
+(nl-3s5.30), in two steps so a wrong geocode match is never saved silently:
+*Look up* (`POST /api/project-location/preview`, `{ query }`) geocodes through
+`tools/geocode.mjs` and the probe cache, drawing from `/api/geocode`'s per-caller
+and shared Nominatim buckets, and shows the matched name and the point rounded
+to 3 decimals; *Save this location* (`POST /api/project-location`, the same
+`{ query }`) saves that match, and only a query the preview already cached, so
+the save never calls Nominatim. `{ clear: true }` clears it. It is stored as
+`{ lat, lng, source }`, the CLI's `--lat/--lng` shape, so feed-poller's index
+queue picks up a new or moved point by its fingerprint. The example yard answers
+403 and never gets a location. Out-of-region points get a warning, not a refusal
+(`src/analysis/coveredRegion.js`: the EPA Level I ecoregion must be one we have
+data for, and the point within our own judgement radius of Dallas).
+The operator can also set it with `node tools/project-location.mjs --project <slug>
 --lat <n> --lng <n>` (or `--address "..."`); run it with no value to see whether
 one is set, without printing it. The fetch scripts read it, and `place`, through
 `tools/projectSite.mjs`. `--owner <email>` (else `OWNER_EMAIL`, else the sole

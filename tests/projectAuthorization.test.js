@@ -38,6 +38,20 @@ import { handleProjectRoutes } from '../server/routes/project.js';
 import { handleEcosystemRoutes } from '../server/routes/ecosystem.js';
 import { locationKey, markBuildFinished, markBuildStarted, openEcosystemDb, replaceTaxonRows } from '../tools/ecosystemIndexDb.js';
 import { serveStaticFile } from '../server/static.js';
+import { openProbeCache, setCached } from '../tools/usda-plants/probeCache.js';
+
+// No test in this file may reach the network. The location routes (nl-3s5.30)
+// geocode through the probe cache seeded below; anything that misses it (the
+// CEC ecoregion lookup) fails here and is reported as "unchecked".
+globalThis.fetch = async (url) => {
+  throw new Error(`network disabled in tests: ${String(url).split('?')[0]}`);
+};
+
+/** The one address the location routes can resolve here: seeded into every env's probe cache. */
+const LOCATION_QUERY = '1 Test St, Dallas, TX';
+const NOMINATIM_MATCH = [
+  { lat: '32.7812345', lon: '-96.8012345', display_name: '1 Test St, Dallas, Texas, USA', address: { city: 'Dallas', state: 'Texas', country: 'United States' } },
+];
 
 const PHOTO = 'img/top.webp';
 const CONFIG = {
@@ -78,7 +92,14 @@ function setup() {
   env.aliceYardId = addYard(env, env.alice, 'alice-yard');
   env.bobYardId = addYard(env, env.bob, 'bob-yard');
   env.ecosystem = openEcosystemDb(join(dataDir, 'ecosystem.db'));
+  env.probeCache = openProbeCache(join(dataDir, 'probe-cache.db'));
+  setCached(env.probeCache, 'nominatim', 'search', LOCATION_QUERY, NOMINATIM_MATCH);
+  // A save must repeat the caller's own pending preview (nl-3s5.30): Bob has
+  // just looked LOCATION_QUERY up for his yard, so the table's save succeeds
+  // for him, and Alice's 404 is still authorization alone.
+  env.pendingLocationPreviews = new Map([[`${env.bob.id}:${env.bobYardId}`, { query: LOCATION_QUERY, at: Date.now() }]]);
   env.cleanup = () => {
+    env.probeCache.close();
     env.ecosystem.close();
     db.close();
     rmSync(dataDir, { recursive: true, force: true });
@@ -145,12 +166,15 @@ async function call(env, user, method, pathAndQuery, body, headers) {
     url,
     pathname: url.pathname,
     dataDir: env.dataDir,
-    db: { app: env.db, ecosystem: env.ecosystem },
+    db: { app: env.db, ecosystem: env.ecosystem, probeCache: env.probeCache },
     user,
     // A fresh limiter per call unless the test brings its own: user ids repeat
     // across these throwaway databases, so the module's shared one would
     // carry one test's copies into the next.
     copyExampleLimiter: env.copyExampleLimiter || createRateLimiter(),
+    geocodeLimiter: env.geocodeLimiter || createRateLimiter(),
+    ecoregionLimiter: env.ecoregionLimiter || createRateLimiter(),
+    pendingLocationPreviews: env.pendingLocationPreviews,
   };
   const res = makeRes();
   for (const handle of [handleProjectRoutes, handleEcosystemRoutes]) {
@@ -208,6 +232,10 @@ const ROUTES = [
   { method: 'GET', path: '/api/project-photo', query: `&path=${encodeURIComponent(PHOTO)}` },
   { method: 'POST', path: '/api/view-background', query: '&view=plan', body: () => WEBP, headers: { 'content-type': 'image/webp' } },
   { method: 'GET', path: '/api/ecosystem' },
+  // The yard's location (nl-3s5.30): read, look up (writes nothing), save.
+  { method: 'GET', path: '/api/project-location' },
+  { method: 'POST', path: '/api/project-location/preview', body: () => ({ query: LOCATION_QUERY }) },
+  { method: 'POST', path: '/api/project-location', body: () => ({ query: LOCATION_QUERY }) },
 ];
 
 for (const route of ROUTES) {
@@ -677,7 +705,7 @@ test("the example never returns a location, and the owner's real backyard stays 
     assert.equal(shown.location, null);
 
     // Nothing the example serves carries the source's address or coordinates.
-    for (const path of ['/api/project', '/api/history', '/api/features', '/api/layout', '/api/ecosystem']) {
+    for (const path of ['/api/project', '/api/history', '/api/features', '/api/layout', '/api/ecosystem', '/api/project-location']) {
       const body = String((await call(env, env.alice, 'GET', `${path}?project=${EXAMPLE_SLUG}`)).body);
       assert.equal(/somewhere|32\.5|-96\.5/.test(body), false, `${path} leaks the source location`);
     }

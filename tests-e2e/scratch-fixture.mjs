@@ -65,6 +65,7 @@ export const SCRATCH_PROJECTS = [
   'second-yard',
   'setup-undo',
   'plant-lifecycle',
+  'location-set',
 ];
 
 /**
