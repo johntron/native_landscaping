@@ -6,14 +6,12 @@
  * the local ecosystem" page — this pass only indexes; it draws no
  * plant-animal conclusions.
  *
- * Deliberately separate from tools/fetch-nearby-fauna.mjs, which already
- * feeds the committed ecology/nearby-fauna.csv that src/analysis/ reads
- * offline — that pipeline is tested and in active use, so this script does
- * not touch it. This one covers a superset of taxa (adds Plantae), uses
- * real per-taxon radius ranges instead of one shared band list, and writes
- * to a gitignored SQLite index (like data/probe-cache.db) rather than a
- * committed CSV, since it's meant to be rebuilt by re-running this script,
- * not hand-curated.
+ * Deliberately separate from tools/fetch-nearby-fauna.mjs, which builds the
+ * yard's 'fauna' layer that the local-fauna-support rule reads (five shared
+ * distance bands, the ones faunaMatches.js's thresholds were written
+ * against). This one covers a superset of taxa (adds Plantae) and uses real
+ * per-taxon radius ranges instead of one shared band list. Both write to the
+ * gitignored data/ecosystem.db, keyed by yard.
  *
  * The exact coordinates never reach the index or git: they live in
  * a yard's location in app.db (tools/projectSite.mjs), never in git (this repo is public).

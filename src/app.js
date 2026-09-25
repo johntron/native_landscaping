@@ -25,6 +25,7 @@ import {
   emptyNearbyFaunaIndex,
 } from './analysis/faunaMatches.js';
 import { loadEcologyTables } from './data/ecologyTables.js';
+import { loadYardSite } from './data/yardSite.js';
 import { configureViews } from './render/viewConfig.js';
 import { createPlantDragController, createElevationDragController } from './interaction/dragController.js';
 import { clampHiddenLayerCount } from './state/layers.js';
@@ -734,6 +735,8 @@ async function init() {
     });
   }
 
+  // Started first so it runs alongside the CSVs; never rejects.
+  const yardSite = loadYardSite(project.id);
   try {
     const [speciesCsv, drawingCsv, synonymCsv, ecology] = await Promise.all([
       fetchCsv(new URL('plants.csv', document.baseURI)),
@@ -749,7 +752,10 @@ async function init() {
     ]);
     appState.hostGenera = ecology.hostGenera;
     appState.interactions = ecology.interactions;
-    appState.nearbyFauna = ecology.nearbyFauna;
+    // The yard's own nearby fauna (nl-3s5.31), owner-scoped on the server.
+    // Tolerant like the tables above: a failure leaves an empty index, and
+    // the local-fauna-support check reports not-declared.
+    appState.nearbyFauna = (await yardSite).nearbyFauna;
     loadedSpeciesCsv = speciesCsv;
     loadedDrawingCsv = drawingCsv;
     appState.species = parseSpeciesCsv(speciesCsv, drawingCsv);

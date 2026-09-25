@@ -122,25 +122,22 @@ function animalKey(name) {
 }
 
 /**
- * Adapts `data/ecosystem.db`'s fauna rows — finer per-taxon radius bands than
- * `ecology/nearby-fauna.csv`'s five fixed bands — into the shape
- * `faunaMatches.js`'s `matchesForGenus` expects, so this module can reuse
- * that join rather than re-deriving it. Deliberately does NOT touch
- * `rules/localFaunaSupport.js` or `ecology/nearby-fauna.csv` — that pipeline
- * stays as-is; this is an additive, independent read of the same kind of
- * data from a different (more granular) source.
+ * Adapts the species index's animal rows (`data/ecosystem.db`, finer per-taxon
+ * radius bands than the fauna layer's five shared bands) into the shape
+ * `faunaMatches.js`'s `matchesForGenus` expects, so this module can reuse that
+ * join rather than re-deriving it. Independent of the yard's fauna layer,
+ * which `rules/localFaunaSupport.js` reads.
  * @param {Array<object>} observationRows
- * @param {string} place
+ * @returns {{ size: number, animals: Map<string, object> }}
  */
-export function buildEcosystemFaunaIndex(observationRows, place) {
-  const byAnimal = new Map();
+export function buildEcosystemFaunaIndex(observationRows) {
+  const animals = new Map();
   (observationRows || []).forEach((row) => {
     if (row.iconic_taxon === 'Plantae') return;
     const key = animalKey(row.taxon_name);
-    const existing = byAnimal.get(key);
+    const existing = animals.get(key);
     if (existing && existing.nearestRadiusMi <= row.radius_mi) return;
-    byAnimal.set(key, {
-      place,
+    animals.set(key, {
       animalSpecies: row.taxon_name,
       animalCommon: row.common_name || '',
       iconicTaxon: row.iconic_taxon,
@@ -148,11 +145,7 @@ export function buildEcosystemFaunaIndex(observationRows, place) {
       observationCount: row.observation_count,
     });
   });
-  return {
-    size: byAnimal.size,
-    byPlace: new Map([[place, byAnimal]]),
-    forPlace: (p) => (p === place ? byAnimal : new Map()),
-  };
+  return { size: animals.size, animals };
 }
 
 /**
@@ -164,7 +157,7 @@ export function buildEcosystemFaunaIndex(observationRows, place) {
  * evidence of either kind still appears, at the bottom of its side, ranked
  * by keystone count alone — this is a prioritization, not a filter.
  *
- * @param {{observationRows: Array<object>, hostGenera: ReturnType<import('./hostGenera.js').buildHostGeneraIndex>, catalogGenusKeys: Set<string>, interactions: ReturnType<import('./faunaMatches.js').buildInteractionsIndex>, place: string}} args
+ * @param {{observationRows: Array<object>, hostGenera: ReturnType<import('./hostGenera.js').buildHostGeneraIndex>, catalogGenusKeys: Set<string>, interactions: ReturnType<import('./faunaMatches.js').buildInteractionsIndex>}} args
  * @returns {{candidates: Array<object>, alreadyInCatalog: Array<object>}} each entry: { genus, hostGeneraRow, associatedFauna, nearbySpecies }
  */
 export function matchNearbyKeystoneGenera({
@@ -172,10 +165,9 @@ export function matchNearbyKeystoneGenera({
   hostGenera,
   catalogGenusKeys: catalogKeys,
   interactions,
-  place,
 }) {
   const plantaeByGenus = groupPlantaeByGenus(observationRows);
-  const faunaIndex = buildEcosystemFaunaIndex(observationRows, place);
+  const faunaIndex = buildEcosystemFaunaIndex(observationRows);
 
   const genusNames = [...new Set([...(hostGenera?.byGenus?.values() || [])].map((row) => row.genus))];
 
@@ -190,7 +182,7 @@ export function matchNearbyKeystoneGenera({
       .slice()
       .sort((a, b) => a.radiusMi - b.radiusMi);
     const associatedFauna = interactions
-      ? matchesForGenus(genus, { interactions, nearbyFauna: faunaIndex, place }).filter(
+      ? matchesForGenus(genus, { interactions, nearbyFauna: faunaIndex }).filter(
           (match) => match.inRange !== false
         )
       : [];

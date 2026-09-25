@@ -203,13 +203,14 @@ function normalizeSite(raw, projectId) {
 }
 
 /**
- * A short label identifying which locality's nearby-fauna records
- * (`ecology/nearby-fauna.csv`) apply to this project — e.g. "home". The exact
- * address or coordinates behind that label are never committed to this
- * (public) repo; they live in app.db (`projects.location_json`, nl-3s5.3), read
- * by the offline `tools/` fetch scripts (tools/projectSite.mjs) and, as bare
- * lat/lng for the owner, by /api/ecosystem. Two projects on the same property (backyard, walkway) share one
- * `place` and therefore one fetch.
+ * A short label for the yard's locality — e.g. "home". Nothing site-specific is
+ * keyed by it any more (nl-3s5.31: a yard's anchors and nearby fauna are keyed
+ * by the yard itself, in data/ecosystem.db); the feed's rarity lane still
+ * resolves a saved area's place among its owner's own yards. The exact address
+ * or coordinates are never committed to this (public) repo; they live in app.db
+ * (`projects.location_json`, nl-3s5.3), read by the offline `tools/` fetch
+ * scripts (tools/projectSite.mjs) and, as bare lat/lng for the owner, by
+ * /api/ecosystem.
  */
 function normalizePlace(raw) {
   const value = String(raw ?? '').trim();

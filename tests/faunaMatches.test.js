@@ -16,15 +16,15 @@ Asclepias,Bombus fervidus,Golden Northern Bumble Bee,pollinator,flowersVisitedBy
 Asclepias,Rara avis,Some rare bird,feeds-on,eatenBy,,globi
 `;
 
-const NEARBY_CSV = `place,animal_species,animal_common,iconic_taxon,nearest_radius_mi,observation_count,fetched_on,source
-home,Danaus plexippus,Monarch,Insecta,1,42,2026-01-01,inat
-home,Bombus fervidus,Golden Northern Bumble Bee,Insecta,25,3,2026-01-01,inat
+const NEARBY_CSV = `animal_species,animal_common,iconic_taxon,nearest_radius_mi,observation_count,fetched_on,source
+Danaus plexippus,Monarch,Insecta,1,42,2026-01-01,inat
+Bombus fervidus,Golden Northern Bumble Bee,Insecta,25,3,2026-01-01,inat
 `;
 
 test('matchesForGenus joins interactions to nearby records by species, dropping unseen animals', () => {
   const interactions = buildInteractionsIndex(INTERACTIONS_CSV);
   const nearbyFauna = buildNearbyFaunaIndex(NEARBY_CSV);
-  const matches = matchesForGenus('Asclepias', { interactions, nearbyFauna, place: 'home' });
+  const matches = matchesForGenus('Asclepias', { interactions, nearbyFauna });
 
   const species = matches.map((m) => m.animalSpecies);
   assert.ok(species.includes('Danaus plexippus'), 'monarch is both interacting and nearby');
@@ -35,7 +35,7 @@ test('matchesForGenus joins interactions to nearby records by species, dropping 
 test('inRange compares the observed distance band against the taxon range threshold, never scoring a likelihood', () => {
   const interactions = buildInteractionsIndex(INTERACTIONS_CSV);
   const nearbyFauna = buildNearbyFaunaIndex(NEARBY_CSV);
-  const matches = matchesForGenus('Asclepias', { interactions, nearbyFauna, place: 'home' });
+  const matches = matchesForGenus('Asclepias', { interactions, nearbyFauna });
 
   const monarch = matches.find((m) => m.animalSpecies === 'Danaus plexippus');
   assert.equal(monarch.inRange, true, `1mi is within Insecta's ${RANGE_THRESHOLD_MI.Insecta}mi range`);
@@ -47,13 +47,21 @@ test('inRange compares the observed distance band against the taxon range thresh
 test('a genus with no interaction rows returns no matches rather than throwing', () => {
   const interactions = buildInteractionsIndex(INTERACTIONS_CSV);
   const nearbyFauna = buildNearbyFaunaIndex(NEARBY_CSV);
-  assert.deepEqual(matchesForGenus('Quercus', { interactions, nearbyFauna, place: 'home' }), []);
+  assert.deepEqual(matchesForGenus('Quercus', { interactions, nearbyFauna }), []);
 });
 
-test('an unknown place returns no matches', () => {
+// nl-3s5.31: the index is one yard's rows, as /api/ecosystem/site sends them,
+// with no place label to select by.
+test('the index takes one yard’s API rows, and a row with no distance band is left out', () => {
   const interactions = buildInteractionsIndex(INTERACTIONS_CSV);
-  const nearbyFauna = buildNearbyFaunaIndex(NEARBY_CSV);
-  assert.deepEqual(matchesForGenus('Asclepias', { interactions, nearbyFauna, place: 'elsewhere' }), []);
+  const nearbyFauna = buildNearbyFaunaIndex([
+    { animal_species: 'Danaus plexippus', animal_common: 'Monarch', iconic_taxon: 'Insecta', nearest_radius_mi: 1, observation_count: 42, establishment_means: 'native', fetched_on: '2026-01-01', source: 'inat' },
+    { animal_species: 'Bombus fervidus', animal_common: '', iconic_taxon: 'Insecta', nearest_radius_mi: '', observation_count: 3, fetched_on: '2026-01-01', source: 'inat' },
+  ]);
+  assert.equal(nearbyFauna.size, 1, 'a blank band is unknown, never read as 0 mi');
+  const matches = matchesForGenus('Asclepias', { interactions, nearbyFauna });
+  assert.deepEqual(matches.map((m) => m.animalSpecies), ['Danaus plexippus']);
+  assert.equal(matches[0].establishmentMeans, 'native');
 });
 
 test('a trinomial subspecies on one side still joins on genus+species', () => {
@@ -63,7 +71,7 @@ Asclepias,Danaus plexippus plexippus,,pollinator,flowersVisitedBy,,globi
 `
   );
   const nearbyFauna = buildNearbyFaunaIndex(NEARBY_CSV);
-  const matches = matchesForGenus('Asclepias', { interactions, nearbyFauna, place: 'home' });
+  const matches = matchesForGenus('Asclepias', { interactions, nearbyFauna });
   assert.equal(matches.length, 1);
   assert.equal(matches[0].animalSpecies, 'Danaus plexippus');
 });
@@ -75,14 +83,13 @@ test('empty indexes report zero size and never throw', () => {
     matchesForGenus('Asclepias', {
       interactions: emptyInteractionsIndex(),
       nearbyFauna: emptyNearbyFaunaIndex(),
-      place: 'home',
     }),
     []
   );
 });
 
 // --- establishment_means (nl-a8v follow-on) -------------------------------
-// nearby-fauna.csv now carries iNaturalist's per-place establishment_means, so
+// the nearby-fauna rows carry iNaturalist's per-place establishment_means, so
 // a page arguing "this native plant feeds local wildlife" can stop citing
 // European Starlings as evidence.
 const ESTABLISHMENT_INTERACTIONS = [
@@ -93,17 +100,16 @@ const ESTABLISHMENT_INTERACTIONS = [
 ].join('\n');
 
 const ESTABLISHMENT_FAUNA = [
-  'place,animal_species,animal_common,iconic_taxon,nearest_radius_mi,observation_count,establishment_means,fetched_on,source',
-  'home,Erynnis horatius,Horace\'s Duskywing,Insecta,3,4,native,2026-09-13,inat',
-  'home,Sturnus vulgaris,European Starling,Aves,1,900,introduced,2026-09-13,inat',
-  'home,Bombus pensylvanicus,American Bumble Bee,Insecta,3,20,,2026-09-13,inat',
+  'animal_species,animal_common,iconic_taxon,nearest_radius_mi,observation_count,establishment_means,fetched_on,source',
+  'Erynnis horatius,Horace\'s Duskywing,Insecta,3,4,native,2026-09-13,inat',
+  'Sturnus vulgaris,European Starling,Aves,1,900,introduced,2026-09-13,inat',
+  'Bombus pensylvanicus,American Bumble Bee,Insecta,3,20,,2026-09-13,inat',
 ].join('\n');
 
 function establishmentCtx(extra = {}) {
   return {
     interactions: buildInteractionsIndex(ESTABLISHMENT_INTERACTIONS),
     nearbyFauna: buildNearbyFaunaIndex(ESTABLISHMENT_FAUNA),
-    place: 'home',
     ...extra,
   };
 }
@@ -153,8 +159,8 @@ const BOTH_VERBS = (first, second) =>
   ].join('\n');
 
 const WEBWORM_NEARBY = [
-  'place,animal_species,animal_common,iconic_taxon,nearest_radius_mi,observation_count,establishment_means,fetched_on,source',
-  'home,Hyphantria cunea,Fall Webworm Moth,Insecta,1,12,native,2026-09-13,inat',
+  'animal_species,animal_common,iconic_taxon,nearest_radius_mi,observation_count,establishment_means,fetched_on,source',
+  'Hyphantria cunea,Fall Webworm Moth,Insecta,1,12,native,2026-09-13,inat',
 ].join('\n');
 
 for (const [first, second] of [
@@ -165,7 +171,6 @@ for (const [first, second] of [
     const matches = matchesForGenus('Cercis', {
       interactions: buildInteractionsIndex(BOTH_VERBS(first, second)),
       nearbyFauna: buildNearbyFaunaIndex(WEBWORM_NEARBY),
-      place: 'home',
     });
     assert.equal(matches.length, 1, 'still one row per animal per category');
     assert.equal(matches[0].evidence, 'develops-on');
@@ -177,7 +182,6 @@ test('evidenceKinds narrows to the requested labels', () => {
   const ctx = {
     interactions: buildInteractionsIndex(ESTABLISHMENT_INTERACTIONS),
     nearbyFauna: buildNearbyFaunaIndex(ESTABLISHMENT_FAUNA),
-    place: 'home',
   };
   const all = matchesForGenus('Quercus', ctx);
   assert.ok(all.every((m) => m.evidence), 'every match carries a label');

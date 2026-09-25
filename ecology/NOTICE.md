@@ -1,6 +1,11 @@
 # Data notices for ecology/
 
-## `anchors.csv`
+## Habitat anchors (formerly `anchors.csv`)
+
+A yard's streams and green space are no longer committed here: since nl-3s5.31
+they are per yard, in the gitignored `data/ecosystem.db`, fetched by
+`tools/fetch-nhd-creeks.mjs` and `tools/fetch-osm-greenspace.mjs`. The notices
+still apply wherever those rows are shown.
 
 Rows whose `source` is **OpenStreetMap via Overpass** (parks, cemeteries, and
 other green space) are derived from OpenStreetMap data,
@@ -17,6 +22,13 @@ U.S. public domain; credit: U.S. Geological Survey.
 
 Both notices were checked against the sources' own pages on 2026-09-23
 (nl-3hi.7.6, item 3).
+
+## `region-fauna.csv`
+
+Species names and research-grade record counts for a region (a county), from
+iNaturalist's public API (`species_counts`), fetched by
+`tools/fetch-region-fauna.mjs`. Counts of records, not the records themselves:
+no observation, photo or location is copied.
 
 ## Other tables
 

@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { buildHostGeneraIndex } from '../src/analysis/hostGenera.js';
-import { buildNearbyFaunaIndex } from '../src/analysis/faunaMatches.js';
 import {
   buildFnctScreenIndex,
   buildNameChangeIndex,
@@ -13,6 +12,7 @@ import {
   screenKeystoneGenera,
   verdictFor,
   CANOPY_HEIGHT_FT,
+  regionFaunaIndex,
 } from '../src/analysis/keystoneScreen.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -23,8 +23,8 @@ const rows = screenKeystoneGenera({
   fnctScreen: buildFnctScreenIndex(read('ecology/fnct-genus-screen.csv')),
   lepHosts: buildLepHostIndex(read('ecology/fnct-lepidoptera-hosts.csv')),
   growth: buildGrowthIndex(read('catalog/blackland-prairie-natives.csv')),
-  nearbyFauna: buildNearbyFaunaIndex(read('ecology/nearby-fauna.csv')),
-  place: 'home',
+  // A county's records (nl-3s5.31), never one yard's.
+  localFauna: regionFaunaIndex(read('ecology/region-fauna.csv')),
   nameChanges: buildNameChangeIndex(read('ecology/fnct-name-changes.csv')),
 });
 const byGenus = (g) => rows.find((r) => r.genus === g);
@@ -130,10 +130,29 @@ test('name changes that point at an untreated genus do not rescue the row', () =
     fnctScreen: screen,
     lepHosts: new Map(),
     growth: new Map(),
-    nearbyFauna: { forPlace: () => new Map() },
-    place: 'home',
+    localFauna: { animals: new Map() },
     nameChanges: buildNameChangeIndex('current_genus,fnct_genus,note,source\nFake,Missing,n,s\n'),
   });
   assert.equal(rows[0].verdict, 'rejected', 'pointing at a genus with no treatment changes nothing');
   assert.equal(rows[0].fnctUnderName, '');
+});
+
+// nl-3s5.31: the public page's "recorded in" claim is about a county, and says so.
+test('the region index is one region’s, and every confirmed host names where it was recorded', () => {
+  const csv = [
+    'region,inat_place_id,taxon_group,animal_species,animal_common,taxon_id,observation_count,fetched_on,source',
+    'Test County,1,Lepidoptera,Asterocampa celtis,Hackberry Emperor,1,40,2026-09-24,inat',
+    'Test County,1,Lepidoptera,Asterocampa celtis antonia,,2,3,2026-09-24,inat',
+    'Other County,2,Lepidoptera,Libytheana carinenta,American Snout,3,9,2026-09-20,inat',
+  ].join('\n');
+  const index = regionFaunaIndex(csv);
+  assert.equal(index.where, 'Test County', 'the first region in the file by default');
+  assert.equal(index.size, 1, 'the subspecies joins its species; the other county is not this one');
+  assert.equal(index.animals.get('asterocampa celtis').observationCount, 40, 'the better-recorded row wins');
+  assert.equal(index.fetchedOn, '2026-09-24');
+  assert.equal(regionFaunaIndex(csv, 'Other County').size, 1);
+  assert.equal(regionFaunaIndex('').size, 0);
+
+  const celtis = byGenus('Celtis');
+  assert.ok(celtis.confirmedNearby.every((c) => c.where === 'Dallas County, TX' && c.nearestRadiusMi === null));
 });

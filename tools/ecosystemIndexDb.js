@@ -18,6 +18,10 @@
 //                                 building, ready or failed, and for which
 //                                 location (a fingerprint, never the location)
 //
+// And, since nl-3s5.31, the yard's habitat anchors and nearby fauna, which
+// were committed place-keyed CSVs before (project_anchors,
+// project_nearby_fauna, project_layer_builds; see openEcosystemDb).
+//
 // The pre-nl-3s5.6 table, species_observations keyed by `place`, is retired
 // (nl-3s5.32): it is no longer created, read, or written, and openEcosystemDb
 // drops it on open if a database still has it (the per-project index has been
@@ -79,6 +83,67 @@ export function openEcosystemDb(path = defaultEcosystemPath()) {
       fetched_on TEXT,
       row_count INTEGER,
       error TEXT
+    )
+  `);
+  // A yard's habitat anchors and nearby fauna (nl-3s5.31). Until then they
+  // were committed CSVs keyed by the free-text place label
+  // (ecology/anchors.csv, ecology/nearby-fauna.csv), which put one owner's
+  // site in a public repo. Now they are per yard, like the species index,
+  // and only reach a browser through the owner-scoped /api/ecosystem/site.
+  //
+  // Neither table holds a coordinate: an anchor is a public feature's name
+  // and the straight-line distance to it, rounded to a quarter mile at fetch
+  // time; a fauna row is a species and the smallest distance band it was
+  // found in.
+  //
+  //   project_anchors       streams (USGS NHD, layer 'streams') and green
+  //                         space (OpenStreetMap, layer 'greenspace')
+  //   project_nearby_fauna  animals on iNaturalist near the yard (layer 'fauna')
+  //   project_layer_builds  one row per (yard, layer): the same building |
+  //                         ready | failed record, and location fingerprint,
+  //                         as project_index_builds, so a moved yard's rows
+  //                         stop applying at once and the queue refetches
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS project_anchors (
+      project_id INTEGER NOT NULL,
+      layer TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      name TEXT NOT NULL,
+      status TEXT NOT NULL,
+      distance_mi REAL NOT NULL,
+      detail TEXT,
+      fetched_on TEXT NOT NULL,
+      source TEXT NOT NULL,
+      PRIMARY KEY (project_id, kind, name)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS project_nearby_fauna (
+      project_id INTEGER NOT NULL,
+      iconic_taxon TEXT NOT NULL,
+      animal_species TEXT NOT NULL,
+      animal_common TEXT,
+      nearest_radius_mi REAL NOT NULL,
+      observation_count INTEGER NOT NULL,
+      establishment_means TEXT,
+      fetched_on TEXT NOT NULL,
+      source TEXT NOT NULL,
+      PRIMARY KEY (project_id, iconic_taxon, animal_species)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS project_layer_builds (
+      project_id INTEGER NOT NULL,
+      layer TEXT NOT NULL CHECK (layer IN ('fauna', 'streams', 'greenspace')),
+      location_key TEXT NOT NULL,
+      state TEXT NOT NULL CHECK (state IN ('building', 'ready', 'failed')),
+      attempts INTEGER NOT NULL DEFAULT 0,
+      started_at TEXT,
+      finished_at TEXT,
+      fetched_on TEXT,
+      row_count INTEGER,
+      error TEXT,
+      PRIMARY KEY (project_id, layer)
     )
   `);
   // The pre-nl-3s5.6 place-keyed table (nl-3s5.32): dropped on open rather
@@ -250,6 +315,207 @@ export function markBuildFinished(db, projectId, { state, error = null, fetchedO
 export function indexStatus(db, projectId, currentKey) {
   if (!currentKey) return { state: 'no-location', rowsApply: false, fetchedOn: null };
   const build = readIndexBuild(db, projectId);
+  if (!build || build.locationKey !== currentKey) return { state: 'queued', rowsApply: false, fetchedOn: null };
+  return { state: build.state, rowsApply: true, fetchedOn: build.fetchedOn };
+}
+
+// ---------------------------------------------------------------------------
+// Site layers: habitat anchors and nearby fauna (nl-3s5.31)
+// ---------------------------------------------------------------------------
+
+/**
+ * The per-yard site layers besides the species index, and the upstream each
+ * one is fetched from (the queue's politeness budget is per upstream).
+ */
+export const SITE_LAYERS = Object.freeze({
+  fauna: { upstream: 'inaturalist' },
+  streams: { upstream: 'nhd' },
+  greenspace: { upstream: 'overpass' },
+});
+
+function requireLayer(layer) {
+  if (!Object.prototype.hasOwnProperty.call(SITE_LAYERS, layer)) {
+    throw new Error(`A site layer is one of ${Object.keys(SITE_LAYERS).join(', ')}, not ${layer}`);
+  }
+  return layer;
+}
+
+/** Which layer an anchor kind belongs to: NHD streams, or OpenStreetMap green space. */
+export function anchorLayerOf(kind) {
+  return kind === 'stream' ? 'streams' : 'greenspace';
+}
+
+function layerRowCount(db, projectId, layer) {
+  const sql =
+    layer === 'fauna'
+      ? 'SELECT COUNT(*) AS n FROM project_nearby_fauna WHERE project_id = ?'
+      : 'SELECT COUNT(*) AS n FROM project_anchors WHERE project_id = ? AND layer = ?';
+  const params = layer === 'fauna' ? [projectId] : [projectId, layer];
+  return db.prepare(sql).get(...params).n;
+}
+
+function deleteLayerRows(db, projectId, layer) {
+  if (layer === 'fauna') {
+    db.prepare('DELETE FROM project_nearby_fauna WHERE project_id = ?').run(projectId);
+  } else {
+    db.prepare('DELETE FROM project_anchors WHERE project_id = ? AND layer = ?').run(projectId, layer);
+  }
+}
+
+/**
+ * Replace every row of one layer for one yard, in one transaction.
+ *
+ * Anchor rows: { kind, name, status, distance_mi, detail, fetched_on, source }.
+ * Fauna rows: { iconic_taxon, animal_species, animal_common, nearest_radius_mi,
+ * observation_count, establishment_means, fetched_on, source }.
+ * A row with no `source` is refused: every stored fact says where it came from.
+ */
+export function replaceLayerRows(db, projectId, layer, rows) {
+  const id = requireProjectId(projectId);
+  requireLayer(layer);
+  for (const row of rows) {
+    if (!String(row.source || '').trim()) throw new Error(`A ${layer} row has no source: ${JSON.stringify(row)}`);
+    if (layer !== 'fauna' && anchorLayerOf(row.kind) !== layer) {
+      throw new Error(`An anchor of kind ${row.kind} belongs to layer ${anchorLayerOf(row.kind)}, not ${layer}`);
+    }
+  }
+  db.exec('BEGIN');
+  try {
+    deleteLayerRows(db, id, layer);
+    if (layer === 'fauna') {
+      const insert = db.prepare(`
+        INSERT INTO project_nearby_fauna
+          (project_id, iconic_taxon, animal_species, animal_common, nearest_radius_mi, observation_count, establishment_means, fetched_on, source)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const row of rows) {
+        insert.run(
+          id,
+          row.iconic_taxon,
+          row.animal_species,
+          row.animal_common || '',
+          Number(row.nearest_radius_mi),
+          Number(row.observation_count) || 0,
+          row.establishment_means || null,
+          row.fetched_on,
+          row.source
+        );
+      }
+    } else {
+      const insert = db.prepare(`
+        INSERT INTO project_anchors (project_id, layer, kind, name, status, distance_mi, detail, fetched_on, source)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const row of rows) {
+        insert.run(
+          id,
+          layer,
+          row.kind,
+          row.name,
+          row.status,
+          Number(row.distance_mi),
+          row.detail || '',
+          row.fetched_on,
+          row.source
+        );
+      }
+    }
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
+
+/** One yard's anchors (both layers), nearest first. */
+export function listProjectAnchors(db, projectId) {
+  return db
+    .prepare('SELECT * FROM project_anchors WHERE project_id = ? ORDER BY distance_mi, name')
+    .all(requireProjectId(projectId));
+}
+
+/** One yard's nearby fauna, by taxon then species. */
+export function listProjectFauna(db, projectId) {
+  return db
+    .prepare('SELECT * FROM project_nearby_fauna WHERE project_id = ? ORDER BY iconic_taxon, animal_species')
+    .all(requireProjectId(projectId));
+}
+
+/** @returns {(IndexBuild & { layer: string }) | null} */
+export function readLayerBuild(db, projectId, layer) {
+  const row = db
+    .prepare('SELECT * FROM project_layer_builds WHERE project_id = ? AND layer = ?')
+    .get(requireProjectId(projectId), requireLayer(layer));
+  if (!row) return null;
+  return {
+    projectId: row.project_id,
+    layer: row.layer,
+    locationKey: row.location_key,
+    state: row.state,
+    attempts: row.attempts,
+    startedAt: row.started_at,
+    finishedAt: row.finished_at,
+    fetchedOn: row.fetched_on,
+    rowCount: row.row_count,
+    error: row.error,
+  };
+}
+
+/** markBuildStarted, for one site layer: a build for a new location first drops the old site's rows. */
+export function markLayerStarted(db, projectId, layer, key, now = new Date().toISOString()) {
+  const id = requireProjectId(projectId);
+  requireLayer(layer);
+  const previous = readLayerBuild(db, id, layer);
+  const moved = !previous || previous.locationKey !== key;
+  db.exec('BEGIN');
+  try {
+    if (moved) deleteLayerRows(db, id, layer);
+    db.prepare(
+      `INSERT INTO project_layer_builds (project_id, layer, location_key, state, attempts, started_at, finished_at, fetched_on, row_count, error)
+       VALUES (?, ?, ?, 'building', 1, ?, NULL, NULL, NULL, NULL)
+       ON CONFLICT(project_id, layer) DO UPDATE SET
+         location_key = excluded.location_key,
+         state = 'building',
+         attempts = ${moved ? '1' : 'project_layer_builds.attempts + 1'},
+         started_at = excluded.started_at,
+         error = NULL`
+    ).run(id, layer, key, now);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
+
+/** markBuildFinished, for one site layer. */
+export function markLayerFinished(db, projectId, layer, { state, error = null, fetchedOn = null, now = new Date().toISOString() }) {
+  if (state !== 'ready' && state !== 'failed') throw new Error(`A build finishes 'ready' or 'failed', not ${state}`);
+  const id = requireProjectId(projectId);
+  requireLayer(layer);
+  db.prepare(
+    `UPDATE project_layer_builds
+       SET state = ?, finished_at = ?, error = ?, row_count = ?, fetched_on = COALESCE(?, fetched_on)
+     WHERE project_id = ? AND layer = ?`
+  ).run(state, now, error ? String(error).slice(0, 500) : null, layerRowCount(db, id, layer), fetchedOn, id, layer);
+}
+
+/**
+ * Record a layer as built for `key` with rows that arrived some other way
+ * than a fetch (tools/import-site-layers.mjs moving the committed CSV rows
+ * in): replaces the rows and marks the layer 'ready' in one step, so the
+ * queue does not refetch what was just imported.
+ */
+export function importLayer(db, projectId, layer, key, rows, { fetchedOn, now = new Date().toISOString() } = {}) {
+  if (!key) throw new Error(`Yard #${projectId} has no location to record layer ${layer} against`);
+  markLayerStarted(db, projectId, layer, key, now);
+  replaceLayerRows(db, projectId, layer, rows);
+  markLayerFinished(db, projectId, layer, { state: 'ready', fetchedOn, now });
+}
+
+/** indexStatus, for one site layer of a yard whose current location has this fingerprint. */
+export function layerStatus(db, projectId, layer, currentKey) {
+  if (!currentKey) return { state: 'no-location', rowsApply: false, fetchedOn: null };
+  const build = readLayerBuild(db, projectId, layer);
   if (!build || build.locationKey !== currentKey) return { state: 'queued', rowsApply: false, fetchedOn: null };
   return { state: build.state, rowsApply: true, fetchedOn: build.fetchedOn };
 }

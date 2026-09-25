@@ -23,16 +23,14 @@ export default {
   title: 'Local fauna support',
 
   evaluate(ctx) {
-    if (!ctx.place) {
-      return {
-        status: STATUSES.NOT_DECLARED,
-        summary: 'This project declares no `place`, so nearby wildlife records cannot be looked up.',
-      };
-    }
+    // The yard's own nearby-fauna rows (nl-3s5.31), not a place label's: none
+    // means no location is set yet, the list is still being fetched, or it did
+    // not load. The page says which; this rule only says it could not run.
     if (!ctx.nearbyFauna.size) {
       return {
         status: STATUSES.NOT_DECLARED,
-        summary: 'The nearby-fauna table did not load, so this check could not run.',
+        summary:
+          'No animals are recorded near this yard yet (it has no location set, its nearby-wildlife list is still being fetched, or the list did not load), so this check could not run.',
       };
     }
     if (!ctx.interactions.size) {
@@ -51,7 +49,6 @@ export default {
         matches: matchesForGenus(genus, {
           interactions: ctx.interactions,
           nearbyFauna: ctx.nearbyFauna,
-          place: ctx.place,
         }).filter((match) => match.inRange !== false),
       }))
       .filter(({ matches }) => matches.length);
@@ -96,7 +93,7 @@ export default {
           : STATUSES.GAP;
     const summary = !distinctAnimals.size
       ? 'Nothing planted here matches an animal species already confirmed nearby.'
-      : `${distinctAnimals.size} animal species already reported near "${ctx.place}" have a documented use for something planted here.`;
+      : `${distinctAnimals.size} animal species already reported near this yard have a documented use for something planted here.`;
 
     return {
       status,

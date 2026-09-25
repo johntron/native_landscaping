@@ -54,3 +54,19 @@ test('catalog/manual-corrections.tsv: every correction names a reason, an author
     });
   });
 });
+
+// nl-3s5.31: a yard's site (its streams and green space with distances, and
+// the animals reported near it) once sat in committed tables keyed by a
+// `place` label, which put the owner's surroundings in this public repo. Those
+// rows now live per yard in the gitignored data/ecosystem.db. No committed
+// table may be keyed by a yard's place again; region-level tables (a county)
+// are keyed by `region` instead.
+test('no committed table is keyed by a yard’s place label', () => {
+  for (const { dir, name } of sourcedTables) {
+    const header = readFileSync(`${dir}${name}`, 'utf8').split('\n')[0].split(',').map((c) => c.trim());
+    assert.ok(!header.includes('place'), `${labelFor(dir)}/${name} has a place column`);
+  }
+  for (const retired of ['anchors.csv', 'nearby-fauna.csv']) {
+    assert.ok(!ecologyTables.some((t) => t.name === retired), `ecology/${retired} is back`);
+  }
+});

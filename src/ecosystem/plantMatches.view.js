@@ -143,7 +143,6 @@ export async function computePlantMatches(project, observationRows) {
     hostGenera: ecology.hostGenera,
     catalogGenusKeys: catalogGenusKeys(speciesRows),
     interactions: ecology.interactions,
-    place: String(project.place || '').trim(),
   });
 
   const withFauna = candidates.filter((c) => c.associatedFauna.length).length;

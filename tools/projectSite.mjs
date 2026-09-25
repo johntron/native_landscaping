@@ -57,10 +57,10 @@ export function findYard(db, slug, { ownerEmail = process.env.OWNER_EMAIL } = {}
  * The yard's id, place label and location the fetch scripts need, or a thrown
  * message saying which is missing and how to set it.
  *
- * The nearby-species index is keyed by the yard's id (nl-3s5.6), so
- * tools/fetch-ecosystem-index.mjs passes `requirePlace: false`; the scripts
- * that still write place-keyed committed tables (nearby fauna, anchors) keep
- * requiring one.
+ * Everything these scripts write is keyed by the yard's id (the species
+ * index since nl-3s5.6, anchors and nearby fauna since nl-3s5.31), so they
+ * all pass `requirePlace: false`; the option stays for any caller that needs
+ * the label.
  *
  * @param {string} slug
  * @param {{ ownerEmail?: string, dataDir?: string, requirePlace?: boolean }} [options]

@@ -81,10 +81,12 @@ on port `8123` (override with `E2E_PORT`) and drives the real `design.html` in C
     either, so `nearbyIndexState.spec.js` asserts the page's "no location set" state. This is a deliberate
     trade-off, not an oversight: none of the specs in `tests-e2e/` assert on
     iNaturalist-derived content (nearby species/fauna matches, the feed, or
-    `claims-coverage.html`/`claims-conflicts.html`). `habitatNearby.spec.js` (which does
-    touch `ecosystem.html`, its "Habitat nearby" section) and `ecology.spec.js` (the
-    ecology check panel on `design.html`) both read from the *committed*
-    `ecology/anchors.csv` and `ecology/host-genera.csv`, not from `data/ecosystem.db`. If
+    `claims-coverage.html`/`claims-conflicts.html`). `ecology.spec.js` (the ecology
+    check panel on `design.html`) reads the *committed* `ecology/host-genera.csv`.
+    `habitatNearby.spec.js` (the "Habitat nearby" section of `ecosystem.html`) seeds its
+    own scratch yard, `habitat-nearby`, with a made-up location and made-up anchors
+    straight into the scratch server's `app.db` and `ecosystem.db` (nl-3s5.31: a yard's
+    anchors are per yard now, never committed). If
     a future spec needs real cached observation data, seed it explicitly (copy or
     symlink a fixture `.db` into `SCRATCH_DATA_DIR` in `scratch-fixture.mjs`) rather than
     pointing `DATA_DIR` back at the repo's `data/`, which the running deploy also writes

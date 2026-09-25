@@ -5,7 +5,8 @@ import { classifySource, bestTier, tierInfo } from './provenance.js';
 /**
  * Assemble the screened keystone table: for one plant genus, what the
  * continental keystone list claims, what the regional flora actually says, and
- * which of the flora's animals are confirmed near this site.
+ * which of the flora's animals are recorded in the region (a county on the
+ * public page; see regionFaunaIndex).
  *
  * The argument this table exists to make is a DISAGREEMENT between sources.
  * NWF's Native Plant Finder is keyed to EPA Level I ecoregion 9, which runs
@@ -20,7 +21,7 @@ import { classifySource, bestTier, tierInfo } from './provenance.js';
  *   host-genera.csv             NWF counts               agency
  *   fnct-genus-screen.csv       does the flora treat it  primary
  *   fnct-lepidoptera-hosts.csv  named larval hosts       primary
- *   nearby-fauna.csv            what is actually here    aggregator
+ *   region-fauna.csv            what is recorded here    aggregator
  *   the plant catalog           growth habit and height  agency (USDA)
  */
 
@@ -196,8 +197,47 @@ export function buildGrowthIndex(csvText) {
 }
 
 /**
+ * The Lepidoptera recorded in one region (ecology/region-fauna.csv, fetched by
+ * tools/fetch-region-fauna.mjs), keyed like every animal join here.
+ *
+ * Until nl-3s5.31 the screen read the owner's own site's nearby fauna
+ * (ecology/nearby-fauna.csv, place "home"): one person's surroundings on a
+ * public page. A county record is public and about no one's yard. It is
+ * also a different claim, "recorded in the county", not "within N miles",
+ * and every entry carries `where` so the page says which.
+ *
+ * @param {string} csvText
+ * @param {string} [region] which region's rows; default the first in the file
+ * @returns {{ size: number, animals: Map<string, { observationCount: number, where: string, fetchedOn: string }>, where: string, fetchedOn: string }}
+ */
+export function regionFaunaIndex(csvText, region) {
+  const rows = parseCsv(csvText || '');
+  const wanted = region || String(rows[0]?.region || '').trim();
+  const animals = new Map();
+  let fetchedOn = '';
+  rows.forEach((row) => {
+    if (String(row.region || '').trim() !== wanted || !row.animal_species) return;
+    const key = animalKey(row.animal_species);
+    const entry = {
+      observationCount: Number(row.observation_count) || 0,
+      where: wanted,
+      fetchedOn: String(row.fetched_on || '').trim(),
+    };
+    const existing = animals.get(key);
+    // A subspecies row and its species share a key; keep the better-recorded.
+    if (!existing || entry.observationCount > existing.observationCount) animals.set(key, entry);
+    if (entry.fetchedOn > fetchedOn) fetchedOn = entry.fetchedOn;
+  });
+  return { size: animals.size, animals, where: wanted, fetchedOn };
+}
+
+/**
  * One row per genus in `hostGenera`, plus any genus the flora's own host table
  * names that NWF never listed — Celtis is the reason that clause exists.
+ *
+ * `localFauna` is any `{ animals: Map }` keyed by animalKey: the region index
+ * above on the public page. An entry's `where` or `nearestRadiusMi` is carried
+ * onto each confirmed host, so the page can say which claim it is making.
  *
  * @returns {Array<object>} sorted: flora-backed and locally confirmed first
  */
@@ -206,11 +246,10 @@ export function screenKeystoneGenera({
   fnctScreen,
   lepHosts,
   growth,
-  nearbyFauna,
-  place,
+  localFauna,
   nameChanges = new Map(),
 }) {
-  const nearby = nearbyFauna?.forPlace ? nearbyFauna.forPlace(place) : new Map();
+  const nearby = localFauna?.animals instanceof Map ? localFauna.animals : new Map();
   const genera = new Set();
   hostGenera?.byGenus?.forEach((row, key) => genera.add(key));
   lepHosts.forEach((_rows, key) => genera.add(key));
@@ -234,7 +273,7 @@ export function screenKeystoneGenera({
     const size = growth.get(key) || null;
     const resolved = size ? resolveGrowthTier(size.habit, size.maxHeightFt) : null;
 
-    // Which of the flora's named lepidopterans are recorded near this site.
+    // Which of the flora's named lepidopterans are recorded locally.
     const seen = new Set();
     const confirmed = [];
     hosts.forEach((host) => {
@@ -244,12 +283,18 @@ export function screenKeystoneGenera({
       seen.add(host.species);
       confirmed.push({
         ...host,
-        nearestRadiusMi: local.nearestRadiusMi,
-        establishmentMeans: local.establishmentMeans,
+        nearestRadiusMi: Number.isFinite(local.nearestRadiusMi) ? local.nearestRadiusMi : null,
+        where: local.where || '',
+        establishmentMeans: local.establishmentMeans || '',
         observationCount: local.observationCount,
       });
     });
-    confirmed.sort((a, b) => a.nearestRadiusMi - b.nearestRadiusMi);
+    // Nearest first where there is a distance; otherwise best-recorded first.
+    confirmed.sort(
+      (a, b) =>
+        (a.nearestRadiusMi ?? Infinity) - (b.nearestRadiusMi ?? Infinity) ||
+        (b.observationCount || 0) - (a.observationCount || 0)
+    );
 
     const tiers = [];
     if (flora?.treated) tiers.push('primary-flora');
@@ -333,12 +378,12 @@ export function verdictFor({ flora, hosts, confirmed, nwf }) {
 
 export const VERDICTS = Object.freeze({
   'confirmed-local': {
-    label: 'Confirmed here',
-    note: 'The flora treats it, names larval hosts for it, and at least one of those animals is recorded near this site.',
+    label: 'Recorded in county',
+    note: 'The flora treats it, names larval hosts for it, and at least one of those butterflies or moths has a research-grade iNaturalist record in the county.',
   },
   'flora-hosts': {
     label: 'Flora-cited hosts',
-    note: 'The flora treats it and names larval hosts, but none of those animals has turned up near this site in the local records.',
+    note: 'The flora treats it and names larval hosts, but none of those butterflies or moths has a research-grade iNaturalist record in the county.',
   },
   'in-flora': {
     label: 'In the flora',

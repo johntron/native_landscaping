@@ -456,29 +456,30 @@ Asclepias,Bombus fervidus,Golden Northern Bumble Bee,pollinator,flowersVisitedBy
 `
 );
 const NEARBY_FAUNA_FIXTURE = buildNearbyFaunaIndex(
-  `place,animal_species,animal_common,iconic_taxon,nearest_radius_mi,observation_count,fetched_on,source
-home,Danaus plexippus,Monarch,Insecta,1,42,2026-01-01,inat
+  `animal_species,animal_common,iconic_taxon,nearest_radius_mi,observation_count,fetched_on,source
+Danaus plexippus,Monarch,Insecta,1,42,2026-01-01,inat
 `
 );
 
-test('local fauna support reports not-declared when the project has no place', () => {
+// nl-3s5.31: the fauna is the yard's own (/api/ecosystem/site), so a yard
+// with no place label but with nearby rows is graded, not refused.
+test('local fauna support needs the yard’s own rows, not a place label', () => {
   const result = runWithGenera(place('Asclepias asperula'), {
     interactions: INTERACTIONS_FIXTURE,
     nearbyFauna: NEARBY_FAUNA_FIXTURE,
   })['local-fauna-support'];
-  assert.equal(result.status, STATUSES.NOT_DECLARED);
+  assert.equal(result.status, STATUSES.PARTIAL);
+  assert.match(result.summary, /near this yard/);
 });
 
 test('local fauna support reports not-declared when either table failed to load', () => {
   const noInteractions = run(place('Asclepias asperula'), {
     nearbyFauna: NEARBY_FAUNA_FIXTURE,
-    place: 'home',
   })['local-fauna-support'];
   assert.equal(noInteractions.status, STATUSES.NOT_DECLARED);
 
   const noNearbyFauna = run(place('Asclepias asperula'), {
     interactions: INTERACTIONS_FIXTURE,
-    place: 'home',
   })['local-fauna-support'];
   assert.equal(noNearbyFauna.status, STATUSES.NOT_DECLARED);
 });
@@ -487,7 +488,6 @@ test('local fauna support matches a planted genus against an animal reported nea
   const result = run(place('Asclepias asperula'), {
     interactions: INTERACTIONS_FIXTURE,
     nearbyFauna: NEARBY_FAUNA_FIXTURE,
-    place: 'home',
   })['local-fauna-support'];
   assert.equal(result.status, STATUSES.PARTIAL, 'one matched species is a start, not ample');
   assert.match(result.summary, /1 animal species/);
@@ -499,14 +499,13 @@ test('local fauna support matches a planted genus against an animal reported nea
 
 test('local fauna support drops a match outside the taxon range threshold', () => {
   const farAway = buildNearbyFaunaIndex(
-    `place,animal_species,animal_common,iconic_taxon,nearest_radius_mi,observation_count,fetched_on,source
-home,Danaus plexippus,Monarch,Insecta,25,1,2026-01-01,inat
+    `animal_species,animal_common,iconic_taxon,nearest_radius_mi,observation_count,fetched_on,source
+Danaus plexippus,Monarch,Insecta,25,1,2026-01-01,inat
 `
   );
   const result = run(place('Asclepias asperula'), {
     interactions: INTERACTIONS_FIXTURE,
     nearbyFauna: farAway,
-    place: 'home',
   })['local-fauna-support'];
   assert.equal(result.status, STATUSES.GAP);
 });
@@ -515,7 +514,6 @@ test('local fauna support points at the keystone-genera check rather than invent
   const result = run(place('Asclepias asperula'), {
     interactions: INTERACTIONS_FIXTURE,
     nearbyFauna: NEARBY_FAUNA_FIXTURE,
-    place: 'home',
   })['local-fauna-support'];
   assert.ok(result.suggestions.some((s) => /[Kk]eystone genera/.test(s)));
 });

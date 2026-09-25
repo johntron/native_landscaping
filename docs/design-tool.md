@@ -33,8 +33,7 @@ plants.csv                       shared species catalog (all projects)
 plant-drawing.csv                how each species is drawn, keyed by plants.csv id (all projects)
 ecology/host-genera.csv          keystone/larval-host genera per ecoregion (all projects)
 ecology/plant-animal-interactions.csv  genus-keyed animal interactions (all projects)
-ecology/nearby-fauna.csv         animal species reported nearby, keyed by place
-ecology/anchors.csv              streams and green space near the site, keyed by place
+ecology/region-fauna.csv         butterflies and moths recorded in the county (public page)
 projects/backyard/               the one yard still tracked: seed data for the shared
                                  read-only example (nl-3s5.24), in the old file layout
 ```

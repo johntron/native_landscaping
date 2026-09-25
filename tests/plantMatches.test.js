@@ -59,11 +59,9 @@ test('buildEcosystemFaunaIndex ignores Plantae rows and keeps the nearest radius
     observation({ taxon: 'Insecta', name: 'Bombus pensylvanicus', radius: 1 }), // nearer sighting should win
     observation({ name: 'Quercus shumardii', genus: 'Quercus' }), // Plantae — excluded
   ];
-  const index = buildEcosystemFaunaIndex(rows, 'home');
-  const nearby = index.forPlace('home');
-  assert.equal(nearby.size, 1);
-  assert.equal(nearby.get('bombus pensylvanicus').nearestRadiusMi, 1);
-  assert.deepEqual([...index.forPlace('elsewhere').values()], []);
+  const index = buildEcosystemFaunaIndex(rows);
+  assert.equal(index.size, 1);
+  assert.equal(index.animals.get('bombus pensylvanicus').nearestRadiusMi, 1);
 });
 
 test('a genus with no host-genera.csv row never surfaces, even if observed nearby', () => {
@@ -72,7 +70,6 @@ test('a genus with no host-genera.csv row never surfaces, even if observed nearb
     hostGenera: emptyHostGeneraIndex(),
     catalogGenusKeys: new Set(),
     interactions: emptyInteractionsIndex(),
-    place: 'home',
   });
   assert.equal(candidates.length, 0);
   assert.equal(alreadyInCatalog.length, 0);
@@ -85,7 +82,6 @@ test('candidates include the FULL ecoregion keystone list, not just genera with 
     hostGenera,
     catalogGenusKeys: new Set(),
     interactions: emptyInteractionsIndex(),
-    place: 'home',
   });
   // All six ecoregion-9 keystone genera in the fixture must appear (catalog is empty here)
   // — purely on the strength of the ecoregion-wide list, with zero local evidence.
@@ -110,7 +106,6 @@ test('a genus whose associated fauna is confirmed nearby outranks a higher-keyst
     hostGenera,
     catalogGenusKeys: new Set(),
     interactions,
-    place: 'home',
   });
 
   // Rubus (rank 20) has a nearby-confirmed pollinator and must rank above Quercus (rank
@@ -137,7 +132,6 @@ test('an associated-fauna match outside its taxon range does not count', () => {
     hostGenera,
     catalogGenusKeys: new Set(),
     interactions,
-    place: 'home',
   });
 
   const rubus = candidates.find((c) => c.genus === 'Rubus');
@@ -155,7 +149,6 @@ test('splits candidates (catalog-absent) from ones already carried', () => {
     hostGenera,
     catalogGenusKeys: catalogGenusKeys(CATALOG_ROWS), // Helianthus, Packera
     interactions: emptyInteractionsIndex(),
-    place: 'home',
   });
   assert.deepEqual(
     candidates.map((c) => c.genus).sort(),
@@ -174,7 +167,6 @@ test('synonym_of resolves so Packera carries Senecio\'s keystone counts', () => 
     hostGenera,
     catalogGenusKeys: catalogGenusKeys(CATALOG_ROWS),
     interactions: emptyInteractionsIndex(),
-    place: 'home',
   });
   const packera = alreadyInCatalog.find((c) => c.genus === 'Packera');
   assert.equal(packera.hostGeneraRow.beeSpecialistSpecies, 22);
@@ -199,7 +191,6 @@ Rubus,Cardinalis cardinalis,Northern cardinal,feeds-on,eats,,test
     hostGenera,
     catalogGenusKeys: new Set(),
     interactions,
-    place: 'home',
   });
 
   const rubus = candidates.find((c) => c.genus === 'Rubus');
@@ -222,7 +213,6 @@ test('nearby Plantae observations still show as secondary evidence when present'
     hostGenera,
     catalogGenusKeys: new Set(),
     interactions: emptyInteractionsIndex(),
-    place: 'home',
   });
   const quercus = candidates.find((c) => c.genus === 'Quercus');
   assert.equal(quercus.nearbySpecies.length, 1);

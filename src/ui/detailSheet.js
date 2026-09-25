@@ -103,8 +103,7 @@ export function createDetailSheet({ elements, appState, setTargetedPlant, lifecy
    */
   const renderDetailSheetFauna = (plant, container, list) => {
     list.innerHTML = '';
-    const place = appState.project?.place;
-    if (!place || !appState.nearbyFauna.size || !appState.interactions.size) {
+    if (!appState.nearbyFauna.size || !appState.interactions.size) {
       container.hidden = true;
       return;
     }
@@ -112,7 +111,6 @@ export function createDetailSheet({ elements, appState, setTargetedPlant, lifecy
     const matches = matchesForGenus(genus, {
       interactions: appState.interactions,
       nearbyFauna: appState.nearbyFauna,
-      place,
     }).filter((match) => match.inRange !== false);
     if (!matches.length) {
       container.hidden = true;

@@ -1,14 +1,12 @@
 import { fetchCsv } from './csvLoader.js';
 import { buildHostGeneraIndex, emptyHostGeneraIndex } from '../analysis/hostGenera.js';
-import {
-  buildInteractionsIndex,
-  emptyInteractionsIndex,
-  buildNearbyFaunaIndex,
-  emptyNearbyFaunaIndex,
-} from '../analysis/faunaMatches.js';
+import { buildInteractionsIndex, emptyInteractionsIndex } from '../analysis/faunaMatches.js';
 
 /**
- * Load the three committed ecology tables and hand back the built indexes.
+ * Load the two committed ecology tables and hand back the built indexes.
+ *
+ * A yard's nearby fauna is not one of them any more (nl-3s5.31): it is per
+ * yard, from /api/ecosystem/site, loaded by src/data/yardSite.js.
  *
  * These tables are read by every page that says anything about fauna — the
  * design page's rules, the ecosystem page's plant matches, and whatever comes
@@ -20,7 +18,7 @@ import {
  * behaviour is the correct one, and this module is where it now lives once.
  *
  * **A missing table costs checks, not the app.** Every fetch is caught
- * individually; a caller always gets three usable indexes. What failed is
+ * individually; a caller always gets two usable indexes. What failed is
  * reported in `warnings` so a page can say so in its own voice rather than
  * leaving the reader to guess why a panel is empty.
  *
@@ -29,7 +27,7 @@ import {
  *   per ecoregion, and without one the index is deliberately empty.
  * @param {string|URL} [options.baseUrl] resolved against, for tests.
  * @param {(path: URL) => Promise<string>} [options.fetchCsvImpl] seam for tests.
- * @returns {Promise<{ hostGenera: object, interactions: object, nearbyFauna: object, warnings: string[] }>}
+ * @returns {Promise<{ hostGenera: object, interactions: object, warnings: string[] }>}
  */
 export async function loadEcologyTables({
   ecoregion,
@@ -49,10 +47,9 @@ export async function loadEcologyTables({
     }
   };
 
-  const [hostGeneraCsv, interactionsCsv, nearbyFaunaCsv] = await Promise.all([
+  const [hostGeneraCsv, interactionsCsv] = await Promise.all([
     read('ecology/host-genera.csv', 'genus checks will report as not declared'),
     read('ecology/plant-animal-interactions.csv', 'local fauna checks will report as not declared'),
-    read('ecology/nearby-fauna.csv', 'local fauna checks will report as not declared'),
   ]);
 
   return {
@@ -60,7 +57,6 @@ export async function loadEcologyTables({
       ? buildHostGeneraIndex(hostGeneraCsv, { ecoregion })
       : emptyHostGeneraIndex(),
     interactions: interactionsCsv ? buildInteractionsIndex(interactionsCsv) : emptyInteractionsIndex(),
-    nearbyFauna: nearbyFaunaCsv ? buildNearbyFaunaIndex(nearbyFaunaCsv) : emptyNearbyFaunaIndex(),
     warnings,
   };
 }

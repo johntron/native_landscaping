@@ -1,6 +1,14 @@
 import { projectIdFromUrl } from '../../src/data/projectPaths.js';
 import { findCallerProject, findExampleFor, findExampleProject, parseLocation } from '../db/projectStore.js';
-import { indexStatus, listSpeciesObservations, locationKey } from '../../tools/ecosystemIndexDb.js';
+import {
+  SITE_LAYERS,
+  indexStatus,
+  layerStatus,
+  listProjectAnchors,
+  listProjectFauna,
+  listSpeciesObservations,
+  locationKey,
+} from '../../tools/ecosystemIndexDb.js';
 import { exampleIndexSource, listOwnerProjectSites } from '../db/projectSites.js';
 import { excludeNonNative } from '../../src/analysis/establishmentMeans.js';
 import { geocodeAddress } from '../../tools/geocode.mjs';
@@ -107,6 +115,65 @@ export async function handleEcosystemRoutes(req, res, ctx) {
           rows: rows.map(({ project_id, ...row }) => row),
           location,
           index: { state: status.state, fetchedOn: status.fetchedOn },
+        })
+      );
+    } catch (err) {
+      console.error(err);
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return true;
+  }
+
+  // A yard's habitat anchors and nearby fauna (nl-3s5.31): the rows that were
+  // the committed, place-keyed ecology/anchors.csv and ecology/nearby-fauna.csv
+  // until those put the owner's site in a public repo. Resolved exactly like
+  // /api/ecosystem above: ?project= required, 401 anonymous, the same 404 for a
+  // yard that is missing or someone else's, and the shared example reads the
+  // yard it was refreshed from. No location is sent at all.
+  //
+  // - `anchors`: streams (layer 'streams') and green space ('greenspace'),
+  //   nearest first: kind, name, status, distance_mi, detail, fetched_on, source.
+  // - `fauna`: every nearby animal row, native or not (the rules and the detail
+  //   sheet read establishment_means themselves, as they did from the CSV).
+  // - `layers`: { fauna, streams, greenspace } -> { state, fetchedOn }, state
+  //   as for the index. A layer's rows are sent only while they describe the
+  //   yard's current location. A build's error text is never sent.
+  if (pathname === '/api/ecosystem/site' && req.method === 'GET') {
+    if (!url.searchParams.has('project')) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Site layers are per yard: pass ?project=<slug>' }));
+      return true;
+    }
+    const project = loadReadableProject(ctx, res, projectIdFromUrl(url), {
+      findProject: findCallerProject,
+      findExample: findExampleFor,
+    });
+    if (!project) return true;
+    try {
+      const isExample = project.id === findExampleProject(ctx.db.app)?.id;
+      const source = isExample ? exampleIndexSource(ctx.db.app) : project;
+      const key = source ? locationKey(parseLocation(source)) : null;
+      const layers = {};
+      const applies = {};
+      for (const layer of Object.keys(SITE_LAYERS)) {
+        const status = source
+          ? layerStatus(db.ecosystem, source.id, layer, key)
+          : { state: 'no-location', rowsApply: false, fetchedOn: null };
+        layers[layer] = { state: status.state, fetchedOn: status.fetchedOn };
+        applies[layer] = status.rowsApply;
+      }
+      const anchors = source
+        ? listProjectAnchors(db.ecosystem, source.id).filter((row) => applies[row.layer])
+        : [];
+      const fauna = source && applies.fauna ? listProjectFauna(db.ecosystem, source.id) : [];
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          project: project.slug,
+          anchors: anchors.map(({ project_id, ...row }) => row),
+          fauna: fauna.map(({ project_id, ...row }) => row),
+          layers,
         })
       );
     } catch (err) {

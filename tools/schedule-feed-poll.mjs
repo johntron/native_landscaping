@@ -32,15 +32,19 @@
  *
  * Each tick also builds the nearby-species index of any yard that has a
  * location and no index for it yet (nl-3s5.6, tools/ecosystemIndexQueue.js),
- * at most one network-touching build per tick, after the saved areas. The two
- * jobs fail independently: a failed index build never skips the feed poll,
- * and the reverse.
+ * and its site layers: nearby fauna, streams and green space (nl-3s5.31). At
+ * most one network-touching build per upstream per tick, after the saved
+ * areas. The two jobs fail independently: a failed index build never skips
+ * the feed poll, and the reverse.
  */
 import { pollSavedAreas } from './feedState/pollAreas.js';
 import { openAppDbWithoutMigrating, AppDbNotReadyError } from '../server/db/appDb.js';
 import { openEcosystemDb } from './ecosystemIndexDb.js';
-import { runIndexQueue } from './ecosystemIndexQueue.js';
+import { runSiteQueue } from './ecosystemIndexQueue.js';
 import { buildAndRecordEcosystemIndex } from './fetch-ecosystem-index.mjs';
+import { buildAndRecordFauna } from './fetch-nearby-fauna.mjs';
+import { buildAndRecordStreams } from './fetch-nhd-creeks.mjs';
+import { buildAndRecordGreenspace } from './fetch-osm-greenspace.mjs';
 import { openProbeCache } from './usda-plants/probeCache.js';
 
 const DEFAULT_INTERVAL_MINUTES = 30;
@@ -83,17 +87,22 @@ async function pollFeed(appDb, startedAt) {
 
 async function buildDueIndexes(appDb, ecosystemDb, probeCache, startedAt) {
   try {
-    const { due, built } = await runIndexQueue({
+    const args = (project) => ({ projectId: project.id, location: project.location, db: ecosystemDb, probeCache });
+    const { due, built } = await runSiteQueue({
       appDb,
       ecosystemDb,
-      build: (project) =>
-        buildAndRecordEcosystemIndex({ projectId: project.id, location: project.location, db: ecosystemDb, probeCache }),
+      builders: {
+        index: (project) => buildAndRecordEcosystemIndex(args(project)),
+        fauna: (project) => buildAndRecordFauna(args(project)),
+        streams: (project) => buildAndRecordStreams(args(project)),
+        greenspace: (project) => buildAndRecordGreenspace(args(project)),
+      },
     });
     if (!due) return;
     const summary = built
-      .map((b) => `yard #${b.projectId} (${b.reason}): ${b.state}, ${b.rows} rows, ${b.networkRequests} request(s)`)
+      .map((b) => `yard #${b.projectId} ${b.job} (${b.reason}): ${b.state}, ${b.rows} rows, ${b.networkRequests} request(s)`)
       .join('; ');
-    console.log(`[${startedAt}] nearby index: ${due} yard(s) due — ${summary || 'none built this tick'}`);
+    console.log(`[${startedAt}] nearby index and site layers: ${due} job(s) due — ${summary || 'none built this tick'}`);
   } catch (err) {
     console.error(`[${startedAt}] nearby index build failed:`, err);
   }

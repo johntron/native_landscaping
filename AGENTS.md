@@ -41,7 +41,7 @@ same order.
 | page | entry | what it is for |
 | --- | --- | --- |
 | `index.html` | `src/patchnetwork/` | **Start here.** The homeowner-facing argument, led by the PLANTS memory aid, with the keystone-genus screen ("What belongs here") and the invasives list. Needs no project; its handoff section opens a yard in `design.html`. |
-| `ecosystem.html` | `src/ecosystem/` | **What's nearby**: streams and green space near the site ("Habitat nearby", from `ecology/anchors.csv`: name and straight-line distance only, OSM green space marked not checked), plants and animals reported on iNaturalist nearby (a per-yard index `feed-poller` builds once the yard has a location; [docs/ecology-rules.md](docs/ecology-rules.md#the-nearby-species-index-dataecosystemdb)), and the plant genera that would serve them. Also available as a drawer (`src/ui/ecosystemDrawer.js`) on any page with `?project=`; both compute matches through `src/ecosystem/plantMatches.view.js`. |
+| `ecosystem.html` | `src/ecosystem/` | **What's nearby**: streams and green space near the yard ("Habitat nearby": name and straight-line distance only, OSM green space marked not checked), plants and animals reported on iNaturalist nearby (both per yard in `data/ecosystem.db`, built by `feed-poller` once the yard has a location and served only to its owner; [docs/ecology-rules.md](docs/ecology-rules.md#the-nearby-species-index-dataecosystemdb)), and the plant genera that would serve them. Also available as a drawer (`src/ui/ecosystemDrawer.js`) on any page with `?project=`; both compute matches through `src/ecosystem/plantMatches.view.js`. |
 | `feed.html` | `src/feed/` | **New sightings**: new iNaturalist records in saved monitoring areas, flagged for invasives, rarity, and yard relevance. |
 | `design.html` | `src/app.js` | **Your yard**, the design tool: a planting drawn month by month in a plan and compass elevations, graded by the ecological rules engine. Scoped by `?project=<slug>`. See [docs/design-tool.md](docs/design-tool.md). |
 | `sourcing.html` | `src/sourcing/` | **Buy plants**: dated native plant sales around DFW (upcoming vs. recently held, split by the viewer's local date) and the NPSOT NICE! partner nurseries of the Dallas, North Central and Trinity Forks chapters, from the sourced tables in `sourcing/`. Sale dates go stale: re-check each organizer's page and bump `checked_on` each spring and fall. |
@@ -57,7 +57,7 @@ The **HOA submission packet** export (`src/export/hoaPacket.js`) is produced fro
 plants.csv            the species catalog every yard renders from (the single source of truth); claim-backed botany only
 plant-drawing.csv     how each species is drawn (colours, flowers), keyed by plants.csv id; our judgement, with a source
 catalog/              wider regional lists + manual-corrections.tsv; see catalog/README.md
-ecology/              sourced, genus- or place-keyed tables for the rules engine
+ecology/              sourced, genus- or region-keyed tables (never keyed by a yard: nl-3s5.31)
 sourcing/             sourced nursery and plant-sale tables behind sourcing.html
 projects/backyard/    the one yard still in git: seeds the shared example at startup only when none exists (yards live in app.db)
 src/                  browser code: one folder per page, plus shared analysis/, data/, render/, ui/
@@ -104,8 +104,13 @@ tests/, tests-e2e/    Node unit tests (the gate) and Playwright specs
   `app.db` too, not in the repo (nl-3s5.3). The one exception is the shared read-only
   example yard (nl-3s5.24): a location-free copy of the owner's backyard, owned by the
   system user `example@rewilder.invalid`, readable by any signed-in user, refreshed with
-  `tools/refresh-example-yard.mjs`. It keeps the backyard's place label, so viewers see
-  that place's nearby habitat and species (owner decision 2026-09-24).
+  `tools/refresh-example-yard.mjs`. It shows the backyard's nearby habitat and species
+  (owner decision 2026-09-24), read from the backyard's own per-yard rows, never its location.
+- **Nothing derived from one yard's site is committed** (nl-3s5.31): its streams, green
+  space and nearby animals live per yard in `data/ecosystem.db` and reach only its owner
+  (and the example's viewers) through `/api/ecosystem` and `/api/ecosystem/site`. The public
+  `index.html` uses region-level records (`ecology/region-fauna.csv`, a county) instead.
+  `tests/sourcedTables.test.js` fails on a committed table with a `place` column.
 - The NCTX flora PDFs may be downloaded but not redistributed. They stay local
   (`docs/data-acquisition/corpus/*.pdf` is gitignored); the extracted text is what
   code reads.
@@ -345,6 +350,8 @@ onto main fires neither hook: deploy by hand afterwards.
 3. restarts `web`. It also restarts `feed-poller` when the deployed range touched code
    the poller loads: `tools/feedState/`, `tools/savedAreas/`,
    `tools/fetch-observation-events.mjs`, `tools/fetch-ecosystem-index.mjs`,
+   `tools/fetch-nearby-fauna.mjs`, `tools/fetch-nhd-creeks.mjs`,
+   `tools/fetch-osm-greenspace.mjs`, `tools/siteLayerShared.mjs`, `tools/geoShared.mjs`,
    `tools/ecosystemIndexQueue.js`, `tools/projectSite.mjs`, `tools/geocode.mjs`,
    `tools/dataDir.js`, `tools/schedule-feed-poll.mjs`, `tools/inatShared.mjs`,
    `tools/usda-plants/probeCache.js`, `tools/*Db.js`, `server/db/`, `src/data/`, or

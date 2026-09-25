@@ -59,7 +59,7 @@ test('the data files the browser fetches are served', () => {
     'plant-drawing.csv',
     'src/app.js',
     'src/ecosystem/plantMatches.view.js',
-    'ecology/anchors.csv',
+    'ecology/region-fauna.csv',
     'catalog/blackland-prairie-natives.csv',
     'sourcing/plant-sales.csv',
   ]) {

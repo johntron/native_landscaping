@@ -15,7 +15,8 @@ support (below), drifts (9), and mature-size spacing (12).
 ```
 ecology/host-genera.csv          one genus-keyed table, shared by rules 4, 5, 10
 ecology/plant-animal-interactions.csv  genus-keyed, global (GloBI) — local-fauna-support
-ecology/nearby-fauna.csv         place-keyed, local (iNaturalist) — local-fauna-support
+a yard's nearby fauna            per yard, data/ecosystem.db (iNaturalist) — local-fauna-support
+ecology/region-fauna.csv         region-keyed, a county (iNaturalist) — the public keystone screen
 src/analysis/ecology.js          the registry; analyzeEcology(ctx) -> one result per rule
 src/analysis/hostGenera.js       parse + index the table, resolving synonym_of
 src/analysis/faunaMatches.js     parse + index the two fauna tables and join them
@@ -23,9 +24,10 @@ src/analysis/months.js           month-set helpers ("Oct-Feb", not "Oct, Nov, De
 src/analysis/rules/*.js          one file per rule: { id, title, evaluate(ctx) }
 src/render/ecologyPanel.js       the panel above the species table — presentation only
 tools/fetch-plant-animal-interactions.mjs  offline fetch for the interactions CSV
-tools/fetch-nearby-fauna.mjs      offline fetch for the nearby-fauna CSV
-tools/fetch-nhd-creeks.mjs        offline fetch for anchors.csv streams (NHD)
-tools/fetch-osm-greenspace.mjs    offline fetch for anchors.csv green space (OSM/Overpass)
+tools/fetch-nearby-fauna.mjs      a yard's nearby fauna (iNaturalist), per yard
+tools/fetch-nhd-creeks.mjs        a yard's streams (NHD), per yard
+tools/fetch-osm-greenspace.mjs    a yard's green space (OSM/Overpass), per yard
+tools/fetch-region-fauna.mjs      a county's Lepidoptera, for the public page
 ```
 
 **`src/analysis/` is pure.** No DOM, no fetch, no judgement made outside it. Every
@@ -79,14 +81,14 @@ synonym_of, source`.
 - **Every row carries a `source`, and a genus with nothing sourced stays blank rather
   than guessed** — see "Rules that hold everywhere" in AGENTS.md.
 
-## Local fauna support: `ecology/plant-animal-interactions.csv` and `ecology/nearby-fauna.csv`
+## Local fauna support: `ecology/plant-animal-interactions.csv` and the yard's nearby fauna
 
 The other six dimensions grade against ecoregion-wide lists. This one asks a
-different question — which animals are ALREADY reported near this specific site,
-and would a planted genus plausibly serve them — and does it with the same
-"fetch offline, commit a sourced CSV, keep `src/analysis/` pure" pattern as
-`host-genera.csv`, split into two tables because the two facts have different
-lifetimes:
+different question — which animals are ALREADY reported near this specific yard,
+and would a planted genus plausibly serve them — with the same "fetch offline,
+keep `src/analysis/` pure" pattern as `host-genera.csv`, split into two tables
+because the two facts have different lifetimes (and, since nl-3s5.31, different
+privacy: one is about the world, the other about one person's yard):
 
 - `ecology/plant-animal-interactions.csv` — genus-keyed, global, from
   [GloBI](https://www.globalbioticinteractions.org/). Columns: `genus,
@@ -99,14 +101,18 @@ lifetimes:
   distinction matters. Regenerate with
   `node tools/fetch-plant-animal-interactions.mjs` (or `--genus X` for one
   genus, `--smoke` for a quick check — both print to stdout instead of writing).
-- `ecology/nearby-fauna.csv` — place-keyed, local, from iNaturalist's
-  `species_counts` endpoint. Columns: `place, animal_species, animal_common,
-  iconic_taxon, nearest_radius_mi, observation_count, fetched_on, source`.
-  `nearest_radius_mi` is the smallest of five fetch-tool distance bands (1, 3,
-  8, 15, 25 mi) the species was found within — a proxy for "how close is
-  confirmed presence", since `species_counts` gives a count per radius, not a
-  per-observation distance. Regenerate with `node tools/fetch-nearby-fauna.mjs
-  --project <id>` (`--smoke` for one taxon/radius, no write).
+- **The yard's nearby fauna** — per yard, the `fauna` layer in
+  `data/ecosystem.db` (`project_nearby_fauna`; see "Site layers" below), from
+  iNaturalist's `species_counts` endpoint. Columns: `iconic_taxon,
+  animal_species, animal_common, nearest_radius_mi, observation_count,
+  establishment_means, fetched_on, source`. `nearest_radius_mi` is the smallest
+  of five distance bands (1, 3, 8, 15, 25 mi) the species was found within — a
+  proxy for "how close is confirmed presence", since `species_counts` gives a
+  count per radius, not a per-observation distance. The design tool reads it
+  from `GET /api/ecosystem/site` (`src/data/yardSite.js`). Until nl-3s5.31 it was
+  the committed, place-keyed `ecology/nearby-fauna.csv`, which put the owner's
+  site in this public repo. Refresh by hand with `node tools/fetch-nearby-fauna.mjs
+  --project <slug>` (`--smoke` for one taxon/radius, no write).
 
 **Keep the two tables' genera in step.** `plant-animal-interactions.csv` must cover
 every `host-genera.csv` genus, not only the ones in `plants.csv`. A genus with no GloBI
@@ -135,10 +141,10 @@ keystone-genera check rather than re-deriving a ranked list of catalog species,
 since keystone status is a far more reliable signal than what iNaturalist
 happened to have observations for.
 
-**Exact coordinates never reach either CSV or git.** A project's `place` field
-(next to `ecoregion` and `site` in `project.json`) is a short label like
-`"home"` — committable, and two projects on the same property share one label
-and one fetch. The address or lat/lng behind that label lives in `app.db`
+**Exact coordinates never reach git, and neither does anything derived from
+one yard's site** (nl-3s5.31). A project's `place` field is a short label like
+`"home"`; nothing is keyed by it any more except the feed's rarity lane, which
+resolves it among the caller's own yards. The address or lat/lng lives in `app.db`
 (`projects.location_json`, nl-3s5.3; it was the gitignored `location.json`), and is
 read by the `tools/` fetch scripts (through `tools/projectSite.mjs`) and, server-side
 only, by `GET /api/ecosystem`. With `?project=`, that route returns the yard's
@@ -151,9 +157,17 @@ node tools/project-location.mjs --project backyard --address "123 Main St, Dalla
 node tools/project-location.mjs --project backyard --lat 32.81 --lng -96.79
 ```
 
-A project with no `place` (or no location set yet) reports `not-declared` on this one
-dimension, the same "absent means undeclared, never guessed" contract as
-`ecoregion`.
+A yard with no location set yet, or whose fauna layer is still being fetched, reports
+`not-declared` on this one dimension, the same "absent means undeclared, never guessed"
+contract as `ecoregion`. A place label is not needed.
+
+**The public "Start here" page** (index.html, its keystone screen) never reads a yard.
+Its "In county" column is `ecology/region-fauna.csv`: every butterfly and moth species
+with a research-grade, wild iNaturalist record in Dallas County (iNaturalist place 1281),
+fetched by `node tools/fetch-region-fauna.mjs` and committed with a `source`. The county
+is our judgement (it is the county the flora column already checks), and the claim it
+supports is "recorded in the county", never a distance. Until nl-3s5.31 that column was
+the owner's own site's fauna, which put the owner's surroundings on a public page.
 
 ## The nearby-species index: `data/ecosystem.db`
 
@@ -170,9 +184,28 @@ anything:
   location itself). A yard whose location changes is due again, and its old
   site's rows stop showing at once.
 
+**Site layers (nl-3s5.31).** The same database holds each yard's habitat anchors and
+nearby fauna, which were committed place-keyed CSVs until they put the owner's site in
+this public repo: `project_anchors` (layers `streams` and `greenspace`),
+`project_nearby_fauna` (layer `fauna`), and `project_layer_builds`, one row per (yard,
+layer) with the same states and location fingerprint as `project_index_builds`. No row
+holds a coordinate. They reach a browser only through `GET /api/ecosystem/site?project=`,
+resolved exactly like `/api/ecosystem` (401 anonymous, the same 404 for a yard that is
+missing or someone else's, the example reads its source yard's rows, no location sent).
+The one-time move of the old CSV rows into the owner's yards is
+`tools/import-site-layers.mjs` (`--dry-run`, then a real run, then `--verify`; it reads
+the rows from git at the last commit that had them). Once it has been run against
+every owner's data and verified, delete it, as nl-3s5.32 did for the index's rekey tool.
+
 **Built without manual steps.** `feed-poller` runs the queue
 (`tools/ecosystemIndexQueue.js`) after the saved-area poll on every tick: every
-yard with a location and no index for it, oldest first. The queue is derived from
+yard with a location and no index (or no site layer) for it, oldest first. The
+politeness budget is per upstream: one network-touching build a tick for
+iNaturalist (shared by the index and the fauna layer), one for NHD and one for
+Overpass, so a new yard's layers are all in within two ticks. At the default
+30-minute tick that is at most 48 Overpass queries a day, under the 100 a day the
+OpenStreetMap wiki gives for regular use of the public instance; the other limits
+are our judgement. The queue is derived from
 the two databases, not stored, so nothing has to enqueue a job when a location is
 saved. Judgement calls, labelled as such in the module: at most one build that
 touched the network per tick (a build served entirely from the probe cache costs
@@ -187,25 +220,26 @@ refresh is still `node tools/fetch-ecosystem-index.mjs --project <slug> --force`
 owner's own yards only (case-insensitive), taking the oldest with a built index.
 `GET /api/ecosystem/places` lists the caller's own indexed place labels.
 
-**The example yard** has no location, so no index of its own. It shows the
-index of the owner's yard it was refreshed from (the `projectId` that
-`tools/refresh-example-yard.mjs` records in `app_meta.example_yard`), with
-`location: null`.
+**The example yard** has no location, so no index or site layers of its own. It
+shows the index and the layers of the owner's yard it was refreshed from (the
+`projectId` that `tools/refresh-example-yard.mjs` records in
+`app_meta.example_yard`), with `location: null`.
 
 The pre-nl-3s5.6 place-keyed table, `species_observations`, is retired (nl-3s5.32):
 `openEcosystemDb` drops it on open if a database still has it. The one-time
 migration tool that copied its rows to yards, `tools/rekey-ecosystem-index.mjs`, has
 been run against every owner's data and is deleted; there is nothing left to migrate.
 
-## Habitat anchors: `ecology/anchors.csv`
+## Habitat anchors: a yard's `streams` and `greenspace` layers
 
 Part of the pivot away from a per-parcel habitat score (nl-3hi) toward
 observable facts: what real corridors and green space sit near the site, and
 how far away — never a connectivity score or gradient. One table for every
 anchor kind (not one file per source), because stage 5 of the epic is a
 human promoting a row from `candidate` to `anchor`, which is a `status` edit,
-not a file merge. Columns: `place, kind, name, status, distance_mi, detail,
-fetched_on, source`. `kind` is `stream`, `park`, `cemetery`, `forest`,
+not a file merge. Per yard since nl-3s5.31 (`project_anchors` in `data/ecosystem.db`;
+it was the committed, place-keyed `ecology/anchors.csv`). Columns: `kind, name, status,
+distance_mi, detail, fetched_on, source`, plus the layer. `kind` is `stream`, `park`, `cemetery`, `forest`,
 `nature_reserve`, or `golf_course`; `status` is `anchor` (NHD hydrology —
 the epic's "best ecological signal", a fact) or `candidate` (OSM
 leisure/landuse tags — administrative, not ecological: a live test returned
@@ -214,22 +248,23 @@ so nothing from OSM is ever written as `anchor`). `distance_mi` is straight-line
 distance to the nearest point on the actual feature geometry — not a
 centroid, and rounded to the nearest quarter mile as a privacy floor, since a
 named creek plus an exact distance is more locating than the coarse distance
-*bands* `nearby-fauna.csv` gets away with.
+*bands* the fauna layer gets away with.
 
-Regenerate with `node tools/fetch-nhd-creeks.mjs --project <id>` (streams,
+`feed-poller` builds both layers for every yard with a location. Refresh by hand with
+`node tools/fetch-nhd-creeks.mjs --project <slug>` (streams,
 via USGS NHD's `hydro.nationalmap.gov` flowline layer) and
-`node tools/fetch-osm-greenspace.mjs --project <id>` (green space, via
+`node tools/fetch-osm-greenspace.mjs --project <slug>` (green space, via
 OpenStreetMap/Overpass, with a `MIN_ACRES` size floor so pocket-park- and
 traffic-island-scale features don't pollute the candidate list — an
 authored judgment call, like `AMPLE_SHARE` in `rules/keystoneGenera.js`, not
 a sourced fact). Both take `--smoke` to print without writing and `--force`
-to bypass the probe cache. Same offline-fetch/checked-in-CSV/gitignored-coords
-pattern as `nearby-fauna.csv` above; geometry math (point-to-line distance,
+to bypass the probe cache. Same pattern as the fauna layer above; geometry math (point-to-line distance,
 polygon area) lives in `tools/geoShared.mjs`, tested in
 `tests/geoShared.test.js`.
 
 **Shown on the "What's nearby" page** (`ecosystem.html`, section "Habitat nearby"):
-`src/analysis/anchors.js` groups the rows (pure, unit-tested) and the page lists
+`src/analysis/anchors.js` groups the yard's rows from `/api/ecosystem/site` (pure,
+unit-tested) and the page lists
 streams and unchecked green space by name and straight-line distance, with the
 USGS and OpenStreetMap credits (`ecology/NOTICE.md`; licensing checked under
 nl-3hi.7.6 item 3). Still not built: no `src/analysis/` rule grades against it,

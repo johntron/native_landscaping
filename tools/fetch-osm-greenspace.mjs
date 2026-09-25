@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
  * Fetch candidate green-space anchors (parks, nature reserves, cemeteries,
- * forest, golf courses) near a project's site from OpenStreetMap via
- * Overpass, and merge the result into ecology/anchors.csv keyed by `place`
- * (nl-3hi.7.2, stage 2 of the anchor-data epic nl-3hi.7).
+ * forest, golf courses) near a yard from OpenStreetMap via Overpass into the
+ * yard's 'greenspace' layer in data/ecosystem.db (nl-3hi.7.2, stage 2 of the
+ * anchor-data epic nl-3hi.7; per yard since nl-3s5.31, when the rows left the
+ * committed ecology/anchors.csv).
  *
- * Same offline-fetch/checked-in-CSV pattern as fetch-nearby-fauna.mjs and
- * fetch-nhd-creeks.mjs. Coordinates never reach the CSV or git — see
- * the yard's location in app.db (tools/projectSite.mjs).
+ * The location is read from app.db (tools/projectSite.mjs) and never written
+ * anywhere.
  *
  * OSM's leisure/landuse tags are ADMINISTRATIVE, not ecological (a live test
  * against Dallas returned "Texas State Fair Grounds" and "Old East Dallas
@@ -15,16 +15,29 @@
  * status=candidate, never status=anchor — nl-3hi.7.5 is what promotes a
  * candidate once a human confirms it, this tool never does.
  *
+ * feed-poller builds this layer for every yard with a location
+ * (tools/ecosystemIndexQueue.js), one Overpass query per yard, so running it
+ * by hand is for a forced refresh or a --smoke look.
+ *
  * Usage:
- *   node tools/fetch-osm-greenspace.mjs --project backyard
- *   node tools/fetch-osm-greenspace.mjs --project backyard --smoke
+ *   node tools/fetch-osm-greenspace.mjs --project backyard [--owner <email>]
+ *   node tools/fetch-osm-greenspace.mjs --project backyard --smoke   # print, write nothing
+ *   node tools/fetch-osm-greenspace.mjs --project backyard --force   # bypass the response cache
  */
 import { readProjectSite, ownerFromArgs } from './projectSite.mjs';
-import { openProbeCache, cached } from './usda-plants/probeCache.js';
-import { USER_AGENT, fetchWithBackoff } from './inatShared.mjs';
+import { openProbeCache } from './usda-plants/probeCache.js';
+import { openEcosystemDb } from './ecosystemIndexDb.js';
 import { pointToPolylineMi, ringAreaAcres, roundDistanceMi } from './geoShared.mjs';
-import { ANCHORS_CSV, mergeAnchorRows } from './anchorsShared.mjs';
-
+import {
+  USER_AGENT,
+  argAfter,
+  buildAndRecordLayer,
+  cachedRequest,
+  createIo,
+  isEntryPoint,
+  resolveCoordinates,
+  today,
+} from './siteLayerShared.mjs';
 
 /**
  * overpass-api.de returned HTTP 406 to a default curl User-Agent in the
@@ -57,86 +70,53 @@ const MIN_ACRES = 1;
 
 /**
  * Cap on candidates written, nearest first. Stage 5 (nl-3hi.7.5) is a human
- * reading this table to promote real anchors — a Dallas-density 5mi pull
+ * reading this list to promote real anchors — a Dallas-density 5mi pull
  * returns 100+ named parks/cemeteries, which is a data dump, not a
  * reviewable candidate list. Another judgment call, not a fact.
  */
 const MAX_CANDIDATES = 15;
 
-async function main() {
-  const args = process.argv.slice(2);
-  const projectId = argAfter(args, '--project');
-  const smoke = args.includes('--smoke');
-  const force = args.includes('--force');
-  if (!projectId) {
-    console.error('Usage: node tools/fetch-osm-greenspace.mjs --project <id> [--owner <email>] [--smoke] [--force]');
-    process.exit(1);
-  }
+export const GREENSPACE_SOURCE = 'OpenStreetMap via Overpass (overpass-api.de)';
 
-  // The place label and the location behind it live in app.db (nl-3s5.3);
-  // the location never reaches git. tools/projectSite.mjs says how to set one.
-  let site;
-  try {
-    site = readProjectSite(projectId, { ownerEmail: ownerFromArgs(args) });
-  } catch (err) {
-    console.error(err.message);
-    process.exit(1);
-  }
-  const { place, location } = site;
-  const { lat, lng } = await resolveCoordinates(location);
-
-
-  const probeCache = openProbeCache();
+/**
+ * The yard's nearest named green space, as 'greenspace' layer rows. One
+ * Overpass query (cached by rounded point and radius).
+ *
+ * @param {{ location: object, probeCache: import('node:sqlite').DatabaseSync, fetchImpl?: typeof fetch,
+ *   force?: boolean, logger?: { log: Function, warn: Function } }} args
+ */
+export async function buildGreenspaceLayer({ location, probeCache, fetchImpl, force = false, logger = console }) {
+  const io = createIo({ probeCache, fetchImpl, force, logger });
+  const { lat, lng } = await resolveCoordinates(location, io);
   const cacheKey = `${lat.toFixed(4)},${lng.toFixed(4)},r${SEARCH_RADIUS_MI}`;
   const query = buildQuery(lat, lng);
-  const { raw: body } = await cached(
-    probeCache,
+  const { raw: body } = await cachedRequest(
+    io,
     'overpass',
     'greenspace-query',
     cacheKey,
-    async () => {
-      const response = await fetchWithBackoff(OVERPASS_URL, {
-        method: 'POST',
-        headers: { 'User-Agent': USER_AGENT, 'Content-Type': 'text/plain' },
-        body: query,
-      });
-      const text = await response.text();
-      if (!response.ok) throw new Error(`HTTP ${response.status}: ${text.slice(0, 200)}`);
-      return JSON.parse(text);
-    },
-    { force }
+    () => [
+      OVERPASS_URL,
+      { method: 'POST', headers: { 'User-Agent': USER_AGENT, 'Content-Type': 'text/plain' }, body: query },
+    ],
+    async (response) => JSON.parse(await response.text())
   );
-
-  const candidates = extractCandidates(body, lat, lng);
-
-  if (smoke) {
-    console.log(
-      `\n--smoke run: ${candidates.length} candidates >= ${MIN_ACRES} acre(s) within ${SEARCH_RADIUS_MI}mi, NOT writing ${ANCHORS_CSV}\n`
-    );
-    console.table(candidates.map((c) => ({ ...c, acres: Math.round(c.acres) })));
-    return;
-  }
-
-  const newRows = candidates.map((c) => ({
-    place,
+  const fetchedOn = today();
+  const rows = extractCandidates(body, lat, lng).map((c) => ({
     kind: c.tag.split('=')[1],
     name: c.name,
     status: 'candidate', // OSM tags are administrative, never promoted to "anchor" by this tool (nl-3hi.7.2).
     distance_mi: roundDistanceMi(c.distanceMi),
     detail: `${c.tag}, ~${Math.round(c.acres)} acres`,
-    fetched_on: new Date().toISOString().slice(0, 10),
-    source: 'OpenStreetMap via Overpass (overpass-api.de)',
+    fetched_on: fetchedOn,
+    source: GREENSPACE_SOURCE,
   }));
+  return { rows, networkRequests: io.networkRequests, failures: io.failures, fetchedOn };
+}
 
-  for (const [, tag] of TAGS) {
-    const kind = tag;
-    mergeAnchorRows(
-      place,
-      kind,
-      newRows.filter((row) => row.kind === kind)
-    );
-  }
-  console.log(`Wrote ${newRows.length} candidate row(s) for "${place}" to ${ANCHORS_CSV}`);
+/** Build and record one yard's 'greenspace' layer (feed-poller's queue and the CLI). */
+export function buildAndRecordGreenspace(args) {
+  return buildAndRecordLayer('greenspace', buildGreenspaceLayer, args);
 }
 
 function buildQuery(lat, lng) {
@@ -147,7 +127,7 @@ function buildQuery(lat, lng) {
 }
 
 /** Distance to the nearest point on each way's ring, and its area — not a centroid distance (nl-3hi.7.2). */
-function extractCandidates(body, lat, lng) {
+export function extractCandidates(body, lat, lng) {
   const point = [lng, lat];
   const results = [];
   for (const element of body.elements || []) {
@@ -175,27 +155,43 @@ function extractCandidates(body, lat, lng) {
     .slice(0, MAX_CANDIDATES);
 }
 
-async function resolveCoordinates(location) {
-  if (Number.isFinite(location.lat) && Number.isFinite(location.lng)) {
-    return { lat: location.lat, lng: location.lng };
+async function main() {
+  const args = process.argv.slice(2);
+  const slug = argAfter(args, '--project');
+  const smoke = args.includes('--smoke');
+  const force = args.includes('--force');
+  if (!slug) {
+    console.error('Usage: node tools/fetch-osm-greenspace.mjs --project <slug> [--owner <email>] [--smoke] [--force]');
+    process.exit(1);
   }
-  if (!location.address) {
-    throw new Error('the stored location has neither lat/lng nor an address');
+  let site;
+  try {
+    site = readProjectSite(slug, { ownerEmail: ownerFromArgs(args), requirePlace: false });
+  } catch (err) {
+    console.error(err.message);
+    process.exit(1);
   }
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(location.address)}`;
-  const response = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
-  if (!response.ok) throw new Error(`Geocoding failed: HTTP ${response.status}`);
-  const results = await response.json();
-  if (!results.length) throw new Error(`Geocoding found nothing for "${location.address}"`);
-  return { lat: Number(results[0].lat), lng: Number(results[0].lon) };
+  const probeCache = openProbeCache();
+  if (smoke) {
+    const { rows } = await buildGreenspaceLayer({ location: site.location, probeCache, force });
+    console.log(
+      `\n--smoke run: ${rows.length} candidate(s) >= ${MIN_ACRES} acre(s) within ${SEARCH_RADIUS_MI}mi, NOT writing data/ecosystem.db\n`
+    );
+    console.table(rows);
+    return;
+  }
+  const db = openEcosystemDb();
+  const result = await buildAndRecordGreenspace({ projectId: site.projectId, location: site.location, db, probeCache, force });
+  console.log(
+    `Yard "${slug}" (#${site.projectId}) green space: ${result.state}, ${result.rows} row(s), ${result.networkRequests} network request(s)` +
+      (result.error ? ` — ${result.error}` : '')
+  );
+  if (result.state !== 'ready') process.exitCode = 1;
 }
 
-function argAfter(args, flag) {
-  const idx = args.indexOf(flag);
-  return idx >= 0 ? args[idx + 1] : null;
+if (isEntryPoint(import.meta.url)) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
 }
-
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});

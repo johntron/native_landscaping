@@ -82,7 +82,7 @@ export function ringAreaAcres(ring) {
   return sqMiles * 640; // 640 acres per square mile
 }
 
-/** Round a distance to the nearest quarter mile — precision floor for anchors.csv (nl-3hi.7.1). */
+/** Round a distance to the nearest quarter mile — precision floor for a yard's habitat anchors (nl-3hi.7.1). */
 export function roundDistanceMi(mi, step = 0.25) {
   return Math.round(mi / step) * step;
 }

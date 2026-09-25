@@ -1,39 +1,42 @@
 #!/usr/bin/env node
 /**
- * Fetch which animal species are already reported nearby a project's site,
- * banded by distance, from iNaturalist (api.inaturalist.org), and merge the
- * result into ecology/nearby-fauna.csv keyed by `place`.
+ * Fetch which animal species are reported near a yard, banded by distance,
+ * from iNaturalist (api.inaturalist.org), into the yard's 'fauna' layer in
+ * data/ecosystem.db. The design tool's local-fauna-support rule and the
+ * plant detail sheet read it through /api/ecosystem/site.
  *
- * Same pattern as fetch-plant-animal-interactions.mjs: the network call
- * happens here, once, offline, and the app only ever reads the checked-in
- * CSV. src/analysis/ stays pure.
+ * Per yard since nl-3s5.31. Before that the rows were merged into the
+ * committed ecology/nearby-fauna.csv keyed by the yard's `place` label, which
+ * put one owner's site in a public repo. The location is read from app.db
+ * (tools/projectSite.mjs) and never written anywhere.
  *
- * The exact coordinates never reach the CSV or git: they live in
- * a yard's location in app.db (tools/projectSite.mjs), never in git (this repo is public).
- * Only the resulting species list — which does not by itself disclose an
- * address — is committed, keyed by the project's `place` label.
+ * Deliberately still separate from the species index
+ * (tools/fetch-ecosystem-index.mjs): this layer's five shared distance bands
+ * are what faunaMatches.js's RANGE_THRESHOLD_MI was written against.
+ *
+ * feed-poller builds this layer for every yard with a location
+ * (tools/ecosystemIndexQueue.js), so running it by hand is for a forced
+ * refresh or a --smoke look.
  *
  * Usage:
- *   node tools/fetch-nearby-fauna.mjs --project backyard
- *   node tools/fetch-nearby-fauna.mjs --project backyard --smoke   # one taxon, one radius
+ *   node tools/fetch-nearby-fauna.mjs --project backyard [--owner <email>]
+ *   node tools/fetch-nearby-fauna.mjs --project backyard --smoke   # one taxon, one radius, writes nothing
+ *   node tools/fetch-nearby-fauna.mjs --project backyard --force   # bypass the response cache
  */
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { readProjectSite, ownerFromArgs } from './projectSite.mjs';
-import { parseCsv } from '../src/data/csvLoader.js';
-import { openProbeCache, cached } from './usda-plants/probeCache.js';
+import { openProbeCache } from './usda-plants/probeCache.js';
+import { openEcosystemDb } from './ecosystemIndexDb.js';
+import { MI_TO_KM, fetchEstablishmentMeans, resolvePlaceId, restrictToWildPreciseRecords } from './inatShared.mjs';
 import {
-  MI_TO_KM,
   USER_AGENT,
-  fetchEstablishmentMeans,
-  fetchWithBackoff,
-  resolvePlaceId,
-  restrictToWildPreciseRecords,
-  sleep,
-} from './inatShared.mjs';
-
-const ROOT = fileURLToPath(new URL('..', import.meta.url));
-const OUT_CSV = `${ROOT}ecology/nearby-fauna.csv`;
+  argAfter,
+  buildAndRecordLayer,
+  cachedRequest,
+  createIo,
+  isEntryPoint,
+  resolveCoordinates,
+  today,
+} from './siteLayerShared.mjs';
 
 /**
  * Distance bands, in miles. Deliberately several bands rather than one radius:
@@ -50,69 +53,45 @@ const ICONIC_TAXA = ['Aves', 'Insecta', 'Mammalia', 'Reptilia', 'Amphibia'];
 /** Sorted by observation count already; the long tail past this is mostly noise/vagrants for our purpose. */
 const PER_TAXON_PAGE_SIZE = 200;
 
+/** iNaturalist asks for roughly one request a second; requests here go strictly one at a time. */
 const REQUEST_DELAY_MS = 1000;
 
-async function main() {
-  const args = process.argv.slice(2);
-  const projectId = argAfter(args, '--project');
-  const smoke = args.includes('--smoke');
-  const force = args.includes('--force');
-  if (!projectId) {
-    console.error('Usage: node tools/fetch-nearby-fauna.mjs --project <id> [--owner <email>] [--smoke] [--force]');
-    process.exit(1);
-  }
+export const FAUNA_SOURCE = 'api.inaturalist.org species_counts';
 
-  // The place label and the location behind it live in app.db (nl-3s5.3);
-  // the location never reaches git. tools/projectSite.mjs says how to set one.
-  let site;
-  try {
-    site = readProjectSite(projectId, { ownerEmail: ownerFromArgs(args) });
-  } catch (err) {
-    console.error(err.message);
-    process.exit(1);
-  }
-  const { place, location } = site;
-  const { lat, lng } = await resolveCoordinates(location);
+/**
+ * The animals reported near the yard, one row per (iconic taxon, species) at
+ * the nearest band it was found in. ~25 species_counts requests plus the
+ * establishment-means lookups, all through the probe cache. A request that
+ * fails is logged and counted, and the build carries on; a build with any
+ * failure is recorded as failed and its rows are not written
+ * (buildAndRecordLayer).
+ *
+ * @param {{ location: object, probeCache: import('node:sqlite').DatabaseSync, fetchImpl?: typeof fetch,
+ *   force?: boolean, smoke?: boolean, requestDelayMs?: number, logger?: { log: Function, warn: Function } }} args
+ */
+export async function buildFaunaLayer({
+  location,
+  probeCache,
+  fetchImpl,
+  force = false,
+  smoke = false,
+  requestDelayMs = REQUEST_DELAY_MS,
+  logger = console,
+}) {
+  const io = createIo({ probeCache, fetchImpl, force, requestDelayMs, logger });
+  const fetchJson = async (endpoint, url) =>
+    (await cachedRequest(io, 'inaturalist', endpoint, url.toString(), () => [url, { headers: { 'User-Agent': USER_AGENT } }])).raw;
 
-
+  const { lat, lng } = await resolveCoordinates(location, io);
   const radii = smoke ? [RADII_MI[Math.floor(RADII_MI.length / 2)]] : RADII_MI;
   const taxa = smoke ? [ICONIC_TAXA[0]] : ICONIC_TAXA;
 
-  // Same raw-response cache fetch-ecosystem-index.mjs uses, so re-deriving the
-  // CSV after a column change replays from disk instead of re-crawling.
-  const probeCache = openProbeCache();
-  const fetchJson = async (endpoint, url) => {
-    const { raw, cached: fromCache } = await cached(
-      probeCache,
-      'inaturalist',
-      endpoint,
-      url.toString(),
-      async () => {
-        const response = await fetchWithBackoff(url, { headers: { 'User-Agent': USER_AGENT } });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
-      },
-      { force }
-    );
-    if (!fromCache) await sleep(REQUEST_DELAY_MS);
-    return raw;
-  };
-
-  console.log(`Fetching nearby fauna for place "${place}" (lat=${lat}, lng=${lng})`);
-  console.log(`Radii: ${radii.join(', ')} mi; taxa: ${taxa.join(', ')}`);
-
   const placeId = await resolvePlaceId(lat, lng, { fetchJson });
-  if (placeId) {
-    console.log(`Native/introduced status will be checked against iNaturalist place_id=${placeId}`);
-  } else {
-    console.warn('Could not resolve a state/country place_id — establishment_means will be blank for every row.');
-  }
+  if (!placeId) logger.warn('Could not resolve a state/country place_id — establishment_means will be blank for every row.');
 
-  // seen: nearest (smallest) radius a species was found at, across all iconic
-  // taxa queried so far — radii are visited ascending so the first hit IS the
-  // nearest band.
-  const seen = new Map(); // key: `${iconicTaxon}|${animalSpecies}` -> row
-
+  // Nearest (smallest) radius a species was found at, per iconic taxon: radii
+  // are visited ascending, so the first hit IS the nearest band.
+  const seen = new Map(); // `${iconicTaxon}|${animalSpecies}` -> row
   for (const iconicTaxon of taxa) {
     for (const radius of radii) {
       let found = 0;
@@ -120,67 +99,50 @@ async function main() {
         const results = await fetchSpeciesCounts({ lat, lng, radiusMi: radius, iconicTaxon, fetchJson });
         results.forEach((entry) => {
           const key = `${iconicTaxon}|${entry.animal_species}`;
-          if (seen.has(key)) return; // already have this species at a smaller radius
-          seen.set(key, { ...entry, iconic_taxon: iconicTaxon, nearest_radius_mi: radius, place });
+          if (seen.has(key)) return;
+          seen.set(key, { ...entry, iconic_taxon: iconicTaxon, nearest_radius_mi: radius });
           found += 1;
         });
       } catch (err) {
-        console.warn(`  ${iconicTaxon} @ ${radius}mi: FAILED — ${err.message}`);
+        io.failures += 1;
+        logger.warn(`  ${iconicTaxon} @ ${radius}mi: FAILED — ${err.message}`);
       }
-      console.log(`  ${iconicTaxon} @ ${radius}mi: ${found} new species`);
+      logger.log(`  ${iconicTaxon} @ ${radius}mi: ${found} new species`);
     }
   }
 
-  const newRows = [...seen.values()];
+  const found = [...seen.values()];
+  // Stored rather than filtered: the read side decides, and "unassessed" is
+  // not "introduced" — see src/analysis/establishmentMeans.js.
+  const meansById =
+    placeId && found.length
+      ? await fetchEstablishmentMeans(found.map((row) => Number(row.taxon_id)), placeId, { fetchJson })
+      : new Map();
 
-  // Which of these are actually native here. Stored rather than filtered: the
-  // read side decides, and "unassessed" is not "introduced" — see
-  // src/analysis/establishmentMeans.js.
-  if (placeId && newRows.length) {
-    const meansById = await fetchEstablishmentMeans(
-      newRows.map((row) => Number(row.taxon_id)),
-      placeId,
-      { fetchJson }
-    );
-    newRows.forEach((row) => {
-      row.establishment_means = meansById.get(Number(row.taxon_id)) || '';
-    });
-    const flagged = newRows.filter((row) => row.establishment_means);
-    const introduced = newRows.filter((row) => row.establishment_means === 'introduced');
-    console.log(`\nestablishment_means resolved for ${flagged.length}/${newRows.length} species (${introduced.length} introduced)`);
-  }
-  if (smoke) {
-    console.log(`\n--smoke run: printing ${newRows.length} rows to stdout, NOT writing ecology/nearby-fauna.csv\n`);
-    console.log(toCsv(newRows));
-    return;
-  }
-
-  mergeAndWrite(place, newRows);
+  const fetchedOn = today();
+  const rows = found.map((row) => ({
+    iconic_taxon: row.iconic_taxon,
+    animal_species: row.animal_species,
+    animal_common: row.animal_common,
+    nearest_radius_mi: row.nearest_radius_mi,
+    observation_count: row.observation_count,
+    establishment_means: meansById.get(Number(row.taxon_id)) || '',
+    fetched_on: fetchedOn,
+    source: FAUNA_SOURCE,
+  }));
+  return { rows, networkRequests: io.networkRequests, failures: io.failures, fetchedOn };
 }
 
-async function resolveCoordinates(location) {
-  if (Number.isFinite(location.lat) && Number.isFinite(location.lng)) {
-    return { lat: location.lat, lng: location.lng };
-  }
-  if (!location.address) {
-    throw new Error('the stored location has neither lat/lng nor an address');
-  }
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(location.address)}`;
-  const response = await fetch(url, {
-    headers: { 'User-Agent': 'native-landscaping-app (ecology data fetch)' },
-  });
-  if (!response.ok) throw new Error(`Geocoding failed: HTTP ${response.status}`);
-  const results = await response.json();
-  if (!results.length) throw new Error(`Geocoding found nothing for "${location.address}"`);
-  return { lat: Number(results[0].lat), lng: Number(results[0].lon) };
+/** Build and record one yard's 'fauna' layer (feed-poller's queue and the CLI). */
+export function buildAndRecordFauna(args) {
+  return buildAndRecordLayer('fauna', buildFaunaLayer, args);
 }
 
 async function fetchSpeciesCounts({ lat, lng, radiusMi, iconicTaxon, fetchJson }) {
   const url = new URL('https://api.inaturalist.org/v1/observations/species_counts');
   url.searchParams.set('lat', lat);
   url.searchParams.set('lng', lng);
-  // The API's radius is in KM, not miles (nl-a8v). Passing the mile figure
-  // straight through is what made every band here roughly 0.62x its label.
+  // The API's radius is in KM, not miles (nl-a8v).
   url.searchParams.set('radius', (radiusMi * MI_TO_KM).toFixed(3));
   url.searchParams.set('iconic_taxa[]', iconicTaxon);
   url.searchParams.set('per_page', String(PER_TAXON_PAGE_SIZE));
@@ -195,75 +157,46 @@ async function fetchSpeciesCounts({ lat, lng, radiusMi, iconicTaxon, fetchJson }
       animal_species: entry.taxon?.name || '',
       animal_common: entry.taxon?.preferred_common_name || '',
       taxon_id: entry.taxon?.id ?? '',
-      observation_count: entry.count ?? '',
+      observation_count: entry.count ?? 0,
     }))
     .filter((row) => row.animal_species);
 }
 
-/** Merge new rows for one place into the existing CSV, replacing that place's rows only. */
-function mergeAndWrite(place, newRows) {
-  const existing = existsSync(OUT_CSV) ? parseCsv(readFileSync(OUT_CSV, 'utf8')) : [];
-  const untouched = existing.filter((row) => row.place !== place);
-  const fetchedOn = new Date().toISOString().slice(0, 10);
-  const rows = [
-    ...untouched,
-    ...newRows.map((row) => ({
-      place: row.place,
-      animal_species: row.animal_species,
-      animal_common: row.animal_common,
-      iconic_taxon: row.iconic_taxon,
-      nearest_radius_mi: row.nearest_radius_mi,
-      observation_count: row.observation_count,
-      establishment_means: row.establishment_means || '',
-      fetched_on: fetchedOn,
-      source: 'api.inaturalist.org species_counts',
-    })),
-  ];
-  writeFileSync(OUT_CSV, toCsv(rows, true));
-  console.log(`\nWrote ${rows.length} total rows (${newRows.length} for "${place}") to ${OUT_CSV}`);
+async function main() {
+  const args = process.argv.slice(2);
+  const slug = argAfter(args, '--project');
+  const smoke = args.includes('--smoke');
+  const force = args.includes('--force');
+  if (!slug) {
+    console.error('Usage: node tools/fetch-nearby-fauna.mjs --project <slug> [--owner <email>] [--smoke] [--force]');
+    process.exit(1);
+  }
+  let site;
+  try {
+    site = readProjectSite(slug, { ownerEmail: ownerFromArgs(args), requirePlace: false });
+  } catch (err) {
+    console.error(err.message);
+    process.exit(1);
+  }
+  const probeCache = openProbeCache();
+  if (smoke) {
+    const { rows } = await buildFaunaLayer({ location: site.location, probeCache, force, smoke: true });
+    console.log(`\n--smoke run: ${rows.length} row(s), NOT writing data/ecosystem.db\n`);
+    console.table(rows.slice(0, 50));
+    return;
+  }
+  const db = openEcosystemDb();
+  const result = await buildAndRecordFauna({ projectId: site.projectId, location: site.location, db, probeCache, force });
+  console.log(
+    `Yard "${slug}" (#${site.projectId}) nearby fauna: ${result.state}, ${result.rows} row(s), ${result.networkRequests} network request(s)` +
+      (result.error ? ` — ${result.error}` : '')
+  );
+  if (result.state !== 'ready') process.exitCode = 1;
 }
 
-const CSV_HEADER = [
-  'place',
-  'animal_species',
-  'animal_common',
-  'iconic_taxon',
-  'nearest_radius_mi',
-  'observation_count',
-  'establishment_means',
-  'fetched_on',
-  'source',
-];
-
-function toCsv(rows, includeHeader) {
-  const lines = includeHeader ? [CSV_HEADER.join(',')] : [];
-  rows
-    .slice()
-    .sort(
-      (a, b) =>
-        String(a.place).localeCompare(String(b.place)) ||
-        String(a.iconic_taxon).localeCompare(String(b.iconic_taxon)) ||
-        String(a.animal_species).localeCompare(String(b.animal_species))
-    )
-    .forEach((row) => {
-      lines.push(CSV_HEADER.map((key) => escapeCell(row[key])).join(','));
-    });
-  return lines.join('\n') + '\n';
+if (isEntryPoint(import.meta.url)) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
 }
-
-function escapeCell(value) {
-  const str = String(value ?? '');
-  if (!/[",\n]/.test(str)) return str;
-  return `"${str.replace(/"/g, '""')}"`;
-}
-
-function argAfter(args, flag) {
-  const idx = args.indexOf(flag);
-  return idx >= 0 ? args[idx + 1] : null;
-}
-
-
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});

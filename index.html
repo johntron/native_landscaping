@@ -114,8 +114,8 @@
           <div class="pn-ctl">
             <label for="pnVerdictFilter">Evidence</label>
             <select id="pnVerdictFilter">
-              <option value="recommendable">Plantable &amp; confirmed near this site</option>
-              <option value="confirmed-local">Any confirmed host (incl. non-natives)</option>
+              <option value="recommendable">Plantable &amp; host recorded in the county</option>
+              <option value="confirmed-local">Any host recorded in the county (incl. non-natives)</option>
               <option value="flora-cited">Flora-cited hosts (any)</option>
               <option value="rejected">Rejected by the flora</option>
               <option value="renamed">Renamed since 1999</option>
@@ -145,7 +145,7 @@
                   <th class="num">NWF lep.<button type="button" class="disclosure" data-disclosure aria-controls="dNwfLep" aria-label="What the NWF lepidoptera count means">?</button></th>
                   <th class="num">NWF bees<button type="button" class="disclosure" data-disclosure aria-controls="dNwfBees" aria-label="What the NWF bee count means">?</button></th>
                   <th class="num">FNCT hosts<button type="button" class="disclosure" data-disclosure aria-controls="dFnctHosts" aria-label="What the FNCT host count means">?</button></th>
-                  <th class="num">Near here<button type="button" class="disclosure" data-disclosure aria-controls="dNearHere" aria-label="What near here means">?</button></th>
+                  <th class="num">In county<button type="button" class="disclosure" data-disclosure aria-controls="dNearHere" aria-label="What in county means">?</button></th>
                 </tr>
               </thead>
               <tbody id="pnRows"></tbody>
@@ -157,6 +157,7 @@
         <p class="data-note">
           Every column heading carries its own definition &mdash; the <span aria-hidden="true">?</span>
           markers above open what each number is, and is not.
+          <span id="pnRegionNote"></span>
         </p>
       </section>
 
@@ -199,7 +200,7 @@
         <div id="dNwfLep" hidden><p>Caterpillar species for a whole <em>genus</em> across an entire continental ecoregion. It does not transfer to one plant in one yard.</p><p>Never added to the FNCT column &mdash; they are different measurements.</p></div>
         <div id="dNwfBees" hidden><p>Bee species recorded for the genus across the same continental ecoregion, with the same caveat: a genus-wide, region-wide count.</p></div>
         <div id="dFnctHosts" hidden><p>Lepidoptera named for the genus in the flora’s Appendix Ten for North Central Texas &mdash; a compilation with its own coverage gaps, not an exhaustive survey.</p><p><cite>Diggs, Lipscomb &amp; O’Kennon 1999, pp. 1394&ndash;1403.</cite></p></div>
-        <div id="dNearHere" hidden><p>The animal has been reported within 15 miles on iNaturalist. <em>Presence, not abundance</em>, and heavily observer-biased.</p></div>
+        <div id="dNearHere" hidden><p>How many of the flora’s named butterflies and moths for this genus have a research-grade, wild iNaturalist record in <span id="pnRegionWhere">the county</span>. <em>Presence, not abundance</em>, heavily observer-biased, and about the county, not any one yard: a signed-in yard sees its own nearby wildlife on “What’s nearby”.</p><p>The county is our choice (the same county the flora column checks), not a source’s. Fetched by <code>tools/fetch-region-fauna.mjs</code> from api.inaturalist.org.</p></div>
       </div>
     </main>
 

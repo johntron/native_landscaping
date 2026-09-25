@@ -1,5 +1,7 @@
 /**
- * Habitat anchors near a site, from ecology/anchors.csv (nl-3hi.7).
+ * Habitat anchors near a yard (nl-3hi.7): its 'streams' and 'greenspace' layers
+ * from /api/ecosystem/site (per yard since nl-3s5.31; they were the committed,
+ * place-keyed ecology/anchors.csv).
  *
  * Location and distance are facts; "how connected the yard is" would be a
  * model, and this module deliberately computes nothing of the kind: no score,
@@ -13,18 +15,16 @@
  *   (a live test returned the State Fair grounds as leisure=park), so these are
  *   places to go and look, never presented as habitat.
  *
- * Pure: no DOM, no fetch. The page reads the CSV and renders what this returns.
+ * Pure: no DOM, no fetch. The page fetches one yard's rows and renders what
+ * this returns.
  */
 
 /**
- * @param {Array<Record<string, string>>} rows  parsed ecology/anchors.csv
- * @param {string} place                        the project's place label
+ * @param {Array<Record<string, any>>} rows  one yard's anchor rows
  * @returns {{ anchors: object[], candidates: object[], fetchedOn: string }}
  */
-export function groupAnchors(rows, place) {
-  const wanted = String(place || '').trim();
+export function groupAnchors(rows) {
   const entries = (Array.isArray(rows) ? rows : [])
-    .filter((row) => wanted && String(row.place || '').trim() === wanted)
     .map((row) => ({
       kind: String(row.kind || '').trim(),
       name: String(row.name || '').trim(),

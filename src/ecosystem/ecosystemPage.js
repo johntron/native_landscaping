@@ -5,7 +5,7 @@
  * near this site per /api/ecosystem, cross-referenced against the catalog.
  */
 import { loadProjectIndex, loadProjectConfig, resolveActiveProjectId } from '../data/projectConfig.js';
-import { fetchCsv, parseCsv } from '../data/csvLoader.js';
+import { loadYardSite } from '../data/yardSite.js';
 import { computePlantMatches, escapeHtml, fetchObservationRows } from './plantMatches.view.js';
 import { pageTitle } from '../ui/siteRoute.js';
 import { candidateSize, formatDistance, groupAnchors, kindLabel } from '../analysis/anchors.js';
@@ -54,15 +54,12 @@ async function load() {
     navDesignLink.href = url.toString();
   }
 
-  const place = String(project.place || '').trim();
   if (titleEl) titleEl.textContent = `What’s nearby: ${project.name}`;
   document.title = pageTitle(`What’s nearby: ${project.name}`);
-  // Streams and green space are still keyed by the place label (committed
-  // ecology/anchors.csv); the species index is keyed by the yard itself
-  // (nl-3s5.6), so a yard with no label still gets its species. Independent
-  // of the index below: a missing anchors table costs this section, never
-  // the page.
-  if (place) renderHabitatNearby(place).catch((err) => console.warn('Habitat anchors unavailable', err));
+  // Streams and green space are the yard's own site layers (nl-3s5.31), like
+  // the species index below. Independent of it: a failed load costs this
+  // section, never the page.
+  renderHabitatNearby(project).catch((err) => console.warn('Habitat anchors unavailable', err));
   if (noteEl) {
     noteEl.innerHTML = `Species reported on iNaturalist near this yard, banded by how far each taxon
       plausibly ranges to find a newly planted specimen. The index is built in the background once
@@ -205,14 +202,16 @@ searchFilter.addEventListener('input', render);
 load();
 
 /**
- * Streams and green space near the site (ecology/anchors.csv, nl-3hi.7). Name and
- * straight-line distance only, by design: no score or ranking beyond distance.
- * The section stays hidden when this place has no rows.
+ * Streams and green space near the yard (nl-3hi.7; per yard since nl-3s5.31).
+ * Name and straight-line distance only, by design: no score or ranking beyond
+ * distance. The section stays hidden while the yard has no rows (no location,
+ * or its layers are still being fetched).
  */
-async function renderHabitatNearby(place) {
+async function renderHabitatNearby(project) {
   if (!habitatSectionEl) return;
-  const rows = parseCsv(await fetchCsv(new URL('ecology/anchors.csv', document.baseURI)));
-  const { anchors, candidates, fetchedOn } = groupAnchors(rows, place);
+  const site = await loadYardSite(project.id);
+  if (site.error) throw new Error(site.error);
+  const { anchors, candidates, fetchedOn } = groupAnchors(site.anchors);
   if (!anchors.length && !candidates.length) return;
 
   const renderList = (listEl, entries, describe) => {

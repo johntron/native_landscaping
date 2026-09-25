@@ -36,7 +36,7 @@ import { COPY_NAME, EXAMPLE_NAME, findGeoKeys, snapshotFromOwnerYard, writeExamp
 import { createRateLimiter, EXAMPLE_READ_ONLY_ERROR } from '../server/http.js';
 import { handleProjectRoutes } from '../server/routes/project.js';
 import { handleEcosystemRoutes } from '../server/routes/ecosystem.js';
-import { locationKey, markBuildFinished, markBuildStarted, openEcosystemDb, replaceTaxonRows } from '../tools/ecosystemIndexDb.js';
+import { importLayer, locationKey, markBuildFinished, markBuildStarted, openEcosystemDb, replaceTaxonRows } from '../tools/ecosystemIndexDb.js';
 import { serveStaticFile } from '../server/static.js';
 import { openProbeCache, setCached } from '../tools/usda-plants/probeCache.js';
 
@@ -232,6 +232,8 @@ const ROUTES = [
   { method: 'GET', path: '/api/project-photo', query: `&path=${encodeURIComponent(PHOTO)}` },
   { method: 'POST', path: '/api/view-background', query: '&view=plan', body: () => WEBP, headers: { 'content-type': 'image/webp' } },
   { method: 'GET', path: '/api/ecosystem' },
+  // The yard's habitat anchors and nearby fauna (nl-3s5.31).
+  { method: 'GET', path: '/api/ecosystem/site' },
   // The yard's location (nl-3s5.30): read, look up (writes nothing), save.
   { method: 'GET', path: '/api/project-location' },
   { method: 'POST', path: '/api/project-location/preview', body: () => ({ query: LOCATION_QUERY }) },
@@ -282,11 +284,16 @@ test('every project route in the handler is covered by the table above', async (
     covered.add('POST /api/projects');
     covered.add('POST /api/projects/copy-example'); // its own tests, below
     covered.add('GET /api/me/storage'); // its own tests, below
-    const source = readFileSync(new URL('../server/routes/project.js', import.meta.url), 'utf-8');
-    const found = [...source.matchAll(/pathname === '([^']+)' && req\.method === '([A-Z]+)'/g)].map(
-      ([, path, method]) => `${method} ${path}`
+    // The ecosystem routes that take no yard (nl-3s5.31 added this file to the scan).
+    covered.add('POST /api/geocode'); // no yard; rate-limited, tests/adminAndRateLimits.test.js
+    covered.add('GET /api/ecoregion'); // no yard; coordinates in, a code out
+    covered.add('GET /api/ecosystem/places'); // the caller's own labels, tests/routesDbHandles.test.js
+    const found = ['project.js', 'ecosystem.js'].flatMap((file) =>
+      [...readFileSync(new URL(`../server/routes/${file}`, import.meta.url), 'utf-8').matchAll(
+        /pathname === '([^']+)' && req\.method === '([A-Z]+)'/g
+      )].map(([, path, method]) => `${method} ${path}`)
     );
-    assert.ok(found.length >= 12, `found ${found.length} routes`);
+    assert.ok(found.length >= 17, `found ${found.length} routes`);
     for (const route of found) assert.ok(covered.has(route), `${route} has no authorization row`);
   } finally {
     env.cleanup();
@@ -574,6 +581,99 @@ test('/api/ecosystem: per yard, owner-only, even empty; a place label reaches no
   }
 });
 
+// --- /api/ecosystem/site (nl-3s5.31) ----------------------------------------------------
+
+/** Seed a yard's three site layers for the location addYard gives every yard. Obviously fake names. */
+function seedSiteLayers(env, projectId, tag, location = { lat: 32.5, lng: -96.5 }) {
+  const key = locationKey(location);
+  const fetchedOn = '2026-01-01';
+  importLayer(env.ecosystem, projectId, 'streams', key, [
+    { kind: 'stream', name: `${tag} Test Creek`, status: 'anchor', distance_mi: 0.5, detail: 'channel', fetched_on: fetchedOn, source: 'test' },
+  ], { fetchedOn });
+  importLayer(env.ecosystem, projectId, 'greenspace', key, [
+    { kind: 'park', name: `${tag} Test Park`, status: 'candidate', distance_mi: 1, detail: 'leisure=park, ~3 acres', fetched_on: fetchedOn, source: 'test' },
+  ], { fetchedOn });
+  importLayer(env.ecosystem, projectId, 'fauna', key, [
+    { iconic_taxon: 'Insecta', animal_species: `${tag} testmoth`, animal_common: '', nearest_radius_mi: 1, observation_count: 2, establishment_means: '', fetched_on: fetchedOn, source: 'test' },
+  ], { fetchedOn });
+}
+
+const siteNames = (body) => [...body.anchors.map((a) => a.name), ...body.fauna.map((f) => f.animal_species)].sort();
+
+test('/api/ecosystem/site: per yard, owner-only; a yard at the same place and site never sees another owner’s rows', async () => {
+  const env = setup();
+  try {
+    assert.equal((await call(env, null, 'GET', '/api/ecosystem/site')).statusCode, 400);
+    assert.equal((await call(env, env.alice, 'GET', '/api/ecosystem/site?place=home')).statusCode, 400);
+    assert.equal((await call(env, null, 'GET', '/api/ecosystem/site?project=bob-yard')).statusCode, 401);
+    assert.equal((await call(env, env.alice, 'GET', '/api/ecosystem/site?project=bob-yard')).statusCode, 404);
+
+    // Nothing built yet: every layer queued, no rows.
+    let own = (await call(env, env.bob, 'GET', '/api/ecosystem/site?project=bob-yard')).json();
+    assert.deepEqual(own.layers, {
+      fauna: { state: 'queued', fetchedOn: null },
+      streams: { state: 'queued', fetchedOn: null },
+      greenspace: { state: 'queued', fetchedOn: null },
+    });
+    assert.deepEqual([own.anchors, own.fauna], [[], []]);
+
+    // Both yards say place "home" at the same coordinates. Bob's rows are Bob's.
+    seedSiteLayers(env, env.bobYardId, 'Bob');
+    const res = await call(env, env.bob, 'GET', '/api/ecosystem/site?project=bob-yard');
+    own = res.json();
+    assert.deepEqual(siteNames(own), ['Bob Test Creek', 'Bob Test Park', 'Bob testmoth']);
+    assert.equal(own.layers.fauna.state, 'ready');
+    assert.equal(own.layers.streams.fetchedOn, '2026-01-01');
+    assert.equal('project_id' in own.anchors[0] || 'project_id' in own.fauna[0], false, 'the row key is not sent');
+    assert.equal('location' in own, false, 'this route sends no location at all');
+    assert.equal(/32\.5|-96\.5|somewhere/.test(String(res.body)), false);
+
+    const alice = (await call(env, env.alice, 'GET', '/api/ecosystem/site?project=alice-yard')).json();
+    assert.deepEqual([alice.anchors, alice.fauna], [[], []], "Alice's yard shows none of Bob's rows");
+    // The other way round too: Bob asking for Alice's slug is refused outright.
+    assert.equal((await call(env, env.bob, 'GET', '/api/ecosystem/site?project=alice-yard')).statusCode, 404);
+
+    // Bob moves: the old site's rows stop showing at once, every layer queued again.
+    env.db.prepare('UPDATE projects SET location_json = ? WHERE id = ?').run(JSON.stringify({ lat: 33, lng: -97 }), env.bobYardId);
+    own = (await call(env, env.bob, 'GET', '/api/ecosystem/site?project=bob-yard')).json();
+    assert.deepEqual([own.anchors, own.fauna], [[], []]);
+    assert.equal(own.layers.streams.state, 'queued');
+
+    // No location at all says so.
+    env.db.prepare('UPDATE projects SET location_json = NULL WHERE id = ?').run(env.bobYardId);
+    own = (await call(env, env.bob, 'GET', '/api/ecosystem/site?project=bob-yard')).json();
+    assert.equal(own.layers.fauna.state, 'no-location');
+  } finally {
+    env.cleanup();
+  }
+});
+
+test('/api/ecosystem/site on the example shows its source yard’s layers, and a moved source shows none', async () => {
+  const env = setupWithExample();
+  try {
+    let shown = (await call(env, env.alice, 'GET', `/api/ecosystem/site?project=${EXAMPLE_SLUG}`)).json();
+    assert.deepEqual([shown.anchors, shown.fauna], [[], []]);
+    seedSiteLayers(env, env.carolYardId, 'Carol');
+    seedSiteLayers(env, env.bobYardId, 'Bob');
+    for (const user of [env.alice, env.bob, env.carol]) {
+      const res = await call(env, user, 'GET', `/api/ecosystem/site?project=${EXAMPLE_SLUG}`);
+      assert.equal(res.statusCode, 200);
+      shown = res.json();
+      assert.deepEqual(siteNames(shown), ['Carol Test Creek', 'Carol Test Park', 'Carol testmoth'], `as ${user.email}`);
+      assert.equal(/32\.5|-96\.5|somewhere/.test(String(res.body)), false);
+    }
+    assert.equal((await call(env, null, 'GET', `/api/ecosystem/site?project=${EXAMPLE_SLUG}`)).statusCode, 401);
+    // Carol's own backyard stays hers.
+    assert.equal((await call(env, env.alice, 'GET', '/api/ecosystem/site?project=backyard')).statusCode, 404);
+
+    env.db.prepare('UPDATE projects SET location_json = ? WHERE id = ?').run(JSON.stringify({ lat: 33, lng: -97 }), env.carolYardId);
+    shown = (await call(env, env.alice, 'GET', `/api/ecosystem/site?project=${EXAMPLE_SLUG}`)).json();
+    assert.deepEqual([shown.anchors, shown.fauna], [[], []], 'rows for a site the source has left are not shown');
+  } finally {
+    env.cleanup();
+  }
+});
+
 // --- visibility ------------------------------------------------------------------------
 
 test('visibility: the database allows private and public, the application assigns only private', () => {
@@ -705,7 +805,7 @@ test("the example never returns a location, and the owner's real backyard stays 
     assert.equal(shown.location, null);
 
     // Nothing the example serves carries the source's address or coordinates.
-    for (const path of ['/api/project', '/api/history', '/api/features', '/api/layout', '/api/ecosystem', '/api/project-location']) {
+    for (const path of ['/api/project', '/api/history', '/api/features', '/api/layout', '/api/ecosystem', '/api/ecosystem/site', '/api/project-location']) {
       const body = String((await call(env, env.alice, 'GET', `${path}?project=${EXAMPLE_SLUG}`)).body);
       assert.equal(/somewhere|32\.5|-96\.5/.test(body), false, `${path} leaks the source location`);
     }

@@ -10,13 +10,13 @@
 import { fetchCsv, parseCsv } from '../data/csvLoader.js';
 import { loadProjectConfig, resolveActiveProjectId } from '../data/projectConfig.js';
 import { buildHostGeneraIndex } from '../analysis/hostGenera.js';
-import { buildNearbyFaunaIndex } from '../analysis/faunaMatches.js';
 import { TIERS, tierInfo } from '../analysis/provenance.js';
 import {
   buildFnctScreenIndex,
   buildGrowthIndex,
   buildLepHostIndex,
   buildNameChangeIndex,
+  regionFaunaIndex,
   screenKeystoneGenera,
   GROWTH_TIERS,
   VERDICTS,
@@ -29,6 +29,8 @@ const $ = (id) => document.getElementById(id);
 
 let allRows = [];
 let selected = null;
+// The region the "recorded in" column speaks for (ecology/region-fauna.csv).
+let regionLabel = 'the county';
 
 const escapeHtml = (value) =>
   String(value ?? '').replace(/[&<>"']/g, (c) =>
@@ -139,7 +141,7 @@ function renderDetail() {
         .map((h) => {
           const near = row.confirmedNearby.find((c) => c.species === h.species);
           const flag = near
-            ? ` <span class="pn-near">— reported within ${near.nearestRadiusMi} mi</span>`
+            ? ` <span class="pn-near">— recorded in ${escapeHtml(near.where || regionLabel)}</span>`
             : '';
           const inferred = h.nameInferred ? ' <em title="Expanded from an abbreviation in the printed table">(name expanded)</em>' : '';
           return `<li>${escapeHtml(h.common || '—')} <span class="sci">${escapeHtml(h.species)}</span>${inferred}${flag}</li>`;
@@ -177,7 +179,7 @@ function renderDetail() {
     ${row.habitConflict ? `<p class="pn-mine"><strong>My call, not the source's.</strong> ${escapeHtml(row.habitConflict)}</p>` : ''}
     ${row.curatedLarvalHosts ? `<p class="pn-mine"><strong>Hand-added, weaker provenance.</strong> ${escapeHtml(row.curatedLarvalHosts)}</p>` : ''}
     <p style="margin:0.7rem 0 0;font-size:0.78rem;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-muted)">
-      Larval hosts in the flora (${hosts.length})${nearSet.size ? ` — ${nearSet.size} confirmed nearby` : ''}
+      Larval hosts in the flora (${hosts.length})${nearSet.size ? ` — ${nearSet.size} recorded in ${escapeHtml(regionLabel)}` : ''}
     </p>
     ${hostList}
     <p class="pn-cite">${cites.map((c) => escapeHtml(c)).join('<br>')}</p>
@@ -211,7 +213,7 @@ function renderCompare() {
         ? `Not absent — the flora keeps these under <i>${escapeHtml(row.fnctUnderName)}</i>, a 1999 naming decision.`
         : row.lepHostCount === 0
           ? `In the flora (p. ${escapeHtml(row.fnctPage)}), but its host appendix names no Lepidoptera, and its one nc TX species is a riverbank tree with no Dallas record.`
-          : `${row.confirmedCount ? `<span class="pn-near">${row.confirmedCount} of them recorded near here.</span> ` : ''}Cited to FNCT p. ${escapeHtml(row.fnctPage)}.`;
+          : `${row.confirmedCount ? `<span class="pn-near">${row.confirmedCount} of them recorded in ${escapeHtml(regionLabel)}.</span> ` : ''}Cited to FNCT p. ${escapeHtml(row.fnctPage)}.`;
 
     return `<div class="pn-card${reject ? ' pn-card--reject' : ''}">
       <span class="g">${escapeHtml(genus)}${genusCommonSuffix(genus)}</span>
@@ -237,7 +239,7 @@ function renderHeadline() {
 
   $('pnHeadline').innerHTML =
     `<strong>${confirmed.length} genera</strong> in the Blackland natives catalog clear the screen with ` +
-    `at least one flora-cited larval host confirmed near this site — ${nearTaxa.size} distinct butterflies ` +
+    `at least one flora-cited larval host recorded in ${escapeHtml(regionLabel)} — ${nearTaxa.size} distinct butterflies ` +
     `and moths, across ${habits.size} growth forms, from canopy trees to forbs. ` +
     `<strong>${rejected.length} genera</strong> on the keystone list have no treatment in the flora at all` +
     (worstReject
@@ -258,23 +260,39 @@ function populateHabitFilter() {
   });
 }
 
+/** Says which region the "recorded in" column is, and when it was fetched, or that it is not available. */
+function renderRegionNote(regionFauna) {
+  const where = $('pnRegionWhere');
+  if (where) where.textContent = regionFauna.where || 'the county';
+  const note = $('pnRegionNote');
+  if (!note) return;
+  note.textContent = regionFauna.size
+    ? `${regionFauna.size} butterfly and moth species with a research-grade iNaturalist record in ${regionFauna.where}, fetched ${regionFauna.fetchedOn}.`
+    : 'County records are not available right now, so no genus is marked as recorded in the county.';
+}
+
 async function main() {
   renderTierKey();
 
-  let project = { ecoregion: '9', place: 'home' };
+  let project = { ecoregion: '9' };
   try {
     project = await loadProjectConfig(resolveActiveProjectId());
   } catch (err) {
-    console.warn('Falling back to the default ecoregion/place; project config unavailable', err);
+    console.warn('Falling back to the default ecoregion; project config unavailable', err);
   }
 
   const url = (path) => new URL(path, document.baseURI);
-  const [hostGeneraCsv, screenCsv, lepCsv, catalogCsv, faunaCsv, nameChangeCsv, avoidCsv] = await Promise.all([
+  const [hostGeneraCsv, screenCsv, lepCsv, catalogCsv, regionFaunaCsv, nameChangeCsv, avoidCsv] = await Promise.all([
     fetchCsv(url('ecology/host-genera.csv')),
     fetchCsv(url('ecology/fnct-genus-screen.csv')),
     fetchCsv(url('ecology/fnct-lepidoptera-hosts.csv')),
     fetchCsv(url('catalog/blackland-prairie-natives.csv')),
-    fetchCsv(url('ecology/nearby-fauna.csv')),
+    // Public, region-level records (nl-3s5.31), never one person's yard. A
+    // missing table empties the "recorded in" column rather than the page.
+    fetchCsv(url('ecology/region-fauna.csv')).catch((err) => {
+      console.warn('Region fauna unavailable; the recorded-in column will be empty', err);
+      return '';
+    }),
     fetchCsv(url('ecology/fnct-name-changes.csv')),
     fetchCsv(url('catalog/dfw-avoid-non-natives.csv')),
   ]);
@@ -283,13 +301,16 @@ async function main() {
     .map((row) => `<li>${escapeHtml(row.common_name)} <span class="sci">${escapeHtml(row.botanical_name)}</span></li>`)
     .join('');
 
+  const regionFauna = regionFaunaIndex(regionFaunaCsv);
+  if (regionFauna.where) regionLabel = regionFauna.where;
+  renderRegionNote(regionFauna);
+
   allRows = screenKeystoneGenera({
     hostGenera: buildHostGeneraIndex(hostGeneraCsv, { ecoregion: project.ecoregion || '9' }),
     fnctScreen: buildFnctScreenIndex(screenCsv),
     lepHosts: buildLepHostIndex(lepCsv),
     growth: buildGrowthIndex(catalogCsv),
-    nearbyFauna: buildNearbyFaunaIndex(faunaCsv),
-    place: project.place || 'home',
+    localFauna: regionFauna,
     nameChanges: buildNameChangeIndex(nameChangeCsv),
   });
 

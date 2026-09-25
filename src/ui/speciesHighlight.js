@@ -74,7 +74,6 @@ export function createSpeciesHighlight({ appState, speciesTableContainer, ecolog
         ecoregion: appState.project?.ecoregion,
         interactions: appState.interactions,
         nearbyFauna: appState.nearbyFauna,
-        place: appState.project?.place,
       })
     );
     renderEcologyPanel(results, container);

@@ -27,7 +27,7 @@ ecological instrument.
 
 ## 2. Nearest-anchor kind per place
 
-**DECIDED:** "this place's anchor lean" = the `kind` of the single row in `ecology/anchors.csv`
+**DECIDED:** "this place's anchor lean" = the `kind` of the single row in the yard's anchors (then `ecology/anchors.csv`)
 with the smallest `distance_mi` for that `place`. Not "the nearest of each kind" — one anchor,
 the closest one overall, because a project sits at one point and the closest habitat edge is
 the one most plausibly reachable by the wildlife the design is for (pollinators' typical
@@ -35,16 +35,17 @@ forage range, per `nl-3hi`'s own 73–121m/mean citation, is far smaller than a 
 distances none of the three kinds is truly "connected," so picking the closest is a
 tie-breaking convention, not a claim of ecological reach).
 
-**MEASURED**, this session, `ecology/anchors.csv` for `place=home` (the only place with data
-today):
+**MEASURED**, this session, the anchors of the one yard with data at the time (they were
+`ecology/anchors.csv`, `place=home`; per yard in `data/ecosystem.db` since nl-3s5.31, and the
+feature names are left out here because together with distances they locate the yard):
 
 ```
-stream   nearest: <a named creek>                0.75 mi
-park     nearest: <a named park>                   0.25 mi
-cemetery nearest: <a named cemetery> 0.75 mi
+stream   nearest: <a named creek>     0.75 mi
+park     nearest: <a named park>      0.25 mi
+cemetery nearest: <a named cemetery>  0.75 mi
 ```
 
-Overall nearest = **<a named park>, kind=park, 0.25 mi**. `home`'s own numbers already show why
+Overall nearest = **a park, kind=park, 0.25 mi**. `home`'s own numbers already show why
 ties are the expected case here, not a rare edge: `distance_mi` is rounded to the nearest
 quarter mile as a deliberate precision floor (`tools/geoShared.mjs:85`), and `stream` and
 `cemetery` are already tied with each other at 0.75 mi — only `park`'s 0.25 mi breaks the
@@ -145,7 +146,7 @@ the question 10 §6 raised, not an eighth lookup to add.
 
 ## 7. Worked example
 
-For `place=home` (nearest anchor: <a named park>, `kind=park`, §2): the boosted bucket is
+For that yard (nearest anchor: a park, `kind=park`, §2): the boosted bucket is
 `water_pref ∈ {low, medium}`. The number that matters is the `water_pref` distribution across
 the actual plantable core §3 requires this join to reach — [10 §2.2](10-prioritization.md)'s
 101-species union of `plants.csv` and `npsot_dfw_recommended=yes`, joined by `botanical_name`

@@ -130,7 +130,7 @@ touched() { [ -n "$changed" ] && grep -Eq "$1" <<<"$changed"; }
 # in src/data/ and tools/dataDir.js, which the earlier list missed). All of
 # src/data/ rather than its three files: projectStore.js grows imports there,
 # and a needless poller restart costs nothing. Widen it when that grows.
-FEED_POLLER_CODE='^(tools/(feedState/|savedAreas/|fetch-observation-events\.mjs$|fetch-ecosystem-index\.mjs$|ecosystemIndexQueue\.js$|projectSite\.mjs$|geocode\.mjs$|dataDir\.js$|schedule-feed-poll\.mjs$|inatShared\.mjs$|usda-plants/probeCache\.js$|[^/]*Db\.js$)|server/db/|src/data/|src/analysis/establishmentMeans\.js$)'
+FEED_POLLER_CODE='^(tools/(feedState/|savedAreas/|fetch-observation-events\.mjs$|fetch-ecosystem-index\.mjs$|fetch-nearby-fauna\.mjs$|fetch-nhd-creeks\.mjs$|fetch-osm-greenspace\.mjs$|siteLayerShared\.mjs$|geoShared\.mjs$|ecosystemIndexQueue\.js$|projectSite\.mjs$|geocode\.mjs$|dataDir\.js$|schedule-feed-poll\.mjs$|inatShared\.mjs$|usda-plants/probeCache\.js$|[^/]*Db\.js$)|server/db/|src/data/|src/analysis/establishmentMeans\.js$)'
 restart_poller=0
 touched "$FEED_POLLER_CODE" && restart_poller=1
 

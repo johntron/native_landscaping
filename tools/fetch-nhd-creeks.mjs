@@ -1,28 +1,39 @@
 #!/usr/bin/env node
 /**
- * Fetch the nearest named streams to a project's site from USGS NHD
- * (hydro.nationalmap.gov), and merge the result into ecology/anchors.csv
- * keyed by `place` (nl-3hi.7.1, stage 1 of the anchor-data epic nl-3hi.7).
+ * Fetch the nearest named streams to a yard from USGS NHD
+ * (hydro.nationalmap.gov) into the yard's 'streams' layer in
+ * data/ecosystem.db (nl-3hi.7.1, stage 1 of the anchor-data epic nl-3hi.7;
+ * per yard since nl-3s5.31, when the rows left the committed
+ * ecology/anchors.csv).
  *
- * Same pattern as fetch-nearby-fauna.mjs: the network call happens here,
- * once, offline, and the app only ever reads the checked-in CSV.
- * src/analysis/ stays pure. Coordinates never reach the CSV or git — see
- * the yard's location in app.db (tools/projectSite.mjs).
+ * The location is read from app.db (tools/projectSite.mjs) and never written
+ * anywhere. Anchor location and distance are facts (see nl-3hi.7's hard
+ * boundary): no connectivity score is computed here, just the nearest named
+ * streams and how far away they are, rounded to a quarter mile.
  *
- * Anchor location and distance are facts (see nl-3hi.7's hard boundary): no
- * connectivity score is computed here, just the nearest named streams and
- * how far away they are.
+ * feed-poller builds this layer for every yard with a location
+ * (tools/ecosystemIndexQueue.js), so running it by hand is for a forced
+ * refresh or a --smoke look.
  *
  * Usage:
- *   node tools/fetch-nhd-creeks.mjs --project backyard
- *   node tools/fetch-nhd-creeks.mjs --project backyard --smoke
+ *   node tools/fetch-nhd-creeks.mjs --project backyard [--owner <email>]
+ *   node tools/fetch-nhd-creeks.mjs --project backyard --smoke   # print, write nothing
+ *   node tools/fetch-nhd-creeks.mjs --project backyard --force   # bypass the response cache
  */
 import { readProjectSite, ownerFromArgs } from './projectSite.mjs';
-import { openProbeCache, cached } from './usda-plants/probeCache.js';
-import { USER_AGENT } from './inatShared.mjs';
+import { openProbeCache } from './usda-plants/probeCache.js';
+import { openEcosystemDb } from './ecosystemIndexDb.js';
 import { pointToPolylineMi, roundDistanceMi } from './geoShared.mjs';
-import { ANCHORS_CSV, mergeAnchorRows } from './anchorsShared.mjs';
-
+import {
+  USER_AGENT,
+  argAfter,
+  buildAndRecordLayer,
+  cachedRequest,
+  createIo,
+  isEntryPoint,
+  resolveCoordinates,
+  today,
+} from './siteLayerShared.mjs';
 
 /** NHD "Flowline - Large Scale" layer — high-resolution flowlines, the one layer with real geometry at this scale. */
 const NHD_QUERY_URL = 'https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer/6/query';
@@ -31,83 +42,58 @@ const NHD_QUERY_URL = 'https://hydro.nationalmap.gov/arcgis/rest/services/nhd/Ma
 const SEARCH_RADIUS_MI = 5;
 const SEARCH_RADIUS_M = SEARCH_RADIUS_MI * 1609.34;
 
-/** How many distinct named streams to keep, nearest first. */
+/** How many distinct named streams to keep, nearest first. A judgement call, not a sourced figure. */
 const MAX_STREAMS = 3;
 
 /**
  * NHD FType codes seen near Dallas test sites. 460 = StreamRiver (a real
  * channel); 558 = ArtificialPath (a schematic connector drawn through lakes
  * and reservoirs, inheriting the waterbody's name — not a corridor). Stored
- * as a column too (ftype/fcode), so the read side can refine this later
- * without a re-fetch, same as establishment_means in fetch-nearby-fauna.mjs.
+ * in the row's detail, so the read side can refine this later without a
+ * re-fetch.
  */
 const REAL_CHANNEL_FTYPES = new Set([460, 336]); // StreamRiver, CanalDitch
 
-async function main() {
-  const args = process.argv.slice(2);
-  const projectId = argAfter(args, '--project');
-  const smoke = args.includes('--smoke');
-  const force = args.includes('--force');
-  if (!projectId) {
-    console.error('Usage: node tools/fetch-nhd-creeks.mjs --project <id> [--owner <email>] [--smoke] [--force]');
-    process.exit(1);
-  }
+export const STREAMS_SOURCE = 'hydro.nationalmap.gov nhd/MapServer/6 (Flowline - Large Scale)';
 
-  // The place label and the location behind it live in app.db (nl-3s5.3);
-  // the location never reaches git. tools/projectSite.mjs says how to set one.
-  let site;
-  try {
-    site = readProjectSite(projectId, { ownerEmail: ownerFromArgs(args) });
-  } catch (err) {
-    console.error(err.message);
-    process.exit(1);
-  }
-  const { place, location } = site;
-  const { lat, lng } = await resolveCoordinates(location);
-
-
-  const probeCache = openProbeCache();
+/**
+ * The yard's nearest named streams, as 'streams' layer rows. One NHD request
+ * (cached by rounded point and radius). Nothing is written here; see
+ * buildAndRecordLayer.
+ *
+ * @param {{ location: object, probeCache: import('node:sqlite').DatabaseSync, fetchImpl?: typeof fetch,
+ *   force?: boolean, logger?: { log: Function, warn: Function } }} args
+ */
+export async function buildStreamsLayer({ location, probeCache, fetchImpl, force = false, logger = console }) {
+  const io = createIo({ probeCache, fetchImpl, force, logger });
+  const { lat, lng } = await resolveCoordinates(location, io);
   const cacheKey = `${lat.toFixed(4)},${lng.toFixed(4)},r${SEARCH_RADIUS_MI}`;
-  const { raw: body } = await cached(
-    probeCache,
-    'nhd',
-    'flowline-query',
-    cacheKey,
-    async () => {
-      const response = await fetch(buildQueryUrl(lat, lng), {
-        headers: { 'User-Agent': USER_AGENT },
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return response.json();
-    },
-    { force }
-  );
-
+  const { raw: body } = await cachedRequest(io, 'nhd', 'flowline-query', cacheKey, () => [
+    buildQueryUrl(lat, lng),
+    { headers: { 'User-Agent': USER_AGENT } },
+  ]);
   if (body.error) {
-    throw new Error(`NHD query failed: ${JSON.stringify(body.error)}`);
+    // The code alone: an ArcGIS error's details can echo the query geometry.
+    const err = new Error(`NHD query failed: code ${Number(body.error.code) || 'unknown'}`);
+    err.networkRequests = io.networkRequests;
+    throw err;
   }
-
-  const streams = extractNamedStreams(body, lat, lng);
-
-  if (smoke) {
-    console.log(`\n--smoke run: found ${streams.length} named streams within ${SEARCH_RADIUS_MI}mi, NOT writing ${ANCHORS_CSV}\n`);
-    console.table(streams);
-    return;
-  }
-
-  const newRows = streams.map((stream) => ({
-    place,
+  const fetchedOn = today();
+  const rows = extractNamedStreams(body, lat, lng).map((stream) => ({
     kind: 'stream',
     name: stream.name,
     status: 'anchor', // NHD hydrology is the epic's "best ecological signal" — a fact, not an admin label.
     distance_mi: roundDistanceMi(stream.distanceMi),
     detail: REAL_CHANNEL_FTYPES.has(stream.ftype) ? 'channel' : 'artificial-path',
-    fetched_on: new Date().toISOString().slice(0, 10),
-    source: 'hydro.nationalmap.gov nhd/MapServer/6 (Flowline - Large Scale)',
+    fetched_on: fetchedOn,
+    source: STREAMS_SOURCE,
   }));
+  return { rows, networkRequests: io.networkRequests, failures: io.failures, fetchedOn };
+}
 
-  mergeAnchorRows(place, 'stream', newRows);
-  console.log(`Wrote ${newRows.length} stream row(s) for "${place}" to ${ANCHORS_CSV}`);
+/** Build and record one yard's 'streams' layer (feed-poller's queue and the CLI). */
+export function buildAndRecordStreams(args) {
+  return buildAndRecordLayer('streams', buildStreamsLayer, args);
 }
 
 function buildQueryUrl(lat, lng) {
@@ -126,7 +112,7 @@ function buildQueryUrl(lat, lng) {
 }
 
 /** Nearest distance per distinct named stream, using actual line geometry, not a centroid (nl-3hi.7.1). */
-function extractNamedStreams(body, lat, lng) {
+export function extractNamedStreams(body, lat, lng) {
   const point = [lng, lat];
   const nearestByName = new Map(); // gnis_name -> { name, distanceMi, ftype }
 
@@ -147,27 +133,41 @@ function extractNamedStreams(body, lat, lng) {
     .slice(0, MAX_STREAMS);
 }
 
-async function resolveCoordinates(location) {
-  if (Number.isFinite(location.lat) && Number.isFinite(location.lng)) {
-    return { lat: location.lat, lng: location.lng };
+async function main() {
+  const args = process.argv.slice(2);
+  const slug = argAfter(args, '--project');
+  const smoke = args.includes('--smoke');
+  const force = args.includes('--force');
+  if (!slug) {
+    console.error('Usage: node tools/fetch-nhd-creeks.mjs --project <slug> [--owner <email>] [--smoke] [--force]');
+    process.exit(1);
   }
-  if (!location.address) {
-    throw new Error('the stored location has neither lat/lng nor an address');
+  let site;
+  try {
+    site = readProjectSite(slug, { ownerEmail: ownerFromArgs(args), requirePlace: false });
+  } catch (err) {
+    console.error(err.message);
+    process.exit(1);
   }
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(location.address)}`;
-  const response = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
-  if (!response.ok) throw new Error(`Geocoding failed: HTTP ${response.status}`);
-  const results = await response.json();
-  if (!results.length) throw new Error(`Geocoding found nothing for "${location.address}"`);
-  return { lat: Number(results[0].lat), lng: Number(results[0].lon) };
+  const probeCache = openProbeCache();
+  if (smoke) {
+    const { rows } = await buildStreamsLayer({ location: site.location, probeCache, force });
+    console.log(`\n--smoke run: ${rows.length} named stream(s) within ${SEARCH_RADIUS_MI}mi, NOT writing data/ecosystem.db\n`);
+    console.table(rows);
+    return;
+  }
+  const db = openEcosystemDb();
+  const result = await buildAndRecordStreams({ projectId: site.projectId, location: site.location, db, probeCache, force });
+  console.log(
+    `Yard "${slug}" (#${site.projectId}) streams: ${result.state}, ${result.rows} row(s), ${result.networkRequests} network request(s)` +
+      (result.error ? ` — ${result.error}` : '')
+  );
+  if (result.state !== 'ready') process.exitCode = 1;
 }
 
-function argAfter(args, flag) {
-  const idx = args.indexOf(flag);
-  return idx >= 0 ? args[idx + 1] : null;
+if (isEntryPoint(import.meta.url)) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
 }
-
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});

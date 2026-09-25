@@ -66,6 +66,7 @@ export const SCRATCH_PROJECTS = [
   'setup-undo',
   'plant-lifecycle',
   'location-set',
+  'habitat-nearby', // seeded with fake per-yard anchors by habitatNearby.spec.js (nl-3s5.31)
 ];
 
 /**
@@ -255,6 +256,7 @@ export function readSeededProject(dataDir, slug) {
 const LINKED = [
   'index.html',
   'design.html',
+  'ecosystem.html', // habitatNearby.spec.js reads a seeded scratch yard's anchors (nl-3s5.31)
   'styles.css',
   'patch-network.css',
   'ecosystem.css',

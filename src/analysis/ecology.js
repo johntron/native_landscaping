@@ -64,7 +64,6 @@ export function buildEcologyContext({
   ecoregion,
   interactions,
   nearbyFauna,
-  place,
 } = {}) {
   const placed = plants.filter(Boolean);
   const placedSpeciesKeys = new Set(placed.map((plant) => getSpeciesKey(plant)));
@@ -84,8 +83,8 @@ export function buildEcologyContext({
     site: site || null,
     ecoregion: ecoregion ? String(ecoregion) : '',
     interactions: interactions || emptyInteractionsIndex(),
+    // One yard's nearby fauna (/api/ecosystem/site), not a place label's.
     nearbyFauna: nearbyFauna || emptyNearbyFaunaIndex(),
-    place: place ? String(place) : '',
   };
 }
 

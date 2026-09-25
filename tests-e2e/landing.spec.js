@@ -31,4 +31,21 @@ test.describe('the landing page', () => {
 
     expect(failed).toEqual([]);
   });
+
+  // nl-3s5.31: the screen's local evidence is a county's public records, never
+  // one person's yard. It used to read the owner's site's nearby fauna.
+  test('says its local evidence is the county, and reads no yard to get it', async ({ page }) => {
+    const requested = [];
+    page.on('request', (req) => requested.push(new URL(req.url()).pathname));
+    await page.goto('/index.html');
+    await expect(page.locator('#pnRows tr').first()).toBeVisible();
+
+    expect(requested).toContain('/ecology/region-fauna.csv');
+    expect(requested.filter((p) => /nearby-fauna|anchors\.csv|^\/api\/ecosystem/.test(p))).toEqual([]);
+
+    await expect(page.locator('#pnHeadline')).toContainText('recorded in Dallas County, TX');
+    await expect(page.locator('#pnHeadline')).not.toContainText('near this site');
+    await expect(page.locator('#pnRegionNote')).toContainText('Dallas County, TX');
+    await expect(page.locator('.pn-table thead')).toContainText('In county');
+  });
 });

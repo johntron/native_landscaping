@@ -3,13 +3,18 @@ import { normalizeGenus } from './hostGenera.js';
 import { isExcludedEstablishment } from './establishmentMeans.js';
 
 /**
- * Join two checked-in, sourced tables — same shape as ecology/host-genera.csv,
- * fetched offline by tools/fetch-plant-animal-interactions.mjs and
- * tools/fetch-nearby-fauna.mjs — to answer "which animals already reported
- * near this site would plausibly use this plant":
+ * Join two sourced tables, both fetched offline by tools/ scripts, to answer
+ * "which animals already reported near this yard would plausibly use this
+ * plant":
  *
- *   ecology/plant-animal-interactions.csv   genus-keyed, global (GloBI)
- *   ecology/nearby-fauna.csv                place-keyed, local (iNaturalist)
+ *   ecology/plant-animal-interactions.csv   genus-keyed, global (GloBI), committed
+ *   a yard's nearby fauna                   per yard, local (iNaturalist), from
+ *                                           /api/ecosystem/site (tools/fetch-nearby-fauna.mjs
+ *                                           writes it to data/ecosystem.db)
+ *
+ * The nearby fauna was the committed, place-keyed ecology/nearby-fauna.csv
+ * until nl-3s5.31: one owner's site in a public repo. It is now per yard, so
+ * an index here always describes exactly one yard and takes no place label.
  *
  * The grain is deliberately asymmetric: the animal side is species-level
  * (what the user actually wants to know), the plant side is genus-level
@@ -81,7 +86,7 @@ function evidenceRank(evidence) {
  * rules/keystoneGenera.js. Ordered by typical foraging/home-range scale:
  * flying pollinators and small ectotherms range least, birds and mammals most.
  *
- * These were always meant as real miles (nl-rma): nearby-fauna.csv's
+ * These were always meant as real miles (nl-rma): the nearby-fauna table's
  * nearest_radius_mi held kilometres by mistake for a while after these
  * thresholds were written (fixed by nl-a8v), but the mistake was in the
  * CSV's generation, not in this reasoning — these numbers were authored
@@ -125,35 +130,38 @@ export function emptyInteractionsIndex() {
 }
 
 /**
- * Parse ecology/nearby-fauna.csv into a place-keyed index.
+ * Index ONE yard's nearby fauna by animal.
  *
- * Columns: place, animal_species, animal_common, iconic_taxon,
+ * Takes the rows /api/ecosystem/site returns (or CSV text with the same
+ * columns, for test fixtures): animal_species, animal_common, iconic_taxon,
  * nearest_radius_mi (the smallest of the fetch tool's distance bands the
  * species was found within), observation_count, establishment_means,
- * fetched_on, source.
+ * fetched_on, source. Every row is taken as the same yard's.
+ *
+ * @param {Array<Record<string, any>> | string} rows
+ * @returns {{ size: number, animals: Map<string, object> }}
  */
-export function buildNearbyFaunaIndex(csvText) {
-  const rows = parseCsv(csvText || '').map(normalizeFaunaRow).filter((row) => row.place);
-  const byPlace = new Map();
-  rows.forEach((row) => {
-    if (!byPlace.has(row.place)) byPlace.set(row.place, new Map());
-    byPlace.get(row.place).set(animalKey(row.animalSpecies), row);
-  });
-  return {
-    size: rows.length,
-    byPlace,
-    forPlace(place) {
-      return byPlace.get(String(place || '').trim()) || new Map();
-    },
-  };
+export function buildNearbyFaunaIndex(rows) {
+  const list = typeof rows === 'string' ? parseCsv(rows) : Array.isArray(rows) ? rows : [];
+  const animals = new Map();
+  list
+    .map(normalizeFaunaRow)
+    .filter((row) => row.animalSpecies && Number.isFinite(row.nearestRadiusMi))
+    .forEach((row) => {
+      const key = animalKey(row.animalSpecies);
+      const existing = animals.get(key);
+      // One animal, several iconic-taxon rows is not expected; keep the nearest.
+      if (!existing || row.nearestRadiusMi < existing.nearestRadiusMi) animals.set(key, row);
+    });
+  return { size: animals.size, animals };
 }
 
 export function emptyNearbyFaunaIndex() {
-  return { size: 0, byPlace: new Map(), forPlace: () => new Map() };
+  return { size: 0, animals: new Map() };
 }
 
 /**
- * The animals reported near `place` that documented interactions say would
+ * The animals reported near the yard that documented interactions say would
  * use this genus, with each one's distance band and whether that band is
  * within the taxon's plausible range (RANGE_THRESHOLD_MI).
  *
@@ -174,15 +182,15 @@ export function emptyNearbyFaunaIndex() {
  * 'develops-on' alone drops real host records filed as 'consumes'.
  *
  * @param {string} genus
- * @param {{ interactions: ReturnType<typeof buildInteractionsIndex>, nearbyFauna: ReturnType<typeof buildNearbyFaunaIndex>, place: string, nativeOnly?: boolean, evidenceKinds?: Iterable<string> }} ctx
+ * @param {{ interactions: ReturnType<typeof buildInteractionsIndex>, nearbyFauna: ReturnType<typeof buildNearbyFaunaIndex>, nativeOnly?: boolean, evidenceKinds?: Iterable<string> }} ctx
  * @returns {Array<{ animalSpecies: string, animalCommon: string, category: string, interactionType: string, evidence: string, iconicTaxon: string, nearestRadiusMi: number, observationCount: number, establishmentMeans: string, inRange: boolean }>}
  */
 export function matchesForGenus(
   genus,
-  { interactions, nearbyFauna, place, nativeOnly = false, evidenceKinds = null }
+  { interactions, nearbyFauna, nativeOnly = false, evidenceKinds = null }
 ) {
   const wantedEvidence = evidenceKinds ? new Set(evidenceKinds) : null;
-  const nearby = nearbyFauna.forPlace(place);
+  const nearby = nearbyFauna?.animals || new Map();
   if (!nearby.size) return [];
   // One row per animal per category, as before. But `category` is coarse
   // enough that hostOf and eatenBy share the 'feeds-on' bucket, so which verb
@@ -240,11 +248,11 @@ function normalizeInteractionRow(row) {
 
 function normalizeFaunaRow(row) {
   return {
-    place: String(row.place || '').trim(),
     animalSpecies: String(row.animal_species || '').trim(),
     animalCommon: String(row.animal_common || '').trim(),
     iconicTaxon: String(row.iconic_taxon || '').trim(),
-    nearestRadiusMi: Number(row.nearest_radius_mi),
+    // Blank must stay unknown: Number('') is 0, which would read as "in the yard".
+    nearestRadiusMi: String(row.nearest_radius_mi ?? '').trim() === '' ? NaN : Number(row.nearest_radius_mi),
     observationCount: Number(row.observation_count) || 0,
     establishmentMeans: String(row.establishment_means || '').trim(),
     source: String(row.source || '').trim(),
