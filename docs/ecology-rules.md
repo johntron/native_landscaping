@@ -192,10 +192,9 @@ layer) with the same states and location fingerprint as `project_index_builds`. 
 holds a coordinate. They reach a browser only through `GET /api/ecosystem/site?project=`,
 resolved exactly like `/api/ecosystem` (401 anonymous, the same 404 for a yard that is
 missing or someone else's, the example reads its source yard's rows, no location sent).
-The one-time move of the old CSV rows into the owner's yards is
-`tools/import-site-layers.mjs` (`--dry-run`, then a real run, then `--verify`; it reads
-the rows from git at the last commit that had them). Once it has been run against
-every owner's data and verified, delete it, as nl-3s5.32 did for the index's rekey tool.
+The old CSV rows were moved into the owner's yards once, by a one-time import tool
+(nl-3s5.31) that has since been run, verified and deleted; the CSVs were purged from
+git history (nl-3s5.33).
 
 **Built without manual steps.** `feed-poller` runs the queue
 (`tools/ecosystemIndexQueue.js`) after the saved-area poll on every tick: every

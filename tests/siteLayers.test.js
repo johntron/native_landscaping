@@ -27,7 +27,6 @@ import { buildAndRecordFauna } from '../tools/fetch-nearby-fauna.mjs';
 import { buildAndRecordStreams } from '../tools/fetch-nhd-creeks.mjs';
 import { buildAndRecordGreenspace } from '../tools/fetch-osm-greenspace.mjs';
 import { fetchRegionFauna, toRegionFaunaCsv, REGION_FAUNA_HEADER } from '../tools/fetch-region-fauna.mjs';
-import { importSiteLayers, layersFromCsv, resolveTargets, verifySiteLayers, verifyThroughRoute } from '../tools/import-site-layers.mjs';
 import { withoutQuotedText } from '../tools/siteLayerShared.mjs';
 import { openProbeCache, setCached } from '../tools/usda-plants/probeCache.js';
 import { parseCsv } from '../src/data/csvLoader.js';
@@ -355,101 +354,6 @@ test('the example yard is never queued for layers of its own', () => {
     const system = upsertUser(env.app, EXAMPLE_OWNER_EMAIL);
     env.yard(system, 'example', { location: HERE });
     assert.deepEqual(dueSiteJobs(env.app, env.ecosystem), []);
-  } finally {
-    env.cleanup();
-  }
-});
-
-// --- the one-time import (tools/import-site-layers.mjs) ----------------------------------
-
-const ANCHORS_CSV = [
-  'place,kind,name,status,distance_mi,detail,fetched_on,source',
-  'home,stream,Test Creek,anchor,0.5,channel,2026-09-17,hydro',
-  'home,park,Test Park,candidate,1,"leisure=park, ~3 acres",2026-09-18,osm',
-  'other,park,Somebody Else Park,candidate,1,,2026-09-17,osm',
-].join('\n');
-const FAUNA_CSV = [
-  'place,animal_species,animal_common,iconic_taxon,nearest_radius_mi,observation_count,establishment_means,fetched_on,source',
-  'home,Testia mothia,Test Moth,Insecta,1,2,native,2026-09-23,inat',
-  'home,Testia avis,,Aves,15,40,,2026-09-23,inat',
-  'other,Testia elsewhere,,Aves,1,1,,2026-09-23,inat',
-].join('\n');
-
-test('layersFromCsv takes one place’s rows, split into the three layers', () => {
-  const layers = layersFromCsv({ anchorsCsv: ANCHORS_CSV, faunaCsv: FAUNA_CSV, place: 'home' });
-  assert.deepEqual(layers.streams.map((r) => r.name), ['Test Creek']);
-  assert.deepEqual(layers.greenspace.map((r) => [r.name, r.detail]), [['Test Park', 'leisure=park, ~3 acres']]);
-  assert.deepEqual(layers.fauna.map((r) => r.animal_species), ['Testia mothia', 'Testia avis']);
-  assert.throws(() => layersFromCsv({ anchorsCsv: '', faunaCsv: '', place: '' }), /place label is required/);
-});
-
-test('the import goes to the owner’s yards at the same site and place only, is idempotent, and verifies', () => {
-  const env = setup();
-  try {
-    const backyard = env.yard(env.alice, 'backyard');
-    const walkway = env.yard(env.alice, 'walkway');
-    env.yard(env.alice, 'elsewhere', { location: { lat: 1, lng: 1 } });
-    env.yard(env.alice, 'other-label', { place: 'cabin' });
-    const bobs = env.yard(env.bob, 'bob-home'); // same place, same site, other owner
-    const { place, key, targets } = resolveTargets(env.app, 'backyard', { ownerEmail: 'alice@example.com' });
-    assert.equal(place, 'home');
-    assert.equal(key, locationKey(HERE));
-    assert.deepEqual(targets.map((t) => t.id), [backyard, walkway]);
-
-    const layers = layersFromCsv({ anchorsCsv: ANCHORS_CSV, faunaCsv: FAUNA_CSV, place });
-    const dry = importSiteLayers({ ecosystemDb: env.ecosystem, targets, key, layers, dryRun: true });
-    assert.ok(dry.every((p) => p.action === 'import'));
-    assert.equal(listProjectFauna(env.ecosystem, backyard).length, 0, 'a dry run writes nothing');
-
-    importSiteLayers({ ecosystemDb: env.ecosystem, targets, key, layers });
-    for (const id of [backyard, walkway]) {
-      assert.equal(listProjectFauna(env.ecosystem, id).length, 2);
-      assert.equal(listProjectAnchors(env.ecosystem, id).length, 2);
-      const status = layerStatus(env.ecosystem, id, 'greenspace', key);
-      assert.deepEqual(status, { state: 'ready', rowsApply: true, fetchedOn: '2026-09-18' }, 'the CSV’s own date');
-    }
-    assert.equal(listProjectFauna(env.ecosystem, bobs).length, 0, 'another owner’s yard gets nothing');
-    assert.ok(verifySiteLayers({ ecosystemDb: env.ecosystem, targets, key, layers }).every((r) => r.identical));
-    assert.deepEqual(dueSiteJobs(env.app, env.ecosystem, { jobs: ['fauna', 'streams', 'greenspace'] }).map((j) => j.slug).filter((s) => s === 'backyard'), [], 'imported layers are not refetched');
-
-    const again = importSiteLayers({ ecosystemDb: env.ecosystem, targets, key, layers });
-    assert.ok(again.every((p) => p.action === 'unchanged'), 'a second run changes nothing');
-
-    // A newer fetch since is kept unless forced.
-    importLayer(env.ecosystem, backyard, 'streams', key, [{ ...STREAM, name: 'Newer Creek' }], {});
-    const kept = importSiteLayers({ ecosystemDb: env.ecosystem, targets, key, layers });
-    assert.equal(kept.find((p) => p.projectId === backyard && p.layer === 'streams').action, 'kept-newer');
-    assert.deepEqual(listProjectAnchors(env.ecosystem, backyard).filter((r) => r.layer === 'streams').map((r) => r.name), ['Newer Creek']);
-    importSiteLayers({ ecosystemDb: env.ecosystem, targets, key, layers, force: true });
-    assert.deepEqual(listProjectAnchors(env.ecosystem, backyard).filter((r) => r.layer === 'streams').map((r) => r.name), ['Test Creek']);
-
-    // A layer with no rows is left to the queue, not recorded as fetched-and-empty.
-    const noStreams = { ...layers, streams: [] };
-    const other = env.yard(env.alice, 'fresh');
-    const plan = importSiteLayers({ ecosystemDb: env.ecosystem, targets: [{ id: other, slug: 'fresh' }], key, layers: noStreams });
-    assert.equal(plan.find((p) => p.layer === 'streams').action, 'no-rows');
-    assert.equal(readLayerBuild(env.ecosystem, other, 'streams'), null);
-  } finally {
-    env.cleanup();
-  }
-});
-
-test('the import’s route check serves the owner exactly the CSV rows and refuses a stranger', async () => {
-  const env = setup();
-  try {
-    const backyard = env.yard(env.alice, 'backyard');
-    const { key, targets } = resolveTargets(env.app, 'backyard', { ownerEmail: 'alice@example.com' });
-    const layers = layersFromCsv({ anchorsCsv: ANCHORS_CSV, faunaCsv: FAUNA_CSV, place: 'home' });
-    const args = { appDb: env.app, ecosystemDb: env.ecosystem, ownerId: env.alice.id, targets, layers };
-    const before = await verifyThroughRoute(args);
-    assert.equal(before.find((r) => r.who === 'owner').sameAsCsv, false, 'nothing imported yet');
-    importSiteLayers({ ecosystemDb: env.ecosystem, targets, key, layers });
-    const after = await verifyThroughRoute(args);
-    assert.deepEqual(after.map((r) => [r.who, r.project, r.status, r.sameAsCsv]), [
-      ['owner', 'backyard', 200, true],
-      ['stranger', 'backyard', 404, true],
-    ]);
-    assert.equal(backyard, targets[0].id);
   } finally {
     env.cleanup();
   }

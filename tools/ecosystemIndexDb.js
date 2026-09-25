@@ -501,7 +501,7 @@ export function markLayerFinished(db, projectId, layer, { state, error = null, f
 
 /**
  * Record a layer as built for `key` with rows that arrived some other way
- * than a fetch (tools/import-site-layers.mjs moving the committed CSV rows
+ * than a fetch (the one-time nl-3s5.31 import of the old committed CSV rows
  * in): replaces the rows and marks the layer 'ready' in one step, so the
  * queue does not refetch what was just imported.
  */
