@@ -192,10 +192,10 @@ index of the owner's yard it was refreshed from (the `projectId` that
 `tools/refresh-example-yard.mjs` records in `app_meta.example_yard`), with
 `location: null`.
 
-The pre-nl-3s5.6 place-keyed table, `species_observations`, is no longer read or
-created. `tools/rekey-ecosystem-index.mjs --place <label>` copies one place's old
-rows to its owner's located yards once; a database that still has the table keeps
-it, so the previous code works after a rollback.
+The pre-nl-3s5.6 place-keyed table, `species_observations`, is retired (nl-3s5.32):
+`openEcosystemDb` drops it on open if a database still has it. The one-time
+migration tool that copied its rows to yards, `tools/rekey-ecosystem-index.mjs`, has
+been run against every owner's data and is deleted; there is nothing left to migrate.
 
 ## Habitat anchors: `ecology/anchors.csv`
 

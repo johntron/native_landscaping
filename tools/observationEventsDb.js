@@ -2,8 +2,8 @@
 // gitignored (*.db) like data/ecosystem.db and data/probe-cache.db — this is
 // rebuilt by re-running tools/fetch-observation-events.mjs, not hand-curated.
 //
-// Unlike data/ecosystem.db's species_observations table (one row per
-// place+taxon, REPLACED wholesale on every run — a presence snapshot), this
+// Unlike data/ecosystem.db's project_species_observations table (one row per
+// yard+taxon, REPLACED wholesale on every run — a presence snapshot), this
 // table is an EVENT LOG: one row per individual observation, keyed so re-
 // fetching the same observation is idempotent (INSERT OR REPLACE) rather than
 // a full-table replace. That's what lets a future "what's new since I last

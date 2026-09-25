@@ -1,13 +1,11 @@
 // The per-yard nearby index built without manual steps (nl-3s5.6): which yards
-// are due, how many builds a tick runs, the build itself against a stubbed
-// iNaturalist (no test ever reaches the network), and the one-time rekey of
-// the old place-keyed rows.
+// are due, how many builds a tick runs, and the build itself against a
+// stubbed iNaturalist (no test ever reaches the network).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 import { openAppDb } from '../server/db/appDb.js';
 import { upsertUser } from '../server/identity.js';
 import { EXAMPLE_OWNER_EMAIL, insertProject } from '../server/db/projectStore.js';
@@ -24,7 +22,6 @@ import {
 import { dueIndexBuilds, pruneDeletedProjects, runIndexQueue, STALE_BUILD_MINUTES } from '../tools/ecosystemIndexQueue.js';
 import { buildAndRecordEcosystemIndex, withoutQuotedText } from '../tools/fetch-ecosystem-index.mjs';
 import { openProbeCache } from '../tools/usda-plants/probeCache.js';
-import { rekeyPlace } from '../tools/rekey-ecosystem-index.mjs';
 
 const HERE = { lat: 32.5, lng: -96.5 };
 const quiet = { log() {}, warn() {} };
@@ -254,76 +251,6 @@ test('a failed build never stores or returns the address a geocoder quoted back'
     assert.equal(readIndexBuild(env.ecosystem, id).error.includes('Secret'), false);
     assert.equal(withoutQuotedText('found nothing for "1 Secret Lane"'), 'found nothing for "…"');
     probeCache.close();
-  } finally {
-    env.cleanup();
-  }
-});
-
-// --- the one-time rekey of place-keyed rows -----------------------------------------------
-
-function legacyTable(env, rows) {
-  const db = new DatabaseSync(join(env.dataDir, 'ecosystem.db'));
-  db.exec(`CREATE TABLE species_observations (
-    place TEXT NOT NULL, iconic_taxon TEXT NOT NULL, taxon_name TEXT NOT NULL, taxon_id INTEGER,
-    common_name TEXT, genus TEXT NOT NULL, radius_mi REAL NOT NULL, observation_count INTEGER NOT NULL,
-    photo_url TEXT, photo_attribution TEXT, fetched_on TEXT NOT NULL, source TEXT NOT NULL, establishment_means TEXT,
-    PRIMARY KEY (place, iconic_taxon, taxon_name))`);
-  const insert = db.prepare(`INSERT INTO species_observations
-    (place, iconic_taxon, taxon_name, genus, radius_mi, observation_count, fetched_on, source, establishment_means)
-    VALUES (?, ?, ?, ?, 1, 3, ?, 'test', ?)`);
-  for (const [place, taxon, name, fetchedOn, means] of rows) insert.run(place, taxon, name, name.split(' ')[0], fetchedOn, means ?? null);
-  db.close();
-}
-
-test('rekey copies one owner’s place rows to their located yards with that place, once, and nobody else’s', () => {
-  const env = setup();
-  try {
-    legacyTable(env, [
-      ['home', 'Plantae', 'Asclepias tuberosa', '2026-09-13'],
-      ['home', 'Aves', 'Cardinalis cardinalis', '2026-09-12', 'native'],
-      ['Dallas, TX', 'Plantae', 'Lupinus texensis', '2026-09-13'],
-    ]);
-    const backyard = env.yard(env.alice, 'backyard');
-    const walkway = env.yard(env.alice, 'walkway');
-    const unlocated = env.yard(env.alice, 'unlocated', { location: null });
-    const other = env.yard(env.alice, 'other-place', { place: 'Dallas, TX' });
-    const bobs = env.yard(env.bob, 'bobs-home');
-
-    const result = rekeyPlace({ appDb: env.app, ecosystemDb: env.ecosystem, ownerId: env.alice.id, place: 'home' });
-    assert.deepEqual(result.copied, ['backyard', 'walkway']);
-    assert.deepEqual(result.skipped, [{ slug: 'unlocated', why: 'no location' }]);
-    for (const id of [backyard, walkway]) {
-      const status = indexStatus(env.ecosystem, id, locationKey(HERE));
-      assert.deepEqual(status, { state: 'ready', rowsApply: true, fetchedOn: '2026-09-13' });
-      assert.deepEqual(
-        listSpeciesObservations(env.ecosystem, { projectId: id }).map((r) => [r.iconic_taxon, r.taxon_name, r.establishment_means]),
-        [['Aves', 'Cardinalis cardinalis', 'native'], ['Plantae', 'Asclepias tuberosa', null]]
-      );
-    }
-    for (const id of [unlocated, other, bobs]) {
-      assert.equal(listSpeciesObservations(env.ecosystem, { projectId: id }).length, 0);
-    }
-
-    const again = rekeyPlace({ appDb: env.app, ecosystemDb: env.ecosystem, ownerId: env.alice.id, place: 'home' });
-    assert.deepEqual(again.copied, []);
-    assert.equal(again.skipped.filter((s) => /already/.test(s.why)).length, 2);
-  } finally {
-    env.cleanup();
-  }
-});
-
-test('rekey refuses when the yards sharing the place are at different locations', () => {
-  const env = setup();
-  try {
-    legacyTable(env, [['home', 'Plantae', 'Asclepias tuberosa', '2026-09-13']]);
-    env.yard(env.alice, 'here');
-    env.yard(env.alice, 'there', { location: { lat: 30, lng: -97 } });
-    assert.throws(
-      () => rekeyPlace({ appDb: env.app, ecosystemDb: env.ecosystem, ownerId: env.alice.id, place: 'home' }),
-      /different locations/
-    );
-    const narrowed = rekeyPlace({ appDb: env.app, ecosystemDb: env.ecosystem, ownerId: env.alice.id, place: 'home', slug: 'here' });
-    assert.deepEqual(narrowed.copied, ['here']);
   } finally {
     env.cleanup();
   }

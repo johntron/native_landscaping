@@ -6,9 +6,9 @@
  * existing single-relevance-per-item shape — see tools/feedState/feed.js):
  *
  *  1. local-scarcity (nl-1qy.4.1) — sourced from data/ecosystem.db's
- *     species_observations.observation_count, the same /v1/observations/
+ *     project_species_observations.observation_count, the same /v1/observations/
  *     species_counts data fetch-ecosystem-index.mjs already pulls per
- *     place+taxon.
+ *     yard+taxon.
  *  2. conservation-status (nl-1qy.4.2) — the conservation_status column
  *     tools/fetch-observation-events.mjs now captures per event from the
  *     same batched /v1/taxa lookup that already fetched establishment_means

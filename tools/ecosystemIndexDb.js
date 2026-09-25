@@ -18,10 +18,10 @@
 //                                 building, ready or failed, and for which
 //                                 location (a fingerprint, never the location)
 //
-// The pre-nl-3s5.6 table, species_observations keyed by `place`, is no longer
-// created or read here. A database that already has it keeps it untouched,
-// so the previous code still works after a rollback;
-// tools/rekey-ecosystem-index.mjs copies its rows to yards once.
+// The pre-nl-3s5.6 table, species_observations keyed by `place`, is retired
+// (nl-3s5.32): it is no longer created, read, or written, and openEcosystemDb
+// drops it on open if a database still has it (the per-project index has been
+// live and verified since nl-3s5.6, so there is nothing left to roll back to).
 import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
@@ -81,6 +81,13 @@ export function openEcosystemDb(path = defaultEcosystemPath()) {
       error TEXT
     )
   `);
+  // The pre-nl-3s5.6 place-keyed table (nl-3s5.32): dropped on open rather
+  // than left for a rollback that will not happen. IF EXISTS makes this a
+  // no-op on every database that never had the table (all of them, soon) or
+  // has already been opened once since this change; DROP TABLE takes a brief
+  // exclusive lock, which busy_timeout above covers if web and feed-poller
+  // both open the file around the same moment.
+  db.exec('DROP TABLE IF EXISTS species_observations');
   return db;
 }
 
@@ -245,19 +252,6 @@ export function indexStatus(db, projectId, currentKey) {
   const build = readIndexBuild(db, projectId);
   if (!build || build.locationKey !== currentKey) return { state: 'queued', rowsApply: false, fetchedOn: null };
   return { state: build.state, rowsApply: true, fetchedOn: build.fetchedOn };
-}
-
-/** Whether this database still has the pre-nl-3s5.6 place-keyed table. */
-export function hasLegacyPlaceTable(db) {
-  return Boolean(
-    db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'species_observations'").get()
-  );
-}
-
-/** Rows of the pre-nl-3s5.6 table for one place label (tools/rekey-ecosystem-index.mjs). */
-export function listLegacyPlaceRows(db, place) {
-  if (!hasLegacyPlaceTable(db)) return [];
-  return db.prepare('SELECT * FROM species_observations WHERE place = ? ORDER BY iconic_taxon, observation_count DESC').all(place);
 }
 
 function requireProjectId(projectId) {

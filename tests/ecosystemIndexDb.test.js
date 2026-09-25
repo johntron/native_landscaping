@@ -5,9 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import {
-  hasLegacyPlaceTable,
   indexStatus,
-  listLegacyPlaceRows,
   listSpeciesObservations,
   locationKey,
   markBuildFinished,
@@ -105,7 +103,7 @@ test('indexStatus: no-location, queued, building, ready, failed, and queued agai
   });
 });
 
-test('the pre-nl-3s5.6 place-keyed table is left untouched and readable for the one-time rekey', () => {
+test('openEcosystemDb drops the pre-nl-3s5.6 place-keyed table if a database still has it (nl-3s5.32)', () => {
   withDb((_db, path) => {
     const legacy = new DatabaseSync(path);
     legacy.exec(`CREATE TABLE species_observations (
@@ -120,15 +118,16 @@ test('the pre-nl-3s5.6 place-keyed table is left untouched and readable for the 
     legacy.close();
 
     const reopened = openEcosystemDb(path);
-    assert.equal(hasLegacyPlaceTable(reopened), true);
-    assert.equal(listLegacyPlaceRows(reopened, 'home').length, 1);
-    assert.equal(listLegacyPlaceRows(reopened, 'elsewhere').length, 0);
-  });
-});
+    assert.equal(
+      reopened.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'species_observations'").get(),
+      undefined
+    );
 
-test('a fresh index has no place-keyed table at all', () => {
-  withDb((db) => {
-    assert.equal(hasLegacyPlaceTable(db), false);
-    assert.deepEqual(listLegacyPlaceRows(db, 'home'), []);
+    // Idempotent: opening an already-dropped (or never-had-it) database again does not throw.
+    const reopenedAgain = openEcosystemDb(path);
+    assert.equal(
+      reopenedAgain.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'species_observations'").get(),
+      undefined
+    );
   });
 });
