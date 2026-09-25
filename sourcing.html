@@ -82,6 +82,30 @@
         <div class="nursery-groups" id="otherNurseries"></div>
       </section>
 
+      <section class="pn-section" id="saleNotesSection" hidden>
+        <p class="pn-eyebrow">For maintainers</p>
+        <h2>Your sale notes (private)</h2>
+        <p class="pn-lede">
+          Raw notes on plant sales you've come across, kept here to read later, research, and turn
+          by hand into a sourced row of <code>sourcing/plant-sales.csv</code>. Visible only to you;
+          nothing here reaches the sale list automatically.
+        </p>
+        <form id="saleNoteForm" class="sale-notes-form">
+          <textarea
+            id="saleNoteBody"
+            class="sale-notes-form__body"
+            rows="4"
+            maxlength="5000"
+            placeholder="Paste a sale announcement, a link, a date to check…"
+          ></textarea>
+          <div class="sale-notes-form__row">
+            <button type="submit" class="pill-button">Save note</button>
+            <span class="sale-notes-form__error" id="saleNoteError" hidden></span>
+          </div>
+        </form>
+        <ul class="sale-notes-list" id="saleNotesList"></ul>
+      </section>
+
       <section class="pn-section">
         <p class="pn-eyebrow">Sources</p>
         <p class="pn-lede">
@@ -106,5 +130,6 @@
       </div>
     </main>
     <script type="module" src="src/sourcing/sourcingPage.js"></script>
+    <script type="module" src="src/sourcing/saleNotesPage.js"></script>
   </body>
 </html>

@@ -34,3 +34,25 @@
   .sale { grid-template-columns: 1fr; gap: 0.4rem; }
   .sale__when { flex-direction: row; align-items: baseline; gap: 0.6rem; }
 }
+
+/* Sale notes (nl-2bw): admin-only chrome, so no amber here -- see AGENTS.md's colour rule. */
+.sale-notes-form { margin-top: 1rem; display: grid; gap: 0.6rem; }
+.sale-notes-form__body {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+  padding: 0.6rem 0.75rem;
+  background: var(--surface-raised);
+  border: 1px solid var(--rule-strong);
+  color: var(--ink);
+}
+.sale-notes-form__row { display: flex; align-items: center; gap: 0.75rem; }
+.sale-notes-form__error { color: var(--danger-soft); font-size: 0.85rem; }
+
+.sale-notes-list { list-style: none; margin: 1rem 0 0; padding: 0; display: grid; gap: 1px; background: var(--rule); border: 1px solid var(--rule); }
+.sale-notes-list:empty { display: none; }
+.sale-note { background: var(--surface-raised); padding: 0.75rem 0.9rem; display: grid; gap: 0.3rem; }
+.sale-note--empty { color: var(--ink-muted); }
+.sale-note__meta { margin: 0; font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-faint); }
+.sale-note__body { margin: 0; white-space: pre-wrap; color: var(--ink-soft); }
+.sale-note__delete { justify-self: start; }
