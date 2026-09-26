@@ -9,7 +9,7 @@ import { pointInPolygon, nearestFeature } from './geometry.js';
 import { buildPlantLabel } from './labels.js';
 import { buildFruitCenters } from './fruitPlacement.js';
 import { buildSmoothPath } from './pathUtils.js';
-import { outlineStatusAttributes, plantStatus } from './plantStatus.js';
+import { ECOTYPE_RING_RATIO, isLocalEcotype, outlineStatusAttributes, plantStatus } from './plantStatus.js';
 
 const HIGHLIGHT_COLOR = '#ef7d1a';
 const HIGHLIGHT_OUTLINE_OPACITY = 0.9;
@@ -61,6 +61,7 @@ export function renderTopView(svg, plantStates, view, options = {}) {
       'data-plant-id': plant.id,
       'data-species-key': speciesKey,
       'data-status': status,
+      ...(isLocalEcotype(plant) ? { 'data-local-ecotype': 'true' } : {}),
     });
     const { x: cx, y: cy } = transform.planToViewBox(plant);
     let effectiveWidth = plant.width;
@@ -227,6 +228,19 @@ function renderFoliageDome(group, { cx, cy, radius, color, rng, outlinePoints, s
     ...outlineStatusAttributes(status, Math.max(radius * 0.06, 0.8)),
   });
   group.appendChild(outline);
+  if (group.getAttribute('data-local-ecotype') === 'true') {
+    group.appendChild(
+      createSvgElement('circle', {
+        cx,
+        cy,
+        r: radius * ECOTYPE_RING_RATIO,
+        fill: 'none',
+        stroke: darkenHex(color, 0.55),
+        'data-ecotype-ring': 'true',
+        ...outlineStatusAttributes(status, Math.max(radius * 0.04, 0.6)),
+      })
+    );
+  }
 }
 
 function buildWavyCirclePath(cx, cy, radius, rng) {

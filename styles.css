@@ -1748,6 +1748,14 @@ select {
   gap: 0.2rem;
 }
 
+.plant-lifecycle__check {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+
 .plant-lifecycle__label {
   font-size: 0.8rem;
   color: var(--ink-muted);

@@ -29,6 +29,22 @@ export function plantStatus(plant) {
 }
 
 /**
+ * Whether the person marked this plant as grown from local stock (nl-ky8).
+ * @param {object} plant
+ */
+export function isLocalEcotype(plant) {
+  return lifecycleOf(plant).localEcotype;
+}
+
+/**
+ * A local-ecotype plant gets a second, inner ring inside its outline in the
+ * plan: the same stroke, so it reads with either outline (dashed planned,
+ * solid planted) and needs no colour of its own. Its radius as a share of the
+ * canopy's.
+ */
+export const ECOTYPE_RING_RATIO = 0.72;
+
+/**
  * The outline attributes for a plant of `status`, given the planted outline's width.
  * @param {'planned'|'planted'} status
  * @param {number} strokeWidth

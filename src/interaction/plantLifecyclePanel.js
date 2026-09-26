@@ -1,6 +1,7 @@
 /**
  * The lifecycle section of the plant detail sheet (nl-3s5.22): whether the
- * plant is planned or planted, the date it went in, and where it came from.
+ * plant is planned or planted, the date it went in, where it came from, and
+ * whether it was grown from local stock (nl-ky8).
  *
  * It builds its own markup and puts it before the sheet's Clone/Remove row,
  * so design.html needs no change. Every edit goes through setPlantLifecycle
@@ -70,7 +71,8 @@ export function createPlantLifecyclePanel({ sheet, appState, onCommit }) {
   const key = el(
     'p',
     'plant-lifecycle__key',
-    'Planned plants are drawn with a dashed outline, planted ones with a solid outline.'
+    'Planned plants are drawn with a dashed outline, planted ones with a solid outline. ' +
+      'A local-ecotype plant has a second ring inside its outline in the plan.'
   );
 
   const statusRow = el('div', 'plant-lifecycle__status');
@@ -101,6 +103,12 @@ export function createPlantLifecyclePanel({ sheet, appState, onCommit }) {
   sourceInput.placeholder = 'Anywhere: a nursery, a sale, "neighbour’s division"';
   sourceField.appendChild(sourceInput);
 
+  const ecotypeField = el('label', 'plant-lifecycle__check');
+  const ecotypeInput = el('input');
+  ecotypeInput.type = 'checkbox';
+  ecotypeInput.name = 'localEcotype';
+  ecotypeField.append(ecotypeInput, el('span', '', 'Local ecotype (grown from local seed or stock)'));
+
   const linked = el('p', 'plant-lifecycle__linked');
   const linkedText = el('span', 'plant-lifecycle__linked-text');
   const unlinkButton = el('button', 'plant-lifecycle__unlink', 'Unlink');
@@ -112,7 +120,7 @@ export function createPlantLifecyclePanel({ sheet, appState, onCommit }) {
   const message = el('p', 'plant-lifecycle__message');
   message.setAttribute('role', 'status');
 
-  section.append(heading, key, statusRow, dateField, sourceField, linked, suggestions, message);
+  section.append(heading, key, statusRow, dateField, sourceField, linked, suggestions, ecotypeField, message);
   const actions = panel.querySelector('.detail-sheet__actions');
   panel.insertBefore(section, actions || null);
 
@@ -151,8 +159,9 @@ export function createPlantLifecyclePanel({ sheet, appState, onCommit }) {
     const plant = currentPlant();
     section.hidden = !plant || isReadOnly();
     if (section.hidden) return;
-    const { status, plantedOn, source } = lifecycleOf(plant);
+    const { status, plantedOn, source, localEcotype } = lifecycleOf(plant);
     section.dataset.status = status;
+    ecotypeInput.checked = localEcotype;
     statusButtons.forEach((button) => {
       const active = button.dataset.lifecycleStatus === status;
       button.classList.toggle('is-active', active);
@@ -241,6 +250,11 @@ export function createPlantLifecyclePanel({ sheet, appState, onCommit }) {
   });
   sourceInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') sourceInput.blur();
+  });
+
+  ecotypeInput.addEventListener('change', () => {
+    const localEcotype = ecotypeInput.checked;
+    apply({ localEcotype }, localEcotype ? 'Marked plant local ecotype' : 'Cleared local ecotype');
   });
 
   unlinkButton.addEventListener('click', () => {

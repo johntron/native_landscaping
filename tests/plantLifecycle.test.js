@@ -102,7 +102,7 @@ test('setPlantLifecycle: canonical, new array and plant, refusals change nothing
   assert.deepEqual(planted.problems, []);
   assert.notEqual(state.plants[0], plant);
   assert.equal(plant.status, undefined, 'the old plant object is not mutated');
-  assert.deepEqual(lifecycleOf(state.plants[0]), { status: 'planted', plantedOn: '2026-04-18', source: null });
+  assert.deepEqual(lifecycleOf(state.plants[0]), { status: 'planted', plantedOn: '2026-04-18', source: null, localEcotype: false });
   assert.equal(state.plants[0].width, plant.width, 'species attributes are kept');
 
   setPlantLifecycle(state, 'h', { source: { name: ' Native  Gardeners ', ref: NURSERY_REF } }, { today });
@@ -122,12 +122,36 @@ test('setPlantLifecycle: canonical, new array and plant, refusals change nothing
   assert.deepEqual(setPlantLifecycle(state, 'nope', { status: 'planted' }), { plant: null, problems: [] });
 });
 
-test('a clone is a new planned plant with no source, whatever it was copied from', () => {
+test('local ecotype: set and cleared through the setter, canonical as true-or-absent, refused when not a boolean', () => {
+  const state = { plants: [createPlantFromSpecies(holly, { id: 'a', x: 1, y: 1 })] };
+  const set = setPlantLifecycle(state, 'a', { localEcotype: true });
+  assert.equal(set.plant.localEcotype, true);
+  assert.equal(lifecycleOf(state.plants[0]).localEcotype, true);
+  assert.deepEqual(validateLifecycle({ localEcotype: 'yes' }), ['Local ecotype must be yes or no.']);
+  const cleared = setPlantLifecycle(state, 'a', { localEcotype: false });
+  assert.equal('localEcotype' in cleared.plant, false, 'cleared is absent, not false');
+});
+
+test('a local-ecotype plant gets one inner ring in the plan, planned or planted', () => {
+  const plan = { id: 'plan', type: 'plan', viewBox: { width: 600, height: 600 }, originFt: { x: 0, y: 0 }, extentFt: { width: 20, height: 20 } };
+  const shrub = { id: 'p', commonName: 'Shrub', botanicalName: 'Ilex vomitoria', botanicalKey: 'ilex vomitoria', width: 4, height: 5, x: 5, y: 5, growthShape: 'mound' };
+  const rings = (plant) => {
+    const doc = resetDocument();
+    const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    renderTopView(svg, [{ plant, state: STATE }], plan);
+    return findAll(svg, (node) => node.getAttribute?.('data-ecotype-ring') === 'true');
+  };
+  assert.equal(rings(shrub).length, 0);
+  assert.equal(rings({ ...shrub, localEcotype: true }).length, 1);
+  assert.equal(rings({ ...shrub, localEcotype: true, status: 'planted' }).length, 1);
+});
+
+test('a clone is a new planned plant with no source or ecotype, whatever it was copied from', () => {
   const plan = { id: 'plan', type: 'plan', viewBox: { width: 200, height: 100 }, extentFt: { width: 20, height: 10 }, originFt: { x: 0, y: 0 } };
-  const source = { ...createPlantFromSpecies(holly, { id: 'h', x: 1, y: 1 }), status: 'planted', plantedOn: '2026-04-18', source: { name: 'Big Box #123' } };
+  const source = { ...createPlantFromSpecies(holly, { id: 'h', x: 1, y: 1 }), status: 'planted', plantedOn: '2026-04-18', source: { name: 'Big Box #123' }, localEcotype: true };
   const state = { plants: [source], project: { views: [plan] } };
   const clone = clonePlantById(state, 'h');
-  assert.deepEqual(lifecycleOf(clone), { status: 'planned', plantedOn: '', source: null });
+  assert.deepEqual(lifecycleOf(clone), { status: 'planned', plantedOn: '', source: null, localEcotype: false });
   assert.equal(state.plants[0].status, 'planted', 'the original keeps its own');
 });
 
@@ -171,7 +195,7 @@ test('the layout CSV carries the lifecycle out and back, and a four-column file 
   const plants = [
     createPlantFromSpecies(holly, { id: 'a', x: 1, y: 1, status: 'planted', plantedOn: '2026-04-18', source: { name: 'Big Box #123, aisle 7' } }),
     createPlantFromSpecies(holly, { id: 'b', x: 2, y: 2, status: 'planted', source: { name: 'Native Gardeners', ref: NURSERY_REF } }),
-    createPlantFromSpecies(holly, { id: 'c', x: 3, y: 3, source: { name: 'the fall sale', ref: SALE_REF } }),
+    createPlantFromSpecies(holly, { id: 'c', x: 3, y: 3, source: { name: 'the fall sale', ref: SALE_REF }, localEcotype: true }),
     createPlantFromSpecies(holly, { id: 'd', x: 4, y: 4 }),
   ];
   const back = buildPlantsFromCsv(PLANTS_CSV, buildLayoutCsv(plants), { drawingCsv: DRAWING_CSV });
@@ -301,8 +325,8 @@ test('status, plantedOn and source round-trip through POST /api/layout -> app.db
     const env = { dataDir, db, user };
     const sent = [
       { id: 'a', speciesId: 'yaupon-holly', x: 1, y: 2, status: 'planted', plantedOn: '2026-04-18', source: { name: 'Native Gardeners', ref: NURSERY_REF } },
-      { id: 'b', speciesId: 'yaupon-holly', x: 3, y: 4, source: { name: 'the fall sale', ref: SALE_REF } },
-      { id: 'c', speciesId: 'yaupon-holly', x: 5, y: 6, status: 'planted', source: { name: '<b>Big Box</b> #123, "aisle 7"' } },
+      { id: 'b', speciesId: 'yaupon-holly', x: 3, y: 4, source: { name: 'the fall sale', ref: SALE_REF }, localEcotype: true },
+      { id: 'c', speciesId: 'yaupon-holly', x: 5, y: 6, status: 'planted', source: { name: '<b>Big Box</b> #123, "aisle 7"' }, localEcotype: true },
       { id: 'd', speciesId: 'yaupon-holly', x: 7, y: 8 },
     ];
     const saved = await call(env, 'POST', '/api/layout?project=yard', { plants: sent, description: 'Marked plant planted', id: 'e1' });
@@ -324,7 +348,7 @@ test('status, plantedOn and source round-trip through POST /api/layout -> app.db
 
     // A client that posts nonsense cannot store it: the server's reduction
     // (toPlacements in makeEntry) keeps only canonical lifecycle fields.
-    const junk = [{ id: 'j', speciesId: 'yaupon-holly', x: 0, y: 0, status: 'removed', plantedOn: 'tomorrow', source: { name: 'x'.repeat(300), ref: { table: 'shops' } } }];
+    const junk = [{ id: 'j', speciesId: 'yaupon-holly', x: 0, y: 0, status: 'removed', plantedOn: 'tomorrow', source: { name: 'x'.repeat(300), ref: { table: 'shops' } }, localEcotype: 'yes' }];
     const cleaned = await call(env, 'POST', '/api/layout?project=yard', { plants: junk, id: 'e2' });
     assert.equal(cleaned.statusCode, 200);
     const stored = JSON.parse(db.prepare("SELECT plants_json FROM history_entries WHERE entry_id = 'e2'").get().plants_json);

@@ -589,7 +589,7 @@ beautyberry-east,beautyberry,11.825,16.566,planted,2026-04-18,Native Gardeners,N
 
 ### Planned and planted (nl-3s5.22)
 
-A placement may carry three optional fields, owned by `src/data/plantLifecycle.js`:
+A placement may carry four optional fields, owned by `src/data/plantLifecycle.js`:
 
 - `status`: `'planted'`, or absent for planned (the default, so every placement
   saved before this had its canonical form already). Only the two states exist;
@@ -606,6 +606,11 @@ A placement may carry three optional fields, owned by `src/data/plantLifecycle.j
   `{ table: 'plant-sales', organizer, event, startDate }`. A ref that no longer
   resolves (sale rows are pruned each season) is normal, and only the name shows.
   Typed text is never matched on anyone's behalf.
+- `localEcotype`: `true`, or absent (nl-ky8): the person says this plant was
+  grown from local seed or stock. Ecotype belongs to the plant, not the species,
+  so it lives here beside the source. It is the person's statement, not a check,
+  and may be set on a planned plant. CSV column `local_ecotype` (`yes` or blank).
+  The plan draws a second ring inside the outline; a clone drops it.
 
 Two checks: `normalizeLifecycle` is structural, never throws and never reads the
 clock, and runs inside `toPlacement`, so the client's snapshot, the server's

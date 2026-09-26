@@ -223,8 +223,8 @@ test('the owner reads and saves through the routes', async () => {
     assert.match(csv.headers['Content-Type'], /text\/csv/);
     assert.equal(
       csv.body,
-      'id,species_id,x_ft,y_ft,status,planted_on,source,source_nursery,source_sale_organizer,source_sale_event,source_sale_date\n' +
-        'h1,yaupon-holly,1.235,1.000,planned,,,,,,\n'
+      'id,species_id,x_ft,y_ft,status,planted_on,source,source_nursery,source_sale_organizer,source_sale_event,source_sale_date,local_ecotype\n' +
+        'h1,yaupon-holly,1.235,1.000,planned,,,,,,,\n'
     );
     const rewound = await call(env, env.alice, 'POST', '/api/history/cursor?project=new-yard', { cursor: 0 });
     assert.deepEqual(rewound.json().entry.plants, []);

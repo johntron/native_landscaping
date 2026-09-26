@@ -15,6 +15,11 @@
  *                { table: 'plant-sales', organizer, event, startDate }
  *              A ref that no longer resolves (sale rows are pruned every
  *              season) is normal: the name alone is shown.
+ *   localEcotype  true, or absent: the person says this plant was grown from
+ *              local stock (nl-ky8). Ecotype belongs to a plant, not its
+ *              species: the same species can come from local seed or from a
+ *              seed company three ecoregions away. It is what the person
+ *              says, not something checked, so it may be set while planned.
  *
  * Two checks, deliberately different:
  *
@@ -38,7 +43,7 @@ export const STATUS_PLANTED = 'planted';
 export const LIFECYCLE_STATUSES = Object.freeze([STATUS_PLANNED, STATUS_PLANTED]);
 
 /** The placement keys this module owns. */
-export const LIFECYCLE_KEYS = Object.freeze(['status', 'plantedOn', 'source']);
+export const LIFECYCLE_KEYS = Object.freeze(['status', 'plantedOn', 'source', 'localEcotype']);
 
 /** Longest free-text source kept, in characters; longer text is cut, not refused. */
 export const SOURCE_NAME_MAX = 120;
@@ -126,7 +131,7 @@ export function normalizeSource(source) {
  * The lifecycle fields of `placement` in canonical form: only the keys that
  * hold a usable value. Structural only; see the module comment.
  * @param {object} placement
- * @returns {{ status?: 'planted', plantedOn?: string, source?: object }}
+ * @returns {{ status?: 'planted', plantedOn?: string, source?: object, localEcotype?: true }}
  */
 export function normalizeLifecycle(placement) {
   const out = {};
@@ -137,13 +142,14 @@ export function normalizeLifecycle(placement) {
   }
   const source = normalizeSource(placement.source);
   if (source) out.source = source;
+  if (placement.localEcotype === true) out.localEcotype = true;
   return out;
 }
 
 /**
  * The lifecycle of a plant or placement for display: always a status.
  * @param {object} plant
- * @returns {{ status: 'planned'|'planted', plantedOn: string, source: object|null }}
+ * @returns {{ status: 'planned'|'planted', plantedOn: string, source: object|null, localEcotype: boolean }}
  */
 export function lifecycleOf(plant) {
   const normalized = normalizeLifecycle(plant);
@@ -151,6 +157,7 @@ export function lifecycleOf(plant) {
     status: normalized.status || STATUS_PLANNED,
     plantedOn: normalized.plantedOn || '',
     source: normalized.source || null,
+    localEcotype: normalized.localEcotype === true,
   };
 }
 
@@ -187,6 +194,9 @@ export function validateLifecycle(fields, { today = localIsoDate() } = {}) {
     if (source.ref !== undefined && source.ref !== null && !normalizeSourceRef(source.ref)) {
       problems.push('The linked nursery or sale is not one this page knows how to name.');
     }
+  }
+  if (fields?.localEcotype !== undefined && typeof fields.localEcotype !== 'boolean') {
+    problems.push('Local ecotype must be yes or no.');
   }
   return problems;
 }
@@ -304,6 +314,7 @@ export const LIFECYCLE_CSV_COLUMNS = Object.freeze([
   'source_sale_organizer',
   'source_sale_event',
   'source_sale_date',
+  'local_ecotype',
 ]);
 
 /**
@@ -313,7 +324,7 @@ export const LIFECYCLE_CSV_COLUMNS = Object.freeze([
  * @returns {string[]}
  */
 export function lifecycleCsvCells(plant) {
-  const { status, plantedOn, source } = lifecycleOf(plant);
+  const { status, plantedOn, source, localEcotype } = lifecycleOf(plant);
   const ref = source?.ref;
   const nursery = ref?.table === 'nurseries' ? ref : null;
   const sale = ref?.table === 'plant-sales' ? ref : null;
@@ -325,6 +336,7 @@ export function lifecycleCsvCells(plant) {
     sale?.organizer || '',
     sale?.event || '',
     sale?.startDate || '',
+    localEcotype ? 'yes' : '',
   ];
 }
 
@@ -347,5 +359,6 @@ export function lifecycleFromCsvRow(row) {
     status: String(row.status || '').trim().toLowerCase(),
     plantedOn: String(row.planted_on || '').trim(),
     source: { name: row.source, ref: nursery || sale },
+    localEcotype: ['yes', 'true'].includes(String(row.local_ecotype || '').trim().toLowerCase()),
   });
 }
