@@ -92,11 +92,13 @@ export function searchSpecies(species, { query = '', sortBy = 'common', nativeOn
 
 /**
  * An option's text, leading with the name the list is sorted by so the order
- * is visible, then where the species stands against the native test.
+ * is visible, then where the species stands against the native test, then a
+ * star when the person marked it favorite (nl-3on).
  * @param {{commonName?: string, botanicalName?: string, nativity?: string}} entry
  * @param {'common'|'botanical'} sortBy
+ * @param {{favorite?: boolean}} [options]
  */
-export function speciesOptionLabel(entry, sortBy = 'common') {
+export function speciesOptionLabel(entry, sortBy = 'common', { favorite = false } = {}) {
   let names = entry.botanicalName;
   if (entry.commonName) {
     names =
@@ -106,5 +108,6 @@ export function speciesOptionLabel(entry, sortBy = 'common') {
   }
   // The mark trails the names so typing a letter in the select still jumps by name.
   const standing = nativeStanding(entry);
-  return `${names} · ${standing === 'native' ? '✓ ' : ''}${STANDING_LABELS[standing]}`;
+  const label = `${names} · ${standing === 'native' ? '✓ ' : ''}${STANDING_LABELS[standing]}`;
+  return favorite ? `${label} · ★ favorite` : label;
 }

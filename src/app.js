@@ -148,6 +148,7 @@ async function init() {
   const addPlantSearch = document.getElementById('addPlantSearch');
   const addPlantSort = document.getElementById('addPlantSort');
   const addPlantNativeOnly = document.getElementById('addPlantNativeOnly');
+  const addPlantFavoriteButton = document.getElementById('addPlantFavoriteBtn');
 
   let projectIndex;
   let project;
@@ -554,6 +555,18 @@ async function init() {
     if (addPlantSort) addPlantSort.disabled = false;
     if (addPlantNativeOnly) addPlantNativeOnly.disabled = false;
 
+    // The signed-in person's favorite species (nl-3on). The star button stays
+    // hidden until they load; a failed load costs only the stars.
+    let favorites = null;
+    const syncFavoriteButton = () => {
+      if (!addPlantFavoriteButton) return;
+      addPlantFavoriteButton.hidden = !favorites;
+      const on = Boolean(favorites?.has(addPlantSelect.value));
+      addPlantFavoriteButton.disabled = !favorites || !addPlantSelect.value;
+      addPlantFavoriteButton.setAttribute('aria-pressed', on ? 'true' : 'false');
+      addPlantFavoriteButton.textContent = on ? '★ Favorite' : '☆ Favorite';
+    };
+
     // Rebuild the options from the search box and sort choice, keeping the
     // chosen species selected while it still matches.
     const fillOptions = () => {
@@ -568,7 +581,7 @@ async function init() {
       matches.forEach((entry) => {
         const option = document.createElement('option');
         option.value = entry.speciesId;
-        option.textContent = speciesOptionLabel(entry, sortBy);
+        option.textContent = speciesOptionLabel(entry, sortBy, { favorite: Boolean(favorites?.has(entry.speciesId)) });
         addPlantSelect.appendChild(option);
       });
       if (!matches.length) {
@@ -581,8 +594,35 @@ async function init() {
       }
       addPlantSelect.disabled = !matches.length;
       addPlantButton.disabled = !matches.length;
+      syncFavoriteButton();
     };
     fillOptions();
+    addPlantSelect.addEventListener('change', syncFavoriteButton);
+    fetch('/api/favorites', { redirect: 'manual' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        if (!body) return;
+        favorites = new Set(body.speciesIds);
+        fillOptions();
+      })
+      .catch((err) => console.warn('Could not load favorites; the star is off', err));
+    addPlantFavoriteButton?.addEventListener('click', async () => {
+      const speciesId = addPlantSelect.value;
+      if (!favorites || !speciesId) return;
+      addPlantFavoriteButton.disabled = true;
+      try {
+        const res = await fetch('/api/favorites', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ speciesId, favorite: !favorites.has(speciesId) }),
+        });
+        if (!res.ok) throw new Error(`Request failed (${res.status})`);
+        favorites = new Set((await res.json()).speciesIds);
+      } catch (err) {
+        console.error('Could not save the favorite', err);
+      }
+      fillOptions();
+    });
     addPlantSearch?.addEventListener('input', fillOptions);
     addPlantSort?.addEventListener('change', fillOptions);
     addPlantNativeOnly?.addEventListener('change', fillOptions);

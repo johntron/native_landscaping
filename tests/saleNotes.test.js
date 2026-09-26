@@ -206,7 +206,7 @@ test('006 applies to a fresh database', () => {
   try {
     db.exec('PRAGMA foreign_keys = ON');
     runMigrations(db, MIGRATIONS_DIR);
-    assert.equal(db.prepare('SELECT MAX(version) AS v FROM schema_version').get().v, 6);
+    assert.ok(db.prepare('SELECT MAX(version) AS v FROM schema_version').get().v >= 6);
     db.prepare("INSERT INTO users (email, is_admin, created_at) VALUES ('a@example.com', 1, 't')").run();
     db.prepare("INSERT INTO sale_notes (author_id, body, created_at) VALUES (1, 'note', 't')").run();
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM sale_notes').get().n, 1);
@@ -234,7 +234,8 @@ test('006 applies to a database stopped at schema 5 (the live app.db before this
 
     runMigrations(db, MIGRATIONS_DIR);
 
-    assert.equal(db.prepare('SELECT MAX(version) AS v FROM schema_version').get().v, 6);
+    // 6 or later: migrations added after 006 (007, nl-3on) apply on top.
+    assert.ok(db.prepare('SELECT MAX(version) AS v FROM schema_version').get().v >= 6);
     assert.deepEqual(db.prepare('SELECT * FROM projects ORDER BY id').all(), projectsBefore, 'existing tables untouched');
 
     db.prepare("INSERT INTO sale_notes (author_id, body, created_at) VALUES (1, 'note', 't')").run();

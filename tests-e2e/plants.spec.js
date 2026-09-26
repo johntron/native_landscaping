@@ -83,6 +83,31 @@ test.describe('adding and removing plants', () => {
     await expect(options).toHaveCount(total);
   });
 
+  test('the star marks the selected species favorite, and it survives a reload', async ({ page }) => {
+    // Writes /api/favorites, so the scratch server (its own throwaway app.db).
+    await openScratchProject(page, 'plant-add');
+    await page.locator('[data-mode="edit"]').click();
+    const star = page.locator('#addPlantFavoriteBtn');
+    await expect(star).toBeVisible();
+    await page.locator('#addPlantSearch').fill('yarrow');
+    const option = page.locator('#addPlantSelect option').first();
+    if ((await star.getAttribute('aria-pressed')) === 'true') await star.click(); // start from not-favorite
+    await expect(star).toHaveAttribute('aria-pressed', 'false');
+
+    await star.click();
+    await expect(star).toHaveAttribute('aria-pressed', 'true');
+    await expect(option).toContainText('★ favorite');
+
+    await openScratchProject(page, 'plant-add');
+    await page.locator('[data-mode="edit"]').click();
+    await page.locator('#addPlantSearch').fill('yarrow');
+    await expect(page.locator('#addPlantSelect option').first()).toContainText('★ favorite');
+
+    await star.click(); // leave it as found
+    await expect(star).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.locator('#addPlantSelect option').first()).not.toContainText('★');
+  });
+
   test('removing a plant drops it from the drawing and from the saved layout', async ({ page }) => {
     // View mode, not Edit: the detail sheet opens on a plain click, and in Edit
     // mode the drag controller captures the pointer so no click reaches a plant.

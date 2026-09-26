@@ -60,6 +60,13 @@ test('the option label leads with the sort name and ends with the native standin
   assert.equal(speciesOptionLabel(species[3], 'common'), 'Carex blanda · not native here');
 });
 
+test('a favorite ends with a star', () => {
+  assert.equal(
+    speciesOptionLabel(species[1], 'common', { favorite: true }),
+    'Indian blanket (Gaillardia pulchella) · ✓ native to North Central Texas · ★ favorite'
+  );
+});
+
 test('a cultivar is never native, whatever its nativity says', () => {
   const redbud = { speciesId: 'r', commonName: 'Oklahoma redbud', botanicalName: "Cercis canadensis var. texensis 'Oklahoma'", nativity: 'native' };
   assert.equal(nativeStanding(redbud), 'cultivar');
