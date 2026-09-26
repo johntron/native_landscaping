@@ -1,10 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openClaimsStore, createSchema } from '../tools/claims/claimsStore.js';
-import { buildPlantsCsv, PLANTS_CSV_HEADER } from '../tools/claims/exportPlantsCsv.js';
+import {
+  buildPlantsCsv,
+  PLANTS_CSV_HEADER,
+  validateAgainstParser,
+  diffAgainstCommitted,
+  writePlantsCsvExport,
+} from '../tools/claims/exportPlantsCsv.js';
 import { DRAWING_COLUMNS } from '../src/data/plantParser.js';
 
 function tempDbPath() {
@@ -250,4 +256,135 @@ test('the export writes no drawing column, even when the store holds a colour cl
   const [header, dataLine] = csvText.trim().split('\n');
   assert.deepEqual(header.split(',').filter((col) => DRAWING_COLUMNS.includes(col)), []);
   assert.ok(!dataLine.includes('#8f6fb3'));
+});
+
+// --- nl-scx.15: validate against the parser design.html loads, and never
+// silently overwrite a differing plants.csv. -------------------------------
+
+function tempCsvPath() {
+  const dir = mkdtempSync(join(tmpdir(), 'claims-export-guard-test-'));
+  return join(dir, 'plants.csv');
+}
+
+test('validateAgainstParser accepts a clean export', () => {
+  const db = makeStore();
+  const speciesId = insertTaxon(db, { name: 'Passiflora incarnata' });
+  insertClaim(db, { speciesId, field: 'sun_pref', value: 'part-sun', source: 'usda-plants-characteristics' });
+  const identityRows = [{ id: 'x', common_name: 'X', botanical_name: 'Passiflora incarnata' }];
+
+  const { csvText } = buildPlantsCsv(db, identityRows);
+  assert.deepEqual(validateAgainstParser(csvText), []);
+});
+
+test('validateAgainstParser reports every offending cell, not just the first', () => {
+  const db = makeStore();
+  const a = insertTaxon(db, { name: 'Passiflora incarnata' });
+  const b = insertTaxon(db, { name: 'Ilex vomitoria' });
+  // sun_pref is a single value on a scale; a list is exactly what nl-scx.15
+  // found the store holding and the parser rejects with a LayoutDataError.
+  insertClaim(db, { speciesId: a, field: 'sun_pref', value: 'full-sun,part-sun', source: 'npin' });
+  // soil_pref is a set, but every member must be a known soil.
+  insertClaim(db, { speciesId: b, field: 'soil_pref', value: 'peaty', source: 'npin' });
+  const identityRows = [
+    { id: 'passionflower', common_name: 'X', botanical_name: 'Passiflora incarnata' },
+    { id: 'yaupon', common_name: 'Y', botanical_name: 'Ilex vomitoria' },
+  ];
+
+  const { csvText } = buildPlantsCsv(db, identityRows);
+  const errors = validateAgainstParser(csvText);
+  assert.equal(errors.length, 2);
+  const bySpecies = Object.fromEntries(errors.map((e) => [e.id, e]));
+  assert.equal(bySpecies.passionflower.field, 'sun_pref');
+  assert.equal(bySpecies.passionflower.value, 'full-sun,part-sun');
+  assert.equal(bySpecies.yaupon.field, 'soil_pref');
+  assert.equal(bySpecies.yaupon.value, 'peaty');
+});
+
+test('writePlantsCsvExport refuses to write any row when validation fails, force or not', () => {
+  const db = makeStore();
+  const speciesId = insertTaxon(db, { name: 'Passiflora incarnata' });
+  insertClaim(db, { speciesId, field: 'sun_pref', value: 'full-sun,part-sun', source: 'npin' });
+  const identityRows = [{ id: 'x', common_name: 'X', botanical_name: 'Passiflora incarnata' }];
+  const { csvText } = buildPlantsCsv(db, identityRows);
+
+  const outPath = tempCsvPath();
+  writeFileSync(outPath, 'id,common_name,botanical_name\nx,X,Passiflora incarnata\n'); // pre-existing, distinct file
+
+  for (const force of [false, true]) {
+    const result = writePlantsCsvExport({ csvText, outPath, protectedPath: outPath, force });
+    assert.equal(result.written, false);
+    assert.equal(result.validationErrors.length, 1);
+    assert.equal(result.validationErrors[0].field, 'sun_pref');
+    // No partial write: the file on disk is untouched.
+    assert.equal(readFileSync(outPath, 'utf8'), 'id,common_name,botanical_name\nx,X,Passiflora incarnata\n');
+  }
+});
+
+test('writePlantsCsvExport refuses a clean export that differs from the protected path, and reports a per-column diff', () => {
+  const db = makeStore();
+  const speciesId = insertTaxon(db, { name: 'Passiflora incarnata' });
+  insertClaim(db, { speciesId, field: 'height_ft', value: '20', source: 'usda-plants-characteristics' });
+  const identityRows = [{ id: 'x', common_name: 'X', botanical_name: 'Passiflora incarnata' }];
+  const { csvText } = buildPlantsCsv(db, identityRows);
+
+  const protectedPath = tempCsvPath();
+  const committed = `${PLANTS_CSV_HEADER.join(',')}\nx,X,Passiflora incarnata,,,,,,,,,10,,\n`;
+  writeFileSync(protectedPath, committed);
+
+  const result = writePlantsCsvExport({ csvText, outPath: protectedPath, protectedPath });
+  assert.equal(result.written, false);
+  assert.equal(result.validationErrors.length, 0);
+  assert.equal(result.diff.changed, true);
+  const heightCol = result.diff.perColumn.find((c) => c.column === 'height_ft');
+  assert.deepEqual(heightCol, { column: 'height_ft', changed: 1, blanked: 0, total: 1 });
+  assert.equal(readFileSync(protectedPath, 'utf8'), committed); // untouched
+});
+
+test('writePlantsCsvExport writes when --force is given, and when writing to a different path', () => {
+  const db = makeStore();
+  const speciesId = insertTaxon(db, { name: 'Passiflora incarnata' });
+  insertClaim(db, { speciesId, field: 'height_ft', value: '20', source: 'usda-plants-characteristics' });
+  const identityRows = [{ id: 'x', common_name: 'X', botanical_name: 'Passiflora incarnata' }];
+  const { csvText } = buildPlantsCsv(db, identityRows);
+
+  const protectedPath = tempCsvPath();
+  const committed = `${PLANTS_CSV_HEADER.join(',')}\nx,X,Passiflora incarnata,,,,,,,,,10,,\n`;
+  writeFileSync(protectedPath, committed);
+
+  const forced = writePlantsCsvExport({ csvText, outPath: protectedPath, protectedPath, force: true });
+  assert.equal(forced.written, true);
+  assert.equal(readFileSync(protectedPath, 'utf8'), csvText);
+
+  writeFileSync(protectedPath, committed); // reset
+  const elsewherePath = tempCsvPath();
+  const elsewhere = writePlantsCsvExport({ csvText, outPath: elsewherePath, protectedPath });
+  assert.equal(elsewhere.written, true);
+  assert.equal(readFileSync(elsewherePath, 'utf8'), csvText);
+  assert.equal(readFileSync(protectedPath, 'utf8'), committed); // still untouched
+});
+
+test('writePlantsCsvExport allows the write when the export matches the committed file exactly', () => {
+  const db = makeStore();
+  const speciesId = insertTaxon(db, { name: 'Passiflora incarnata' });
+  insertClaim(db, { speciesId, field: 'height_ft', value: '20', source: 'usda-plants-characteristics' });
+  const identityRows = [{ id: 'x', common_name: 'X', botanical_name: 'Passiflora incarnata' }];
+  const { csvText } = buildPlantsCsv(db, identityRows);
+
+  const protectedPath = tempCsvPath();
+  writeFileSync(protectedPath, csvText); // already up to date
+
+  const result = writePlantsCsvExport({ csvText, outPath: protectedPath, protectedPath });
+  assert.equal(result.written, true);
+  assert.equal(result.diff.changed, false);
+});
+
+test('diffAgainstCommitted keys by id, not row position, and reports added/removed ids', () => {
+  const exported = `${PLANTS_CSV_HEADER.join(',')}\na,A,Species a,,,,,,,,,5,,\nc,C,Species c,,,,,,,,,,,\n`;
+  const committed = `${PLANTS_CSV_HEADER.join(',')}\nb,B,Species b,,,,,,,,,,,\na,A,Species a,,,,,,,,,3,,\n`;
+
+  const diff = diffAgainstCommitted(exported, committed);
+  assert.deepEqual(diff.addedIds, ['c']);
+  assert.deepEqual(diff.removedIds, ['b']);
+  const heightCol = diff.perColumn.find((c) => c.column === 'height_ft');
+  assert.deepEqual(heightCol, { column: 'height_ft', changed: 1, blanked: 0, total: 1 });
 });

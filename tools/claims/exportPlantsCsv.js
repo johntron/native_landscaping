@@ -23,9 +23,11 @@
 // botanical_name columns come from an identity list — today, the existing
 // plants.csv — not from claims. Widening identity into the store is a
 // separate bead.
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { resolve as resolvePath } from 'node:path';
 import { parseCsv } from '../../src/data/csvLoader.js';
+import { parseSpeciesCsv, LayoutDataError } from '../../src/data/plantParser.js';
 import { resolveField } from './precedence.js';
 import { COMMERCIAL_STATUS } from './projectConfig.js';
 
@@ -68,6 +70,11 @@ export const PLANTS_CSV_HEADER = [
 ];
 
 const IDENTITY_COLUMNS = ['id', 'common_name', 'botanical_name'];
+
+// Columns the store fills and the parser has rules for. `taxon_id` is
+// identity-shaped (a link, not a claim) and the parser does not check it, so
+// it is left out here rather than validated for nothing.
+const VALIDATED_COLUMNS = PLANTS_CSV_HEADER.filter((col) => !IDENTITY_COLUMNS.includes(col) && col !== 'taxon_id');
 
 /**
  * 04 §3.2: today's store only ever writes 'personal-noncommercial' (NPIN) or
@@ -196,12 +203,167 @@ export function exportPlantsCsv(db, { identityCsvPath = DEFAULT_IDENTITY_PATH, c
   return buildPlantsCsv(db, identityRows, { commercialStatus });
 }
 
+/**
+ * Validate every row the export built against the SAME parser design.html
+ * loads plants.csv through (src/data/plantParser.js) — never a
+ * reimplementation of its site-vocabulary/shape/month rules (nl-scx.15). A
+ * `LayoutDataError` from that parser is exactly what would stop design.html
+ * loading, so the export must refuse before the value ever reaches
+ * plants.csv.
+ *
+ * Checked cell by cell first (a 2-column `id,<field>` mini CSV through the
+ * one-argument `parseSpeciesCsv`, so drawing columns are never implicated),
+ * so one bad row's second bad field is not hidden behind its first. Then,
+ * only if every cell passed, once over the whole file as a backstop for a
+ * structural/cross-row rule (duplicate ids) no single cell would trip.
+ * @param {string} csvText the export's own output (buildPlantsCsv's csvText)
+ * @returns {Array<{id: string, field: string, value: string, message: string}>} empty if every row is valid
+ */
+export function validateAgainstParser(csvText) {
+  const rows = parseCsv(csvText);
+  const errors = [];
+
+  for (const row of rows) {
+    const id = row.id || '';
+    for (const field of VALIDATED_COLUMNS) {
+      const value = row[field] ?? '';
+      if (!value) continue; // blank is always valid — it's "no claim", not a bad one
+      const miniCsv = `id,${field}\n${csvCell(id)},${csvCell(value)}\n`;
+      try {
+        parseSpeciesCsv(miniCsv);
+      } catch (err) {
+        if (!(err instanceof LayoutDataError)) throw err;
+        errors.push({ id, field, value, message: err.message });
+      }
+    }
+  }
+
+  if (!errors.length) {
+    try {
+      parseSpeciesCsv(csvText);
+    } catch (err) {
+      if (!(err instanceof LayoutDataError)) throw err;
+      errors.push({ id: '', field: '', value: '', message: err.message });
+    }
+  }
+
+  return errors;
+}
+
+/**
+ * Per-column diff between the export's rows and the committed file it would
+ * replace, keyed by `id` (never row position — a reordered id is not a
+ * change). This is the bead's own numbers (nl-scx.15: "height_ft on 53/62,
+ * ... width_ft goes blank on all 56 that have it"), computed instead of
+ * eyeballed, so the guard's refusal message always matches what actually
+ * changed.
+ * @param {string} csvText the export's own output
+ * @param {string} committedCsvText the file on disk the export would overwrite
+ * @returns {{ changed: boolean, perColumn: Array<{column: string, changed: number, blanked: number, total: number}>,
+ *             addedIds: string[], removedIds: string[] }}
+ */
+export function diffAgainstCommitted(csvText, committedCsvText) {
+  const exportedById = new Map(parseCsv(csvText).map((row) => [row.id, row]));
+  const committedById = new Map(parseCsv(committedCsvText).map((row) => [row.id, row]));
+
+  const addedIds = [...exportedById.keys()].filter((id) => !committedById.has(id));
+  const removedIds = [...committedById.keys()].filter((id) => !exportedById.has(id));
+
+  const perColumn = PLANTS_CSV_HEADER.filter((col) => !IDENTITY_COLUMNS.includes(col)).map((column) => {
+    let changed = 0;
+    let blanked = 0;
+    let total = 0;
+    for (const [id, committedRow] of committedById) {
+      const exportedRow = exportedById.get(id);
+      if (!exportedRow) continue;
+      const before = committedRow[column] ?? '';
+      const after = exportedRow[column] ?? '';
+      if (!before) continue; // only counting rows that HAD a value to lose/change
+      total += 1;
+      if (before !== after) {
+        changed += 1;
+        if (!after) blanked += 1;
+      }
+    }
+    return { column, changed, blanked, total };
+  });
+
+  const changed = addedIds.length > 0 || removedIds.length > 0 || perColumn.some((c) => c.changed > 0);
+  return { changed, perColumn, addedIds, removedIds };
+}
+
+/**
+ * The guarded write path (nl-scx.15). Two refusals, both "print and don't
+ * write" rather than throwing, so a CLI caller can report and exit non-zero:
+ *
+ *   1. Any row fails validateAgainstParser: no partial write, ever — this
+ *      refusal `force` cannot bypass, because a LayoutDataError isn't a
+ *      question of intent, it would break design.html.
+ *   2. The output would replace `protectedPath`'s current committed bytes
+ *      with different ones, and `force` was not given. Writing to a
+ *      different `outPath` (one that does not resolve to `protectedPath`)
+ *      is exempt, same as `force`, per the bead's own escape hatches.
+ *
+ * @param {{ csvText: string, outPath?: string, protectedPath?: string, force?: boolean }} options
+ * @returns {{ written: boolean, validationErrors: Array<object>, diff: object | null }}
+ */
+export function writePlantsCsvExport({
+  csvText,
+  outPath = DEFAULT_OUTPUT_PATH,
+  protectedPath = DEFAULT_OUTPUT_PATH,
+  force = false,
+}) {
+  const validationErrors = validateAgainstParser(csvText);
+  if (validationErrors.length) {
+    return { written: false, validationErrors, diff: null };
+  }
+
+  const isProtected = resolvePath(outPath) === resolvePath(protectedPath);
+  let diff = null;
+  if (isProtected && existsSync(protectedPath)) {
+    diff = diffAgainstCommitted(csvText, readFileSync(protectedPath, 'utf8'));
+    if (diff.changed && !force) {
+      return { written: false, validationErrors: [], diff };
+    }
+  }
+
+  writeFileSync(outPath, csvText);
+  return { written: true, validationErrors: [], diff };
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   const { openClaimsStore } = await import('./claimsStore.js');
-  const { writeFileSync } = await import('node:fs');
-  const db = openClaimsStore();
+  const args = process.argv.slice(2);
+  const force = args.includes('--force');
+  const outFlagIdx = args.indexOf('--out');
+  const outPath = outFlagIdx === -1 ? DEFAULT_OUTPUT_PATH : args[outFlagIdx + 1];
+  const dbFlagIdx = args.indexOf('--db');
+  const dbPath = dbFlagIdx === -1 ? undefined : args[dbFlagIdx + 1];
+
+  const db = openClaimsStore(dbPath);
   const { csvText, replacements } = exportPlantsCsv(db);
-  writeFileSync(DEFAULT_OUTPUT_PATH, csvText);
-  console.log(`Wrote ${DEFAULT_OUTPUT_PATH} (${replacements.length} newline/quote replacements).`);
-  for (const r of replacements) console.log(`  ${r.kind}: ${r.id} ${r.field}`);
+  const { written, validationErrors, diff } = writePlantsCsvExport({ csvText, outPath, force });
+
+  if (validationErrors.length) {
+    console.error(
+      `Refusing to write ${outPath}: ${validationErrors.length} value${validationErrors.length === 1 ? '' : 's'} the parser design.html loads would reject:`,
+    );
+    for (const e of validationErrors) {
+      console.error(e.field ? `  ${e.id} ${e.field} = "${e.value}": ${e.message}` : `  ${e.message}`);
+    }
+    process.exitCode = 1;
+  } else if (!written) {
+    console.error(
+      `Refusing to write ${outPath}: it differs from the committed file. Pass --force to overwrite, or --out <path> to write elsewhere.`,
+    );
+    for (const c of diff.perColumn) {
+      if (c.changed) console.error(`  ${c.column}: ${c.changed}/${c.total} changed${c.blanked ? ` (${c.blanked} blanked)` : ''}`);
+    }
+    if (diff.addedIds.length) console.error(`  added ids: ${diff.addedIds.join(', ')}`);
+    if (diff.removedIds.length) console.error(`  removed ids: ${diff.removedIds.join(', ')}`);
+    process.exitCode = 1;
+  } else {
+    console.log(`Wrote ${outPath} (${replacements.length} newline/quote replacements).`);
+    for (const r of replacements) console.log(`  ${r.kind}: ${r.id} ${r.field}`);
+  }
 }
