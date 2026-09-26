@@ -315,9 +315,33 @@ test('writePlantsCsvExport refuses to write any row when validation fails, force
     assert.equal(result.written, false);
     assert.equal(result.validationErrors.length, 1);
     assert.equal(result.validationErrors[0].field, 'sun_pref');
+    // The diff against the protected path is computed regardless — a caller
+    // refused for bad values still sees what else changed.
+    assert.notEqual(result.diff, null);
     // No partial write: the file on disk is untouched.
     assert.equal(readFileSync(outPath, 'utf8'), 'id,common_name,botanical_name\nx,X,Passiflora incarnata\n');
   }
+});
+
+test('writePlantsCsvExport refuses when a blank cell gains a value, not only when a value is lost', () => {
+  const db = makeStore();
+  const speciesId = insertTaxon(db, { name: 'Passiflora incarnata' });
+  insertClaim(db, { speciesId, field: 'height_ft', value: '20', source: 'usda-plants-characteristics' });
+  const identityRows = [{ id: 'x', common_name: 'X', botanical_name: 'Passiflora incarnata' }];
+  const { csvText } = buildPlantsCsv(db, identityRows);
+
+  const protectedPath = tempCsvPath();
+  // Committed height_ft is blank; the export would fill it. No value is lost,
+  // but the file still differs and must still be refused.
+  const committed = `${PLANTS_CSV_HEADER.join(',')}\nx,X,Passiflora incarnata,,,,,,,,,,,\n`;
+  writeFileSync(protectedPath, committed);
+
+  const result = writePlantsCsvExport({ csvText, outPath: protectedPath, protectedPath });
+  assert.equal(result.written, false);
+  assert.equal(result.diff.changed, true);
+  const heightCol = result.diff.perColumn.find((c) => c.column === 'height_ft');
+  assert.deepEqual(heightCol, { column: 'height_ft', changed: 1, blanked: 0, filled: 1, total: 1 });
+  assert.equal(readFileSync(protectedPath, 'utf8'), committed); // untouched
 });
 
 test('writePlantsCsvExport refuses a clean export that differs from the protected path, and reports a per-column diff', () => {
@@ -336,7 +360,7 @@ test('writePlantsCsvExport refuses a clean export that differs from the protecte
   assert.equal(result.validationErrors.length, 0);
   assert.equal(result.diff.changed, true);
   const heightCol = result.diff.perColumn.find((c) => c.column === 'height_ft');
-  assert.deepEqual(heightCol, { column: 'height_ft', changed: 1, blanked: 0, total: 1 });
+  assert.deepEqual(heightCol, { column: 'height_ft', changed: 1, blanked: 0, filled: 0, total: 1 });
   assert.equal(readFileSync(protectedPath, 'utf8'), committed); // untouched
 });
 
@@ -386,5 +410,5 @@ test('diffAgainstCommitted keys by id, not row position, and reports added/remov
   assert.deepEqual(diff.addedIds, ['c']);
   assert.deepEqual(diff.removedIds, ['b']);
   const heightCol = diff.perColumn.find((c) => c.column === 'height_ft');
-  assert.deepEqual(heightCol, { column: 'height_ft', changed: 1, blanked: 0, total: 1 });
+  assert.deepEqual(heightCol, { column: 'height_ft', changed: 1, blanked: 0, filled: 0, total: 1 });
 });

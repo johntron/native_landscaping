@@ -257,9 +257,13 @@ export function validateAgainstParser(csvText) {
  * ... width_ft goes blank on all 56 that have it"), computed instead of
  * eyeballed, so the guard's refusal message always matches what actually
  * changed.
+ * Every row shared by both files is compared, blank or not — a blank cell
+ * gaining a value is as much a change as one losing it, and both must be
+ * caught (nl-scx.15 requirement 2 is "differs", not "differs by losing a
+ * value").
  * @param {string} csvText the export's own output
  * @param {string} committedCsvText the file on disk the export would overwrite
- * @returns {{ changed: boolean, perColumn: Array<{column: string, changed: number, blanked: number, total: number}>,
+ * @returns {{ changed: boolean, perColumn: Array<{column: string, changed: number, blanked: number, filled: number, total: number}>,
  *             addedIds: string[], removedIds: string[] }}
  */
 export function diffAgainstCommitted(csvText, committedCsvText) {
@@ -272,20 +276,21 @@ export function diffAgainstCommitted(csvText, committedCsvText) {
   const perColumn = PLANTS_CSV_HEADER.filter((col) => !IDENTITY_COLUMNS.includes(col)).map((column) => {
     let changed = 0;
     let blanked = 0;
+    let filled = 0;
     let total = 0;
     for (const [id, committedRow] of committedById) {
       const exportedRow = exportedById.get(id);
-      if (!exportedRow) continue;
+      if (!exportedRow) continue; // row removed entirely — counted in removedIds, not per-column
+      total += 1;
       const before = committedRow[column] ?? '';
       const after = exportedRow[column] ?? '';
-      if (!before) continue; // only counting rows that HAD a value to lose/change
-      total += 1;
       if (before !== after) {
         changed += 1;
-        if (!after) blanked += 1;
+        if (before && !after) blanked += 1;
+        else if (!before && after) filled += 1;
       }
     }
-    return { column, changed, blanked, total };
+    return { column, changed, blanked, filled, total };
   });
 
   const changed = addedIds.length > 0 || removedIds.length > 0 || perColumn.some((c) => c.changed > 0);
@@ -293,16 +298,23 @@ export function diffAgainstCommitted(csvText, committedCsvText) {
 }
 
 /**
- * The guarded write path (nl-scx.15). Two refusals, both "print and don't
- * write" rather than throwing, so a CLI caller can report and exit non-zero:
+ * The guarded write path (nl-scx.15). The diff against `protectedPath` is
+ * always computed when that file exists — even when validation is about to
+ * refuse the write, and even when `outPath` points elsewhere — so a caller
+ * always sees the per-column summary the bead asked for, not just whichever
+ * refusal happened to run first.
+ *
+ * Two refusals, both "print and don't write" rather than throwing, so a CLI
+ * caller can report and exit non-zero:
  *
  *   1. Any row fails validateAgainstParser: no partial write, ever — this
  *      refusal `force` cannot bypass, because a LayoutDataError isn't a
  *      question of intent, it would break design.html.
  *   2. The output would replace `protectedPath`'s current committed bytes
- *      with different ones, and `force` was not given. Writing to a
- *      different `outPath` (one that does not resolve to `protectedPath`)
- *      is exempt, same as `force`, per the bead's own escape hatches.
+ *      with different ones (`outPath` resolves to `protectedPath`), and
+ *      `force` was not given. Writing to a different `outPath` (one that
+ *      does not resolve to `protectedPath`) is exempt, same as `force`, per
+ *      the bead's own escape hatches.
  *
  * @param {{ csvText: string, outPath?: string, protectedPath?: string, force?: boolean }} options
  * @returns {{ written: boolean, validationErrors: Array<object>, diff: object | null }}
@@ -313,18 +325,16 @@ export function writePlantsCsvExport({
   protectedPath = DEFAULT_OUTPUT_PATH,
   force = false,
 }) {
+  const diff = existsSync(protectedPath) ? diffAgainstCommitted(csvText, readFileSync(protectedPath, 'utf8')) : null;
+
   const validationErrors = validateAgainstParser(csvText);
   if (validationErrors.length) {
-    return { written: false, validationErrors, diff: null };
+    return { written: false, validationErrors, diff };
   }
 
   const isProtected = resolvePath(outPath) === resolvePath(protectedPath);
-  let diff = null;
-  if (isProtected && existsSync(protectedPath)) {
-    diff = diffAgainstCommitted(csvText, readFileSync(protectedPath, 'utf8'));
-    if (diff.changed && !force) {
-      return { written: false, validationErrors: [], diff };
-    }
+  if (isProtected && diff && diff.changed && !force) {
+    return { written: false, validationErrors: [], diff };
   }
 
   writeFileSync(outPath, csvText);
@@ -344,6 +354,17 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const { csvText, replacements } = exportPlantsCsv(db);
   const { written, validationErrors, diff } = writePlantsCsvExport({ csvText, outPath, force });
 
+  const printDiff = () => {
+    if (!diff) return;
+    for (const c of diff.perColumn) {
+      if (!c.changed) continue;
+      const detail = [c.blanked && `${c.blanked} blanked`, c.filled && `${c.filled} filled`].filter(Boolean).join(', ');
+      console.error(`  ${c.column}: ${c.changed}/${c.total} changed${detail ? ` (${detail})` : ''}`);
+    }
+    if (diff.addedIds.length) console.error(`  added ids: ${diff.addedIds.join(', ')}`);
+    if (diff.removedIds.length) console.error(`  removed ids: ${diff.removedIds.join(', ')}`);
+  };
+
   if (validationErrors.length) {
     console.error(
       `Refusing to write ${outPath}: ${validationErrors.length} value${validationErrors.length === 1 ? '' : 's'} the parser design.html loads would reject:`,
@@ -351,16 +372,16 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     for (const e of validationErrors) {
       console.error(e.field ? `  ${e.id} ${e.field} = "${e.value}": ${e.message}` : `  ${e.message}`);
     }
+    if (diff && diff.changed) {
+      console.error('It also differs from the committed file:');
+      printDiff();
+    }
     process.exitCode = 1;
   } else if (!written) {
     console.error(
       `Refusing to write ${outPath}: it differs from the committed file. Pass --force to overwrite, or --out <path> to write elsewhere.`,
     );
-    for (const c of diff.perColumn) {
-      if (c.changed) console.error(`  ${c.column}: ${c.changed}/${c.total} changed${c.blanked ? ` (${c.blanked} blanked)` : ''}`);
-    }
-    if (diff.addedIds.length) console.error(`  added ids: ${diff.addedIds.join(', ')}`);
-    if (diff.removedIds.length) console.error(`  removed ids: ${diff.removedIds.join(', ')}`);
+    printDiff();
     process.exitCode = 1;
   } else {
     console.log(`Wrote ${outPath} (${replacements.length} newline/quote replacements).`);
