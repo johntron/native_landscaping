@@ -71,8 +71,14 @@ function renderNotes(notes) {
 }
 
 async function loadNotes() {
-  const res = await fetch('/api/sale-notes');
-  if (!res.ok) return null; // 404 (not admin) or 401 (anonymous): stay hidden
+  // sourcing.html is public (nl-3s5.8) but /api/sale-notes is not: a
+  // logged-out visitor has no Cloudflare Access cookie, so a normal fetch
+  // would be redirected to the login host and fail as a cross-origin network
+  // error. redirect: 'manual' turns that into an ordinary, non-ok
+  // "opaqueredirect" response instead, so a logged-out load never throws or
+  // logs a network error here -- the section just stays hidden.
+  const res = await fetch('/api/sale-notes', { redirect: 'manual' });
+  if (!res.ok) return null; // opaqueredirect (anonymous), 401, or 404 (not admin): stay hidden
   const { notes } = await res.json();
   return notes;
 }

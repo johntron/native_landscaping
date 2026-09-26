@@ -8,7 +8,6 @@
  * that degrades on stage is worse than no demo.
  */
 import { fetchCsv, parseCsv } from '../data/csvLoader.js';
-import { loadProjectConfig, resolveActiveProjectId } from '../data/projectConfig.js';
 import { buildHostGeneraIndex } from '../analysis/hostGenera.js';
 import { TIERS, tierInfo } from '../analysis/provenance.js';
 import {
@@ -260,6 +259,13 @@ function populateHabitFilter() {
   });
 }
 
+// This page needs no project (AGENTS.md): it is public and scoped to the
+// keystone screen, not to any one yard. ecology/host-genera.csv only ever
+// carries EPA Level I ecoregion "9" (Great Plains, which the Blackland
+// Prairie / North Central Texas sits in), so there is nothing to look up per
+// yard yet; this is a fixed value, not a per-project default of 'home'.
+const ECOREGION = '9';
+
 /** Says which region the "recorded in" column is, and when it was fetched, or that it is not available. */
 function renderRegionNote(regionFauna) {
   const where = $('pnRegionWhere');
@@ -273,13 +279,6 @@ function renderRegionNote(regionFauna) {
 
 async function main() {
   renderTierKey();
-
-  let project = { ecoregion: '9' };
-  try {
-    project = await loadProjectConfig(resolveActiveProjectId());
-  } catch (err) {
-    console.warn('Falling back to the default ecoregion; project config unavailable', err);
-  }
 
   const url = (path) => new URL(path, document.baseURI);
   const [hostGeneraCsv, screenCsv, lepCsv, catalogCsv, regionFaunaCsv, nameChangeCsv, avoidCsv] = await Promise.all([
@@ -306,7 +305,7 @@ async function main() {
   renderRegionNote(regionFauna);
 
   allRows = screenKeystoneGenera({
-    hostGenera: buildHostGeneraIndex(hostGeneraCsv, { ecoregion: project.ecoregion || '9' }),
+    hostGenera: buildHostGeneraIndex(hostGeneraCsv, { ecoregion: ECOREGION }),
     fnctScreen: buildFnctScreenIndex(screenCsv),
     lepHosts: buildLepHostIndex(lepCsv),
     growth: buildGrowthIndex(catalogCsv),
