@@ -56,3 +56,32 @@
 .sale-note__meta { margin: 0; font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-faint); }
 .sale-note__body { margin: 0; white-space: pre-wrap; color: var(--ink-soft); }
 .sale-note__delete { justify-self: start; }
+
+/*
+ * Your shopping list (nl-46b). Chrome, so cyan at most: the star is the
+ * person's own marker, not data about life, and never glows (AGENTS.md).
+ */
+.shopping-yards { border: 0; margin: 1rem 0 0; padding: 0; }
+.shopping-yards legend { font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-faint); padding: 0; }
+.shopping-yards__choices { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; margin-top: 0.35rem; }
+.shopping-yards__choices label { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.92rem; }
+.shopping-summary { margin: 0.9rem 0 0; color: var(--ink-muted); font-size: 0.92rem; }
+.shopping-list { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; gap: 1px; background: var(--rule); border: 1px solid var(--rule); }
+.shopping-list:empty { display: none; }
+.shopping-row { display: grid; grid-template-columns: 2.2rem 3rem minmax(0, 1fr); align-items: start; gap: 0.6rem; background: var(--surface-raised); padding: 0.6rem 0.9rem; }
+.shopping-row--empty { display: block; color: var(--ink-muted); }
+.shopping-row__count { font-weight: 600; font-size: 1.05rem; font-variant-numeric: tabular-nums; color: var(--ink); text-align: right; }
+.shopping-row__body p { margin: 0; }
+.shopping-row__name { font-weight: 600; }
+.shopping-row__botanical { font-style: italic; font-weight: 400; color: var(--ink-soft); }
+.shopping-row__meta { font-size: 0.85rem; color: var(--ink-muted); margin-top: 0.1rem !important; }
+.shopping-star { font: inherit; font-size: 1.15rem; line-height: 1; width: 2rem; height: 2rem; border: 1px solid var(--rule-strong); border-radius: 999px; background: var(--surface-card); color: var(--ink-faint); cursor: pointer; }
+.shopping-star[aria-pressed='true'] { color: var(--accent); border-color: var(--accent); background: var(--accent-wash); }
+.shopping-star:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.shopping-wanted-heading { margin: 1.4rem 0 0; font-size: 1rem; }
+.shopping-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-top: 1rem; }
+.shopping-actions__status { font-size: 0.85rem; color: var(--ink-muted); }
+.shopping-list--wanted .shopping-row__count { color: var(--ink-faint); }
+@media (max-width: 600px) {
+  .shopping-row { grid-template-columns: 2.2rem 2.4rem minmax(0, 1fr); padding-inline: 0.6rem; }
+}

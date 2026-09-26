@@ -9,6 +9,7 @@ import { handleFeedRoutes } from './server/routes/feed.js';
 import { handleClaimsRoutes } from './server/routes/claims.js';
 import { handleSaleNotesRoutes } from './server/routes/saleNotes.js';
 import { handleFavoritesRoutes } from './server/routes/favorites.js';
+import { handleShoppingListRoutes } from './server/routes/shoppingList.js';
 import { rejectCrossSite } from './server/http.js';
 import { legacyRedirect, serveStaticFile, isAdminOnlyStaticPath } from './server/static.js';
 import { openAppDb, resolveDataDir } from './server/db/appDb.js';
@@ -27,7 +28,7 @@ const PUBLIC_DIR = process.env.PUBLIC_DIR
 // nl-3s5.3): outside the served root, reached only through /api routes.
 const DATA_DIR = resolveDataDir();
 
-const ROUTES = [handleProjectRoutes, handleEcosystemRoutes, handleFeedRoutes, handleClaimsRoutes, handleSaleNotesRoutes, handleFavoritesRoutes];
+const ROUTES = [handleProjectRoutes, handleEcosystemRoutes, handleFeedRoutes, handleClaimsRoutes, handleSaleNotesRoutes, handleFavoritesRoutes, handleShoppingListRoutes];
 
 // Built once so its configuration warnings log at startup (server/identity.js).
 const identify = createIdentity();

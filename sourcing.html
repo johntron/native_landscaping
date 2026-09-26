@@ -34,6 +34,35 @@
     </header>
 
     <main class="pn-page">
+      <!--
+        Your shopping list (nl-46b): every planned plant in your own yards, by
+        species, with your favorites (nl-3on) first. Hidden unless
+        /api/shopping-list answers 200, so a signed-out visitor sees the public
+        page unchanged. src/sourcing/shoppingListPage.js fills it.
+      -->
+      <section class="pn-section" id="shoppingListSection" hidden>
+        <p class="pn-eyebrow">For you</p>
+        <h2>Your shopping list</h2>
+        <p class="pn-lede">
+          Every plant still marked <em>planned</em> in your yards, by species. Mark a plant
+          <em>planted</em> in the yard's details once it is in the ground and it leaves this list. ★
+          marks a favorite (most wanted): favorites come first, and a favorite you have not placed
+          yet is listed below as wanted.
+        </p>
+        <fieldset class="shopping-yards">
+          <legend>Yards</legend>
+          <div class="shopping-yards__choices" id="shoppingYards"></div>
+        </fieldset>
+        <p class="shopping-summary" id="shoppingSummary" aria-live="polite"></p>
+        <ul class="shopping-list" id="shoppingRows"></ul>
+        <h3 class="shopping-wanted-heading" id="shoppingWantedHeading" hidden>Wanted, not yet placed</h3>
+        <ul class="shopping-list" id="shoppingWanted"></ul>
+        <div class="shopping-actions">
+          <button type="button" class="pill-button" id="shoppingCopyBtn">Copy list as text</button>
+          <span class="shopping-actions__status" id="shoppingCopyStatus" role="status"></span>
+        </div>
+      </section>
+
       <section class="pn-section">
         <p class="pn-eyebrow">Plant sales</p>
         <h2>Upcoming sales</h2>
@@ -135,5 +164,6 @@
     </main>
     <script type="module" src="src/sourcing/sourcingPage.js"></script>
     <script type="module" src="src/sourcing/saleNotesPage.js"></script>
+    <script type="module" src="src/sourcing/shoppingListPage.js"></script>
   </body>
 </html>
