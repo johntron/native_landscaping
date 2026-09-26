@@ -48,6 +48,32 @@ test.describe('adding and removing plants', () => {
     await expect(planPlants(page)).toHaveCount(before + 1);
   });
 
+  test('the picker narrows by a partial name and sorts by either name', async ({ page }) => {
+    // Read-only: nothing is added, so no layout is written.
+    await openScratchProject(page, 'plant-add');
+    await page.locator('[data-mode="edit"]').click();
+    const options = page.locator('#addPlantSelect option');
+    const total = await options.count();
+
+    await page.locator('#addPlantSearch').fill('YARR');
+    const narrowed = await options.allTextContents();
+    expect(narrowed.length).toBeGreaterThan(0);
+    expect(narrowed.length).toBeLessThan(total);
+    for (const text of narrowed) expect(text.toLowerCase()).toContain('yarr');
+
+    // Sorted by scientific name, each option leads with it: "Achillea ... (Western yarrow)".
+    await page.locator('#addPlantSort').selectOption('botanical');
+    expect((await options.first().textContent()).startsWith('Achillea')).toBe(true);
+
+    await page.locator('#addPlantSearch').fill('zzzz no such plant');
+    await expect(options).toHaveText(['No plants match']);
+    await expect(page.locator('#addPlantBtn')).toBeDisabled();
+
+    await page.locator('#addPlantSearch').fill('');
+    await expect(options).toHaveCount(total);
+    await expect(page.locator('#addPlantBtn')).toBeEnabled();
+  });
+
   test('removing a plant drops it from the drawing and from the saved layout', async ({ page }) => {
     // View mode, not Edit: the detail sheet opens on a plain click, and in Edit
     // mode the drag controller captures the pointer so no click reaches a plant.

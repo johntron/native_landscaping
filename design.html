@@ -145,10 +145,24 @@
             <!--
               Places one plant of the chosen species at the middle of the plan
               view; options come from the shared plants.csv catalog at load.
+              The search box and sort choice narrow and order the options
+              (src/data/speciesSearch.js, nl-ah5).
               Removing a plant lives on the plant itself (detail sheet / right-click).
             -->
             <div class="add-plant" id="addPlantRow">
               <label for="addPlantSelect">Add plant</label>
+              <input
+                id="addPlantSearch"
+                type="search"
+                placeholder="Search plants"
+                aria-label="Search plants by common or scientific name"
+                autocomplete="off"
+                disabled
+              />
+              <select id="addPlantSort" aria-label="Sort plants by" disabled>
+                <option value="common">Common name</option>
+                <option value="botanical">Scientific name</option>
+              </select>
               <select id="addPlantSelect" disabled></select>
               <button id="addPlantBtn" class="button pill-button" type="button" disabled>Add</button>
             </div>

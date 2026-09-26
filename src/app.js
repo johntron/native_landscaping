@@ -41,6 +41,7 @@ import { createLayoutHistoryController } from './history/layoutHistoryController
 import { createSpeciesHighlight } from './ui/speciesHighlight.js';
 import { patchView } from './state/yardEdits.js';
 import { addPlantFromCatalog, clonePlantById, removePlantById } from './state/plantEdits.js';
+import { searchSpecies, speciesOptionLabel } from './data/speciesSearch.js';
 import { createPlantMenu } from './interaction/plantMenu.js';
 import { createPlantLifecyclePanel } from './interaction/plantLifecyclePanel.js';
 import { PROJECT_QUERY_PARAM, initNewProjectForm, initProjectPicker } from './ui/projectPicker.js';
@@ -144,6 +145,8 @@ async function init() {
   const detailSheetRemoveBtn = document.getElementById('detailSheetRemoveBtn');
   const addPlantSelect = document.getElementById('addPlantSelect');
   const addPlantButton = document.getElementById('addPlantBtn');
+  const addPlantSearch = document.getElementById('addPlantSearch');
+  const addPlantSort = document.getElementById('addPlantSort');
 
   let projectIndex;
   let project;
@@ -544,24 +547,39 @@ async function init() {
    */
   function initAddPlantControl() {
     if (!addPlantSelect || !addPlantButton) return;
-    const options = appState.species
-      .filter((entry) => entry.speciesId && entry.botanicalName)
-      .sort((a, b) =>
-        (a.commonName || a.botanicalName).localeCompare(b.commonName || b.botanicalName)
-      );
-    addPlantSelect.innerHTML = '';
-    options.forEach((entry) => {
-      const option = document.createElement('option');
-      option.value = entry.speciesId;
-      option.textContent = entry.commonName
-        ? `${entry.commonName} (${entry.botanicalName})`
-        : entry.botanicalName;
-      addPlantSelect.appendChild(option);
-    });
-    const hasOptions = options.length > 0;
-    addPlantSelect.disabled = !hasOptions;
-    addPlantButton.disabled = !hasOptions;
+    const hasOptions = searchSpecies(appState.species).length > 0;
     if (!hasOptions) return;
+    if (addPlantSearch) addPlantSearch.disabled = false;
+    if (addPlantSort) addPlantSort.disabled = false;
+
+    // Rebuild the options from the search box and sort choice, keeping the
+    // chosen species selected while it still matches.
+    const fillOptions = () => {
+      const sortBy = addPlantSort?.value || 'common';
+      const matches = searchSpecies(appState.species, { query: addPlantSearch?.value || '', sortBy });
+      const previous = addPlantSelect.value;
+      addPlantSelect.innerHTML = '';
+      matches.forEach((entry) => {
+        const option = document.createElement('option');
+        option.value = entry.speciesId;
+        option.textContent = speciesOptionLabel(entry, sortBy);
+        addPlantSelect.appendChild(option);
+      });
+      if (!matches.length) {
+        const empty = document.createElement('option');
+        empty.value = '';
+        empty.textContent = 'No plants match';
+        addPlantSelect.appendChild(empty);
+      } else if (matches.some((entry) => entry.speciesId === previous)) {
+        addPlantSelect.value = previous;
+      }
+      addPlantSelect.disabled = !matches.length;
+      addPlantButton.disabled = !matches.length;
+    };
+    fillOptions();
+    addPlantSearch?.addEventListener('input', fillOptions);
+    addPlantSort?.addEventListener('change', fillOptions);
+
     addPlantButton.addEventListener('click', () => {
       const added = addPlantFromCatalog(appState, addPlantSelect.value);
       if (!added) return;
