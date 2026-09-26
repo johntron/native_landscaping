@@ -67,6 +67,8 @@ export const PLANTS_CSV_HEADER = [
   'height_ft',
   'fruit_season_months',
   'fruit_load',
+  // FNCT nativity (nl-5j5): the Add plant picker labels and filters on it.
+  'nativity_nctx',
 ];
 
 const IDENTITY_COLUMNS = ['id', 'common_name', 'botanical_name'];

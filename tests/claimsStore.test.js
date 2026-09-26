@@ -304,9 +304,21 @@ test('rebuildClaimsStore is idempotent: running it twice produces the same plant
   assert.equal(first.plantableCoreSize, second.plantableCoreSize);
 });
 
-test('the committed manual-corrections.tsv replays its 7 seed corrections and excludes the 2 species already in plantable_core', () => {
+test('the committed manual-corrections.tsv replays its 9 corrections and excludes the 2 species already in plantable_core', () => {
   const { db, correctionsApplied } = rebuildClaimsStore({ dbPath: tempDbPath() });
-  assert.equal(correctionsApplied, 7);
+  // 7 seed corrections (nl-scx.6), plus 2 FNCT name mismatches marked native (nl-5j5).
+  assert.equal(correctionsApplied, 9);
+
+  const nativeByCorrection = db
+    .prepare(
+      `SELECT t.scientific_name FROM claims c
+       JOIN taxa t ON t.id = c.species_id
+       WHERE c.source = 'manual-correction' AND c.field = 'nativity_nctx' AND c.value = 'native'
+       ORDER BY t.scientific_name`,
+    )
+    .all()
+    .map((r) => r.scientific_name);
+  assert.deepEqual(nativeByCorrection, ['Conoclinium coelestinum', 'Rudbeckia hirta']);
 
   const corrected = db
     .prepare(

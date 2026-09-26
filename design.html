@@ -145,8 +145,9 @@
             <!--
               Places one plant of the chosen species at the middle of the plan
               view; options come from the shared plants.csv catalog at load.
-              The search box and sort choice narrow and order the options
-              (src/data/speciesSearch.js, nl-ah5).
+              The search box, sort choice and native-only box narrow and order
+              the options (src/data/speciesSearch.js, nl-ah5, nl-5j5). "Native"
+              is the Flora of North Central Texas's, and never a cultivar.
               Removing a plant lives on the plant itself (detail sheet / right-click).
             -->
             <div class="add-plant" id="addPlantRow">
@@ -163,6 +164,10 @@
                 <option value="common">Common name</option>
                 <option value="botanical">Scientific name</option>
               </select>
+              <label class="add-plant__native" title="Native per the Flora of North Central Texas; cultivars excluded">
+                <input id="addPlantNativeOnly" type="checkbox" disabled />
+                Native only
+              </label>
               <select id="addPlantSelect" disabled></select>
               <button id="addPlantBtn" class="button pill-button" type="button" disabled>Add</button>
             </div>

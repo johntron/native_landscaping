@@ -783,6 +783,18 @@ h1 {
   color: var(--ink);
 }
 
+/* The "Native only" box reads as a control, not as the row's uppercase caption. */
+.add-plant label.add-plant__native {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 500;
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+
 .pill-switch input:checked + .pill-body {
   background-color: var(--accent);
   color: var(--surface-raised);

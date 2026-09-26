@@ -6,6 +6,12 @@
  * words, in the common or botanical name. Case, accents and punctuation are
  * ignored, so "black eyed", "blackeyed" and "Black-eyed" all find
  * black-eyed Susan, and "rud hir" finds Rudbeckia hirta.
+ *
+ * "Native" here is the owner's definition (nl-5j5): the Flora of North Central
+ * Texas treats the species as native (plants.csv `nativity_nctx`), and it is
+ * not a cultivar. A cultivar is a selected clone, not a local population, so it
+ * never counts, whatever its parent species is. Blank nativity is "not
+ * confirmed", never "introduced".
  */
 
 export const SPECIES_SORT_KEYS = Object.freeze(['common', 'botanical']);
@@ -35,6 +41,30 @@ export function speciesMatchesQuery(entry, query) {
   return words.every((word) => spaced.includes(word) || compact.includes(word));
 }
 
+/** A cultivar name carries its cultivar epithet in quotes: Ilex vomitoria 'Nana'. */
+function isCultivar(entry) {
+  return /['‘’"]/.test(entry.botanicalName || '');
+}
+
+/**
+ * How a species stands against the native test, for its label and the filter.
+ * @param {{botanicalName?: string, nativity?: string}} entry
+ * @returns {'native'|'cultivar'|'introduced'|'unconfirmed'}
+ */
+export function nativeStanding(entry) {
+  if (isCultivar(entry)) return 'cultivar';
+  if (entry.nativity === 'native') return 'native';
+  if (entry.nativity === 'introduced') return 'introduced';
+  return 'unconfirmed';
+}
+
+const STANDING_LABELS = Object.freeze({
+  native: 'native to North Central Texas',
+  cultivar: 'cultivar',
+  introduced: 'not native here',
+  unconfirmed: 'nativity not confirmed',
+});
+
 function sortName(entry, sortBy) {
   return sortBy === 'botanical'
     ? entry.botanicalName || entry.commonName || ''
@@ -45,12 +75,13 @@ function sortName(entry, sortBy) {
  * The picker's options: species with an id and a botanical name that match
  * `query`, ordered by the chosen name (the other name breaks ties).
  * @param {Array<{speciesId?: string, commonName?: string, botanicalName?: string}>} species
- * @param {{query?: string, sortBy?: 'common'|'botanical'}} [options]
+ * @param {{query?: string, sortBy?: 'common'|'botanical', nativeOnly?: boolean}} [options]
  */
-export function searchSpecies(species, { query = '', sortBy = 'common' } = {}) {
+export function searchSpecies(species, { query = '', sortBy = 'common', nativeOnly = false } = {}) {
   const other = sortBy === 'botanical' ? 'common' : 'botanical';
   return (species || [])
     .filter((entry) => entry.speciesId && entry.botanicalName)
+    .filter((entry) => !nativeOnly || nativeStanding(entry) === 'native')
     .filter((entry) => speciesMatchesQuery(entry, query))
     .sort(
       (a, b) =>
@@ -60,13 +91,20 @@ export function searchSpecies(species, { query = '', sortBy = 'common' } = {}) {
 }
 
 /**
- * An option's text, leading with the name the list is sorted by so the order is visible.
- * @param {{commonName?: string, botanicalName?: string}} entry
+ * An option's text, leading with the name the list is sorted by so the order
+ * is visible, then where the species stands against the native test.
+ * @param {{commonName?: string, botanicalName?: string, nativity?: string}} entry
  * @param {'common'|'botanical'} sortBy
  */
 export function speciesOptionLabel(entry, sortBy = 'common') {
-  if (!entry.commonName) return entry.botanicalName;
-  return sortBy === 'botanical'
-    ? `${entry.botanicalName} (${entry.commonName})`
-    : `${entry.commonName} (${entry.botanicalName})`;
+  let names = entry.botanicalName;
+  if (entry.commonName) {
+    names =
+      sortBy === 'botanical'
+        ? `${entry.botanicalName} (${entry.commonName})`
+        : `${entry.commonName} (${entry.botanicalName})`;
+  }
+  // The mark trails the names so typing a letter in the select still jumps by name.
+  const standing = nativeStanding(entry);
+  return `${names} · ${standing === 'native' ? '✓ ' : ''}${STANDING_LABELS[standing]}`;
 }

@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { searchSpecies, speciesMatchesQuery, speciesOptionLabel } from '../src/data/speciesSearch.js';
+import { nativeStanding, searchSpecies, speciesMatchesQuery, speciesOptionLabel } from '../src/data/speciesSearch.js';
 
 const species = [
-  { speciesId: 'black-eyed-susan', commonName: 'Black-eyed Susan', botanicalName: 'Rudbeckia hirta' },
-  { speciesId: 'indian-blanket', commonName: 'Indian blanket', botanicalName: 'Gaillardia pulchella' },
-  { speciesId: 'western-yarrow', commonName: 'Western yarrow', botanicalName: 'Achillea millefolium var. occidentalis' },
-  { speciesId: 'no-common', commonName: '', botanicalName: 'Carex blanda' },
+  { speciesId: 'black-eyed-susan', commonName: 'Black-eyed Susan', botanicalName: 'Rudbeckia hirta', nativity: 'native' },
+  { speciesId: 'indian-blanket', commonName: 'Indian blanket', botanicalName: 'Gaillardia pulchella', nativity: 'native' },
+  { speciesId: 'western-yarrow', commonName: 'Western yarrow', botanicalName: 'Achillea millefolium var. occidentalis', nativity: '' },
+  { speciesId: 'no-common', commonName: '', botanicalName: 'Carex blanda', nativity: 'introduced' },
   { speciesId: 'no-botanical', commonName: 'Mystery', botanicalName: '' },
 ];
 
@@ -47,8 +47,27 @@ test('a query that matches nothing returns no options', () => {
   assert.deepEqual(searchSpecies(species, { query: 'zzz' }), []);
 });
 
-test('the option label leads with the sort name', () => {
-  assert.equal(speciesOptionLabel(species[1], 'common'), 'Indian blanket (Gaillardia pulchella)');
-  assert.equal(speciesOptionLabel(species[1], 'botanical'), 'Gaillardia pulchella (Indian blanket)');
-  assert.equal(speciesOptionLabel(species[3], 'common'), 'Carex blanda');
+test('the option label leads with the sort name and ends with the native standing', () => {
+  assert.equal(
+    speciesOptionLabel(species[1], 'common'),
+    'Indian blanket (Gaillardia pulchella) · ✓ native to North Central Texas'
+  );
+  assert.equal(
+    speciesOptionLabel(species[1], 'botanical'),
+    'Gaillardia pulchella (Indian blanket) · ✓ native to North Central Texas'
+  );
+  assert.equal(speciesOptionLabel(species[2], 'common'), 'Western yarrow (Achillea millefolium var. occidentalis) · nativity not confirmed');
+  assert.equal(speciesOptionLabel(species[3], 'common'), 'Carex blanda · not native here');
+});
+
+test('a cultivar is never native, whatever its nativity says', () => {
+  const redbud = { speciesId: 'r', commonName: 'Oklahoma redbud', botanicalName: "Cercis canadensis var. texensis 'Oklahoma'", nativity: 'native' };
+  assert.equal(nativeStanding(redbud), 'cultivar');
+  assert.equal(nativeStanding({ botanicalName: 'Ilex vomitoria ‘Nana’' }), 'cultivar');
+  assert.deepEqual(searchSpecies([redbud], { nativeOnly: true }), []);
+});
+
+test('native only keeps species FNCT treats as native, and blank is not native', () => {
+  assert.deepEqual(ids(searchSpecies(species, { nativeOnly: true })), ['black-eyed-susan', 'indian-blanket']);
+  assert.deepEqual(ids(searchSpecies(species, { nativeOnly: true, query: 'yarrow' })), []);
 });

@@ -72,6 +72,15 @@ test.describe('adding and removing plants', () => {
     await page.locator('#addPlantSearch').fill('');
     await expect(options).toHaveCount(total);
     await expect(page.locator('#addPlantBtn')).toBeEnabled();
+
+    // Native only keeps just the options labelled native (a cultivar is labelled "cultivar").
+    await page.locator('#addPlantNativeOnly').check();
+    const natives = await options.allTextContents();
+    expect(natives.length).toBeGreaterThan(0);
+    expect(natives.length).toBeLessThan(total);
+    for (const text of natives) expect(text).toContain('✓ native to North Central Texas');
+    await page.locator('#addPlantNativeOnly').uncheck();
+    await expect(options).toHaveCount(total);
   });
 
   test('removing a plant drops it from the drawing and from the saved layout', async ({ page }) => {

@@ -192,8 +192,29 @@ export function parseSpeciesCsv(csvText, drawingCsvText) {
       fruitColor: normalizeHexColor(row.fruit_color || row.fruitColor),
       fruitMonths: parseMonthField(row.fruit_season_months, row.fruitStart, row.fruitEnd),
       fruitLoad,
+      nativity: parseNativity(row.nativity_nctx, id),
     };
   });
+}
+
+/** The values `nativity_nctx` may hold: the claim store's nativity_nctx claim, or blank. */
+export const NATIVITY_VALUES = Object.freeze(['native', 'introduced']);
+
+/**
+ * `nativity_nctx`: whether the Flora of North Central Texas treats the species
+ * as native here (the claim store's nativity_nctx field, nl-5j5). Blank means
+ * no asserted claim, which is "not confirmed", never "introduced".
+ * @param {unknown} raw
+ * @param {string} id species id, for the message
+ * @returns {''|'native'|'introduced'}
+ */
+function parseNativity(raw, id) {
+  const value = String(raw ?? '').trim().toLowerCase();
+  if (!value) return '';
+  if (!NATIVITY_VALUES.includes(value)) {
+    throw new LayoutDataError(`plants.csv ${id}: nativity_nctx "${raw}" is not one of ${NATIVITY_VALUES.join(', ')}`);
+  }
+  return value;
 }
 
 /** Only the drawing columns of a plant-drawing.csv row (never its id or source). */

@@ -716,6 +716,13 @@ now carries both files.
   hold one PREFERRED soil with no tolerance data, so rule 8's soil stopgap
   (see the comment atop `siteMatch.js`) stays in place for those.
 - `fruit_season_months`, `fruit_load`
+- `nativity_nctx` – `native`, `introduced` or blank: the claim store's nativity
+  claim, whose only source is the *Flora of North Central Texas* (plus
+  `catalog/manual-corrections.tsv`). Blank means no asserted claim, so "not
+  confirmed", never "introduced". The Edit-mode Add plant picker labels every
+  species with it and its "Native only" box filters on it; a cultivar never
+  counts as native, whatever its parent's value (`src/data/speciesSearch.js`,
+  nl-5j5).
 
 `plant-drawing.csv` columns (`DRAWING_COLUMNS` in `src/data/plantParser.js`):
 

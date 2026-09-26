@@ -147,6 +147,7 @@ async function init() {
   const addPlantButton = document.getElementById('addPlantBtn');
   const addPlantSearch = document.getElementById('addPlantSearch');
   const addPlantSort = document.getElementById('addPlantSort');
+  const addPlantNativeOnly = document.getElementById('addPlantNativeOnly');
 
   let projectIndex;
   let project;
@@ -551,12 +552,17 @@ async function init() {
     if (!hasOptions) return;
     if (addPlantSearch) addPlantSearch.disabled = false;
     if (addPlantSort) addPlantSort.disabled = false;
+    if (addPlantNativeOnly) addPlantNativeOnly.disabled = false;
 
     // Rebuild the options from the search box and sort choice, keeping the
     // chosen species selected while it still matches.
     const fillOptions = () => {
       const sortBy = addPlantSort?.value || 'common';
-      const matches = searchSpecies(appState.species, { query: addPlantSearch?.value || '', sortBy });
+      const matches = searchSpecies(appState.species, {
+        query: addPlantSearch?.value || '',
+        sortBy,
+        nativeOnly: Boolean(addPlantNativeOnly?.checked),
+      });
       const previous = addPlantSelect.value;
       addPlantSelect.innerHTML = '';
       matches.forEach((entry) => {
@@ -579,6 +585,7 @@ async function init() {
     fillOptions();
     addPlantSearch?.addEventListener('input', fillOptions);
     addPlantSort?.addEventListener('change', fillOptions);
+    addPlantNativeOnly?.addEventListener('change', fillOptions);
 
     addPlantButton.addEventListener('click', () => {
       const added = addPlantFromCatalog(appState, addPlantSelect.value);
