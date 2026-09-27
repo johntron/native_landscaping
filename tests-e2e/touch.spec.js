@@ -107,3 +107,151 @@ test.describe('dragging by touch', () => {
     await expect(page.locator('#detailSheetRemoveBtn')).toBeVisible();
   });
 });
+
+test.describe('dragging a maximized view (nl-o47.1)', () => {
+  /**
+   * A plant's on-screen centre, mapped through the SVG's own screenCTM rather
+   * than `rect.width / viewBox.width`: that ratio is only right when the box
+   * happens to share the viewBox's own aspect, which a maximized panel need
+   * not (it is exactly the letterboxing this bug was about). getScreenCTM is
+   * the same matrix the browser itself hit-tests with, so this checks the
+   * fix against ground truth rather than against this app's own math.
+   */
+  async function plantScreenPosition(page, svgId, plantId) {
+    return page.evaluate(
+      ({ svgId, plantId }) => {
+        const svg = document.getElementById(svgId);
+        const group = svg.querySelector(`g[data-plant-id="${plantId}"]`);
+        const label = group?.querySelector('text');
+        if (!label) return null;
+        const point = new DOMPoint(Number(label.getAttribute('x')), Number(label.getAttribute('y')));
+        const screen = point.matrixTransform(svg.getScreenCTM());
+        return { x: screen.x, y: screen.y };
+      },
+      { svgId, plantId }
+    );
+  }
+
+  /**
+   * Drag the plant D screen px north/south, then D more east/west, and check
+   * the on-screen movement matches the finger on the axis that moved and
+   * stays flat on the other — the two symptoms independent scaleX/scaleY (off
+   * `getBoundingClientRect`) produced whenever the panel didn't share the
+   * viewBox's own shape. Measured through `plantScreenPosition` (the
+   * browser's own screenCTM), never through this app's own scaleFactor, so
+   * this checks the fix against ground truth rather than against itself.
+   */
+  async function assertDragTracksFinger(page, projectId, plantId) {
+    const D = 60; // screen px moved by the finger
+    const TOLERANCE = 12;
+    const savedBefore = (await readScratchLayout(projectId)).find((row) => row.id === plantId)?.y;
+
+    let before = await plantScreenPosition(page, 'topSvg', plantId);
+    await touchGesture(page, { x: before.x, y: before.y, dy: D });
+    let after = await plantScreenPosition(page, 'topSvg', plantId);
+    expect(Math.abs(after.y - before.y), 'vertical screen movement matches the finger').toBeGreaterThan(
+      D - TOLERANCE
+    );
+    expect(Math.abs(after.y - before.y), 'vertical screen movement matches the finger').toBeLessThan(
+      D + TOLERANCE
+    );
+    expect(Math.abs(after.x - before.x), 'no sideways drift from a straight-down drag').toBeLessThan(6);
+
+    // East/west, from wherever the first drag left the plant.
+    before = after;
+    await touchGesture(page, { x: before.x, y: before.y, dx: D });
+    after = await plantScreenPosition(page, 'topSvg', plantId);
+    expect(Math.abs(after.x - before.x), 'horizontal screen movement matches the finger').toBeGreaterThan(
+      D - TOLERANCE
+    );
+    expect(Math.abs(after.x - before.x), 'horizontal screen movement matches the finger').toBeLessThan(
+      D + TOLERANCE
+    );
+    expect(Math.abs(after.y - before.y), 'no vertical drift from a straight-sideways drag').toBeLessThan(6);
+
+    // Both drags actually reached the server, not just the DOM — compared
+    // against the value from before either drag, so this fails if the save
+    // never lands (a vacuous `.not.toBe(undefined)` would pass even then,
+    // since the yard already has a real saved y from the moment it was seeded).
+    await expect
+      .poll(async () => (await savedPosition(projectId, plantId))?.y, { timeout: 5000 })
+      .not.toBe(savedBefore);
+  }
+
+  test('a maximized panel keeps the viewBox shape, and a drag moves the plant as far as the finger on both axes', async ({
+    page,
+  }) => {
+    await openScratchProject(page, 'touch-maximize');
+    await page.locator('[data-mode="edit"]').click();
+
+    // project.json's own view id ("plan"), not the SVG's historical "topSvg" id.
+    await page.locator('[data-maximize-target="plan"]').click();
+    await page.locator('.views[data-maximized="plan"]').waitFor();
+
+    // The Restore button must still be visible and reachable once maximized,
+    // not pushed off screen by whatever the panel's new size came out to.
+    const maximizeToggle = page.locator('[data-maximize-target="plan"]');
+    await expect(maximizeToggle).toHaveText(/Restore/);
+    await expect(maximizeToggle).toBeInViewport();
+
+    // Fault (a): the old `aspect-ratio: auto; height: calc(100vh - 3.5rem)`
+    // rule sheared the box away from the viewBox's own shape. The fixed rule
+    // keeps `aspect-ratio` in charge, so the two must still match.
+    const { boxRatio, viewBoxRatio } = await page.evaluate(() => {
+      const view = document.querySelector('.view-panel.is-maximized .view');
+      const svg = view.querySelector('svg');
+      const rect = view.getBoundingClientRect();
+      const box = svg.viewBox.baseVal;
+      return { boxRatio: rect.width / rect.height, viewBoxRatio: box.width / box.height };
+    });
+    expect(boxRatio, 'the maximized box keeps the viewBox aspect ratio').toBeCloseTo(viewBoxRatio, 1);
+
+    const plantId = await page.evaluate(
+      () => document.querySelector('#topSvg g[data-plant-id]')?.getAttribute('data-plant-id')
+    );
+    expect(plantId, 'a plant is on the drawing').toBeTruthy();
+
+    await assertDragTracksFinger(page, 'touch-maximize', plantId);
+  });
+
+  test('the pointer mapping stays exact even while the panel IS letterboxed, not only once the CSS fix removes the letterbox', async ({
+    page,
+  }) => {
+    // With the CSS fix in place, a maximized box always shares the viewBox's
+    // shape, so the old rect-based scaleX/scaleY math would happen to pass
+    // the test above too — it is only ever wrong under a letterbox. This test
+    // forces the pre-fix shear back on with a page-level override, so it
+    // exercises buildPointerContext's mapping (fault b) on its own, the way a
+    // future CSS zoom transform (also letterboxed relative to its own
+    // pre-transform layout) will.
+    await openScratchProject(page, 'touch-letterbox');
+    await page.locator('[data-mode="edit"]').click();
+    await page.locator('[data-maximize-target="plan"]').click();
+    await page.locator('.views[data-maximized="plan"]').waitFor();
+
+    await page.addStyleTag({
+      content:
+        '.views[data-maximized] .view { aspect-ratio: auto !important; width: 100% !important; height: calc(100dvh - 3.5rem) !important; }',
+    });
+
+    // The precondition: the forced style actually letterboxes the drawing,
+    // not merely resizes it.
+    const { boxRatio, viewBoxRatio } = await page.evaluate(() => {
+      const svg = document.getElementById('topSvg');
+      const rect = svg.getBoundingClientRect();
+      const box = svg.viewBox.baseVal;
+      return { boxRatio: rect.width / rect.height, viewBoxRatio: box.width / box.height };
+    });
+    expect(
+      Math.abs(boxRatio - viewBoxRatio),
+      'the forced style actually letterboxes the drawing'
+    ).toBeGreaterThan(0.2);
+
+    const plantId = await page.evaluate(
+      () => document.querySelector('#topSvg g[data-plant-id]')?.getAttribute('data-plant-id')
+    );
+    expect(plantId, 'a plant is on the drawing').toBeTruthy();
+
+    await assertDragTracksFinger(page, 'touch-letterbox', plantId);
+  });
+});

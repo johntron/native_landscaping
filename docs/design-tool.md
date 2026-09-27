@@ -776,6 +776,26 @@ Top view uses the yard coordinate system (origin at SW corner, y increasing nort
   in `tests-e2e/helpers.js`): `page.mouse` is not touch and `page.touchscreen` only taps, so
   neither exercises `touch-action` and both pass against a broken app. CDP synthesizes no
   long-press `contextmenu`, so the right-click menu cannot be tested on touch.
+- **A client point (a mouse or touch event's clientX/clientY) becomes a viewBox point through
+  `src/render/screenPoint.js`'s `clientPointToViewBox`**, the one place any of the three plan/
+  elevation controllers (`dragController.js`, `setupController.js`, `featureController.js`) does
+  that mapping. It reads `svg.getScreenCTM().inverse()` — the browser's own user-space↔screen
+  matrix, already carrying the viewBox's scale and origin, any `preserveAspectRatio="xMidYMid
+  meet"` letterbox offset, and a future CSS zoom transform — rather than dividing
+  `viewBox.width` by `getBoundingClientRect().width` on each axis separately, which is only
+  right when the box happens to share the viewBox's own aspect ratio. A maximized panel on a
+  phone need not (nl-o47.1): that rect-based math undercounted one axis of a drag and
+  hit-tested the wrong plant whenever it let the box drift from the viewBox's shape. The matrix
+  arithmetic itself (`applyMatrix`, `matrixScale`) is pure and unit-tested in `tests/screenPoint.test.js`
+  without a DOM; `clientPointToViewBox` is the only part that touches `svg`.
+- **A maximized panel on a phone (`@media (max-width: 960px)` in `styles.css`) keeps the
+  viewBox's aspect ratio.** It used to set `aspect-ratio: auto; height: calc(100vh - 3.5rem)`,
+  which is exactly the shear the comment on `.view` warns about: the SVG letterboxes under
+  `meet` while the photo's CSS-background percentages (`photoPlacement.js`) stretch to the
+  now-distorted box. The fixed rule instead sizes `width: min(100%, calc((100dvh - 3.5rem) *
+  var(--view-aspect-ratio)))` and leaves `aspect-ratio` alone, so CSS derives the height itself
+  and the box can no longer disagree with the drawing. `dvh`, not `vh`: iOS's `vh` is sized to
+  the viewport once the browser chrome has hidden, not to what is on screen right now.
 - Edit mode's "Add plant" picker places one plant of the chosen species at the middle of
   the plan view; the plant's own detail sheet and right-click menu carry Clone and Remove.
   All three go through the same commit path as a drag, so undo/redo and the auto-save
@@ -799,6 +819,9 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
 - `server/db/projectImport.js`, `tools/import-projects.mjs` – the one-time copy of yards from files (see "Importing yards from files").
 - `src/render/elevationOrientation.js` – compass → axis/mirror/depth mapping for elevations.
 - `src/render/viewTransform.js` – the one feet↔pixel authority, wrapping that mapping.
+- `src/render/screenPoint.js` – the one client-pixel↔viewBox-unit authority, through
+  `svg.getScreenCTM()`; used by `dragController.js`, `setupController.js`, and
+  `featureController.js` so a client point never has to become a viewBox point twice.
 - `src/render/yardBounds.js` – the declared yard a plant may be dragged within.
 - `src/render/photoPlacement.js` – which photo a view draws, and where in the panel it lands.
 - `src/render/pageScale.js` – the one screen scale every panel is drawn at.

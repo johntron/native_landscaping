@@ -54,6 +54,8 @@ export const SCRATCH_PROJECTS = [
   'touch-plan',
   'touch-hold',
   'touch-elevation',
+  'touch-maximize', // maximized-panel drag scale (nl-o47.1), its own yard so a concurrent touch-plan drag cannot race it
+  'touch-letterbox', // same bug, with the pre-fix CSS shear forced back on to isolate the JS mapping fix
   'background-upload',
   'placed-photo',
   'features-save',
