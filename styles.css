@@ -1864,11 +1864,20 @@ select {
   }
 
   .views[data-maximized] .view {
-    aspect-ratio: auto;
-    /* Height is driven directly here, so the width cap above — which exists to
-       bound a height it does not control — must get out of the way. */
-    width: 100%;
-    height: calc(100vh - 3.5rem);
+    /* Keep the aspect ratio here too. Dropping it, as this rule used to, is
+       exactly the shear the comment on .view above warns about: the SVG
+       letterboxes under `meet` (src/render/viewConfig.js sets
+       preserveAspectRatio="xMidYMid meet") while the photo's CSS-background
+       percentages (src/render/photoPlacement.js) stretch to fit the now-
+       distorted box, so the photo warps and the plants drift off it.
+       Fit width to whichever of width/height binds — the same idea as the
+       desktop rule above, `70vh * ratio`, but against this panel's own
+       budget: 100dvh minus room for the header row the fixed panel still
+       shows above the drawing (its Restore button). dvh, not vh: iOS's vh is
+       the height once the browser chrome has hidden, so vh sizes the box
+       taller than what is actually on screen while the chrome (still)
+       shows; dvh tracks the viewport that is visible right now. */
+    width: min(100%, calc((100dvh - 3.5rem) * var(--view-aspect-ratio, 4 / 3)));
   }
 
   .view-meta {
