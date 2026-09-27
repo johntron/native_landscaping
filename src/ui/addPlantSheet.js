@@ -55,7 +55,7 @@ export function createAddPlantSheet({ elements, appState, trigger, onPick }) {
     chip.setAttribute('aria-pressed', pressed ? 'true' : 'false');
   };
 
-  const buildRow = (entry, sortBy) => {
+  const buildRow = (entry) => {
     const li = document.createElement('li');
     li.className = 'add-plant-sheet__row';
     li.dataset.speciesId = entry.speciesId;
@@ -125,7 +125,7 @@ export function createAddPlantSheet({ elements, appState, trigger, onPick }) {
       matches = matches.filter((entry) => favorites.has(entry.speciesId));
     }
     if (list) {
-      list.replaceChildren(...matches.map((entry) => buildRow(entry, sortBy)));
+      list.replaceChildren(...matches.map((entry) => buildRow(entry)));
     }
     if (status) {
       status.textContent = matches.length

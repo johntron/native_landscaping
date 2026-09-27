@@ -8,16 +8,10 @@
  * src/app.js owns every DOM and `window` read (per AGENTS.md); this module
  * never touches either, so it is unit tested directly on plain rect objects.
  *
- * ASSUMPTION: outside of a maximized view on a narrow phone (a separate bug,
- * nl-o47.1), the plan SVG's CSS box is drawn at the same aspect ratio as its
- * own viewBox — src/render/pageScale.js sizes every panel at
- * `extentFt * pxPerFt` on both axes — so there is no SVG letterboxing to
- * correct for, and a screen pixel maps to a viewBox pixel by one ratio per
- * axis (`viewBox.width / svgRect.width`, and the same on the other axis).
- * If that assumption is ever violated the centre point drifts by however much
- * the box is letterboxed; the caller still clamps the result to the declared
- * yard (src/render/yardBounds.js), so the failure mode is a placement a
- * little off-centre, never a plant placed outside the yard.
+ * The caller supplies the client-px -> yard-feet mapping. src/app.js maps
+ * through src/render/screenPoint.js (the SVG's screen CTM), the same path a
+ * drag takes, so the result stays right under letterboxing or a CSS zoom
+ * transform; this module only finds which client point to map.
  */
 
 /**
@@ -28,12 +22,12 @@
  *   `window.visualViewport`'s `offsetLeft`/`offsetTop`/`width`/`height` when
  *   present (its offsets are already relative to the layout viewport, the
  *   same frame `getBoundingClientRect()` uses), else the layout viewport
- * @param {{ viewBox: { width: number, height: number }, viewBoxToPlan: (point: { x: number, y: number }) => { x: number, y: number } }} transform
- *   the plan view's own `createViewTransform(view)`
+ * @param {(clientPoint: { x: number, y: number }) => ({ x: number, y: number }|null)} clientToFeet
+ *   maps a client point over the plan SVG to yard feet
  * @returns {{ x: number, y: number }|null} yard feet, or null when no part of
  *   the plan SVG's rect intersects the viewport (nothing on screen to centre on)
  */
-export function visiblePlanCenterFt(svgRect, viewportRect, transform) {
+export function visiblePlanCenterFt(svgRect, viewportRect, clientToFeet) {
   if (!(svgRect?.width > 0) || !(svgRect?.height > 0)) return null;
   if (!(viewportRect?.width > 0) || !(viewportRect?.height > 0)) return null;
 
@@ -43,11 +37,5 @@ export function visiblePlanCenterFt(svgRect, viewportRect, transform) {
   const bottom = Math.min(svgRect.top + svgRect.height, viewportRect.top + viewportRect.height);
   if (right <= left || bottom <= top) return null;
 
-  const scaleX = transform.viewBox.width / svgRect.width;
-  const scaleY = transform.viewBox.height / svgRect.height;
-  const viewBoxPoint = {
-    x: ((left + right) / 2 - svgRect.left) * scaleX,
-    y: ((top + bottom) / 2 - svgRect.top) * scaleY,
-  };
-  return transform.viewBoxToPlan(viewBoxPoint);
+  return clientToFeet({ x: (left + right) / 2, y: (top + bottom) / 2 });
 }

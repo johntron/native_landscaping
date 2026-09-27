@@ -18,6 +18,7 @@ import { computePlantState } from './state/seasonalState.js';
 import { renderViews } from './render/renderViews.js';
 import { createViewTransform } from './render/viewTransform.js';
 import { visiblePlanCenterFt } from './render/visiblePlanCenter.js';
+import { clientPointToViewBox } from './render/screenPoint.js';
 import { createSetupController } from './interaction/setupController.js';
 import { createFeatureController } from './interaction/featureController.js';
 import { emptyHostGeneraIndex } from './analysis/hostGenera.js';
@@ -576,7 +577,11 @@ async function init() {
           height: window.visualViewport.height,
         }
       : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
-    const at = visiblePlanCenterFt(svgRect, viewportRect, createViewTransform(planView));
+    const transform = createViewTransform(planView);
+    const at = visiblePlanCenterFt(svgRect, viewportRect, (point) => {
+      const mapped = clientPointToViewBox(planEntry.svg, point.x, point.y);
+      return mapped ? transform.viewBoxToPlan(mapped.point) : null;
+    });
     return { at, planEntry };
   }
 
