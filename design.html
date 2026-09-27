@@ -143,43 +143,20 @@
               </label>
             </div>
             <!--
-              Places one plant of the chosen species at the middle of the plan
-              view; options come from the shared plants.csv catalog at load.
-              The search box, sort choice and native-only box narrow and order
-              the options (src/data/speciesSearch.js, nl-ah5, nl-5j5). "Native"
-              is the Flora of North Central Texas's, and never a cultivar.
-              Removing a plant lives on the plant itself (detail sheet / right-click).
+              Opens the Add plant sheet (#addPlantSheet, src/ui/addPlantSheet.js):
+              search, "Native to NCTX" / "Favorites" filter chips, sort, and a
+              tappable list, in place of a strip of loosely related controls
+              (search box, sort select, native-only box, species <select>,
+              Add and Favorite buttons) that used to wrap into a disjointed
+              block on a phone (nl-o47.3). Options come from the shared
+              plants.csv catalog at load; disabled until it has loaded, and on
+              the read-only example yard Edit mode itself never shows.
+              Tapping a row places that species at the visible centre of the
+              plan and closes the sheet. Removing a plant lives on the plant
+              itself (detail sheet / right-click).
             -->
             <div class="add-plant" id="addPlantRow">
-              <label for="addPlantSelect">Add plant</label>
-              <input
-                id="addPlantSearch"
-                type="search"
-                placeholder="Search plants"
-                aria-label="Search plants by common or scientific name"
-                autocomplete="off"
-                disabled
-              />
-              <select id="addPlantSort" aria-label="Sort plants by" disabled>
-                <option value="common">Common name</option>
-                <option value="botanical">Scientific name</option>
-              </select>
-              <label class="add-plant__native" title="Native per the Flora of North Central Texas; cultivars excluded">
-                <input id="addPlantNativeOnly" type="checkbox" disabled />
-                Native only
-              </label>
-              <select id="addPlantSelect" disabled></select>
-              <button id="addPlantBtn" class="button pill-button" type="button" disabled>Add</button>
-              <button
-                id="addPlantFavoriteBtn"
-                class="button pill-button add-plant__favorite"
-                type="button"
-                aria-pressed="false"
-                title="Mark the selected species as a favorite (most wanted); it shows at the top of your shopping list on Buy plants"
-                hidden
-              >
-                ☆ Favorite
-              </button>
+              <button id="addPlantBtn" class="button pill-button" type="button" disabled>Add plant</button>
             </div>
             <div class="view-toolbar__control-group">
               <div class="control-pair control-pair--scale">
@@ -276,6 +253,67 @@
           <button type="button" class="button pill-button" id="detailSheetCloneBtn">Clone plant</button>
           <button type="button" class="button pill-button pill-button--danger" id="detailSheetRemoveBtn">Remove plant</button>
         </div>
+      </div>
+    </div>
+    <!--
+      The Add plant sheet (nl-o47.3, src/ui/addPlantSheet.js): a bottom sheet
+      under 640px, a centred dialog from it, same as #detailSheet above.
+      panel gets tabindex="-1" so it can take focus itself when opened on
+      touch, without moving focus onto the search field and raising the
+      keyboard over the list it filters.
+    -->
+    <div class="add-plant-sheet" id="addPlantSheet" hidden>
+      <div class="add-plant-sheet__backdrop" data-add-plant-close></div>
+      <div
+        class="add-plant-sheet__panel"
+        id="addPlantSheetPanel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="addPlantSheetTitle"
+        tabindex="-1"
+      >
+        <button type="button" class="add-plant-sheet__close" data-add-plant-close aria-label="Close add plant">×</button>
+        <h2 class="add-plant-sheet__title" id="addPlantSheetTitle">Add plant</h2>
+        <input
+          id="addPlantSearch"
+          class="add-plant-sheet__search"
+          type="search"
+          placeholder="Search plants"
+          aria-label="Search plants by common or scientific name"
+          autocomplete="off"
+        />
+        <div class="add-plant-sheet__controls">
+          <div class="add-plant-sheet__chips" role="group" aria-label="Filter plants">
+            <button
+              type="button"
+              id="addPlantNativeChip"
+              class="chip chip--ghost"
+              aria-pressed="false"
+              title="Native per the Flora of North Central Texas; cultivars excluded"
+            >
+              Native to NCTX
+            </button>
+            <button
+              type="button"
+              id="addPlantFavoritesChip"
+              class="chip chip--ghost"
+              aria-pressed="false"
+              title="Species marked favorite (most wanted); they also show at the top of your shopping list on Buy plants"
+              hidden
+            >
+              Favorites
+            </button>
+          </div>
+          <label class="add-plant-sheet__sort" for="addPlantSort">
+            Sort
+            <select id="addPlantSort" aria-label="Sort plants by">
+              <option value="common">Common name</option>
+              <option value="botanical">Scientific name</option>
+            </select>
+          </label>
+        </div>
+        <p class="add-plant-sheet__status" id="addPlantStatus" role="status"></p>
+        <ul class="add-plant-sheet__list" id="addPlantList"></ul>
       </div>
     </div>
     <script src="node_modules/jszip/dist/jszip.min.js"></script>

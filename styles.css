@@ -750,49 +750,11 @@ h1 {
   color: var(--ink-faint);
 }
 
-/* Species picker + Add, alongside the other Edit-mode controls. */
+/* Opens the Add plant sheet (#addPlantSheet below); alongside the other
+   Edit-mode controls. */
 .add-plant {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.add-plant label {
-  font-size: 0.8rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--ink-soft);
-}
-
-.add-plant select,
-.add-plant input[type='search'] {
-  max-width: min(22rem, 60vw);
-  padding: 0.4rem 0.5rem;
-  border: 1px solid var(--rule-cool);
-  border-radius: 0.5rem;
-  background-color: var(--surface-card);
-  font: inherit;
-  font-size: 0.9rem;
-}
-
-.add-plant input[type='search'] {
-  width: 11rem;
-  color: var(--ink);
-}
-
-/* The "Native only" box reads as a control, not as the row's uppercase caption. */
-.add-plant label.add-plant__native {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  text-transform: none;
-  letter-spacing: normal;
-  font-weight: 500;
-  font-size: 0.85rem;
-  color: var(--ink);
+  justify-content: flex-start;
 }
 
 .pill-switch input:checked + .pill-body {
@@ -1701,6 +1663,238 @@ select {
   justify-content: flex-end;
 }
 
+/*
+ * The Add plant sheet (nl-o47.3): the same bottom-sheet / centred-dialog
+ * pattern as .detail-sheet above (fixed overlay, backdrop, 640px breakpoint —
+ * see the shared media query below), under its own class family rather than
+ * sharing .detail-sheet's: tests-e2e/detailSheet.spec.js locates that sheet's
+ * close button by bare class name, and a second element carrying it would
+ * make the locator ambiguous.
+ */
+.add-plant-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.add-plant-sheet[hidden] {
+  display: none;
+}
+
+.add-plant-sheet__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(20, 20, 18, 0.45);
+}
+
+.add-plant-sheet__panel {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  max-height: 80vh;
+  background: var(--surface-raised);
+  border-radius: 12px 12px 0 0;
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.25);
+  padding: 1.25rem 1.25rem 1rem;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.add-plant-sheet__panel:focus {
+  outline: none;
+}
+
+.add-plant-sheet__close {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.5rem;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  font-size: 1.4rem;
+  line-height: 1;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+.add-plant-sheet__title {
+  margin: 0 1.5rem 0.75rem 0;
+  font-size: 1.15rem;
+}
+
+.add-plant-sheet__search {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--rule-cool);
+  border-radius: 0.5rem;
+  background-color: var(--surface-card);
+  font: inherit;
+  font-size: 0.95rem;
+  color: var(--ink);
+  margin-bottom: 0.6rem;
+}
+
+.add-plant-sheet__controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.add-plant-sheet__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+/* Scoped to this row so the 44px touch target does not spill onto every
+   other .chip on the page (e.g. the layer-visibility chips). */
+.add-plant-sheet__chips .chip {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.add-plant-sheet__sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.add-plant-sheet__sort select {
+  min-height: 44px;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--rule-cool);
+  border-radius: 0.5rem;
+  background-color: var(--surface-card);
+  font: inherit;
+  font-size: 0.88rem;
+}
+
+.add-plant-sheet__status {
+  margin: 0 0 0.4rem;
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+}
+
+.add-plant-sheet__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  overscroll-behavior: contain;
+  border-top: 1px solid var(--rule);
+}
+
+.add-plant-sheet__row {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--rule);
+}
+
+.add-plant-sheet__pick {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0.5rem 0.4rem 0.5rem 0.1rem;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: var(--ink);
+}
+
+.add-plant-sheet__pick:hover,
+.add-plant-sheet__pick:focus-visible {
+  background-color: var(--accent-wash);
+  outline: none;
+}
+
+.add-plant-sheet__names {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.add-plant-sheet__name {
+  font-weight: 600;
+  font-size: 0.92rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.add-plant-sheet__botanical {
+  font-size: 0.82rem;
+  font-style: italic;
+  color: var(--ink-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Green reads as the ecology-positive signal everywhere else in the app
+   (.detail-sheet__fauna); the other three standings share one neutral chip. */
+.add-plant-sheet__badge {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  color: var(--green);
+  background-color: var(--green-wash);
+}
+
+.add-plant-sheet__badge--cultivar,
+.add-plant-sheet__badge--introduced,
+.add-plant-sheet__badge--unconfirmed {
+  color: var(--ink-muted);
+  background-color: var(--surface-sunken);
+}
+
+.add-plant-sheet__star {
+  flex-shrink: 0;
+  min-width: 44px;
+  min-height: 44px;
+  border: none;
+  background: none;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--ink-faint);
+}
+
+.add-plant-sheet__star[aria-pressed='true'] {
+  color: var(--signal);
+}
+
+/* The Favorites chip and every row's star are toggled with `hidden` as well
+   as styled, the same reason .plant-lifecycle carries this rule below. */
+.add-plant-sheet [hidden] {
+  display: none;
+}
+
 /* The plant's lifecycle in the detail sheet (nl-3s5.22). Chrome: the status
    toggle is the ordinary cyan .chip, and nothing here glows. Planned and
    planted are told apart in the drawing by the outline (dashed or solid,
@@ -1831,11 +2025,13 @@ select {
 }
 
 @media (min-width: 640px) {
-  .detail-sheet {
+  .detail-sheet,
+  .add-plant-sheet {
     align-items: center;
   }
 
-  .detail-sheet__panel {
+  .detail-sheet__panel,
+  .add-plant-sheet__panel {
     margin: 0;
     border-radius: 12px;
     box-shadow: 0 20px 45px rgba(0, 0, 0, 0.3);

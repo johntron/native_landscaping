@@ -1,4 +1,7 @@
+import { readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
+import { parseCsv } from '../src/data/csvLoader.js';
+import { searchSpecies } from '../src/data/speciesSearch.js';
 import { openScratchProject, plantPointerTarget, readScratchHistory, readScratchLayout } from './helpers.js';
 
 // Adding and removing both auto-save through POST /api/layout, so these run
@@ -7,6 +10,24 @@ import { openScratchProject, plantPointerTarget, readScratchHistory, readScratch
 // alter the count the other asserts on.
 
 const planPlants = (page) => page.locator('#topSvg g[data-plant-id]');
+
+/**
+ * The same catalog the Add plant sheet reads, shaped the way it shapes it
+ * (src/ui/addPlantSheet.js / src/sourcing/shoppingListPage.js). Read directly
+ * from the repo's own plants.csv (the scratch server's public dir is a copy of
+ * it) so the search/sort/native-chip assertions below check the sheet against
+ * the real catalog's own searchSpecies() output, rather than a hand-picked
+ * species name that could go stale.
+ */
+function catalogSpecies() {
+  const csv = readFileSync(new URL('../plants.csv', import.meta.url), 'utf8');
+  return parseCsv(csv).map((row) => ({
+    speciesId: row.id,
+    commonName: row.common_name,
+    botanicalName: row.botanical_name,
+    nativity: row.nativity_nctx,
+  }));
+}
 
 /**
  * Click a plant so its detail sheet opens, and report which plant that was.
@@ -20,92 +41,142 @@ async function openDetailSheetOnAPlant(page) {
   return page.locator('#detailSheet').getAttribute('data-plant-id');
 }
 
+/** Open the Add plant sheet from Edit mode. */
+async function openAddPlantSheet(page) {
+  await page.locator('[data-mode="edit"]').click();
+  await page.locator('#addPlantBtn').click();
+  await expect(page.locator('#addPlantSheet')).toBeVisible();
+}
+
 test.describe('adding and removing plants', () => {
-  test('adding a plant from the catalog draws it and saves it', async ({ page }) => {
+  test('adding a plant from the catalog draws it, targets it, and saves it', async ({ page }) => {
     await openScratchProject(page, 'plant-add');
-    await page.locator('[data-mode="edit"]').click();
+    await openAddPlantSheet(page);
 
     const before = await planPlants(page).count();
     const savedBefore = (await readScratchLayout('plant-add')).length;
 
-    // Pick a species by its plants.csv id (the select's value), so the
-    // assertion below names a plant the catalog actually carries.
-    const value = await page.locator('#addPlantSelect option').first().getAttribute('value');
-    await page.locator('#addPlantSelect').selectOption(value);
-    await page.locator('#addPlantBtn').click();
+    // Pick the first row off the list.
+    const firstRow = page.locator('#addPlantList .add-plant-sheet__row').first();
+    await firstRow.locator('.add-plant-sheet__pick').click();
+
+    // The sheet closes itself and focus returns to the button that opened it.
+    await expect(page.locator('#addPlantSheet')).toBeHidden();
+    await expect(page.locator('#addPlantBtn')).toBeFocused();
 
     await expect(planPlants(page)).toHaveCount(before + 1);
+    // Targeted the way a click on the plant would (setTargetedPlant, nl-o47.3):
+    // renderTopView draws exactly one target ring, in its own fixed colour,
+    // for whichever plant is targeted or hovered — nothing else here is hovered.
+    await expect(page.locator('#topSvg circle[stroke="#1b74d8"]')).toHaveCount(1);
 
     // The add reached disk, not just the DOM. The save is a POST, so poll.
     await expect
       .poll(async () => (await readScratchLayout('plant-add')).length, { timeout: 5000 })
       .toBe(savedBefore + 1);
 
-    // And the saved row reloads. The select's value is the species id and the
-    // CSV's species_id column carries it back, so this is the assertion that
-    // proves the write and the read agree on a real catalog row.
+    // And the saved row reloads.
     await openScratchProject(page, 'plant-add');
     await expect(planPlants(page)).toHaveCount(before + 1);
   });
 
-  test('the picker narrows by a partial name and sorts by either name', async ({ page }) => {
+  test('search, sort and the native chip narrow the list the way searchSpecies() does', async ({ page }) => {
     // Read-only: nothing is added, so no layout is written.
     await openScratchProject(page, 'plant-add');
-    await page.locator('[data-mode="edit"]').click();
-    const options = page.locator('#addPlantSelect option');
-    const total = await options.count();
+    await openAddPlantSheet(page);
+    const rows = page.locator('#addPlantList .add-plant-sheet__row');
+    const species = catalogSpecies();
+    const total = await rows.count();
+    expect(total).toBe(searchSpecies(species).length);
 
     await page.locator('#addPlantSearch').fill('YARR');
-    const narrowed = await options.allTextContents();
+    const narrowed = searchSpecies(species, { query: 'YARR' });
     expect(narrowed.length).toBeGreaterThan(0);
     expect(narrowed.length).toBeLessThan(total);
-    for (const text of narrowed) expect(text.toLowerCase()).toContain('yarr');
+    await expect(rows).toHaveCount(narrowed.length);
 
-    // Sorted by scientific name, each option leads with it: "Achillea ... (Western yarrow)".
+    // Sorting by scientific name reorders the rows; compare the rendered
+    // order (each row carries its species id) against searchSpecies() itself,
+    // rather than a hand-picked plant name that could go stale.
+    await page.locator('#addPlantSearch').fill('');
     await page.locator('#addPlantSort').selectOption('botanical');
-    expect((await options.first().textContent()).startsWith('Achillea')).toBe(true);
+    const botanicalOrder = searchSpecies(species, { sortBy: 'botanical' }).map((entry) => entry.speciesId);
+    expect(botanicalOrder.length).toBeGreaterThan(1); // otherwise reordering proves nothing
+    await expect(rows).toHaveCount(botanicalOrder.length);
+    expect(await rows.evaluateAll((els) => els.map((el) => el.dataset.speciesId))).toEqual(botanicalOrder);
 
     await page.locator('#addPlantSearch').fill('zzzz no such plant');
-    await expect(options).toHaveText(['No plants match']);
-    await expect(page.locator('#addPlantBtn')).toBeDisabled();
+    await expect(rows).toHaveCount(0);
+    await expect(page.locator('#addPlantStatus')).toHaveText('No plants match.');
 
     await page.locator('#addPlantSearch').fill('');
-    await expect(options).toHaveCount(total);
-    await expect(page.locator('#addPlantBtn')).toBeEnabled();
+    await expect(rows).toHaveCount(total);
 
-    // Native only keeps just the options labelled native (a cultivar is labelled "cultivar").
-    await page.locator('#addPlantNativeOnly').check();
-    const natives = await options.allTextContents();
+    // The native chip keeps just the rows badged native (a cultivar is badged "Cultivar").
+    await page.locator('#addPlantNativeChip').click();
+    await expect(page.locator('#addPlantNativeChip')).toHaveAttribute('aria-pressed', 'true');
+    const natives = searchSpecies(species, { sortBy: 'botanical', nativeOnly: true });
     expect(natives.length).toBeGreaterThan(0);
     expect(natives.length).toBeLessThan(total);
-    for (const text of natives) expect(text).toContain('✓ native to North Central Texas');
-    await page.locator('#addPlantNativeOnly').uncheck();
-    await expect(options).toHaveCount(total);
+    await expect(rows).toHaveCount(natives.length);
+    for (const text of await rows.locator('.add-plant-sheet__badge').allTextContents()) {
+      expect(text).toBe('Native NCTX');
+    }
+    await page.locator('#addPlantNativeChip').click();
+    await expect(rows).toHaveCount(total);
   });
 
-  test('the star marks the selected species favorite, and it survives a reload', async ({ page }) => {
+  test('the star favorites a species from its row, filterable by the Favorites chip, and it survives a reload', async ({
+    page,
+  }) => {
     // Writes /api/favorites, so the scratch server (its own throwaway app.db).
     await openScratchProject(page, 'plant-add');
-    await page.locator('[data-mode="edit"]').click();
-    const star = page.locator('#addPlantFavoriteBtn');
-    await expect(star).toBeVisible();
+    await openAddPlantSheet(page);
     await page.locator('#addPlantSearch').fill('yarrow');
-    const option = page.locator('#addPlantSelect option').first();
+    const row = page.locator('#addPlantList .add-plant-sheet__row').first();
+    const star = row.locator('.add-plant-sheet__star');
+    await expect(star).toBeVisible();
     if ((await star.getAttribute('aria-pressed')) === 'true') await star.click(); // start from not-favorite
     await expect(star).toHaveAttribute('aria-pressed', 'false');
 
     await star.click();
     await expect(star).toHaveAttribute('aria-pressed', 'true');
-    await expect(option).toContainText('★ favorite');
+    await expect(page.locator('#addPlantFavoritesChip')).toBeVisible();
+
+    // Filtering by Favorites still shows it.
+    await page.locator('#addPlantFavoritesChip').click();
+    await expect(page.locator('#addPlantList .add-plant-sheet__row')).toHaveCount(1);
+    await page.locator('#addPlantFavoritesChip').click();
 
     await openScratchProject(page, 'plant-add');
-    await page.locator('[data-mode="edit"]').click();
+    await openAddPlantSheet(page);
     await page.locator('#addPlantSearch').fill('yarrow');
-    await expect(page.locator('#addPlantSelect option').first()).toContainText('★ favorite');
+    await expect(page.locator('#addPlantList .add-plant-sheet__row').first().locator('.add-plant-sheet__star')).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
 
-    await star.click(); // leave it as found
-    await expect(star).toHaveAttribute('aria-pressed', 'false');
-    await expect(page.locator('#addPlantSelect option').first()).not.toContainText('★');
+    await page.locator('#addPlantList .add-plant-sheet__row').first().locator('.add-plant-sheet__star').click(); // leave it as found
+    await expect(page.locator('#addPlantList .add-plant-sheet__row').first().locator('.add-plant-sheet__star')).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    );
+  });
+
+  test('Escape and the backdrop both dismiss the sheet without adding anything', async ({ page }) => {
+    await openScratchProject(page, 'plant-add');
+    const before = await planPlants(page).count();
+
+    await openAddPlantSheet(page);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#addPlantSheet')).toBeHidden();
+    await expect(page.locator('#addPlantBtn')).toBeFocused();
+
+    await openAddPlantSheet(page);
+    await page.locator('.add-plant-sheet__backdrop').click({ position: { x: 5, y: 5 } });
+    await expect(page.locator('#addPlantSheet')).toBeHidden();
+
+    await expect(planPlants(page)).toHaveCount(before);
   });
 
   test('removing a plant drops it from the drawing and from the saved layout', async ({ page }) => {

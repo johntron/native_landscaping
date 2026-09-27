@@ -724,8 +724,8 @@ now carries both files.
 - `nativity_nctx` – `native`, `introduced` or blank: the claim store's nativity
   claim, whose only source is the *Flora of North Central Texas* (plus
   `catalog/manual-corrections.tsv`). Blank means no asserted claim, so "not
-  confirmed", never "introduced". The Edit-mode Add plant picker labels every
-  species with it and its "Native only" box filters on it; a cultivar never
+  confirmed", never "introduced". The Edit-mode Add plant sheet badges every
+  row with it and its "Native to NCTX" chip filters on it; a cultivar never
   counts as native, whatever its parent's value (`src/data/speciesSearch.js`,
   nl-5j5).
 
@@ -796,10 +796,26 @@ Top view uses the yard coordinate system (origin at SW corner, y increasing nort
   var(--view-aspect-ratio)))` and leaves `aspect-ratio` alone, so CSS derives the height itself
   and the box can no longer disagree with the drawing. `dvh`, not `vh`: iOS's `vh` is sized to
   the viewport once the browser chrome has hidden, not to what is on screen right now.
-- Edit mode's "Add plant" picker places one plant of the chosen species at the middle of
-  the plan view; the plant's own detail sheet and right-click menu carry Clone and Remove.
-  All three go through the same commit path as a drag, so undo/redo and the auto-save
-  (`POST /api/layout`) come for free — there is no separate confirmation step.
+- Edit mode's "Add plant" button (`#addPlantBtn`) opens a sheet
+  (`src/ui/addPlantSheet.js`, `.add-plant-sheet` in styles.css) — a bottom sheet
+  under 640px, a centred dialog from it, the same pattern as the plant detail
+  sheet — with search, "Native to NCTX" / "Favorites" filter chips, a sort
+  choice, and a scrollable, tappable list; tapping a row adds that species and
+  closes the sheet (nl-o47.3). It places the plant at the centre of whatever
+  part of the plan view is actually on screen — the plan SVG's own rect
+  intersected with the visible viewport (`window.visualViewport` when
+  present), mapped to yard feet through the plan's view transform and clamped
+  to the declared yard (`src/render/yardBounds.js`) — rather than the plan's
+  true middle, which is routinely scrolled off a phone screen; screen-rect math
+  is a small pure helper, `src/render/visiblePlanCenter.js`, called from
+  `src/app.js` (which owns the DOM/window reads) and passed into
+  `addPlantFromCatalog` as an optional `{ at }` point. With no part of the plan
+  on screen it falls back to the plan's own middle and scrolls the plan into
+  view instead. The new plant is targeted the way a click on it would be
+  (`speciesHighlight`'s `setTargetedPlant`); the plant's own detail sheet and
+  right-click menu carry Clone and Remove. All three go through the same
+  commit path as a drag, so undo/redo and the auto-save (`POST /api/layout`)
+  come for free — there is no separate confirmation step.
 - The plan bundle export uses `buildLayoutCsv` to include the current layout as `planting_layout.csv`.
 - SVG `<title>` tooltips (built by `render/tooltip.js`) display common + botanical names plus horticultural prefs on hover.
 - When data fails to load, `src/app.js` surfaces a lightweight error banner: sign in (a 401), start a yard (an empty list), or serve the app with `node server.js`.
@@ -823,6 +839,8 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
   `svg.getScreenCTM()`; used by `dragController.js`, `setupController.js`, and
   `featureController.js` so a client point never has to become a viewBox point twice.
 - `src/render/yardBounds.js` – the declared yard a plant may be dragged within.
+- `src/render/visiblePlanCenter.js` – pure screen-rect math: the centre, in yard
+  feet, of whatever part of the plan view is on screen (nl-o47.3).
 - `src/render/photoPlacement.js` – which photo a view draws, and where in the panel it lands.
 - `src/render/pageScale.js` – the one screen scale every panel is drawn at.
 - `src/data/backgroundUpload.js` – browser-side resize/re-encode, and the upload POST.
@@ -851,6 +869,9 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
   capture every view, zip, restore the page. Covered by `tests-e2e/export.spec.js`.
 - `src/ui/detailSheet.js` – the plant detail sheet: facts for the month, keystone/larval-host
   notes, and nearby animals that use the genus.
+- `src/ui/addPlantSheet.js` – the Add plant sheet: search, filter chips, sort,
+  and the tappable species list, over `src/data/speciesSearch.js` and the
+  `/api/favorites` calls (nl-o47.3).
 - `src/ui/projectPicker.js` – the project picker and new-project form; `src/ui/controls.js` – the
   month slider, zoom controls, scale bars, and button/download helpers.
 

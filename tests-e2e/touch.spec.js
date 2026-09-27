@@ -106,6 +106,27 @@ test.describe('dragging by touch', () => {
     await expect(page.locator('#detailSheetCloneBtn')).toBeVisible();
     await expect(page.locator('#detailSheetRemoveBtn')).toBeVisible();
   });
+
+  test('opening the Add plant sheet on touch does not raise the keyboard over the list', async ({
+    page,
+  }) => {
+    // The device this project emulates (Pixel 5) is what src/ui/addPlantSheet.js's
+    // own coarse-pointer check is judging; confirm the emulation actually flips
+    // it before trusting the assertion below. Read-only: the sheet is opened but
+    // nothing is picked, so this can share 'touch-hold' with the specs above.
+    await openScratchProject(page, 'touch-hold');
+    expect(await page.evaluate(() => window.matchMedia('(pointer: coarse)').matches)).toBe(true);
+
+    await page.locator('[data-mode="edit"]').click();
+    await page.locator('#addPlantBtn').click();
+    await expect(page.locator('#addPlantSheet')).toBeVisible();
+
+    // Autofocusing the search field here would raise the on-screen keyboard
+    // over the very list it is meant to filter (nl-o47.3); the panel itself
+    // takes focus instead, which still satisfies aria-modal.
+    await expect(page.locator('#addPlantSearch')).not.toBeFocused();
+    await expect(page.locator('#addPlantSheetPanel')).toBeFocused();
+  });
 });
 
 test.describe('dragging a maximized view (nl-o47.1)', () => {

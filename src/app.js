@@ -17,6 +17,7 @@ import {
 import { computePlantState } from './state/seasonalState.js';
 import { renderViews } from './render/renderViews.js';
 import { createViewTransform } from './render/viewTransform.js';
+import { visiblePlanCenterFt } from './render/visiblePlanCenter.js';
 import { createSetupController } from './interaction/setupController.js';
 import { createFeatureController } from './interaction/featureController.js';
 import { emptyHostGeneraIndex } from './analysis/hostGenera.js';
@@ -41,7 +42,7 @@ import { createLayoutHistoryController } from './history/layoutHistoryController
 import { createSpeciesHighlight } from './ui/speciesHighlight.js';
 import { patchView } from './state/yardEdits.js';
 import { addPlantFromCatalog, clonePlantById, removePlantById } from './state/plantEdits.js';
-import { searchSpecies, speciesOptionLabel } from './data/speciesSearch.js';
+import { createAddPlantSheet } from './ui/addPlantSheet.js';
 import { createPlantMenu } from './interaction/plantMenu.js';
 import { createPlantLifecyclePanel } from './interaction/plantLifecyclePanel.js';
 import { PROJECT_QUERY_PARAM, initNewProjectForm, initProjectPicker } from './ui/projectPicker.js';
@@ -143,12 +144,18 @@ async function init() {
   const detailSheetEcologyLines = document.getElementById('detailSheetEcologyLines');
   const detailSheetCloneBtn = document.getElementById('detailSheetCloneBtn');
   const detailSheetRemoveBtn = document.getElementById('detailSheetRemoveBtn');
-  const addPlantSelect = document.getElementById('addPlantSelect');
   const addPlantButton = document.getElementById('addPlantBtn');
+  const addPlantSheetEl = document.getElementById('addPlantSheet');
+  const addPlantSheetPanel = document.getElementById('addPlantSheetPanel');
   const addPlantSearch = document.getElementById('addPlantSearch');
   const addPlantSort = document.getElementById('addPlantSort');
-  const addPlantNativeOnly = document.getElementById('addPlantNativeOnly');
-  const addPlantFavoriteButton = document.getElementById('addPlantFavoriteBtn');
+  const addPlantNativeChip = document.getElementById('addPlantNativeChip');
+  const addPlantFavoritesChip = document.getElementById('addPlantFavoritesChip');
+  const addPlantStatus = document.getElementById('addPlantStatus');
+  const addPlantList = document.getElementById('addPlantList');
+  // Set once the sheet is built in initAddPlantControl(); the Escape handler
+  // near the end of init() closes it the same way it closes detailSheet.
+  let closeAddPlantSheet = () => {};
 
   let projectIndex;
   let project;
@@ -543,97 +550,76 @@ async function init() {
   });
 
   /**
-   * Fill the species picker from the shared catalog and wire the Add button.
-   * Runs once the catalog has loaded — until then both controls stay disabled,
-   * because there is nothing to choose from.
+   * Where a newly added plant should land: the centre, in yard feet, of the
+   * part of the plan view actually on screen right now (nl-o47.3) — the
+   * plan's true middle is routinely scrolled off a phone screen. Screen-rect
+   * math is delegated to the pure src/render/visiblePlanCenter.js; this is
+   * the one place that reads the DOM and window for it.
+   * @returns {{ at: {x:number,y:number}|null, planEntry: object|null }}
+   *   `at` is null when no part of the plan is on screen (or there is no
+   *   plan view yet), in which case addPlantFromCatalog falls back to the
+   *   plan's own middle and the caller scrolls the plan into view instead.
+   */
+  function computeAddPlantAtPoint() {
+    const planView = appState.project?.views?.find((view) => view.type === 'plan');
+    const planEntry = planView ? viewPanels.find((entry) => entry.view.id === planView.id) : null;
+    if (!planView || !planEntry?.svg) return { at: null, planEntry };
+    const svgRect = planEntry.svg.getBoundingClientRect();
+    // visualViewport's offsetLeft/offsetTop are already in the same CSS-px
+    // frame as getBoundingClientRect() (see visiblePlanCenterFt's own doc
+    // comment), so this is a plain rect, not a coordinate conversion.
+    const viewportRect = window.visualViewport
+      ? {
+          left: window.visualViewport.offsetLeft,
+          top: window.visualViewport.offsetTop,
+          width: window.visualViewport.width,
+          height: window.visualViewport.height,
+        }
+      : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+    const at = visiblePlanCenterFt(svgRect, viewportRect, createViewTransform(planView));
+    return { at, planEntry };
+  }
+
+  /**
+   * Wire the "Add plant" button to its sheet (src/ui/addPlantSheet.js) once
+   * the catalog has loaded — until then it stays disabled, because there is
+   * nothing to add. Never wired at all on the read-only example yard, which
+   * keeps Add disabled the way it always has (Edit mode itself never shows
+   * there, but this is the sheet's own guard too).
    */
   function initAddPlantControl() {
-    if (!addPlantSelect || !addPlantButton) return;
-    const hasOptions = searchSpecies(appState.species).length > 0;
-    if (!hasOptions) return;
-    if (addPlantSearch) addPlantSearch.disabled = false;
-    if (addPlantSort) addPlantSort.disabled = false;
-    if (addPlantNativeOnly) addPlantNativeOnly.disabled = false;
-
-    // The signed-in person's favorite species (nl-3on). The star button stays
-    // hidden until they load; a failed load costs only the stars.
-    let favorites = null;
-    const syncFavoriteButton = () => {
-      if (!addPlantFavoriteButton) return;
-      addPlantFavoriteButton.hidden = !favorites;
-      const on = Boolean(favorites?.has(addPlantSelect.value));
-      addPlantFavoriteButton.disabled = !favorites || !addPlantSelect.value;
-      addPlantFavoriteButton.setAttribute('aria-pressed', on ? 'true' : 'false');
-      addPlantFavoriteButton.textContent = on ? '★ Favorite' : '☆ Favorite';
-    };
-
-    // Rebuild the options from the search box and sort choice, keeping the
-    // chosen species selected while it still matches.
-    const fillOptions = () => {
-      const sortBy = addPlantSort?.value || 'common';
-      const matches = searchSpecies(appState.species, {
-        query: addPlantSearch?.value || '',
-        sortBy,
-        nativeOnly: Boolean(addPlantNativeOnly?.checked),
-      });
-      const previous = addPlantSelect.value;
-      addPlantSelect.innerHTML = '';
-      matches.forEach((entry) => {
-        const option = document.createElement('option');
-        option.value = entry.speciesId;
-        option.textContent = speciesOptionLabel(entry, sortBy, { favorite: Boolean(favorites?.has(entry.speciesId)) });
-        addPlantSelect.appendChild(option);
-      });
-      if (!matches.length) {
-        const empty = document.createElement('option');
-        empty.value = '';
-        empty.textContent = 'No plants match';
-        addPlantSelect.appendChild(empty);
-      } else if (matches.some((entry) => entry.speciesId === previous)) {
-        addPlantSelect.value = previous;
-      }
-      addPlantSelect.disabled = !matches.length;
-      addPlantButton.disabled = !matches.length;
-      syncFavoriteButton();
-    };
-    fillOptions();
-    addPlantSelect.addEventListener('change', syncFavoriteButton);
-    fetch('/api/favorites', { redirect: 'manual' })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((body) => {
-        if (!body) return;
-        favorites = new Set(body.speciesIds);
-        fillOptions();
-      })
-      .catch((err) => console.warn('Could not load favorites; the star is off', err));
-    addPlantFavoriteButton?.addEventListener('click', async () => {
-      const speciesId = addPlantSelect.value;
-      if (!favorites || !speciesId) return;
-      addPlantFavoriteButton.disabled = true;
-      try {
-        const res = await fetch('/api/favorites', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ speciesId, favorite: !favorites.has(speciesId) }),
-        });
-        if (!res.ok) throw new Error(`Request failed (${res.status})`);
-        favorites = new Set((await res.json()).speciesIds);
-      } catch (err) {
-        console.error('Could not save the favorite', err);
-      }
-      fillOptions();
+    if (!addPlantButton) return;
+    if (readOnly) return;
+    if (!appState.species.length) return;
+    addPlantButton.disabled = false;
+    const addPlantSheet = createAddPlantSheet({
+      elements: {
+        sheet: addPlantSheetEl,
+        panel: addPlantSheetPanel,
+        search: addPlantSearch,
+        nativeChip: addPlantNativeChip,
+        favoritesChip: addPlantFavoritesChip,
+        sort: addPlantSort,
+        status: addPlantStatus,
+        list: addPlantList,
+      },
+      appState,
+      trigger: addPlantButton,
+      onPick: (speciesId) => {
+        const { at, planEntry } = computeAddPlantAtPoint();
+        const added = addPlantFromCatalog(appState, speciesId, at ? { at } : undefined);
+        if (!added) return;
+        render();
+        refreshSpeciesTable();
+        commitLayoutChange('Added plant');
+        // Target the new plant the way a click on it would (speciesHighlight);
+        // a later bead (nl-o47.2) turns this into a real selection.
+        setTargetedPlant(added.id);
+        if (!at) planEntry?.panel?.scrollIntoView({ block: 'center', inline: 'center' });
+      },
     });
-    addPlantSearch?.addEventListener('input', fillOptions);
-    addPlantSort?.addEventListener('change', fillOptions);
-    addPlantNativeOnly?.addEventListener('change', fillOptions);
-
-    addPlantButton.addEventListener('click', () => {
-      const added = addPlantFromCatalog(appState, addPlantSelect.value);
-      if (!added) return;
-      render();
-      refreshSpeciesTable();
-      commitLayoutChange('Added plant');
-    });
+    addPlantButton.addEventListener('click', () => addPlantSheet.open());
+    closeAddPlantSheet = addPlantSheet.close;
   }
 
   // Status, planting date and source (nl-3s5.22): each edit is one planting
@@ -942,6 +928,7 @@ async function init() {
     if (event.key === 'Escape') {
       plantMenu.hide();
       closeDetailSheet();
+      closeAddPlantSheet();
     }
   });
 
