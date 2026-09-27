@@ -7,6 +7,7 @@ import {
   resolvePhotoDrag,
   resolvePhotoResize,
 } from '../render/setupOverlay.js';
+import { clientPointToViewBox } from '../render/screenPoint.js';
 
 const MIN_HITBOX_RADIUS_PX = 28; // matches dragController; generous for touch
 
@@ -73,29 +74,21 @@ export function createSetupController({
   listeners.forEach(([type, handler]) => svg.addEventListener(type, handler));
 
   /**
-   * Screen point to drawing point, read from the SVG's OWN viewBox rather than
-   * the view's declared one. Setup widens the box to leave room around the
-   * drawing for a photo that reaches past it, and a converter that assumed the
-   * declared box would put every gesture in the wrong place there.
+   * Screen point to drawing point, through the SVG's screenCTM
+   * (src/render/screenPoint.js) — which reads the box the browser actually
+   * laid the SVG out at, so it already reflects the SVG's OWN, currently-set
+   * `viewBox` attribute (including its origin) rather than the view's
+   * declared one. Setup widens that attribute to leave room around the
+   * drawing for a photo that reaches past it (`viewBoxAttribute` in
+   * setupMode.js); a converter that assumed the declared box would put every
+   * gesture in the wrong place there.
    */
   function toViewBoxPoint(event) {
     const view = getView?.();
     if (!view) return null;
-    const rect = svg.getBoundingClientRect();
-    if (!rect.width || !rect.height) return null;
-    const box = svg.viewBox?.baseVal;
-    const width = box?.width || view.viewBox.width;
-    const height = box?.height || view.viewBox.height;
-    const scaleX = width / rect.width;
-    const scaleY = height / rect.height;
-    return {
-      view,
-      point: {
-        x: (box?.x || 0) + (event.clientX - rect.left) * scaleX,
-        y: (box?.y || 0) + (event.clientY - rect.top) * scaleY,
-      },
-      scaleFactor: Math.max(scaleX, scaleY),
-    };
+    const mapped = clientPointToViewBox(svg, event.clientX, event.clientY);
+    if (!mapped) return null;
+    return { view, point: mapped.point, scaleFactor: mapped.scaleFactor };
   }
 
   function geometryFor(view) {

@@ -5,6 +5,7 @@ import {
   pickFeatureHandle,
   resolveFeatureDrag,
 } from '../render/featureOverlay.js';
+import { clientPointToViewBox } from '../render/screenPoint.js';
 
 const MIN_HITBOX_RADIUS_PX = 28; // matches dragController; generous for touch
 
@@ -59,25 +60,24 @@ export function createFeatureController({
   ];
   listeners.forEach(([type, handler]) => svg.addEventListener(type, handler));
 
-  /** Screen point to viewBox point, and on to yard feet. */
+  /**
+   * Screen point to viewBox point, through the SVG's screenCTM
+   * (src/render/screenPoint.js — correct under letterboxing, unlike a rect-
+   * based x/y scale), and on to yard feet.
+   */
   function toContext(event) {
     const transform = getTransform?.();
     if (!transform) return null;
-    const rect = svg.getBoundingClientRect();
-    if (!rect.width || !rect.height) return null;
-    const scaleX = transform.viewBox.width / rect.width;
-    const scaleY = transform.viewBox.height / rect.height;
-    const point = {
-      x: (event.clientX - rect.left) * scaleX,
-      y: (event.clientY - rect.top) * scaleY,
-    };
+    const mapped = clientPointToViewBox(svg, event.clientX, event.clientY);
+    if (!mapped) return null;
+    const { point, scaleFactor } = mapped;
     return {
       transform,
       point,
       // A detail crop is a plan view with its own origin and extent, so the
       // pointer becomes YARD feet here rather than feet within this view.
       pointFt: transform.viewBoxToPlan(point),
-      scaleFactor: Math.max(scaleX, scaleY),
+      scaleFactor,
     };
   }
 

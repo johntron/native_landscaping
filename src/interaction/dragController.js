@@ -1,3 +1,5 @@
+import { clientPointToViewBox } from '../render/screenPoint.js';
+
 const MIN_HITBOX_RADIUS_PX = 28; // generous target for touch devices
 
 /**
@@ -445,27 +447,22 @@ function findPlantIdFromEvent(event) {
 
 /**
  * Screen point -> viewBox point -> yard feet, using the panel's own transform.
- * The viewBox comes from the transform rather than the DOM so the pointer and
- * the renderer cannot disagree about what the panel covers.
+ * The client->viewBox mapping goes through the SVG's screenCTM
+ * (src/render/screenPoint.js), which is correct under letterboxing — a rect-
+ * based x/y scale is only right when the box has the viewBox's own aspect
+ * ratio, which a maximized phone panel need not (nl-o47.1).
  */
 function buildPointerContext(svg, event, transform) {
   if (!transform) return null;
-  const rect = svg.getBoundingClientRect();
-  if (!rect.width || !rect.height) return null;
-  const { viewBox } = transform;
-
-  const scaleX = viewBox.width / rect.width;
-  const scaleY = viewBox.height / rect.height;
-  const viewBoxPoint = {
-    x: (event.clientX - rect.left) * scaleX,
-    y: (event.clientY - rect.top) * scaleY,
-  };
+  const mapped = clientPointToViewBox(svg, event.clientX, event.clientY);
+  if (!mapped) return null;
+  const { point: viewBoxPoint, scaleFactor } = mapped;
 
   return {
     transform,
     viewBoxPoint,
     positionFeet: transform.type === 'plan' ? transform.viewBoxToPlan(viewBoxPoint) : null,
-    scaleFactor: Math.max(scaleX, scaleY),
+    scaleFactor,
   };
 }
 
