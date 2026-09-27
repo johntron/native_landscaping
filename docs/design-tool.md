@@ -577,15 +577,17 @@ a phone photo from landing sideways.
 Each layout row describes one plant clump or individual:
 
 ```
-id,species_id,x_ft,y_ft,status,planted_on,source,source_nursery,source_sale_organizer,source_sale_event,source_sale_date
-beautyberry-east,beautyberry,11.825,16.566,planted,2026-04-18,Native Gardeners,Native Gardeners,,,
+id,species_id,x_ft,y_ft,status,planted_on,source,source_nursery,source_sale_organizer,source_sale_event,source_sale_date,local_ecotype,drift_id
+beautyberry-east,beautyberry,11.825,16.566,planted,2026-04-18,Native Gardeners,Native Gardeners,,,,,winecup-strip
 ```
 
 - `id` – the plant's own id, unique within the layout.
 - `species_id` – plants.csv's `id` for the species (a slug such as `fragrant-sumac`).
 - `x_ft`, `y_ft` – offsets in feet from the yard origin (SW corner).
-- `status` … `source_sale_date` – the plant's lifecycle (below). A file with only
+- `status` … `local_ecotype` – the plant's lifecycle (below). A file with only
   the first four columns still loads, every plant planned.
+- `drift_id` – which drift the plant belongs to, if any (below). A file with no
+  such column, or a blank cell, still loads; the plant is simply in no drift.
 
 ### Planned and planted (nl-3s5.22)
 
@@ -626,6 +628,37 @@ dashed; a planted one draws it solid (`src/render/plantStatus.js`, presentation
 attributes so the exported PNGs match); a plant is the same elements either way,
 only its outline's dash differs. The HOA letter counts how many of each
 species are already planted and, when any are, says what the two outlines mean.
+
+### Drifts (nl-o47.6)
+
+A drift (several plants of one species planted as a mass) is a **label on
+plants, not a shape**: a placement may carry an optional `driftId`, one more
+extra like `localEcotype` above, absent for a plant in no drift. Plants stay
+first-class — each keeps its own position and lifecycle — because a drift is
+planted over time and its members die and get replaced. A drift's outline,
+centroid and spacing are **derived from its members, never stored**, so they
+cannot disagree with the plants. One species per drift; several drifts of one
+species are simply different ids. A `driftId` is a slug (the same shape a
+project or view id is held to), validated by `src/data/driftId.js`'s
+`isValidDriftId` everywhere a placement is read — `toPlacement`
+(`src/data/placements.js`, so the server's reduction of a `POST /api/layout`
+body agrees with the client), and the layout CSV's optional `drift_id` column
+(`buildLayoutCsv`, `parsePlantLayoutCsv` in `src/data/plantParser.js`; a file
+with no such column, or an invalid cell, loads with the plant in no drift). New
+ids are minted by `src/state/plantIds.js`'s `buildDriftId`, unique in the yard
+and readable (from a given name, else the species).
+
+The pure geometry and edits a drift needs — members and their centroid, a
+padded outline hull for drawing and point-in-outline hit-testing, spacing (the
+members' median nearest-neighbour distance), phyllotaxis clump layout, where
+"+" adds a member and which member "−" removes, spread, rename, clone,
+dissolve, and single-linkage suggestion clusters over an existing planting —
+live in `src/state/driftGeometry.js` and `src/state/driftEdits.js`, pure and
+unit-tested like `plantEdits.js`/`yardEdits.js`. Every authored constant there
+(a spacing factor, a suggestion-clustering distance, hull padding) is a named
+export commented as our judgement, not a sourced fact. Nothing in `design.html`
+draws or edits a drift yet — that is later beads under nl-o47.6 — so today a
+`driftId` only ever reaches a placement by hand or through a future save path.
 
 ### Species are keyed by id, not by name (nl-3s5.18)
 
@@ -862,6 +895,11 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
 - `src/history/layoutHistoryController.js` – the page's side of it: undo/redo buttons, the save-status line, `commit()` / `commitSetup()` / `commitFeatures()` (record, persist through one queue, check the server's cursor), and restoring a revision's setup and features on undo/redo.
 - `src/state/plantEdits.js` – add, clone, and remove a plant; `src/state/yardEdits.js` – scale and
   shift features, patch a view. Pure, and unit-tested directly.
+- `src/data/driftId.js` – a drift id's slug shape (`isValidDriftId`); `src/state/plantIds.js`'s
+  `buildDriftId` mints one. `src/state/driftGeometry.js` and `src/state/driftEdits.js` – a
+  drift's derived geometry (members, centroid, outline hull, spacing, phyllotaxis clump
+  layout, suggestion clusters) and its edits (add/remove a member, spread, rename, clone,
+  dissolve), pure like `plantEdits.js` (see "Drifts" above).
 - `src/ui/speciesHighlight.js` – the table ↔ drawing link: highlighted species, targeted and hovered plant, and `refresh()` (rebuild the table, re-grade the ecology check).
 - `src/render/speciesTable.js` – the species table; `src/interaction/plantMenu.js` – the plant's
   Clone/Remove menu.

@@ -11,11 +11,17 @@
  * tests/placements.test.js fails if createPlantFromSpecies grows a key that
  * list does not name.
  *
- * The lifecycle keys (`status`, `plantedOn`, `source`; nl-3s5.22) are the one
- * set of extras that is checked: toPlacement keeps them only in the canonical
+ * The lifecycle keys (`status`, `plantedOn`, `source`; nl-3s5.22) are one set
+ * of extras that is checked: toPlacement keeps them only in the canonical
  * form src/data/plantLifecycle.js normalizeLifecycle gives, so neither the
  * client's snapshot nor the server's reduction of a POST /api/layout body can
  * store a status that is not one of the two, or a date that is not a date.
+ *
+ * `driftId` (nl-o47.6.1) is the other: an optional slug naming the drift a
+ * plant belongs to, absent for a plant in none. toPlacement keeps it only when
+ * src/data/driftId.js's isValidDriftId says it is a slug src/state/plantIds.js
+ * could have minted; a malformed value (not a string, empty, too long, or with
+ * a disallowed character) is dropped the same way an invalid lifecycle value is.
  *
  * One exception: an object with no `speciesId` is a legacy snapshot from before
  * nl-3s5.18 (or a stray test row) that nothing could resolve. It is kept
@@ -26,6 +32,10 @@
  */
 import { formatLayoutNumber } from './layoutExporter.js';
 import { LIFECYCLE_KEYS, normalizeLifecycle } from './plantLifecycle.js';
+import { isValidDriftId } from './driftId.js';
+
+/** The placement key toPlacement validates for drift membership (nl-o47.6.1). */
+export const DRIFT_ID_KEY = 'driftId';
 
 /** The fields every placement has. */
 export const PLACEMENT_CORE_KEYS = Object.freeze(['id', 'speciesId', 'x', 'y']);
@@ -95,6 +105,7 @@ export function toPlacement(plant) {
   if (!plant.speciesId) return cloneValue(plant);
   const extras = placementExtras(plant);
   LIFECYCLE_KEYS.forEach((key) => delete extras[key]);
+  delete extras[DRIFT_ID_KEY];
   return {
     id: plant.id,
     speciesId: plant.speciesId,
@@ -102,6 +113,7 @@ export function toPlacement(plant) {
     y: plant.y,
     ...cloneValue(extras),
     ...normalizeLifecycle(plant),
+    ...(isValidDriftId(plant[DRIFT_ID_KEY]) ? { [DRIFT_ID_KEY]: plant[DRIFT_ID_KEY] } : {}),
   };
 }
 

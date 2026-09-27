@@ -91,6 +91,32 @@ test('lifecycle fields are kept in canonical form, never shared, and invalid val
   });
 });
 
+test('driftId is kept only when it is a slug plantIds.js could mint; a malformed value is dropped (nl-o47.6.1)', () => {
+  const bare = { id: 'h', speciesId: 'yaupon-holly', x: 0, y: 0 };
+  const cases = [
+    [{ driftId: 'winecup-strip' }, { driftId: 'winecup-strip' }],
+    [{ driftId: 'winecup_strip-2' }, { driftId: 'winecup_strip-2' }],
+    [{}, {}],
+    [{ driftId: '' }, {}],
+    [{ driftId: undefined }, {}],
+    [{ driftId: null }, {}],
+    [{ driftId: 'Winecup Strip' }, {}], // uppercase and a space are not a slug
+    [{ driftId: 'winecup strip' }, {}],
+    [{ driftId: '-leading-hyphen' }, {}],
+    [{ driftId: 'x'.repeat(65) }, {}], // over DRIFT_ID_MAX_LENGTH
+    [{ driftId: 42 }, {}],
+    [{ driftId: ['a'] }, {}],
+  ];
+  cases.forEach(([fields, expected]) => {
+    assert.deepStrictEqual(toPlacement({ ...bare, ...fields }), { ...bare, ...expected }, JSON.stringify(fields));
+  });
+  // This is exactly the reduction server/routes/project.js's makeEntry runs a POST
+  // /api/layout body through (toPlacements over its plants), so this proves the
+  // server path too: a malformed driftId in a posted body cannot reach history.
+  assert.deepStrictEqual(toPlacements([{ ...bare, driftId: 'Bad Slug' }]), [bare]);
+  assert.deepStrictEqual(toPlacements([{ ...bare, driftId: 'good-slug' }]), [{ ...bare, driftId: 'good-slug' }]);
+});
+
 test('a snapshot with no speciesId is kept verbatim, not trimmed', () => {
   const stray = { id: 'a', botanicalName: 'X', x: 1, y: 2 };
   assert.deepStrictEqual(toPlacement(stray), stray);

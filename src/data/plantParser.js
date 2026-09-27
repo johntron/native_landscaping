@@ -4,6 +4,7 @@ import { buildSpeciesIndex, normalizeBotanicalName, resolveSpeciesRef } from './
 import { placementExtras } from './placements.js';
 import { lifecycleFromCsvRow } from './plantLifecycle.js';
 import { SITE_VOCABULARY } from './projectConfig.js';
+import { isValidDriftId } from './driftId.js';
 
 const DEFAULT_LEAF_COLOR = '#6b8e23';
 
@@ -271,8 +272,9 @@ function parseSoilPref(raw, id) {
 
 /**
  * Parse a yard's planting_layout.csv: `id,species_id,x_ft,y_ft`, then the
- * lifecycle columns (`status,planted_on,source,...`; nl-3s5.22), which a file
- * from before them lacks and then reads as planned with no source.
+ * lifecycle columns (`status,planted_on,source,...`; nl-3s5.22) and `drift_id`
+ * (nl-o47.6.1), which a file from before them lacks and then reads as planned
+ * with no source and in no drift.
  *
  * `species_id` is plants.csv's `id`. A file in the pre-nl-3s5.18 shape
  * (`id,botanical_name,x_ft,y_ft`) still loads: its name goes through the
@@ -288,11 +290,24 @@ export function parsePlantLayoutCsv(csvText) {
     botanicalName: String(row.botanical_name || row.botanicalName || '').trim(),
     x: pickNumber(row, numberFieldAliases.x) ?? 0,
     y: pickNumber(row, numberFieldAliases.y) ?? 0,
+    ...driftIdFromCsvRow(row),
     ...lifecycleFromCsvRow(row),
   }));
 
   assertUniqueIds(placements);
   return placements;
+}
+
+/**
+ * A planting_layout.csv row's driftId, kept only when it is a slug
+ * src/state/plantIds.js would mint; a file with no `drift_id` column, a blank
+ * cell, or a malformed value all read as "not in a drift" (nl-o47.6.1).
+ * @param {Record<string, string>} row a parsed CSV row
+ * @returns {{ driftId?: string }}
+ */
+function driftIdFromCsvRow(row) {
+  const value = String(row.drift_id || row.driftId || '').trim();
+  return isValidDriftId(value) ? { driftId: value } : {};
 }
 
 /**

@@ -207,6 +207,29 @@ test('a plant built from the catalog round-trips through the layout CSV', () => 
   );
 });
 
+test('a plant\'s driftId round-trips through the layout CSV, and a file with no drift_id column still loads (nl-o47.6.1)', () => {
+  const speciesCsv = `${speciesHeader}\n`
+    + 'c,Autumn sage,Salvia greggii,3-11,3-11,,,,,red,3,3,mound';
+  const species = parseSpeciesCsv(speciesCsv);
+  const plant = createPlantFromSpecies(species[0], { id: 'sage-1', x: 1, y: 1, driftId: 'winecup-strip' });
+
+  const csv = buildLayoutCsv([plant]);
+  assert.match(csv.split('\n')[0], /(?:^|,)drift_id(?:,|$)/);
+
+  const reloaded = buildPlantsFromCsv(speciesCsv, csv);
+  assert.equal(reloaded[0].driftId, 'winecup-strip');
+
+  // A file predating the column (only the original four columns) still loads, with no drift.
+  const legacyCsv = 'id,botanical_name,x_ft,y_ft\nsage-1,Salvia greggii,1,1';
+  const legacy = buildPlantsFromCsv(speciesCsv, legacyCsv);
+  assert.equal(legacy[0].driftId, undefined);
+
+  // A drift_id cell that is not a slug plantIds.js would mint is dropped, not kept verbatim.
+  const badCsv = 'id,species_id,x_ft,y_ft,drift_id\nsage-1,c,1,1,Not A Slug';
+  const fromBad = buildPlantsFromCsv(speciesCsv, badCsv);
+  assert.equal(fromBad[0].driftId, undefined);
+});
+
 /**
  * History stores placements only (nl-3s5.19): a plant is its species plus where
  * it stands, and plantsFromPlacements builds every plant shown from the catalog

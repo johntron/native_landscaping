@@ -209,7 +209,9 @@ test('the owner reads and saves through the routes', async () => {
     assert.deepEqual(renamed.json().index.projects, [{ id: 'new-yard', name: 'Renamed' }], 'the picker label moves with the config');
 
     const saved = await call(env, env.alice, 'POST', '/api/layout?project=new-yard', {
-      plants: [{ ...placement('h1', 1.23456), commonName: 'stripped' }],
+      // driftId is not a slug src/state/plantIds.js would mint, so the server's
+      // reduction of this body must drop it, the same as commonName (nl-o47.6.1).
+      plants: [{ ...placement('h1', 1.23456), commonName: 'stripped', driftId: 'Not A Slug' }],
       previousPlants: [],
       description: 'add',
     });
@@ -223,8 +225,8 @@ test('the owner reads and saves through the routes', async () => {
     assert.match(csv.headers['Content-Type'], /text\/csv/);
     assert.equal(
       csv.body,
-      'id,species_id,x_ft,y_ft,status,planted_on,source,source_nursery,source_sale_organizer,source_sale_event,source_sale_date,local_ecotype\n' +
-        'h1,yaupon-holly,1.235,1.000,planned,,,,,,,\n'
+      'id,species_id,x_ft,y_ft,status,planted_on,source,source_nursery,source_sale_organizer,source_sale_event,source_sale_date,local_ecotype,drift_id\n' +
+        'h1,yaupon-holly,1.235,1.000,planned,,,,,,,,\n'
     );
     const rewound = await call(env, env.alice, 'POST', '/api/history/cursor?project=new-yard', { cursor: 0 });
     assert.deepEqual(rewound.json().entry.plants, []);
