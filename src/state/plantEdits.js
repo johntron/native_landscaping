@@ -5,6 +5,7 @@
  * Every new plant id is minted by src/state/plantIds.js.
  */
 import { createViewTransform } from '../render/viewTransform.js';
+import { resolveYardBounds } from '../render/yardBounds.js';
 import { createPlantFromSpecies } from '../data/plantParser.js';
 import { classifyPlantLayer } from './layers.js';
 import { buildCloneId, buildNewPlantId } from './plantIds.js';
@@ -33,13 +34,20 @@ export function clonePlantById(state, plantId) {
 }
 
 /**
- * Place one plant of the chosen species at the middle of the plan view — the
- * one spot guaranteed to be on the drawing, from which it can be dragged.
+ * Place one plant of the chosen species — at `at` (yard feet) when given and
+ * the yard is declared, clamped to the declared yard so a point computed from
+ * an on-screen rectangle (which can run past the yard into a view's drawing
+ * margin) never lands off the property; otherwise at the middle of the plan
+ * view, the one spot guaranteed to be on the drawing, from which it can be
+ * dragged. `at` comes from the Add plant sheet's placement helper
+ * (src/render/visiblePlanCenter.js), computed by src/app.js from the plan's
+ * on-screen rect — this module stays pure and never reads the DOM itself.
  * @param {{ plants: object[], species: object[], project: object }} state  src/app.js's appState
- * @param {string} speciesId the select's value: plants.csv's `id` for the species
+ * @param {string} speciesId plants.csv's `id` for the species
+ * @param {{ at?: { x: number, y: number } }} [options]
  * @returns {Object|null} the new plant, or null if the species or plan view is gone
  */
-export function addPlantFromCatalog(state, speciesId) {
+export function addPlantFromCatalog(state, speciesId, { at } = {}) {
   const key = String(speciesId || '');
   if (!key) return null;
   // buildLayoutCsv writes speciesId and buildPlantsFromCsv resolves by it, so the
@@ -49,10 +57,17 @@ export function addPlantFromCatalog(state, speciesId) {
   const planView = state.project?.views?.find((view) => view.type === 'plan');
   if (!planView) return null;
   const { originFt, extentFt } = createViewTransform(planView);
+  const bounds = resolveYardBounds(state.project);
+  let x = originFt.x + extentFt.width / 2;
+  let y = originFt.y + extentFt.height / 2;
+  if (bounds && Number.isFinite(at?.x) && Number.isFinite(at?.y)) {
+    x = clampFeet(at.x, bounds.x.min, bounds.x.max);
+    y = clampFeet(at.y, bounds.y.min, bounds.y.max);
+  }
   const plant = createPlantFromSpecies(speciesEntry, {
     id: buildNewPlantId(state.plants, speciesEntry.botanicalName || speciesEntry.speciesId),
-    x: originFt.x + extentFt.width / 2,
-    y: originFt.y + extentFt.height / 2,
+    x,
+    y,
   });
   state.plants = [...state.plants, plant];
   return plant;

@@ -19,8 +19,21 @@ const plan = {
   originFt: { x: 0, y: 0 },
 };
 
-function makeState(plants = []) {
-  return { plants, species, project: { views: [plan] } };
+// A plan padded 2ft past the yard on every side, the way deriveViewGeometry
+// actually builds one: originFt sits outside the yard corner and extentFt
+// covers the yard plus the margin on both ends.
+const paddedPlan = {
+  id: 'plan',
+  type: 'plan',
+  viewBox: { width: 240, height: 140 },
+  extentFt: { width: 24, height: 14 },
+  originFt: { x: -2, y: -2 },
+};
+
+function makeState(plants = [], { views = [plan], yardFt } = {}) {
+  const project = { views };
+  if (yardFt) project.yardFt = yardFt;
+  return { plants, species, project };
 }
 
 test('addPlantFromCatalog places one plant at the middle of the plan view', () => {
@@ -39,6 +52,39 @@ test('addPlantFromCatalog refuses an unknown species or a project with no plan',
   assert.equal(addPlantFromCatalog(makeState(), ''), null);
   const noPlan = { plants: [], species, project: { views: [] } };
   assert.equal(addPlantFromCatalog(noPlan, species[0].speciesId), null);
+});
+
+test('addPlantFromCatalog places the plant at `at` when given and inside the yard', () => {
+  const state = makeState([], { yardFt: { width: 20, depth: 10 } });
+  const plant = addPlantFromCatalog(state, species[0].speciesId, { at: { x: 3, y: 7 } });
+  assert.equal(plant.x, 3);
+  assert.equal(plant.y, 7);
+});
+
+test('addPlantFromCatalog clamps `at` to the declared yard, not to the padded drawing extent', () => {
+  // The plan draws 2ft of margin past the yard on every side; a point in that
+  // margin must still land at the yard edge (0..20, 0..10), never at the
+  // plan's own extent (which would allow -2..22, -2..12).
+  const state = makeState([], { views: [paddedPlan], yardFt: { width: 20, depth: 10 } });
+  const inMargin = addPlantFromCatalog(state, species[0].speciesId, { at: { x: -1.5, y: 11.5 } });
+  assert.equal(inMargin.x, 0);
+  assert.equal(inMargin.y, 10);
+});
+
+test('addPlantFromCatalog falls back to the plan middle when `at` is given but there is no declared yard', () => {
+  const state = makeState([], { yardFt: undefined });
+  const plant = addPlantFromCatalog(state, species[0].speciesId, { at: { x: 1, y: 1 } });
+  assert.equal(plant.x, 10);
+  assert.equal(plant.y, 5);
+});
+
+test('addPlantFromCatalog falls back to the plan middle when `at` is missing or not finite', () => {
+  const state = makeState([], { yardFt: { width: 20, depth: 10 } });
+  assert.equal(addPlantFromCatalog(state, species[0].speciesId, {}).x, 10);
+  assert.equal(
+    addPlantFromCatalog(state, species[0].speciesId, { at: { x: NaN, y: 5 } }).x,
+    10
+  );
 });
 
 test('clonePlantById copies a plant beside the original with a fresh id', () => {
