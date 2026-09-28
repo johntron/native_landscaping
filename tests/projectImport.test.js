@@ -236,6 +236,50 @@ test('no owner, no import and no marker; a yard the owner already has is left al
   }
 });
 
+test('planting_layout.csv extras (driftId, nl-o47.6.1; lifecycle, nl-3s5.22) survive the import, not just the four core columns', () => {
+  const env = setup();
+  try {
+    // No history file: the "empty" verdict path makes the CSV the first
+    // entry directly from csvPlacements (server/db/projectImport.js), the
+    // shortest path to the bug this covers — driftId was being hand-trimmed
+    // away before toPlacements ever got a chance to keep it.
+    writeYard(env.projectsDir, 'drifted', {
+      csvPlants: [
+        { id: 'a', speciesId: 'yaupon-holly', x: 1, y: 2, driftId: 'yaupon-strip' },
+        { id: 'b', speciesId: 'yaupon-holly', x: 3, y: 2, driftId: 'yaupon-strip' },
+        { id: 'c', speciesId: 'yaupon-holly', x: 5, y: 2, status: 'planted', plantedOn: '2026-01-01' },
+      ],
+    });
+    writeFileSync(
+      join(env.projectsDir, 'index.json'),
+      JSON.stringify({ defaultProject: 'drifted', projects: ['drifted'] })
+    );
+    const db = openStore(env.dataDir);
+    try {
+      const result = importLegacyProjects(db, { projectsDir: env.projectsDir, dataDir: env.dataDir, ownerEmail: OWNER });
+      assert.equal(result.status, 'imported');
+      const owner = db.prepare('SELECT id FROM users WHERE email = ?').get(OWNER).id;
+      const drifted = findOwnedProject(db, owner, 'drifted');
+      const placements = currentPlacements(db, drifted.id);
+      assert.deepEqual(
+        placements.map((pl) => [pl.id, pl.driftId ?? null]),
+        [
+          ['a', 'yaupon-strip'],
+          ['b', 'yaupon-strip'],
+          ['c', null],
+        ]
+      );
+      const planted = placements.find((pl) => pl.id === 'c');
+      assert.equal(planted.status, 'planted');
+      assert.equal(planted.plantedOn, '2026-01-01');
+    } finally {
+      db.close();
+    }
+  } finally {
+    env.cleanup();
+  }
+});
+
 test('the dry run is read-only, works on a schema-002 app.db, and prints no location', () => {
   const env = setup();
   try {

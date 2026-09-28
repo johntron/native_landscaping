@@ -163,7 +163,15 @@ export function readLegacyProject(projectsDir, slug, indexName) {
       if (!row.speciesId) {
         throw new Error(`${slug}: planting_layout.csv row "${row.id}" has no species_id; run tools/migrate-species-ids.mjs first`);
       }
-      return { id: row.id, speciesId: row.speciesId, x: row.x, y: row.y };
+      // Keep the row as parsePlantLayoutCsv built it (id/speciesId/x/y plus
+      // whatever extras it already parsed — driftId, nl-o47.6.1; status/
+      // plantedOn/source, nl-3s5.22) rather than hand-picking just the four
+      // core fields: toPlacements below (line ~195) is what validates and
+      // reduces every entry's plants, csvPlacements included, so trimming
+      // here only meant those extras could never survive an import — a
+      // planting_layout.csv with a drift_id column loaded with every plant
+      // in no drift.
+      return row;
     });
   }
 
