@@ -204,6 +204,8 @@ async function init() {
   const selectionDoneBtn = document.getElementById('selectionDoneBtn');
   const selectionBarMoreBtn = document.getElementById('selectionBarMoreBtn'); // nl-o47.4
   const selectionBarMore = document.getElementById('selectionBarMore'); // nl-o47.4
+  const selectionUndoBtn = document.getElementById('selectionUndoBtn'); // nl-o47.4
+  const selectionRedoBtn = document.getElementById('selectionRedoBtn'); // nl-o47.4
   const selectionNudgeN = document.getElementById('selectionNudgeN');
   const selectionNudgeE = document.getElementById('selectionNudgeE');
   const selectionNudgeS = document.getElementById('selectionNudgeS');
@@ -400,6 +402,8 @@ async function init() {
     appState,
     undoButton,
     redoButton,
+    undoMirror: selectionUndoBtn,
+    redoMirror: selectionRedoBtn,
     historyStatus,
     render: () => render(),
     refreshSpeciesTable: () => refreshSpeciesTable(),
@@ -713,6 +717,10 @@ async function init() {
       doneBtn: selectionDoneBtn,
       moreBtn: selectionBarMoreBtn,
       moreGroup: selectionBarMore,
+      undoBtn: selectionUndoBtn,
+      redoBtn: selectionRedoBtn,
+      undoRealBtn: undoButton,
+      redoRealBtn: redoButton,
       nudgeN: selectionNudgeN,
       nudgeE: selectionNudgeE,
       nudgeS: selectionNudgeS,

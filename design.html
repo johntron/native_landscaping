@@ -350,19 +350,30 @@
 
       nl-o47.4 restructures the markup (never the logic) for the phone
       editor, where this bar IS the editor's one bottom bar whenever a
-      selection exists: a compact .selection-bar__primary row (just the
-      label/rename, a More toggle, and Done — 393px has no room left over for
-      more than that once a rename field or a drift's own controls are
-      counted, see the nl-o47.4 bead's own screenshots) and
-      .selection-bar__more, everything else (Details/Clone/Remove, nudges,
-      the drift count stepper, spread, clone/remove drift, the drilled-in
-      extras), as a popover the More button shows/hides — never a third
-      thing stacked under the primary row, so the bar stays at most the one
-      row plus that on-demand popover (the nl-o47.6.2 review's "at most two
-      rows"). On desktop styles.css makes .selection-bar__more
+      selection exists: a compact .selection-bar__primary row (the
+      label/rename, Undo, a More toggle, and Done — 393px has no room left
+      over for more than that once a rename field or a drift's own controls
+      are counted, see the nl-o47.4 bead's own screenshots) and
+      .selection-bar__more, everything else (Details/Clone/Remove, Redo,
+      nudges, the drift count stepper, spread, clone/remove drift, the
+      drilled-in extras), as a popover the More button shows/hides — never a
+      third thing stacked under the primary row, so the bar stays at most the
+      one row plus that on-demand popover (the nl-o47.6.2 review's "at most
+      two rows"). On desktop styles.css makes .selection-bar__more
       `display: contents` and hides the More button outright, so nothing
       there changes: every control still shows inline in one row, in its
       original order, as it always has.
+
+      Undo/Redo here (#selectionUndoBtn/#selectionRedoBtn) are NOT the real
+      #undoLayoutBtn/#redoLayoutBtn the toolbar and the editor's idle bar use
+      — a person needs Undo reachable WHILE something is still selected
+      (undoing a drag or a nudge is the first thing anyone reaches for right
+      after making it, and "Done, then Undo" would also throw the selection
+      away), so this is a second pair of buttons that mirrors the real ones:
+      src/ui/selectionBar.js clicks the real button and copies its own
+      disabled state, rather than duplicating layoutHistoryController's own
+      handler. Hidden outright on desktop (styles.css), where the toolbar's
+      Undo/Redo are already visible next to any selection.
     -->
     <div class="selection-bar" id="selectionBar" hidden role="toolbar" aria-label="Selected plant">
       <div class="selection-bar__primary">
@@ -380,6 +391,15 @@
         <div class="selection-bar__actions">
           <button
             type="button"
+            class="selection-bar__nudge selection-bar__undo-btn"
+            id="selectionUndoBtn"
+            aria-label="Undo"
+            title="Undo"
+          >
+            ↶
+          </button>
+          <button
+            type="button"
             class="button pill-button selection-bar__more-btn"
             id="selectionBarMoreBtn"
             aria-haspopup="true"
@@ -393,6 +413,7 @@
       </div>
       <p class="selection-bar__status" id="selectionDriftNameStatus" role="status" hidden></p>
       <div class="selection-bar__more" id="selectionBarMore">
+        <button type="button" class="button pill-button selection-bar__redo-btn" id="selectionRedoBtn">Redo</button>
         <div class="selection-bar__plain-actions">
           <button type="button" class="button pill-button" id="selectionDetailsBtn">Details</button>
           <button type="button" class="button pill-button" id="selectionCloneBtn">Clone</button>

@@ -64,6 +64,12 @@ export const DESYNC_MESSAGE =
  * @param {object} deps.appState                  reads species and project; replaces plants
  * @param {HTMLButtonElement|null} deps.undoButton
  * @param {HTMLButtonElement|null} deps.redoButton
+ * @param {HTMLButtonElement|null} [deps.undoMirror]  a second Undo button
+ *   (the phone editor's selection bar, nl-o47.4) whose disabled/title always
+ *   matches undoButton's — set here, alongside the real button, rather than
+ *   wherever renders happen to run, since a commit's history change and a
+ *   render are not the same event.
+ * @param {HTMLButtonElement|null} [deps.redoMirror]  same, for Redo
  * @param {HTMLElement|null} deps.historyStatus
  * @param {() => void} deps.render
  * @param {() => void} deps.refreshSpeciesTable
@@ -74,6 +80,8 @@ export function createLayoutHistoryController({
   appState,
   undoButton,
   redoButton,
+  undoMirror,
+  redoMirror,
   historyStatus,
   render,
   refreshSpeciesTable,
@@ -111,10 +119,18 @@ export function createLayoutHistoryController({
       const current = layoutHistoryInstance?.getCurrentEntry();
       undoButton.title = canUndo && current ? `Undo: ${current.description}` : '';
     }
+    if (undoMirror) {
+      undoMirror.disabled = !canUndo;
+      undoMirror.title = undoButton?.title || 'Undo';
+    }
     if (redoButton) {
       redoButton.disabled = !canRedo;
       const next = layoutHistoryInstance?.getEntry(layoutHistoryInstance.getCursor() + 1);
       redoButton.title = canRedo && next ? `Redo: ${next.description}` : '';
+    }
+    if (redoMirror) {
+      redoMirror.disabled = !canRedo;
+      redoMirror.title = redoButton?.title || 'Redo';
     }
   };
 

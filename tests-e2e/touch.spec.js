@@ -247,14 +247,56 @@ test.describe('the selection action bar (nl-o47.2)', () => {
     expect(afterNudge.x - before.x).toBeCloseTo(0.5, 5);
     expect(afterNudge.y, 'nudging east leaves y alone').toBeCloseTo(before.y, 5);
 
-    // Undo lives in the editor's idle bar now, which only shows once nothing
-    // is selected (nl-o47.4) — Done first, same as a person tapping their
-    // way back out would.
-    await page.locator('#selectionDoneBtn').click();
-    await page.locator('#undoLayoutBtn').click();
+    // Undo lives in the primary row itself now (nl-o47.4): reachable without
+    // Done, and Done stays untouched by it.
+    await page.locator('#selectionUndoBtn').click();
     await expect
       .poll(async () => (await savedPosition('touch-nudge', target.id))?.x, { timeout: 5000 })
       .toBeCloseTo(before.x, 5);
+  });
+
+  test('Undo in the primary row reverts a drag while the plant stays selected (nl-o47.4)', async ({ page }) => {
+    // The orchestrator's own review of this bead: Undo has to be reachable
+    // WHILE something is selected (undoing a mistaken drag/nudge is the
+    // first thing anyone reaches for right after making it), and "Done,
+    // then Undo" would throw the selection away first. This is the one
+    // thing worth its own test rather than folding into the nudge test
+    // above: that the selection SURVIVES the undo, not just that the undo
+    // itself works.
+    await openScratchProject(page, 'touch-undo-in-bar');
+    await page.locator('[data-mode="edit"]').click();
+
+    const target = await plantPointerTarget(page, 'topSvg');
+    await tap(page, target);
+    await expect(page.locator('#selectionBar')).toBeVisible();
+    const nameBefore = await page.locator('#selectionBarName').textContent();
+    // Two different units on purpose: plantPosition reads viewBox pixels
+    // (data-cx/data-cy, nl-o47.6.7) for the immediate on-screen check below;
+    // the saved layout is yard feet, for the round-trip check after undo.
+    const before = await plantPosition(page, target.id);
+    const savedBefore = (await readScratchLayout('touch-undo-in-bar')).find((row) => row.id === target.id);
+    expect(savedBefore, 'the tapped plant is in the saved layout').toBeTruthy();
+
+    const away = await emptySpotIn(page, 'topSvg');
+    await touchGesture(page, { x: away.x, y: away.y, dy: 60 });
+    await expect
+      .poll(async () => (await savedPosition('touch-undo-in-bar', target.id))?.y, { timeout: 5000 })
+      .not.toBe(savedBefore.y);
+    const afterDrag = await plantPosition(page, target.id);
+    expect(Math.abs(afterDrag.y - before.y), 'the drag actually moved the plant').toBeGreaterThan(1);
+    await expect(page.locator('#selectionUndoBtn')).toBeEnabled();
+
+    // No Done first — the whole point of the primary-row button.
+    await page.locator('#selectionUndoBtn').click();
+
+    await expect
+      .poll(async () => (await savedPosition('touch-undo-in-bar', target.id))?.y, { timeout: 5000 })
+      .toBeCloseTo(savedBefore.y, 5);
+    // The selection survived (src/state/selection.js's pruneSelectionIds keeps
+    // an id that still exists — an undo that only moved the plant never
+    // touched its id), not narrowed, not cleared.
+    await expect(page.locator('#selectionBar')).toBeVisible();
+    await expect(page.locator('#selectionBarName')).toHaveText(nameBefore);
   });
 });
 
@@ -589,10 +631,9 @@ test.describe('drifts (nl-o47.6.2)', () => {
     expect(lone.x, 'the unrelated plant did not move').toBeCloseTo(4, 5);
     expect(lone.y).toBeCloseTo(4, 5);
 
-    // Undo lives in the editor's idle bar, which only shows once nothing is
-    // selected (nl-o47.4) — Done first.
-    await page.locator('#selectionDoneBtn').click();
-    await page.locator('#undoLayoutBtn').click();
+    // Undo lives in the primary row itself (nl-o47.4), reachable without
+    // Done — the drift stays selected throughout.
+    await page.locator('#selectionUndoBtn').click();
     await expect
       .poll(
         async () => (await readScratchLayoutWithDrift('touch-drift-drag')).find((r) => r.id === 'drift-a')?.x,
@@ -615,23 +656,23 @@ test.describe('drifts (nl-o47.6.2)', () => {
       .toBe(5);
     await expect(page.locator('#selectionDriftCountValue')).toHaveText('5');
 
-    // Undo lives in the editor's idle bar, reachable only once nothing is
-    // selected (nl-o47.4) — Done first, each time.
-    await page.locator('#selectionDoneBtn').click();
-    await page.locator('#undoLayoutBtn').click();
+    // Undo lives in the primary row (nl-o47.4), reachable without Done —
+    // and the whole drift stays selected (its membership re-syncs to
+    // whatever the drift's CURRENT members are, nl-o47.6.2's own
+    // pruneSelection), so the count stepper (still behind More, already
+    // open) answers the very next click with no re-tap needed.
+    await page.locator('#selectionUndoBtn').click();
     await expect
       .poll(async () => (await driftMemberIds('touch-drift-count')).length, { timeout: 5000 })
       .toBe(4);
+    await expect(page.locator('#selectionDriftCountValue')).toHaveText('4');
 
-    await tap(page, await driftMemberScreen(page, 'drift-a'));
-    await page.locator('#selectionBarMoreBtn').click();
     await page.locator('#selectionDriftCountDecBtn').click();
     await expect
       .poll(async () => (await driftMemberIds('touch-drift-count')).length, { timeout: 5000 })
       .toBe(3);
 
-    await page.locator('#selectionDoneBtn').click();
-    await page.locator('#undoLayoutBtn').click();
+    await page.locator('#selectionUndoBtn').click();
     await expect
       .poll(async () => (await driftMemberIds('touch-drift-count')).length, { timeout: 5000 })
       .toBe(4);
@@ -948,9 +989,8 @@ test.describe('the phone editor (nl-o47.4)', () => {
       )
       .not.toBe(savedBefore.x);
 
-    // Undo lives in the idle bar, reachable once nothing is selected.
-    await page.locator('#selectionDoneBtn').click();
-    await page.locator('#undoLayoutBtn').click();
+    // Undo lives in the primary row (nl-o47.4), reachable without Done.
+    await page.locator('#selectionUndoBtn').click();
     await expect
       .poll(
         async () => (await readScratchLayoutWithDrift('touch-editor-zoom-drift')).find((row) => row.id === target.id)

@@ -2247,6 +2247,27 @@ select {
   outline: none;
 }
 
+/* The primary row's own Undo (nl-o47.4): same 44px chrome square as a nudge
+   arrow, just a bigger glyph -- "↶" reads small at the nudges' own font-size. */
+.selection-bar__undo-btn {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.selection-bar__undo-btn:disabled,
+.selection-bar__redo-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Redo sits as a bare button, directly in .selection-bar__more's own
+   flex-column -- without this it stretches to the column's full width
+   (align-items: stretch's default), reading as one oversized pill instead
+   of a normal compact button like its neighbors. */
+.selection-bar__redo-btn {
+  align-self: flex-start;
+}
+
 .selection-bar__actions {
   display: flex;
   flex-wrap: wrap;
@@ -2432,6 +2453,13 @@ select {
   .selection-bar__more-btn {
     display: none; /* nothing is hidden behind it on desktop for it to open */
   }
+  /* The toolbar's own Undo/Redo are already visible next to any selection on
+     desktop (the phone editor never opens there), so this second, mirrored
+     pair (nl-o47.4) has nothing to add. */
+  .selection-bar__undo-btn,
+  .selection-bar__redo-btn {
+    display: none;
+  }
   .selection-bar__nudges {
     order: 1;
   }
@@ -2565,6 +2593,16 @@ select {
   body.is-phone-editor-open #selectionBar {
     min-height: 6.6rem;
     box-sizing: border-box;
+  }
+
+  /* The primary row now carries Undo alongside More and Done (nl-o47.4), so
+     a whole drift's rename field needs to give up some of the room the
+     desktop rule's 40vw cap allows it -- at 393px that cap alone (157px)
+     plus the count label and the three action buttons no longer fits one
+     row. Desktop is untouched (this rule is phone-only). */
+  .selection-bar__rename {
+    width: 6rem;
+    max-width: 22vw;
   }
 
   .view-meta {

@@ -33,6 +33,22 @@
  * bar's own context changes (hidden entirely, or a different selection/drift
  * mode) so a stale popover from the LAST selection can't linger open over a
  * new one.
+ *
+ * It also carries an Undo (primary row) and Redo (in the popover), reachable
+ * while a selection is still live — undoing a drag or a nudge is the first
+ * thing anyone reaches for right after making it, and Done-then-Undo would
+ * also throw the selection away. `undoBtn`/`redoBtn` here are a SECOND pair
+ * of buttons, not the real `#undoLayoutBtn`/`#redoLayoutBtn` the toolbar and
+ * the editor's idle bar already use (one DOM button cannot sit in two
+ * places, and it would need to jump between the idle bar and this one on
+ * every selection change): a click here just forwards to the real button
+ * (`undoRealBtn`/`redoRealBtn`, only if it is not already disabled). Their
+ * OWN disabled/title state is not mirrored here — src/history/
+ * layoutHistoryController.js's updateHistoryControls() sets it directly,
+ * alongside the real buttons, at the one place that already knows when it
+ * changes; mirroring it again from this module's own sync() (which runs
+ * from render(), BEFORE a drag's commit updates history) read it a tick too
+ * early and left the mirror stuck disabled.
  */
 import { driftMembers, driftSpacing, memberToRemove, nextMemberPosition } from '../state/driftGeometry.js';
 import { humanizeDriftId } from '../data/driftId.js';
@@ -64,6 +80,10 @@ export function createSelectionBar({
     doneBtn,
     moreBtn,
     moreGroup,
+    undoBtn,
+    redoBtn,
+    undoRealBtn,
+    redoRealBtn,
     nudgeN,
     nudgeE,
     nudgeS,
@@ -102,6 +122,16 @@ export function createSelectionBar({
     const willOpen = !moreGroup.classList.contains('is-open');
     moreGroup.classList.toggle('is-open', willOpen);
     moreBtn.setAttribute('aria-expanded', String(willOpen));
+  });
+  // Forward to the REAL button (never disabled-but-clicked): a disabled
+  // native button already swallows a click, but undoBtn/redoBtn are their
+  // own elements and must not fire the real handler while it has nothing to
+  // undo/redo.
+  undoBtn?.addEventListener('click', () => {
+    if (undoRealBtn && !undoRealBtn.disabled) undoRealBtn.click();
+  });
+  redoBtn?.addEventListener('click', () => {
+    if (redoRealBtn && !redoRealBtn.disabled) redoRealBtn.click();
   });
   // What the popover is showing right now, so sync() (called on every
   // render — every month-slider tick included) can tell "the same selection,
