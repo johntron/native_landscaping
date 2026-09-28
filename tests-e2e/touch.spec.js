@@ -99,6 +99,10 @@ test.describe('dragging by touch', () => {
     // captures the pointer, later events target the svg itself.
     await openScratchProject(page, 'touch-elevation');
     await page.locator('[data-mode="edit"]').click();
+    // Edit mode on a phone auto-maximizes the plan (nl-o47.4); south is
+    // reached through the editor's own tab strip now, not by scrolling.
+    await page.locator('[data-view-tab="south"]').click();
+    await page.locator('.views[data-maximized="south"]').waitFor();
 
     const target = await plantPointerTarget(page, 'southSvg', 'elevation');
     // This controller picks the plant off the DOM, so the one selected is
@@ -125,9 +129,18 @@ test.describe('dragging by touch', () => {
       .not.toBe(was.x);
   });
 
-  test('with nothing selected, a vertical swipe over the drawing scrolls the page and moves no plant', async ({
+  test('with nothing selected, a vertical swipe at fit zoom scrolls no page and moves no plant', async ({
     page,
   }) => {
+    // Superseded by the phone editor (nl-o47.4): there is no page left to
+    // scroll behind a `position: fixed; inset: 0` panel. A one-finger move
+    // with nothing selected is src/interaction/canvasGesture.js's pan, but
+    // AT FIT (scale 1) neither axis has anywhere to go — canvasZoom.js's own
+    // clamp centers whenever the content does not exceed its container,
+    // which at fit is true on both axes by construction — so this keeps only
+    // the original test's still-true half (no plant moves, no page scrolls);
+    // the "phone editor: pinch-zoom then pan" test below covers a pan that
+    // actually has somewhere to go, once zoomed in.
     await openScratchProject(page, 'touch-hold');
     await page.locator('[data-mode="edit"]').click();
     await expect(page.locator('#selectionBar')).toBeHidden();
@@ -138,10 +151,9 @@ test.describe('dragging by touch', () => {
 
     await touchGesture(page, { x: spot.x, y: spot.y, dy: -120 });
 
-    expect(
-      await page.evaluate(() => window.scrollY),
-      'a finger on empty canvas still pans the page'
-    ).toBeGreaterThan(scrollBefore);
+    expect(await page.evaluate(() => window.scrollY), 'the page behind the editor does not scroll').toBe(
+      scrollBefore
+    );
     expect(await readScratchLayout('touch-hold'), 'no plant moved').toEqual(before);
   });
 
@@ -221,6 +233,10 @@ test.describe('the selection action bar (nl-o47.2)', () => {
     const before = (await readScratchLayout('touch-nudge')).find((row) => row.id === target.id);
     expect(before, 'the tapped plant is in the saved layout').toBeTruthy();
 
+    // The nudge arrows sit behind the bar's "More" popover on a phone
+    // (nl-o47.4 restructures #selectionBar for width; see the review note on
+    // nl-o47.4's own bead).
+    await page.locator('#selectionBarMoreBtn').click();
     await page.locator('#selectionNudgeE').click();
 
     await expect
@@ -231,7 +247,10 @@ test.describe('the selection action bar (nl-o47.2)', () => {
     expect(afterNudge.x - before.x).toBeCloseTo(0.5, 5);
     expect(afterNudge.y, 'nudging east leaves y alone').toBeCloseTo(before.y, 5);
 
-    // Undo lives in the Edit row; the nudge committed its own revision.
+    // Undo lives in the editor's idle bar now, which only shows once nothing
+    // is selected (nl-o47.4) — Done first, same as a person tapping their
+    // way back out would.
+    await page.locator('#selectionDoneBtn').click();
     await page.locator('#undoLayoutBtn').click();
     await expect
       .poll(async () => (await savedPosition('touch-nudge', target.id))?.x, { timeout: 5000 })
@@ -239,7 +258,44 @@ test.describe('the selection action bar (nl-o47.2)', () => {
   });
 });
 
-test.describe('dragging a maximized view (nl-o47.1)', () => {
+test.describe('dragging a maximized view (nl-o47.1, adapted for the phone editor by nl-o47.4)', () => {
+  // Edit mode on a phone now opens the full-screen editor (nl-o47.4), which
+  // auto-maximizes a view and hides the per-panel Maximize/Restore toggle
+  // (replaced by the editor's own tab strip) — so these specs no longer
+  // click it themselves, and the aspect-ratio assertion that used to run
+  // right after clicking it is split out below into its own View-mode test,
+  // where that toggle still exists and still works exactly as nl-o47.1 left
+  // it. The drag-tracks-the-finger assertions instead run INSIDE the editor,
+  // which is maximized (at FIT_STATE — scale 1, no pinch/pan translate) by
+  // the time Edit mode finishes opening, so the geometry under test is
+  // identical to what the manual toggle used to produce.
+
+  test('View mode: maximizing a view on a phone keeps the viewBox aspect ratio', async ({ page }) => {
+    await openScratchProject(page, 'touch-maximize');
+    // View mode (the default): the per-panel toggle is untouched by the
+    // editor, which only ever opens in Edit mode.
+    await page.locator('[data-maximize-target="plan"]').click();
+    await page.locator('.views[data-maximized="plan"]').waitFor();
+
+    const maximizeToggle = page.locator('[data-maximize-target="plan"]');
+    await expect(maximizeToggle).toHaveText(/Restore/);
+    await expect(maximizeToggle).toBeInViewport();
+
+    // Fault (a): the old `aspect-ratio: auto; height: calc(100vh - 3.5rem)`
+    // rule sheared the box away from the viewBox's own shape. The fixed rule
+    // keeps `aspect-ratio` in charge, so the two must still match.
+    const { boxRatio, viewBoxRatio } = await page.evaluate(() => {
+      const view = document.querySelector('.view-panel.is-maximized .view');
+      const svg = view.querySelector('svg');
+      const rect = view.getBoundingClientRect();
+      const box = svg.viewBox.baseVal;
+      return { boxRatio: rect.width / rect.height, viewBoxRatio: box.width / box.height };
+    });
+    expect(boxRatio, 'the maximized box keeps the viewBox aspect ratio').toBeCloseTo(viewBoxRatio, 1);
+  });
+});
+
+test.describe('dragging inside the phone editor (nl-o47.1 fix, exercised through nl-o47.4)', () => {
   /**
    * A plant's on-screen centre, mapped through the SVG's own screenCTM rather
    * than `rect.width / viewBox.width`: that ratio is only right when the box
@@ -290,7 +346,12 @@ test.describe('dragging a maximized view (nl-o47.1)', () => {
     const anchor = await page.evaluate(() => {
       const view = document.querySelector('.view-panel.is-maximized .view') || document.getElementById('topSvg');
       const rect = view.getBoundingClientRect();
-      return { x: rect.left + rect.width / 2, y: rect.top + Math.min(30, rect.height / 4) };
+      // Dead center, not near an edge: the editor's own chrome (nl-o47.4) —
+      // #phoneEditorTabs at the top, the bottom bar — floats OVER the full-
+      // bleed drawing rather than displacing its rect the way the old
+      // in-flow header used to, so a point too close to either edge would
+      // land the synthetic touch on that chrome instead of the drawing.
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
     });
 
     let before = await plantScreenPosition(page, 'topSvg', plantId);
@@ -325,21 +386,15 @@ test.describe('dragging a maximized view (nl-o47.1)', () => {
       .not.toBe(savedBefore);
   }
 
-  test('a maximized panel keeps the viewBox shape, and a drag moves the plant as far as the finger on both axes', async ({
+  test('the editor keeps the viewBox shape, and a drag moves the plant as far as the finger on both axes', async ({
     page,
   }) => {
     await openScratchProject(page, 'touch-maximize');
+    // Edit mode on a phone auto-maximizes the plan (nl-o47.4) — no toggle to
+    // click; the editor's own tab strip is what the phone shows instead.
     await page.locator('[data-mode="edit"]').click();
-
-    // project.json's own view id ("plan"), not the SVG's historical "topSvg" id.
-    await page.locator('[data-maximize-target="plan"]').click();
     await page.locator('.views[data-maximized="plan"]').waitFor();
-
-    // The Restore button must still be visible and reachable once maximized,
-    // not pushed off screen by whatever the panel's new size came out to.
-    const maximizeToggle = page.locator('[data-maximize-target="plan"]');
-    await expect(maximizeToggle).toHaveText(/Restore/);
-    await expect(maximizeToggle).toBeInViewport();
+    await expect(page.locator('#phoneEditorTabs')).toBeVisible();
 
     // Fault (a): the old `aspect-ratio: auto; height: calc(100vh - 3.5rem)`
     // rule sheared the box away from the viewBox's own shape. The fixed rule
@@ -370,10 +425,10 @@ test.describe('dragging a maximized view (nl-o47.1)', () => {
     // forces the pre-fix shear back on with a page-level override, so it
     // exercises buildPointerContext's mapping (fault b) on its own, the way a
     // future CSS zoom transform (also letterboxed relative to its own
-    // pre-transform layout) will.
+    // pre-transform layout, and now a real one — src/render/canvasZoom.js's
+    // own translate+scale — atop it) will.
     await openScratchProject(page, 'touch-letterbox');
     await page.locator('[data-mode="edit"]').click();
-    await page.locator('[data-maximize-target="plan"]').click();
     await page.locator('.views[data-maximized="plan"]').waitFor();
 
     await page.addStyleTag({
@@ -468,6 +523,16 @@ test.describe('drifts (nl-o47.6.2)', () => {
     expect(await page.locator('#topSvg [data-selection-ring]').count()).toBe(4);
     await expect(page.locator('#topSvg g[data-plant-id="lone-plant"]')).toHaveAttribute('data-dimmed', 'true');
 
+    // The bar never exceeds two rows with a whole drift selected (nl-o47.4;
+    // the nl-o47.6.2 review found it at 4). Only the primary row is visible
+    // by default (the "More" popover is closed) — its own height, plus the
+    // rename-refusal status line's when it is showing, is the whole bar.
+    const barBox = await page.locator('#selectionBar').boundingBox();
+    const rowHeight = await page.locator('#selectionDoneBtn').boundingBox();
+    expect(barBox.height, 'closed by default, the bar is at most two button-rows tall').toBeLessThan(
+      rowHeight.height * 2 + 40 // + padding/gaps, not a third row's worth
+    );
+
     // A tap in the gap between members, well inside the outline (the drift's
     // own centroid — see midpointOf), also selects the whole drift.
     await tap(page, await midpointOf(page, 'drift-a', 'drift-d'));
@@ -475,10 +540,12 @@ test.describe('drifts (nl-o47.6.2)', () => {
     await expect(page.locator('#selectionDriftCountLabel')).toContainText('4 plants');
 
     // A further tap on a member drills into it: the plain single-plant bar
-    // returns, with the two drift-member extras.
+    // returns, with the two drift-member extras — behind "More" on a phone
+    // (nl-o47.4).
     await tap(page, target);
     await expect(page.locator('#selectionDriftNameGroup')).toBeHidden();
     await expect(page.locator('#selectionBarName')).toBeVisible();
+    await page.locator('#selectionBarMoreBtn').click();
     await expect(page.locator('#selectionBackToDriftBtn')).toBeVisible();
     await expect(page.locator('#selectionRemoveFromDriftBtn')).toBeVisible();
 
@@ -522,6 +589,9 @@ test.describe('drifts (nl-o47.6.2)', () => {
     expect(lone.x, 'the unrelated plant did not move').toBeCloseTo(4, 5);
     expect(lone.y).toBeCloseTo(4, 5);
 
+    // Undo lives in the editor's idle bar, which only shows once nothing is
+    // selected (nl-o47.4) — Done first.
+    await page.locator('#selectionDoneBtn').click();
     await page.locator('#undoLayoutBtn').click();
     await expect
       .poll(
@@ -535,6 +605,8 @@ test.describe('drifts (nl-o47.6.2)', () => {
     await openScratchProject(page, 'touch-drift-count');
     await page.locator('[data-mode="edit"]').click();
     await tap(page, await driftMemberScreen(page, 'drift-a'));
+    // The count stepper sits behind "More" on a phone (nl-o47.4).
+    await page.locator('#selectionBarMoreBtn').click();
     await expect(page.locator('#selectionDriftCountValue')).toHaveText('4');
 
     await page.locator('#selectionDriftCountIncBtn').click();
@@ -543,16 +615,22 @@ test.describe('drifts (nl-o47.6.2)', () => {
       .toBe(5);
     await expect(page.locator('#selectionDriftCountValue')).toHaveText('5');
 
+    // Undo lives in the editor's idle bar, reachable only once nothing is
+    // selected (nl-o47.4) — Done first, each time.
+    await page.locator('#selectionDoneBtn').click();
     await page.locator('#undoLayoutBtn').click();
     await expect
       .poll(async () => (await driftMemberIds('touch-drift-count')).length, { timeout: 5000 })
       .toBe(4);
 
+    await tap(page, await driftMemberScreen(page, 'drift-a'));
+    await page.locator('#selectionBarMoreBtn').click();
     await page.locator('#selectionDriftCountDecBtn').click();
     await expect
       .poll(async () => (await driftMemberIds('touch-drift-count')).length, { timeout: 5000 })
       .toBe(3);
 
+    await page.locator('#selectionDoneBtn').click();
     await page.locator('#undoLayoutBtn').click();
     await expect
       .poll(async () => (await driftMemberIds('touch-drift-count')).length, { timeout: 5000 })
@@ -564,6 +642,8 @@ test.describe('drifts (nl-o47.6.2)', () => {
     await page.locator('[data-mode="edit"]').click();
     await tap(page, await driftMemberScreen(page, 'drift-a'));
     await expect(page.locator('#selectionDriftNameGroup')).toBeVisible();
+    // Spread sits behind "More" on a phone (nl-o47.4).
+    await page.locator('#selectionBarMoreBtn').click();
 
     const distanceAB = async () => {
       const rows = await readScratchLayoutWithDrift('touch-drift-spread');
@@ -618,11 +698,19 @@ test.describe('species table drift entries, by touch (nl-o47.6.7)', () => {
     await chip.tap();
     await expect(page.locator('#topSvg circle[stroke-dasharray="7 6"]')).toHaveCount(0);
 
+    // Edit mode on a phone opens the full-screen editor (nl-o47.4):
+    // #speciesTable is hosted in the Plants sheet there, not inline on the
+    // page, so it has to be opened first.
     await page.locator('[data-mode="edit"]').click();
+    await page.locator('#phoneEditorPlantsBtn').click();
+    await expect(page.locator('#plantsSheet')).toBeVisible();
     await page
       .locator('#speciesTable button.species-table__drift-chip[data-drift-id="winecup-drift"]')
       .tap();
     await expect(page.locator('#selectionDriftNameGroup')).toBeVisible();
     await expect(page.locator('#selectionDriftCountLabel')).toContainText('4 plants');
+    // Selecting the drift also closes the sheet, so the canvas underneath —
+    // where the selection actually shows — is what the person sees next.
+    await expect(page.locator('#plantsSheet')).toBeHidden();
   });
 });

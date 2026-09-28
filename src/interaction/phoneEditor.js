@@ -261,6 +261,21 @@ export function createPhoneEditor({
     syncMonthReadout();
   }
 
+  // A drift chip inside the hosted #speciesTable (nl-o47.6.7's Drifts
+  // column) selects the drift in Edit mode (src/ui/speciesHighlight.js's own
+  // handleDriftClick, unchanged — this is a SECOND, delegated listener
+  // alongside it, not a replacement). The sheet then closes so the person
+  // can actually see the selection it just made: the canvas is what shows a
+  // selected drift's outline, and the sheet sits on top of it. A plain
+  // species row's hover highlight (not a click, and not a selection change)
+  // is left alone — nothing to reveal by closing the sheet for that.
+  plantsSheetBody?.addEventListener('click', (event) => {
+    if (appState.mode !== 'edit') return;
+    if (event.target instanceof Element && event.target.closest('button[data-drift-id]')) {
+      closePlants();
+    }
+  });
+
   fitBtn?.addEventListener('click', () => gesture.reset());
   monthPrevBtn?.addEventListener('click', () => moveMonthBy(-1));
   monthNextBtn?.addEventListener('click', () => moveMonthBy(1));
