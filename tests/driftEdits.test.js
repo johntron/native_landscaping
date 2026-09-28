@@ -7,6 +7,7 @@ import {
   cloneDrift,
   dissolveDrift,
   MAX_DRIFT_COUNT,
+  removeDrift,
   removeDriftMember,
   removePlantFromDrift,
   renameDrift,
@@ -391,4 +392,45 @@ test('addDriftFromCatalog caps the count at MAX_DRIFT_COUNT', () => {
   const state = makePlanState([]);
   const { plants: created } = addDriftFromCatalog(state, 'winecup', MAX_DRIFT_COUNT + 25);
   assert.equal(created.length, MAX_DRIFT_COUNT);
+});
+
+// --- removeDrift ("Remove drift" on the action bar, nl-o47.6.2) --------------
+
+test('removeDrift deletes PLANNED members outright and dissolves the label on PLANTED ones, leaving other plants untouched', () => {
+  const plants = deepFreeze(baseDrift()); // wc-1, wc-2 planned; wc-3 planted; hh-1 not in the drift
+  const state = makeState(plants);
+  const { removedCount, dissolvedCount, reason } = removeDrift(state, 'winecup-strip');
+  assert.equal(reason, null);
+  assert.equal(removedCount, 2);
+  assert.equal(dissolvedCount, 1);
+  assert.equal(state.plants.find((p) => p.id === 'wc-1'), undefined);
+  assert.equal(state.plants.find((p) => p.id === 'wc-2'), undefined);
+  const survivor = state.plants.find((p) => p.id === 'wc-3');
+  assert.ok(survivor, 'the planted member stays in the yard');
+  assert.equal(survivor.driftId, undefined);
+  assert.equal(survivor.status, 'planted');
+  assert.equal(state.plants.find((p) => p.id === 'hh-1').driftId, undefined);
+  assert.equal(state.plants.length, 2); // wc-3 and hh-1
+});
+
+test('removeDrift with every member planted removes nothing, only dissolves', () => {
+  const plants = [
+    plant(winecup, 'wc-1', 10, 10, { driftId: 'strip', status: 'planted' }),
+    plant(winecup, 'wc-2', 12, 10, { driftId: 'strip', status: 'planted' }),
+  ];
+  const state = makeState(plants);
+  const { removedCount, dissolvedCount, reason } = removeDrift(state, 'strip');
+  assert.equal(reason, null);
+  assert.equal(removedCount, 0);
+  assert.equal(dissolvedCount, 2);
+  assert.equal(state.plants.length, 2);
+  state.plants.forEach((p) => assert.equal(p.driftId, undefined));
+});
+
+test('removeDrift on an unknown driftId', () => {
+  assert.deepStrictEqual(removeDrift(makeState(baseDrift()), 'nope'), {
+    removedCount: 0,
+    dissolvedCount: 0,
+    reason: 'no such drift',
+  });
 });

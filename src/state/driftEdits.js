@@ -18,7 +18,7 @@
  */
 import { resolveYardBounds } from '../render/yardBounds.js';
 import { createPlantFromSpecies } from '../data/plantParser.js';
-import { LIFECYCLE_KEYS } from '../data/plantLifecycle.js';
+import { LIFECYCLE_KEYS, lifecycleOf } from '../data/plantLifecycle.js';
 import { slugifyDriftLabel } from '../data/driftId.js';
 import { addPlantFromCatalog } from './plantEdits.js';
 import { buildCloneId, buildDriftId, buildNewPlantId } from './plantIds.js';
@@ -320,4 +320,31 @@ export function dissolveDrift(state, driftId) {
     return next;
   });
   return { members: state.plants.filter((plant) => members.some((m) => m.id === plant.id)), reason: null };
+}
+
+/**
+ * Remove a whole drift (nl-o47.6.2's action bar "Remove drift"): a PLANTED
+ * member is never deleted automatically (the same rule "-"/memberToRemove
+ * follows) — it just loses the driftId label, exactly like dissolveDrift, and
+ * stays in the yard as a single plant. A PLANNED member is deleted outright,
+ * the same as removePlantById would do to it one at a time. The two counts
+ * are returned so the action bar can say what it is about to do before it
+ * acts (its own confirmation, never window.confirm).
+ * @param {{ plants: object[] }} state
+ * @param {string} driftId
+ * @returns {{ removedCount: number, dissolvedCount: number, reason: string|null }}
+ */
+export function removeDrift(state, driftId) {
+  const members = driftMembers(state.plants, driftId);
+  if (!members.length) return { removedCount: 0, dissolvedCount: 0, reason: 'no such drift' };
+  const removedIds = new Set(members.filter((m) => lifecycleOf(m).status !== 'planted').map((m) => m.id));
+  state.plants = state.plants
+    .filter((plant) => !removedIds.has(plant.id))
+    .map((plant) => {
+      if (plant.driftId !== driftId) return plant;
+      const next = { ...plant };
+      delete next.driftId;
+      return next;
+    });
+  return { removedCount: removedIds.size, dissolvedCount: members.length - removedIds.size, reason: null };
 }

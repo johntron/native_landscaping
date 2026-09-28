@@ -65,3 +65,20 @@ export function slugifyDriftLabel(label) {
       .slice(0, DRIFT_ID_MAX_LENGTH) || 'drift'
   );
 }
+
+/**
+ * A drift's display label, when it has not been given one of its own
+ * (nl-o47.6.2, orchestrator decision 2026-09-27): there is no separate
+ * "named" flag distinguishing a species-minted id ("winecup-2") from a
+ * person's own rename ("front-edge") — both are plain slugs, so the label is
+ * always just the CURRENT driftId humanized, hyphens to spaces and the first
+ * letter capitalised, with nothing else. "winecup-2" reads "Winecup 2";
+ * "front-edge" reads "Front edge". The caller appends the member count
+ * (src/ui/selectionBar.js); this only ever humanizes the id itself.
+ * @param {string} driftId
+ * @returns {string}
+ */
+export function humanizeDriftId(driftId) {
+  const text = String(driftId || '').replace(/-/g, ' ');
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : '';
+}

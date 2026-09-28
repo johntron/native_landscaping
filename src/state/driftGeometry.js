@@ -284,6 +284,45 @@ export function isPointInDriftOutline(point, outline) {
 }
 
 /**
+ * How many points sample the circle drawn around each hull vertex when
+ * building driftOutlinePolygon's padded shape — a judgement call: enough to
+ * read as round once smoothed (buildSmoothPath, src/render/pathUtils.js),
+ * cheap enough to compute for every render.
+ */
+export const OUTLINE_SAMPLES_PER_VERTEX = 12;
+
+/**
+ * The actual polygon to DRAW for a drift's outline (nl-o47.6.2): the
+ * Minkowski sum of the member-centre hull with a disk of the outline's own
+ * offset (radius + padding), approximated by ringing every hull vertex with
+ * OUTLINE_SAMPLES_PER_VERTEX points at that radius and re-hulling the lot.
+ * This is deliberately the same shape isPointInDriftOutline's own
+ * distanceToHull(point, hull) <= offsetFt test describes — a point exactly
+ * offsetFt from some hull vertex is exactly what that test accepts — so the
+ * drawn outline and the hit-tested one agree everywhere: along a long
+ * straight bed edge (where a plain radial push of the hull's own vertices
+ * would fall short of the padding at the edge's midpoint), and for the
+ * degenerate 1- or 2-member hulls (a point or a segment) a real drift edit
+ * routinely produces, which need no special case here because a circle
+ * (or a stadium) is exactly what ringing 1 or 2 vertices already yields.
+ * @param {Array<{x: number, y: number, width?: number}>} members
+ * @param {{ paddingFt?: number }} [options]
+ * @returns {Array<{x:number,y:number}>} empty for an empty drift
+ */
+export function driftOutlinePolygon(members, options = {}) {
+  const { hull, offsetFt } = driftOutline(members, options);
+  if (!hull.length) return [];
+  const samples = [];
+  hull.forEach((vertex) => {
+    for (let i = 0; i < OUTLINE_SAMPLES_PER_VERTEX; i += 1) {
+      const angle = (2 * Math.PI * i) / OUTLINE_SAMPLES_PER_VERTEX;
+      samples.push({ x: vertex.x + offsetFt * Math.cos(angle), y: vertex.y + offsetFt * Math.sin(angle) });
+    }
+  });
+  return convexHull(samples);
+}
+
+/**
  * Positions for a fresh clump of `n` plants at roughly `spacingFt` apart,
  * centred on `centre`: Vogel/sunflower phyllotaxis (the golden angle), so the
  * clump reads as an organic mass rather than a grid. Point i sits at

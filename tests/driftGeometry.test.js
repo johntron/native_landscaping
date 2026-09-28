@@ -9,6 +9,7 @@ import {
   driftCentroid,
   driftMembers,
   driftOutline,
+  driftOutlinePolygon,
   driftsOfSpecies,
   driftSpacing,
   isPointInDriftOutline,
@@ -422,4 +423,62 @@ test('cross-check: a clump generated at the default spacing comes back as exactl
     assert.equal(clusters.length, 1, `n=${n}`);
     assert.equal(clusters[0].members.length, n, `n=${n}`);
   }
+});
+
+// --- driftOutlinePolygon (nl-o47.6.2: the drawn shape, not just the hit test) -
+
+test('driftOutlinePolygon is empty for an empty drift', () => {
+  assert.deepStrictEqual(driftOutlinePolygon([]), []);
+});
+
+test('driftOutlinePolygon around a single member is a ring of samples all offsetFt from it', () => {
+  const members = [{ x: 5, y: 5, width: 2 }];
+  const outline = driftOutline(members);
+  const polygon = driftOutlinePolygon(members);
+  assert.ok(polygon.length >= 8, 'enough points to read as round');
+  polygon.forEach((point) => {
+    const dist = Math.hypot(point.x - 5, point.y - 5);
+    assert.ok(Math.abs(dist - outline.offsetFt) < 1e-6, `point at distance ${dist}, expected ${outline.offsetFt}`);
+  });
+});
+
+test('driftOutlinePolygon exactly matches the region isPointInDriftOutline accepts: every vertex is on the boundary', () => {
+  const members = [
+    { x: 0, y: 0, width: 3 },
+    { x: 10, y: 0, width: 3 },
+    { x: 5, y: 8, width: 3 },
+    { x: 5, y: 3, width: 3 }, // interior point, dropped by the hull
+  ];
+  const outline = driftOutline(members);
+  const polygon = driftOutlinePolygon(members);
+  assert.ok(polygon.length > outline.hull.length, 'padding rounds the corners with extra points');
+  // Each vertex sits AT offsetFt from the hull by construction; a fixed float
+  // tolerance covers the few sampled angles that land a few ULPs past it.
+  polygon.forEach((point) => {
+    assert.ok(
+      distanceToHull(point, outline.hull) <= outline.offsetFt + 1e-9,
+      `boundary point (${point.x}, ${point.y}) should satisfy the same outline it was built from`
+    );
+  });
+});
+
+test('driftOutlinePolygon handles a 2-member (collinear) drift, a bed-edge shape driftEdits.js produces routinely', () => {
+  const members = [
+    { x: 0, y: 0, width: 2 },
+    { x: 6, y: 0, width: 2 },
+  ];
+  const outline = driftOutline(members);
+  const polygon = driftOutlinePolygon(members);
+  assert.ok(polygon.length >= 8);
+  // Every sampled/hulled vertex sits AT the offset from the original 2-point
+  // hull by construction; compare against distanceToHull directly with a
+  // tiny float tolerance rather than isPointInDriftOutline's raw `<=`, since
+  // cos/sin on a handful of the sampled angles land a few ULPs past offsetFt.
+  polygon.forEach((point) => {
+    assert.ok(distanceToHull(point, outline.hull) <= outline.offsetFt + 1e-9);
+  });
+  // A point at the segment's midpoint, pushed out perpendicular by just under
+  // the offset, is inside — the padding reaches past a straight edge's
+  // midpoint too, not just past its two ends.
+  assert.ok(isPointInDriftOutline({ x: 3, y: outline.offsetFt - 0.05 }, outline));
 });
