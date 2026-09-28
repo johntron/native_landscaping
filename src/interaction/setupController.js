@@ -239,7 +239,16 @@ export function createSetupController({
   }
 
   function setLocked(locked) {
-    state.locked = Boolean(locked);
+    const next = Boolean(locked);
+    // Idempotent: syncSetupOverlay calls this on every render, for every
+    // panel, whether or not its lock state actually changed (nl-o47.2 found
+    // this the hard way — a plant drag controller's onSelectPlant now renders
+    // SYNCHRONOUSLY from pointerdown, so a redundant re-lock here landed
+    // inside that same call stack and release()'s cursor reset wiped out the
+    // 'grabbing' cursor the drag controller had just set, before either had a
+    // chance to repaint). A no-op call must stay a no-op.
+    if (next === state.locked) return;
+    state.locked = next;
     if (state.locked) release();
     // See dragController: this element has two controllers, so touch-action is
     // expressed as a class rather than an inline property they overwrite.

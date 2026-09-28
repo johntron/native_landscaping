@@ -43,6 +43,7 @@ export function renderElevationView(svg, plantStates, view, options = {}) {
     highlightedSpeciesKey = '',
     targetedPlantId = '',
     hoveredPlantId = '',
+    selectedPlantIds = null,
     features = [],
   } = options;
   const normalizedHighlightKey = (highlightedSpeciesKey || '').toLowerCase();
@@ -50,6 +51,7 @@ export function renderElevationView(svg, plantStates, view, options = {}) {
   const normalizedHoveredId = String(hoveredPlantId || '');
   const highlightTargets = [];
   const targetMarkers = [];
+  const selectionMarkers = [];
   appendGroundFills(svg, view, viewBox, groundY);
   // Features and plants are sorted as ONE list: that interleave is what lets a
   // fence hide the shrub standing behind it.
@@ -65,6 +67,7 @@ export function renderElevationView(svg, plantStates, view, options = {}) {
     const isHighlighted = Boolean(normalizedHighlightKey && speciesKey === normalizedHighlightKey);
     const isTargeted = normalizedTargetId && String(plant.id) === normalizedTargetId;
     const isHovered = normalizedHoveredId && String(plant.id) === normalizedHoveredId;
+    const isSelected = Boolean(selectedPlantIds && selectedPlantIds.has(String(plant.id)));
     const status = plantStatus(plant);
     const group = createSvgElement('g', {
       'data-name': plant.commonName,
@@ -258,10 +261,19 @@ export function renderElevationView(svg, plantStates, view, options = {}) {
         groundY,
       });
     }
+    if (isSelected) {
+      selectionMarkers.push({
+        cx,
+        width: adjustedWidth,
+        height: adjustedHeight,
+        groundY,
+      });
+    }
   });
 
   highlightTargets.forEach((target) => appendElevationHighlight(svg, target));
   targetMarkers.forEach((target) => appendElevationTarget(svg, target));
+  selectionMarkers.forEach((target) => appendElevationSelection(svg, target));
 }
 
 function renderProfileSilhouette({
@@ -794,6 +806,29 @@ function appendElevationHighlight(svg, { cx, groundY, width, height }) {
   });
   svg.appendChild(rect);
   svg.appendChild(marker);
+}
+
+/**
+ * The Edit-mode selection mark in an elevation (nl-o47.2) — same
+ * `.plant-selection-ring` class as the plan's ring (styles.css, var(--accent)),
+ * shared so the two never disagree on colour.
+ */
+function appendElevationSelection(svg, { cx, groundY, width, height }) {
+  const padding = Math.max(Math.min(width * 0.07, 11), 5.5);
+  svg.appendChild(
+    createSvgElement('rect', {
+      x: cx - width / 2 - padding,
+      y: groundY - height - padding,
+      width: width + padding * 2,
+      height: height + padding * 1.55,
+      class: 'plant-selection-ring',
+      'stroke-width': Math.max(width * 0.05, 2.6),
+      'pointer-events': 'none',
+      rx: padding * 0.4,
+      ry: padding * 0.4,
+      'data-selection-ring': 'true',
+    })
+  );
 }
 
 function appendElevationTarget(svg, { cx, groundY, width, height }) {

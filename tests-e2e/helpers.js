@@ -154,6 +154,17 @@ export async function dragInPanel(page, svgId, { kind = 'plan', dx = 45, dy = 25
  * The move is stepped rather than jumped: the scroll threshold is crossed by
  * accumulated movement, and one big hop can miss it in either direction.
  */
+/**
+ * A single tap: touchstart then touchend at the same point, no movement
+ * (nl-o47.2). In Edit mode this SELECTS whatever plant is under it (replacing
+ * the selection), or clears the selection if it lands on empty ground — a
+ * drag no longer grabs a plant outright, so tests exercising the new model
+ * tap first, then drag with touchGesture.
+ */
+export async function tap(page, { x, y }) {
+  await touchGesture(page, { x, y, steps: 0 });
+}
+
 export async function touchGesture(page, { x, y, dx = 0, dy = 0, steps = 10, holdMs = 0 }) {
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Input.dispatchTouchEvent', {

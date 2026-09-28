@@ -792,23 +792,77 @@ Top view uses the yard coordinate system (origin at SW corner, y increasing nort
 
 - Month selector (`#monthSelect`) controls seasonal state.
 - Scale input + slider are **zoom**: they multiply the page scale and nothing else, with bounds in `SCALE_LIMITS`. Physical scale belongs to the project's `yardFt`.
-- Mode pills switch between View, Edit (drag plants), Setup (declare the yard, place photos), and Features
-  (draw the yard model).
-- Lock toggle enables/disables drag-to-move behavior powered by `createPlantDragController`, which clamps edits to the declared yard and triggers rerenders.
+- Mode pills switch between View, Edit (select and drag plants), Setup (declare the yard, place
+  photos), and Features (draw the yard model).
+- **The Edit-mode selection (nl-o47.2): a SET of plant ids** (`appState.selectedPlantIds`),
+  owned by `src/ui/plantSelection.js` (`selectPlants`, `clearSelection`, `getSelection`,
+  `pruneSelection`). Only single selection has UI today — the Set model is what a drift's
+  several plants (nl-o47.6) will select as one. Pruned everywhere the species table already
+  refreshes (add, clone, remove, undo/redo, load: `src/app.js`'s `refreshSpeciesTable`
+  wrapper), so a plant that stops existing cannot linger in the selection; cleared on every
+  real mode change, and for free on a project switch (the whole page reloads).
+  `src/ui/speciesHighlight.js`'s `setTargetedPlant` also SELECTS while Edit mode is on — the
+  one hook every other caller routes through (right-click, the detail sheet, the Add plant
+  sheet's `onPick`) without needing to know the selection module exists. Rendering draws the
+  selection ring (`.plant-selection-ring`, `var(--accent)`, cyan/apparatus) instead of the
+  older "targeted plant" ring while in Edit mode, so a targeted-and-selected plant shows one
+  ring, not two; the target ring is unchanged in every other mode. Cleared from `appState`
+  before every export capture (`src/export/exportActions.js`, copying the Set on
+  snapshot/restore), so it never reaches a plan bundle or HOA packet PNG.
+- **Gestures, powered by `createPlantDragController`/`createElevationDragController`
+  (`src/interaction/dragController.js`), diverge by pointer type.** Mouse keeps the original
+  model: press a plant to grab AND select it (`onSelectPlant`), drag to move it, exactly as
+  before nl-o47.2. Touch/pen no longer grabs on pointerdown at all: a **tap** — pointerdown to
+  pointerup with at most `TAP_MOVEMENT_THRESHOLD_PX` of movement (~8 CSS px, a judgement call,
+  `src/interaction/tapSelection.js`) — selects the nearest overlapping candidate
+  (`pickPlantHits`' own order), or cycles to the next one if it repeats the previous tap's spot
+  with the same overlapping candidates (the cycle order is captured on the first tap of a run
+  and reused verbatim, never recomputed from a possibly reordered candidate list, so
+  distance-sort jitter between two nearby taps cannot look like a new place was tapped). With a
+  selection, a one-finger drag starting **anywhere on the drawing** — not necessarily on a
+  selected plant — moves every selected plant by the finger's delta, clamped to the yard **as a
+  group** (`src/render/groupClamp.js`: the same delta shrunk just enough that no member leaves
+  the yard, so the group keeps its shape rather than each member clamping to the edge on its
+  own). Only a tap may ever change the selection; a drag cannot grab a different plant. The
+  pointer is captured on every touch pointerdown once Edit mode is on, whether or not anything
+  is selected yet — not to block scrolling (`touch-action` alone does that) but so that a group
+  move's own re-render, which runs every frame, cannot orphan the rest of the gesture by
+  replacing the element that received the touch's implicit target. Hover is mouse-only:
+  updating it from a touch's pointermove would chase a target ring under the finger during a
+  group drag. The elevation controller records the tapped plant's id off the DOM **at
+  pointerdown**, because once it captures the pointer, later events target the svg itself.
+- **A selection action bar** (`src/ui/selectionBar.js`, `#selectionBar` in `design.html`) is
+  fixed to the bottom of the viewport (`env(safe-area-inset-bottom)`) whenever Edit mode has a
+  selection: the plant's name (or "N plants"), Details (opens the existing detail sheet), Clone
+  (selects the clone), Remove (the ensuing prune clears the selection), Done, and four nudge
+  arrows labelled by compass point in yard feet (`src/state/nudgeSelection.js`,
+  `NUDGE_STEP_FT` = 0.5 ft, a judgement call, clamped as a group like a drag). Arrow keys nudge
+  on desktop too, while a selection exists and focus is not in a form field. Every nudge
+  commits immediately as its own history entry rather than coalescing a burst into one: a
+  delayed commit racing an Undo pressed in the same window could record the just-undone
+  position as a new entry and drop the redo tail.
 - **Each view SVG has several controllers, so none may own an inline style.** The drag,
   setup, and (on plans) feature controllers are bound to the same element; while both wrote
   `svg.style.touchAction`
   the later writer silently won and Edit mode sat at `touch-action: auto`, so the page
-  scroller took every drag. Each now toggles its own class (`is-drag-enabled`,
-  `is-setup-enabled`, `is-features-enabled`) and `styles.css` combines them — see the comment
-  there for why neither `pan-y` nor per-plant `touch-action` works. The cursor had the same
-  bug (nl-jfm, fixed): resting cursors now come from those classes too. `applyMode` decides all the lock states in
-  one place, so exactly one kind of controller is ever unlocked.
+  scroller took every drag. Each now toggles its own class and `styles.css` combines them —
+  see the comment there for why neither `pan-y` nor per-plant `touch-action` works. Since
+  nl-o47.2, **`is-drag-enabled` marks Edit mode for the resting cursor only**; the class
+  `touch-action` actually reads is `is-selection-active`, toggled by the drag controllers from
+  the SELECTION (`setSelectionActive`), not from Edit mode outright — a drawing claims a touch
+  only once something is selected, so an empty selection still scrolls like the rest of the
+  page, and the tap that selects makes the very next touch on it a move. Setup and Features
+  still claim every touch outright (`is-setup-enabled`, `is-features-enabled`); their own
+  drags were not part of this redesign. The cursor had its own version of this sharing bug
+  (nl-jfm, fixed): resting cursors come from these classes too. `applyMode` decides every lock
+  state and re-syncs `is-selection-active` in one place, so exactly one kind of controller is
+  ever unlocked and touch-action is never left stale after a rebuild.
 - Touch is covered by `tests-e2e/touch.spec.js` under its own phone-sized Playwright project.
   It drives **real touch through CDP** (`Input.dispatchTouchEvent`, wrapped as `touchGesture`
-  in `tests-e2e/helpers.js`): `page.mouse` is not touch and `page.touchscreen` only taps, so
-  neither exercises `touch-action` and both pass against a broken app. CDP synthesizes no
-  long-press `contextmenu`, so the right-click menu cannot be tested on touch.
+  in `tests-e2e/helpers.js`, and `tap` for a zero-movement tap): `page.mouse` is not touch and
+  `page.touchscreen` only taps, so neither exercises `touch-action` and both pass against a
+  broken app. CDP synthesizes no long-press `contextmenu`, so the right-click menu cannot be
+  tested on touch.
 - **A client point (a mouse or touch event's clientX/clientY) becomes a viewBox point through
   `src/render/screenPoint.js`'s `clientPointToViewBox`**, the one place any of the three plan/
   elevation controllers (`dragController.js`, `setupController.js`, `featureController.js`) does
@@ -888,7 +942,20 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
 - `src/data/layoutExporter.js` – converts in-memory plants back to CSV with consistent precision/escaping.
 - `src/render/*` – view configuration, SVG helpers, tooltip builder, plan view and elevation renderers.
 - `src/state/seasonalState.js` – pure logic for foliage/bloom state per month.
-- `src/interaction/dragController.js` – pointer events + hit-testing for moving plants in plan view.
+- `src/interaction/dragController.js` – pointer events + hit-testing for moving plants in plan
+  and elevation views; since nl-o47.2, mouse's press-and-drag and touch/pen's tap-to-select +
+  drag-the-selection are two branches of the same controllers (see "Interaction and controls").
+- `src/interaction/tapSelection.js` – pure: tap-vs-drag classification and which candidate a tap
+  selects or cycles to, given the previous tap.
+- `src/render/groupClamp.js` – pure: clamping a delta applied to every member of a selection at
+  once, so a group move or nudge keeps the group's shape (generalizes `yardBounds.js`'s
+  single-plant clamp to a set of points sharing one delta).
+- `src/state/selection.js` – pure: pruning a selection Set against the current plant list, and
+  Set equality. `src/ui/plantSelection.js` is the stateful wrapper (owns
+  `appState.selectedPlantIds`) that `src/app.js` and `dragController.js` actually call.
+- `src/ui/selectionBar.js` – the selection action bar: Details, Clone, Remove, Done, and the
+  compass nudge arrows. `src/state/nudgeSelection.js` is the pure move-by-one-step-and-clamp
+  behind the arrows and the desktop keyboard bonus.
 - `src/history/layoutHistory.js` – the undo/redo stack: one full snapshot (placements, config, features) per revision; server-backed via `/api/history`.
 - `src/history/reconcileLayout.js` – which history entry a legacy layout file was showing; used only by the import.
 - `src/data/placements.js` – a plant reduced to its placement, and `sameLayout`.
@@ -900,7 +967,9 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
   drift's derived geometry (members, centroid, outline hull, spacing, phyllotaxis clump
   layout, suggestion clusters) and its edits (add/remove a member, spread, rename, clone,
   dissolve), pure like `plantEdits.js` (see "Drifts" above).
-- `src/ui/speciesHighlight.js` – the table ↔ drawing link: highlighted species, targeted and hovered plant, and `refresh()` (rebuild the table, re-grade the ecology check).
+- `src/ui/speciesHighlight.js` – the table ↔ drawing link: highlighted species, targeted and
+  hovered plant, and `refresh()` (rebuild the table, re-grade the ecology check). Its
+  `setTargetedPlant` also selects (`src/ui/plantSelection.js`) while Edit mode is on (nl-o47.2).
 - `src/render/speciesTable.js` – the species table; `src/interaction/plantMenu.js` – the plant's
   Clone/Remove menu.
 - `src/export/exportActions.js` – the plan-bundle and HOA-packet downloads: render in June,

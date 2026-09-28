@@ -65,10 +65,13 @@ test.describe('adding and removing plants', () => {
     await expect(page.locator('#addPlantBtn')).toBeFocused();
 
     await expect(planPlants(page)).toHaveCount(before + 1);
-    // Targeted the way a click on the plant would (setTargetedPlant, nl-o47.3):
-    // renderTopView draws exactly one target ring, in its own fixed colour,
-    // for whichever plant is targeted or hovered — nothing else here is hovered.
-    await expect(page.locator('#topSvg circle[stroke="#1b74d8"]')).toHaveCount(1);
+    // Targeted the way a click on the plant would (setTargetedPlant, nl-o47.3)
+    // — and since Edit mode is on, targeting also SELECTS it (nl-o47.2): the
+    // action bar shows it, and renderTopView draws the selection ring (cyan,
+    // var(--accent)) rather than the plain "targeted" ring, which nl-o47.2
+    // suppresses in Edit mode so a selected-and-targeted plant shows one ring.
+    await expect(page.locator('#topSvg circle[data-selection-ring]')).toHaveCount(1);
+    await expect(page.locator('#selectionBar')).toBeVisible();
 
     // The add reached disk, not just the DOM. The save is a POST, so poll.
     await expect

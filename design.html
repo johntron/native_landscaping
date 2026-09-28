@@ -316,6 +316,29 @@
         <ul class="add-plant-sheet__list" id="addPlantList"></ul>
       </div>
     </div>
+    <!--
+      The selection action bar (nl-o47.2, src/ui/selectionBar.js): visible in
+      Edit mode while a plant is selected (tap on touch, press or click on
+      desktop). Fixed to the bottom of the viewport, safe-area aware, so it is
+      reachable on a phone with no scrolling. Nudges move the selection in
+      yard feet, labelled by compass point rather than up/down/left/right so
+      the arrows never disagree with which way is which on a mirrored elevation.
+    -->
+    <div class="selection-bar" id="selectionBar" hidden role="toolbar" aria-label="Selected plant">
+      <span class="selection-bar__name" id="selectionBarName"></span>
+      <div class="selection-bar__nudges" role="group" aria-label="Nudge the selection">
+        <button type="button" class="selection-bar__nudge" id="selectionNudgeN" aria-label="Nudge north">N</button>
+        <button type="button" class="selection-bar__nudge" id="selectionNudgeE" aria-label="Nudge east">E</button>
+        <button type="button" class="selection-bar__nudge" id="selectionNudgeS" aria-label="Nudge south">S</button>
+        <button type="button" class="selection-bar__nudge" id="selectionNudgeW" aria-label="Nudge west">W</button>
+      </div>
+      <div class="selection-bar__actions">
+        <button type="button" class="button pill-button" id="selectionDetailsBtn">Details</button>
+        <button type="button" class="button pill-button" id="selectionCloneBtn">Clone</button>
+        <button type="button" class="button pill-button pill-button--danger" id="selectionRemoveBtn">Remove</button>
+        <button type="button" class="button pill-button" id="selectionDoneBtn">Done</button>
+      </div>
+    </div>
     <script src="node_modules/jszip/dist/jszip.min.js"></script>
     <!-- The application logic lives in the ES module entry point. -->
     <script type="module" src="src/app.js"></script>

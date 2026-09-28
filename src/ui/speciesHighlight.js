@@ -21,8 +21,16 @@ import { getSpeciesKey } from '../utils/speciesKey.js';
  * @param {HTMLElement|null} deps.speciesTableContainer   #speciesTable
  * @param {HTMLElement|null} deps.ecologyContainer        #ecologyCheck
  * @param {() => void} deps.render
+ * @param {(plantId: string) => void} [deps.onSelectPlant]  called by
+ *   setTargetedPlant while Edit mode is on (nl-o47.2) — see its own comment
  */
-export function createSpeciesHighlight({ appState, speciesTableContainer, ecologyContainer, render }) {
+export function createSpeciesHighlight({
+  appState,
+  speciesTableContainer,
+  ecologyContainer,
+  render,
+  onSelectPlant = () => {},
+}) {
   let highlightedRowEl = null;
 
   const setHighlightedSpecies = (speciesKey, rowEl) => {
@@ -101,11 +109,25 @@ export function createSpeciesHighlight({ appState, speciesTableContainer, ecolog
     refreshEcologyPanel();
   };
 
+  /**
+   * Target a plant for the blue "target" ring and the detail sheet, in every
+   * mode. In Edit mode, targeting also SELECTS it (nl-o47.2): a plant just
+   * added from the catalog (src/ui/addPlantSheet.js), right-clicked, or
+   * opened in the detail sheet ends up as the Edit-mode selection too,
+   * through this one hook — so none of those callers needs to know the
+   * selection module (src/ui/plantSelection.js) exists. Rendering suppresses
+   * the target ring itself while in Edit mode (src/app.js's render()), so a
+   * targeted-and-selected plant shows one ring, not two.
+   */
   const setTargetedPlant = (plantId) => {
     const normalized = plantId ? String(plantId) : '';
-    if (normalized === appState.targetedPlantId) return;
-    appState.targetedPlantId = normalized;
-    render();
+    if (normalized !== appState.targetedPlantId) {
+      appState.targetedPlantId = normalized;
+      render();
+    }
+    if (normalized && appState.mode === 'edit') {
+      onSelectPlant(normalized);
+    }
   };
   const findSpeciesRowEl = (speciesKey) => {
     if (!speciesKey) return null;

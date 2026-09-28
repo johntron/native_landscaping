@@ -4,12 +4,16 @@ import {
   plantPointerTarget,
   plantPosition,
   readScratchLayout,
+  tap,
   touchGesture,
 } from './helpers.js';
 
-// Real touch, on a phone-sized viewport. These specs complete drags, which
-// auto-save through POST /api/layout, so they run against the throwaway
-// document root — never the repo's own projects/.
+// Real touch, on a phone-sized viewport. Since nl-o47.2, touch no longer
+// grabs a plant on a bare drag: a TAP selects it first (see tests below), and
+// only then does a one-finger drag — starting anywhere on the drawing, not
+// necessarily on the plant — move the selection. These specs complete drags
+// and nudges, which auto-save through POST /api/layout, so they run against
+// the throwaway document root — never the repo's own projects/.
 
 /** The plant's saved position, once the POST lands. */
 async function savedPosition(projectId, plantId) {
@@ -17,24 +21,67 @@ async function savedPosition(projectId, plantId) {
   return rows.find((row) => row.id === plantId) || null;
 }
 
+/** A point inside an SVG panel that is not on any plant: its top-left corner
+ * with a small margin, well clear of the fixed selection bar at the bottom. */
+async function emptySpotIn(page, svgId) {
+  return page.evaluate((id) => {
+    const rect = document.getElementById(id).getBoundingClientRect();
+    return { x: rect.left + 10, y: rect.top + 10 };
+  }, svgId);
+}
+
+test.describe('tap to select (nl-o47.2)', () => {
+  test('a tap on a plant selects it: the action bar appears with its name', async ({ page }) => {
+    await openScratchProject(page, 'touch-tap-select');
+    await page.locator('[data-mode="edit"]').click();
+    await expect(page.locator('#selectionBar')).toBeHidden();
+
+    const target = await plantPointerTarget(page, 'topSvg');
+    await tap(page, target);
+
+    await expect(page.locator('#selectionBar')).toBeVisible();
+    await expect(page.locator('#selectionBarName')).not.toBeEmpty();
+  });
+
+  test('a tap on empty drawing clears the selection', async ({ page }) => {
+    await openScratchProject(page, 'touch-tap-select');
+    await page.locator('[data-mode="edit"]').click();
+
+    const target = await plantPointerTarget(page, 'topSvg');
+    await tap(page, target);
+    await expect(page.locator('#selectionBar')).toBeVisible();
+
+    await tap(page, await emptySpotIn(page, 'topSvg'));
+    await expect(page.locator('#selectionBar')).toBeHidden();
+  });
+});
+
 test.describe('dragging by touch', () => {
-  test('a mostly-vertical drag moves the plant instead of scrolling the page', async ({ page }) => {
+  test('tap then drag: a mostly-vertical drag moves the selected plant instead of scrolling the page', async ({
+    page,
+  }) => {
     await openScratchProject(page, 'touch-plan');
     await page.locator('[data-mode="edit"]').click();
 
     const target = await plantPointerTarget(page, 'topSvg');
+    await tap(page, target); // select it first — a bare drag no longer grabs anything
+    await expect(page.locator('#selectionBar')).toBeVisible();
     const before = await plantPosition(page, target.id);
     const scrollBefore = await page.evaluate(() => window.scrollY);
 
     // Vertical is the interesting direction: it is the axis the page scroller
-    // wants, and in plan view it is the yard's north/south axis.
-    await touchGesture(page, { x: target.x, y: target.y, dy: 60 });
+    // wants, and in plan view it is the yard's north/south axis. Started away
+    // from the plant, on purpose: with a selection, a drag may start ANYWHERE
+    // on the drawing, and it must still move the selected plant, not whatever
+    // is under the finger.
+    const away = await emptySpotIn(page, 'topSvg');
+    await touchGesture(page, { x: away.x, y: away.y, dy: 60 });
 
     const after = await plantPosition(page, target.id);
     expect(after, 'the plant is still on the drawing').not.toBeNull();
     expect(
       Math.abs(after.y - before.y),
-      'the drag moved the plant rather than scrolling the page'
+      'the drag moved the selected plant rather than scrolling the page'
     ).toBeGreaterThan(1);
     expect(await page.evaluate(() => window.scrollY), 'the page did not scroll').toBe(scrollBefore);
 
@@ -43,18 +90,17 @@ test.describe('dragging by touch', () => {
       .not.toBe(undefined);
   });
 
-  test('an elevation drag works by touch too', async ({ page }) => {
+  test('tap then drag: an elevation drag works by touch too', async ({ page }) => {
     // The elevation controller hit-tests through the DOM rather than
-    // geometrically, so its touchstart target is a different element than the
-    // plan view's — worth pinning separately even though both controllers get
-    // is-drag-enabled from the same setLocked.
+    // geometrically, and records the tapped id AT pointerdown — once it
+    // captures the pointer, later events target the svg itself.
     await openScratchProject(page, 'touch-elevation');
     await page.locator('[data-mode="edit"]').click();
 
     const target = await plantPointerTarget(page, 'southSvg', 'elevation');
-    // This controller picks the plant off the DOM, so the one that moves is
-    // whichever silhouette is painted on top at the point — not necessarily the
-    // group the helper measured. Ask the document, the way the app does.
+    // This controller picks the plant off the DOM, so the one selected is
+    // whichever silhouette is painted on top at the point — not necessarily
+    // the group the helper measured. Ask the document, the way the app does.
     const plantId = await page.evaluate(
       ({ x, y }) =>
         document.elementFromPoint(x, y)?.closest('[data-plant-id]')?.getAttribute('data-plant-id'),
@@ -63,24 +109,28 @@ test.describe('dragging by touch', () => {
     expect(plantId, 'the point lands on a plant').toBeTruthy();
     const was = (await readScratchLayout('touch-elevation')).find((row) => row.id === plantId);
 
-    // The south elevation runs the yard's x axis across the drawing, so drag
-    // sideways — but with a vertical component, which is what used to be stolen.
-    await touchGesture(page, { x: target.x, y: target.y, dx: 50, dy: 30 });
+    await tap(page, target);
+    await expect(page.locator('#selectionBar')).toBeVisible();
+
+    // Drag from elsewhere on the elevation, with a vertical component (which
+    // is what used to be stolen by the page scroller under the old model).
+    const away = await emptySpotIn(page, 'southSvg');
+    await touchGesture(page, { x: away.x, y: away.y, dx: 50, dy: 30 });
 
     await expect
       .poll(async () => (await savedPosition('touch-elevation', plantId))?.x, { timeout: 5000 })
       .not.toBe(was.x);
   });
 
-  test('a touch that lands on empty canvas still scrolls the page', async ({ page }) => {
+  test('with nothing selected, a vertical swipe over the drawing scrolls the page and moves no plant', async ({
+    page,
+  }) => {
     await openScratchProject(page, 'touch-hold');
     await page.locator('[data-mode="edit"]').click();
+    await expect(page.locator('#selectionBar')).toBeHidden();
 
-    // The top-left corner of the plan view: inside the SVG, away from plants.
-    const spot = await page.evaluate(() => {
-      const rect = document.getElementById('topSvg').getBoundingClientRect();
-      return { x: rect.left + 6, y: rect.top + 6 };
-    });
+    const before = await readScratchLayout('touch-hold');
+    const spot = await emptySpotIn(page, 'topSvg');
     const scrollBefore = await page.evaluate(() => window.scrollY);
 
     await touchGesture(page, { x: spot.x, y: spot.y, dy: -120 });
@@ -89,6 +139,7 @@ test.describe('dragging by touch', () => {
       await page.evaluate(() => window.scrollY),
       'a finger on empty canvas still pans the page'
     ).toBeGreaterThan(scrollBefore);
+    expect(await readScratchLayout('touch-hold'), 'no plant moved').toEqual(before);
   });
 
   test('a tap on a plant opens its detail sheet, so clone and remove are reachable', async ({
@@ -97,11 +148,11 @@ test.describe('dragging by touch', () => {
     // The right-click menu is a desktop affordance; long-press cannot be driven
     // faithfully here (CDP delivers no contextmenu), so this pins the touch
     // route to the same two actions instead. View mode, because in Edit mode
-    // the drag controller captures the pointer before a click lands.
+    // a tap selects instead (nl-o47.2).
     await openScratchProject(page, 'touch-hold');
 
     const target = await plantPointerTarget(page, 'topSvg');
-    await touchGesture(page, { x: target.x, y: target.y, steps: 0 });
+    await tap(page, target);
 
     await expect(page.locator('#detailSheetCloneBtn')).toBeVisible();
     await expect(page.locator('#detailSheetRemoveBtn')).toBeVisible();
@@ -126,6 +177,36 @@ test.describe('dragging by touch', () => {
     // takes focus instead, which still satisfies aria-modal.
     await expect(page.locator('#addPlantSearch')).not.toBeFocused();
     await expect(page.locator('#addPlantSheetPanel')).toBeFocused();
+  });
+});
+
+test.describe('the selection action bar (nl-o47.2)', () => {
+  test('a nudge moves the selection by the step, saves it, and undo reverts it', async ({ page }) => {
+    await openScratchProject(page, 'touch-nudge');
+    await page.locator('[data-mode="edit"]').click();
+
+    const target = await plantPointerTarget(page, 'topSvg');
+    await tap(page, target);
+    await expect(page.locator('#selectionBar')).toBeVisible();
+
+    const before = (await readScratchLayout('touch-nudge')).find((row) => row.id === target.id);
+    expect(before, 'the tapped plant is in the saved layout').toBeTruthy();
+
+    await page.locator('#selectionNudgeE').click();
+
+    await expect
+      .poll(async () => (await savedPosition('touch-nudge', target.id))?.x, { timeout: 5000 })
+      .not.toBe(before.x);
+    const afterNudge = await savedPosition('touch-nudge', target.id);
+    // East is +x, by exactly the nudge step (0.5 ft, src/state/nudgeSelection.js).
+    expect(afterNudge.x - before.x).toBeCloseTo(0.5, 5);
+    expect(afterNudge.y, 'nudging east leaves y alone').toBeCloseTo(before.y, 5);
+
+    // Undo lives in the Edit row; the nudge committed its own revision.
+    await page.locator('#undoLayoutBtn').click();
+    await expect
+      .poll(async () => (await savedPosition('touch-nudge', target.id))?.x, { timeout: 5000 })
+      .toBeCloseTo(before.x, 5);
   });
 });
 
@@ -154,21 +235,37 @@ test.describe('dragging a maximized view (nl-o47.1)', () => {
   }
 
   /**
-   * Drag the plant D screen px north/south, then D more east/west, and check
-   * the on-screen movement matches the finger on the axis that moved and
-   * stays flat on the other — the two symptoms independent scaleX/scaleY (off
-   * `getBoundingClientRect`) produced whenever the panel didn't share the
-   * viewBox's own shape. Measured through `plantScreenPosition` (the
-   * browser's own screenCTM), never through this app's own scaleFactor, so
-   * this checks the fix against ground truth rather than against itself.
+   * Tap the plant to select it (nl-o47.2), then drag D screen px north/south,
+   * then D more east/west, and check the on-screen movement matches the
+   * finger on the axis that moved and stays flat on the other — the two
+   * symptoms independent scaleX/scaleY (off `getBoundingClientRect`) produced
+   * whenever the panel didn't share the viewBox's own shape. Measured through
+   * `plantScreenPosition` (the browser's own screenCTM), never through this
+   * app's own scaleFactor, so this checks the fix against ground truth rather
+   * than against itself.
+   *
+   * Both drag legs start from a fixed anchor point away from the plant, not
+   * from the plant's own (possibly bar-covered, in a maximized panel) screen
+   * position: since nl-o47.2, a drag with a selection may start anywhere on
+   * the drawing and still moves the same amount as the finger.
    */
   async function assertDragTracksFinger(page, projectId, plantId) {
     const D = 60; // screen px moved by the finger
     const TOLERANCE = 12;
     const savedBefore = (await readScratchLayout(projectId)).find((row) => row.id === plantId)?.y;
 
+    const plantPoint = await plantScreenPosition(page, 'topSvg', plantId);
+    await tap(page, plantPoint);
+    await expect(page.locator('#selectionBar')).toBeVisible();
+
+    const anchor = await page.evaluate(() => {
+      const view = document.querySelector('.view-panel.is-maximized .view') || document.getElementById('topSvg');
+      const rect = view.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + Math.min(30, rect.height / 4) };
+    });
+
     let before = await plantScreenPosition(page, 'topSvg', plantId);
-    await touchGesture(page, { x: before.x, y: before.y, dy: D });
+    await touchGesture(page, { x: anchor.x, y: anchor.y, dy: D });
     let after = await plantScreenPosition(page, 'topSvg', plantId);
     expect(Math.abs(after.y - before.y), 'vertical screen movement matches the finger').toBeGreaterThan(
       D - TOLERANCE
@@ -178,9 +275,9 @@ test.describe('dragging a maximized view (nl-o47.1)', () => {
     );
     expect(Math.abs(after.x - before.x), 'no sideways drift from a straight-down drag').toBeLessThan(6);
 
-    // East/west, from wherever the first drag left the plant.
+    // East/west, from the same anchor point again.
     before = after;
-    await touchGesture(page, { x: before.x, y: before.y, dx: D });
+    await touchGesture(page, { x: anchor.x, y: anchor.y, dx: D });
     after = await plantScreenPosition(page, 'topSvg', plantId);
     expect(Math.abs(after.x - before.x), 'horizontal screen movement matches the finger').toBeGreaterThan(
       D - TOLERANCE

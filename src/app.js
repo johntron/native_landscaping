@@ -41,6 +41,9 @@ import { createFeaturesMode } from './interaction/featuresMode.js';
 import { createSetupMode } from './interaction/setupMode.js';
 import { createLayoutHistoryController } from './history/layoutHistoryController.js';
 import { createSpeciesHighlight } from './ui/speciesHighlight.js';
+import { createPlantSelection } from './ui/plantSelection.js';
+import { createSelectionBar } from './ui/selectionBar.js';
+import { nudgeSelection } from './state/nudgeSelection.js';
 import { patchView } from './state/yardEdits.js';
 import { addPlantFromCatalog, clonePlantById, removePlantById } from './state/plantEdits.js';
 import { createAddPlantSheet } from './ui/addPlantSheet.js';
@@ -94,6 +97,10 @@ const appState = {
   highlightedSpeciesKey: '',
   targetedPlantId: '',
   hoveredPlantId: '',
+  // The Edit-mode selection (nl-o47.2): a SET of plant ids, owned by
+  // src/ui/plantSelection.js. Only single selection has UI today; the Set
+  // model is ready for a drift's several plants (nl-o47.6).
+  selectedPlantIds: new Set(),
   maximizedViewId: '',
   // The Setup-mode ruler: {viewId, from, to} in that view's viewBox pixels,
   // standing from the end of the drag until a length is applied or it is
@@ -157,6 +164,16 @@ async function init() {
   // Set once the sheet is built in initAddPlantControl(); the Escape handler
   // near the end of init() closes it the same way it closes detailSheet.
   let closeAddPlantSheet = () => {};
+  const selectionBarEl = document.getElementById('selectionBar');
+  const selectionBarName = document.getElementById('selectionBarName');
+  const selectionDetailsBtn = document.getElementById('selectionDetailsBtn');
+  const selectionCloneBtn = document.getElementById('selectionCloneBtn');
+  const selectionRemoveBtn = document.getElementById('selectionRemoveBtn');
+  const selectionDoneBtn = document.getElementById('selectionDoneBtn');
+  const selectionNudgeN = document.getElementById('selectionNudgeN');
+  const selectionNudgeE = document.getElementById('selectionNudgeE');
+  const selectionNudgeS = document.getElementById('selectionNudgeS');
+  const selectionNudgeW = document.getElementById('selectionNudgeW');
 
   let projectIndex;
   let project;
@@ -321,13 +338,35 @@ async function init() {
     }
   };
 
+  // Built before speciesHighlight: setTargetedPlant calls back into
+  // selectPlants while Edit mode is on (nl-o47.2), so this has to exist
+  // first. onSelectionChange reads `dragControllers`, built further down —
+  // safe because it is only ever CALLED later, in response to a real
+  // selection change, by which point that `let` binding is assigned.
+  const plantSelection = createPlantSelection({
+    appState,
+    render: () => render(),
+    onSelectionChange: () => syncSelectionTouchAction(),
+  });
+  function syncSelectionTouchAction() {
+    const active = appState.mode === 'edit' && plantSelection.getSelection().size > 0;
+    dragControllers.forEach((controller) => controller?.setSelectionActive?.(active));
+  }
+
   const speciesHighlight = createSpeciesHighlight({
     appState,
     speciesTableContainer: document.getElementById('speciesTable'),
     ecologyContainer: document.getElementById('ecologyCheck'),
     render: () => render(),
+    onSelectPlant: (plantId) => plantSelection.selectPlants([plantId]),
   });
-  const refreshSpeciesTable = () => speciesHighlight.refresh();
+  // Prune the selection everywhere refreshSpeciesTable already runs (add,
+  // clone, remove, undo/redo, the initial load): exactly the events that can
+  // change which plants exist, and so which ids the selection may still name.
+  const refreshSpeciesTable = () => {
+    speciesHighlight.refresh();
+    plantSelection.pruneSelection();
+  };
   const setTargetedPlant = (plantId) => speciesHighlight.setTargetedPlant(plantId);
   const setHoveredPlant = (plantId) => speciesHighlight.setHoveredPlant(plantId);
 
@@ -404,6 +443,9 @@ async function init() {
         onPositionsChange: () => render(),
         onHoverPlant: setHoveredPlant,
         onChangeCommit: () => commitLayoutChange('Moved plant'),
+        getSelection: () => plantSelection.getSelection(),
+        onSelectPlant: (plantId) => plantSelection.selectPlants([plantId]),
+        onClearSelection: () => plantSelection.clearSelection(),
       };
       return view.type === 'plan'
         ? createPlantDragController(shared)
@@ -550,6 +592,78 @@ async function init() {
     onClose: () => setTargetedPlant(''),
   });
 
+  /** One selected plant's id, or '' — only single selection has UI today. */
+  const soleSelectedPlantId = () => {
+    const [id] = plantSelection.getSelection();
+    return id || '';
+  };
+
+  const handleNudge = (direction) => {
+    const selection = plantSelection.getSelection();
+    if (!selection.size) return;
+    const moved = nudgeSelection(appState, selection, direction, resolveYardBounds(project));
+    if (!moved) return;
+    render();
+    // Every nudge is its own history entry: coalescing a burst into one would
+    // race Undo (an Undo pressed while a delayed commit is still pending
+    // could record the just-undone position as a new "Nudged plant" entry and
+    // drop the redo tail), so nl-o47.2 does not attempt it.
+    commitLayoutChange('Nudged plant');
+  };
+
+  const selectionBar = createSelectionBar({
+    elements: {
+      bar: selectionBarEl,
+      name: selectionBarName,
+      detailsBtn: selectionDetailsBtn,
+      cloneBtn: selectionCloneBtn,
+      removeBtn: selectionRemoveBtn,
+      doneBtn: selectionDoneBtn,
+      nudgeN: selectionNudgeN,
+      nudgeE: selectionNudgeE,
+      nudgeS: selectionNudgeS,
+      nudgeW: selectionNudgeW,
+    },
+    appState,
+    onDetails: () => {
+      const id = soleSelectedPlantId();
+      if (id) openDetailSheet(id);
+    },
+    onClone: () => {
+      const id = soleSelectedPlantId();
+      if (!id) return;
+      const clone = clonePlantById(appState, id);
+      if (!clone) return;
+      render();
+      refreshSpeciesTable();
+      // Clone selects the clone, not the plant it came from — the point of
+      // cloning is to then place the new one.
+      plantSelection.selectPlants([clone.id]);
+      commitLayoutChange('Cloned plant');
+    },
+    onRemove: () => {
+      const id = soleSelectedPlantId();
+      if (id) removePlant(id);
+    },
+    onDone: () => plantSelection.clearSelection(),
+    onNudge: handleNudge,
+  });
+
+  // Arrow keys nudge on desktop while a selection exists and focus is not in
+  // a form field (a cheap bonus, not exercised by the e2e suite). Yard y
+  // increases north, drawn "up" in the plan, so Up/Down/Left/Right map to the
+  // compass the way a person reading the plan would expect.
+  const ARROW_KEY_DIRECTION = { ArrowUp: 'N', ArrowDown: 'S', ArrowRight: 'E', ArrowLeft: 'W' };
+  const FORM_FIELD_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT']);
+  document.addEventListener('keydown', (event) => {
+    const direction = ARROW_KEY_DIRECTION[event.key];
+    if (!direction) return;
+    if (appState.mode !== 'edit' || !plantSelection.getSelection().size) return;
+    if (FORM_FIELD_TAGS.has(document.activeElement?.tagName)) return;
+    event.preventDefault();
+    handleNudge(direction);
+  });
+
   /**
    * Where a newly added plant should land: the centre, in yard feet, of the
    * part of the plan view actually on screen right now (nl-o47.3) — the
@@ -678,6 +792,7 @@ async function init() {
    */
   function applyMode(mode) {
     const next = !readOnly && MODES.includes(mode) ? mode : 'view';
+    const changingMode = next !== appState.mode;
     appState.mode = next;
     modeButtons.forEach((button) => {
       const isActive = button.dataset.mode === next;
@@ -703,6 +818,13 @@ async function init() {
     // one of them. Deciding it in one place is what keeps them from fighting
     // over svg.style.cursor the way two controllers on one element do.
     dragControllers.forEach((controller) => controller?.setLocked?.(next !== 'edit'));
+    // The selection means nothing outside Edit mode (nl-o47.2); only clear it
+    // on an actual change, not on the same-mode call rebuildViews makes after
+    // a Setup edit, which would otherwise drop a selection on every geometry
+    // tweak. syncSelectionTouchAction always re-applies, since a rebuild hands
+    // out fresh controller instances that start with no class of their own.
+    if (changingMode) plantSelection.clearSelection();
+    syncSelectionTouchAction();
     setupMode.sync();
     featuresMode.sync();
     // Not over the example: its forced View must not become the mode the
@@ -866,10 +988,16 @@ async function init() {
       showLabels: appState.showLabels,
       hiddenLayerCount: appState.hiddenLayerCount,
       highlightedSpeciesKey: appState.highlightedSpeciesKey,
-      targetedPlantId: appState.targetedPlantId,
+      // The right-click/detail-sheet "target" ring would double up with the
+      // selection ring below in Edit mode, since setTargetedPlant also
+      // selects there (nl-o47.2, src/ui/speciesHighlight.js) — show only the
+      // selection ring while editing, and the target ring everywhere else.
+      targetedPlantId: appState.mode === 'edit' ? '' : appState.targetedPlantId,
       hoveredPlantId: appState.hoveredPlantId,
+      selectedPlantIds: appState.selectedPlantIds,
       features: appState.features,
     });
+    selectionBar.sync();
     setupMode.sync();
     featuresMode.sync();
     // An undo or redo can change the open plant's status under the sheet.
@@ -919,14 +1047,27 @@ async function init() {
   document.addEventListener('click', (event) => {
     if (plantMenu.contains(event.target)) return;
     if (detailSheet && !detailSheet.hidden && detailSheet.contains(event.target)) return;
+    if (selectionBar.contains(event.target)) return;
     const target = event.target;
     const group = target instanceof Element ? target.closest('[data-plant-id]') : null;
     if (group) {
+      // In Edit mode a tap/click on a plant SELECTS it instead (nl-o47.2):
+      // the drag controller's own pointerdown/tap already did that, and this
+      // click is only that same gesture's tail reaching here. Selection is
+      // never cleared or changed from a click, only from a tap or a press —
+      // see the drag controller for why (only a tap may change it).
+      if (appState.mode === 'edit') return;
       openDetailSheet(group.getAttribute('data-plant-id'));
       return;
     }
     plantMenu.hide();
     closeDetailSheet();
+    // Selection on an empty-drawing click is the drag controller's job (a
+    // mouse press with no hit, or a touch tap with no candidates), not this
+    // handler's — see its own comment for why a click here must not also
+    // clear it (a click that lands here right after a completed drag is
+    // common, and clearing would undo the very selection that drag just
+    // relied on).
   });
 
   document.addEventListener('keydown', (event) => {

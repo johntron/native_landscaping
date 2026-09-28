@@ -1524,6 +1524,20 @@ select {
   cursor: pointer;
 }
 
+/*
+ * The Edit-mode selection ring/mark (nl-o47.2, src/render/topView.js and
+ * elevationViews.js): a selection is apparatus, not life, so it takes the
+ * cyan token rather than the amber/blue hexes the older highlight and target
+ * rings predate this rule with. Geometry (position, radius, stroke-width) is
+ * set per plant as attributes; only the colour comes from here, so both
+ * views draw the same ring with one class.
+ */
+.plant-selection-ring {
+  fill: none;
+  stroke: var(--accent);
+  stroke-dasharray: 4 4;
+}
+
 .context-menu {
   position: absolute;
   z-index: 20;
@@ -2022,6 +2036,78 @@ select {
   margin: 0;
   font-size: 0.85rem;
   color: var(--danger);
+}
+
+/*
+ * The selection action bar (nl-o47.2, src/ui/selectionBar.js): fixed to the
+ * bottom of the viewport, safe-area aware, so it stays reachable on a phone
+ * with no scrolling -- including behind a maximized view (z-index above
+ * .view-panel.is-maximized's 50, below the modal sheets' 60, so opening
+ * Details from it still layers a sheet on top). A small floating bar on
+ * desktop too. Every button is at least 44px in either dimension.
+ */
+.selection-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 55;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.5rem 0.75rem calc(0.5rem + env(safe-area-inset-bottom));
+  background: var(--surface-raised);
+  border-top: 1px solid var(--rule-strong);
+  box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.18);
+}
+
+.selection-bar[hidden] {
+  display: none;
+}
+
+.selection-bar__name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--ink);
+  margin-right: auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.selection-bar__nudges {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.selection-bar__nudge {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 6px;
+  background: var(--surface-card);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.selection-bar__nudge:hover,
+.selection-bar__nudge:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent-deep);
+  outline: none;
+}
+
+.selection-bar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.selection-bar__actions .button {
+  min-height: 44px;
 }
 
 @media (min-width: 640px) {
@@ -2602,15 +2688,23 @@ select {
  * died. Per-plant touch-action is not an option either; Chrome ignores the
  * property on SVG child elements, which have no CSS box.
  *
- * The cost is that a finger on a drawing no longer scrolls the page while
- * that drawing is editable. The toolbar, panel headers, and the page around
- * the drawings still pan.
+ * Edit mode used to claim every touch outright (is-drag-enabled), which left
+ * nothing to scroll the page by (nl-o47, problem 3). Since nl-o47.2 the
+ * drawing claims a touch only while something is SELECTED: is-drag-enabled
+ * still marks "Edit mode is on" (see the cursor rule below), but a separate
+ * is-selection-active class — toggled by src/interaction/dragController.js
+ * from the selection state, not from setLocked — is what touch-action reads.
+ * With nothing selected, a finger on the drawing scrolls the page like
+ * anything else; the tap that selects a plant is what makes the NEXT touch on
+ * that drawing a move, because the browser reads touch-action fresh at the
+ * start of each gesture. Setup and Features keep claiming every touch
+ * outright — this bead did not redo their camera/photo/footprint drags.
  *
  * Several controllers share each SVG, so this is driven by a class per
  * controller rather than by svg.style.touchAction, which they used to overwrite
  * in turn.
  */
-.view svg.is-drag-enabled,
+.view svg.is-selection-active,
 .view svg.is-setup-enabled,
 .view svg.is-features-enabled {
   touch-action: none;

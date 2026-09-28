@@ -35,6 +35,7 @@ export function renderTopView(svg, plantStates, view, options = {}) {
     highlightedSpeciesKey = '',
     targetedPlantId = '',
     hoveredPlantId = '',
+    selectedPlantIds = null,
     features = [],
   } = options;
   clearSvg(svg);
@@ -44,6 +45,7 @@ export function renderTopView(svg, plantStates, view, options = {}) {
   const toPixels = transform.toPx;
   const highlightTargets = [];
   const targetMarkers = [];
+  const selectionMarkers = [];
   const climbWarnings = [];
 
   // A plan has no depth to sort on, so features go underneath the plants in the
@@ -55,6 +57,7 @@ export function renderTopView(svg, plantStates, view, options = {}) {
     const isHighlighted = Boolean(normalizedHighlightKey && speciesKey === normalizedHighlightKey);
     const isTargeted = normalizedTargetId && String(plant.id) === normalizedTargetId;
     const isHovered = normalizedHoveredId && String(plant.id) === normalizedHoveredId;
+    const isSelected = Boolean(selectedPlantIds && selectedPlantIds.has(String(plant.id)));
     const status = plantStatus(plant);
     const group = createSvgElement('g', {
       'data-name': plant.commonName,
@@ -172,6 +175,9 @@ export function renderTopView(svg, plantStates, view, options = {}) {
     if (isTargeted || isHovered) {
       targetMarkers.push({ cx, cy, radius });
     }
+    if (isSelected) {
+      selectionMarkers.push({ cx, cy, radius });
+    }
     if (isBoxWarning) {
       climbWarnings.push({ cx, cy, radius });
     }
@@ -179,6 +185,7 @@ export function renderTopView(svg, plantStates, view, options = {}) {
 
   highlightTargets.forEach((target) => appendHighlightRing(svg, target));
   targetMarkers.forEach((target) => appendTargetRing(svg, target));
+  selectionMarkers.forEach((target) => appendSelectionRing(svg, target));
   climbWarnings.forEach((target) => appendClimbWarningRing(svg, target));
 }
 
@@ -360,6 +367,28 @@ function appendClimbWarningRing(svg, { cx, cy, radius }) {
     'pointer-events': 'none',
   });
   svg.appendChild(outer);
+}
+
+/**
+ * The Edit-mode selection ring (nl-o47.2): a selection is apparatus, not
+ * life, so its colour comes from the `.plant-selection-ring` class in
+ * styles.css (var(--accent), cyan) rather than a hardcoded hex like the
+ * highlight/target rings above — those predate the amber/cyan token rule.
+ * Cleared from appState before every export capture (src/export/exportActions.js),
+ * so it never reaches a plan bundle or HOA packet PNG.
+ */
+function appendSelectionRing(svg, { cx, cy, radius }) {
+  svg.appendChild(
+    createSvgElement('circle', {
+      cx,
+      cy,
+      r: radius * 1.15 + 8,
+      class: 'plant-selection-ring',
+      'stroke-width': Math.max(radius * 0.14, 3.2),
+      'pointer-events': 'none',
+      'data-selection-ring': 'true',
+    })
+  );
 }
 
 function appendTargetRing(svg, { cx, cy, radius }) {

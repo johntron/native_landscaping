@@ -217,7 +217,12 @@ export function createFeatureController({
   }
 
   function setLocked(locked) {
-    state.locked = Boolean(locked);
+    const next = Boolean(locked);
+    // Idempotent: featuresMode.sync() calls this on every render regardless of
+    // whether the lock state actually changed — see setupController.js's own
+    // copy of this guard (nl-o47.2) for why a redundant call must be a no-op.
+    if (next === state.locked) return;
+    state.locked = next;
     if (state.locked) release();
     // See dragController: this element has several controllers, so touch-action
     // is expressed as a class rather than an inline property they overwrite.
