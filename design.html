@@ -350,16 +350,19 @@
 
       nl-o47.4 restructures the markup (never the logic) for the phone
       editor, where this bar IS the editor's one bottom bar whenever a
-      selection exists: a compact .selection-bar__primary row (label/rename +
-      Details/Clone/Remove where those apply + a More toggle + Done) and
-      .selection-bar__more, everything else (nudges, the drift count
-      stepper, spread, clone/remove drift, the drilled-in extras), as a
-      popover the More button shows/hides — never a third thing stacked
-      under the primary row, so the bar stays at most the one row plus that
-      on-demand popover (the nl-o47.6.2 review's "at most two rows"). On
-      desktop styles.css makes .selection-bar__more `display: contents` and
-      hides the More button outright, so nothing there changes: every
-      control still shows inline in one row, as it always has.
+      selection exists: a compact .selection-bar__primary row (just the
+      label/rename, a More toggle, and Done — 393px has no room left over for
+      more than that once a rename field or a drift's own controls are
+      counted, see the nl-o47.4 bead's own screenshots) and
+      .selection-bar__more, everything else (Details/Clone/Remove, nudges,
+      the drift count stepper, spread, clone/remove drift, the drilled-in
+      extras), as a popover the More button shows/hides — never a third
+      thing stacked under the primary row, so the bar stays at most the one
+      row plus that on-demand popover (the nl-o47.6.2 review's "at most two
+      rows"). On desktop styles.css makes .selection-bar__more
+      `display: contents` and hides the More button outright, so nothing
+      there changes: every control still shows inline in one row, in its
+      original order, as it always has.
     -->
     <div class="selection-bar" id="selectionBar" hidden role="toolbar" aria-label="Selected plant">
       <div class="selection-bar__primary">
@@ -375,9 +378,6 @@
           <span class="selection-bar__count-label" id="selectionDriftCountLabel"></span>
         </div>
         <div class="selection-bar__actions">
-          <button type="button" class="button pill-button" id="selectionDetailsBtn">Details</button>
-          <button type="button" class="button pill-button" id="selectionCloneBtn">Clone</button>
-          <button type="button" class="button pill-button pill-button--danger" id="selectionRemoveBtn">Remove</button>
           <button
             type="button"
             class="button pill-button selection-bar__more-btn"
@@ -393,6 +393,11 @@
       </div>
       <p class="selection-bar__status" id="selectionDriftNameStatus" role="status" hidden></p>
       <div class="selection-bar__more" id="selectionBarMore">
+        <div class="selection-bar__plain-actions">
+          <button type="button" class="button pill-button" id="selectionDetailsBtn">Details</button>
+          <button type="button" class="button pill-button" id="selectionCloneBtn">Clone</button>
+          <button type="button" class="button pill-button pill-button--danger" id="selectionRemoveBtn">Remove</button>
+        </div>
         <div class="selection-bar__nudges" role="group" aria-label="Nudge the selection">
           <button type="button" class="selection-bar__nudge" id="selectionNudgeN" aria-label="Nudge north">N</button>
           <button type="button" class="selection-bar__nudge" id="selectionNudgeE" aria-label="Nudge east">E</button>

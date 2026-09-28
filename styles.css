@@ -2338,12 +2338,21 @@ select {
   color: var(--ink);
 }
 
-/* display:contents so a drift's own action buttons flow as individual items
-   of whatever flex row now contains .selection-bar__more (nl-o47.4: the
-   popover below on a phone, or -- flattened again -- .selection-bar itself
-   on desktop) rather than as one wide item. */
-.selection-bar__drift-actions {
-  display: contents;
+/*
+ * A drift's own action buttons (Tighter/Looser/Clone/Remove drift, or the
+ * drilled-in Remove-from-drift/Back-to-drift pair) and a plain plant's
+ * Details/Clone/Remove: each its own compact, wrapping row WITHIN the More
+ * popover on a phone (nl-o47.4) -- NOT display:contents there, which would
+ * scatter each button onto its own line of the popover's column layout
+ * (one per flex item) instead of grouping them. Only on desktop, where the
+ * popover itself is flattened back into the bar's one row (the @media block
+ * near the end of this rule group), do these ALSO need to flatten with it.
+ */
+.selection-bar__drift-actions,
+.selection-bar__plain-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
 }
 
 .selection-bar__drift-actions[hidden] {
@@ -2408,7 +2417,9 @@ select {
      flattening three levels instead of one can no longer rely on DOM order
      alone to reproduce it. */
   .selection-bar__primary,
-  .selection-bar__actions {
+  .selection-bar__actions,
+  .selection-bar__drift-actions,
+  .selection-bar__plain-actions {
     display: contents;
   }
   /* !important: without it, a `.is-open` class left over from a narrower
@@ -3254,9 +3265,6 @@ select {
   gap: 0.5rem;
 }
 
-.phone-editor-bar__row:last-child {
-  justify-content: flex-end;
-}
 
 .phone-editor-bar__btn {
   min-width: 44px;
