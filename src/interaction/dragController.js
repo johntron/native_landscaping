@@ -100,6 +100,16 @@ export function createPlantDragController({
     downCtx: null,
     groupStartFeet: null, // Map<plantId, {x,y}> snapshot, or null if nothing was selected
     isDraggingGroup: false,
+    // Touch/pen only (nl-o47.4): past the tap-movement threshold, tracked
+    // regardless of whether anything is selected. Without a selection,
+    // groupStartFeet is null and pointermove below returns before ever
+    // touching hasMoved — a large swipe past MIN_HITBOX_RADIUS_PX would
+    // otherwise still read as a stationary tap at pointerup. In the phone
+    // editor (touch-action: none even with nothing selected, since the
+    // canvas — not the page — owns every one-finger gesture there) that swipe
+    // is the pan gesture (src/interaction/canvasGesture.js), so it must not
+    // also select or clear whatever sat under the finger when it landed.
+    movedPastThreshold: false,
     // The tap-cycle tracker, kept ACROSS gestures (reset only on setLocked):
     // {point, order, index}. See tapSelection.js. Reset to a fresh {index:-1}
     // tracker the instant a tap ENTERS a drift (see resolveTap), so the very
@@ -234,7 +244,21 @@ export function createPlantDragController({
   }
 
   function handlePointerDown(event) {
-    if (state.locked || !event.isPrimary) return;
+    if (state.locked) return;
+    if (!event.isPrimary) {
+      // A second touch/pen finger arriving mid-gesture hands off to the
+      // phone editor's pinch/pan (src/interaction/canvasGesture.js, nl-
+      // o47.4): "two fingers always pinch-zoom and pan." Cancel cleanly —
+      // salvaging a group drag already under way exactly like a lost
+      // pointer/pointercancel does below — rather than let this controller
+      // keep tracking its own (now stale) first finger underneath the
+      // gesture module's. Mouse has no secondary pointer to worry about, and
+      // an idle controller (nothing tracked) has nothing to cancel.
+      if (event.pointerType !== 'mouse' && state.pointerType !== 'mouse' && state.pointerId !== null) {
+        cancelTouchForSecondPointer();
+      }
+      return;
+    }
 
     if (event.pointerType === 'mouse') {
       handleMousePointerDown(event);
@@ -250,6 +274,7 @@ export function createPlantDragController({
     state.downCtx = ctx;
     state.isDraggingGroup = false;
     state.hasMoved = false;
+    state.movedPastThreshold = false;
     state.groupStartFeet = ctx ? snapshotGroupStartFeet(getSelection(), getPlants()) : null;
     // Captured unconditionally, whether or not a drag turns out to be
     // possible: once a group move starts, onPositionsChange re-renders the
@@ -281,13 +306,18 @@ export function createPlantDragController({
     }
 
     if (event.pointerId !== state.pointerId) return;
-    if (!state.groupStartFeet) return; // nothing selected at down: let the page scroll
     const dxClient = event.clientX - state.downClient.x;
     const dyClient = event.clientY - state.downClient.y;
-    if (!state.isDraggingGroup) {
-      if (!exceedsTapThreshold(dxClient, dyClient)) return;
-      state.isDraggingGroup = true;
+    if (!state.movedPastThreshold && exceedsTapThreshold(dxClient, dyClient)) {
+      // Past the tap threshold regardless of whether anything is selected
+      // (see the movedPastThreshold field comment): with a selection this is
+      // where the drag itself begins, below; with none, the pan gesture
+      // (src/interaction/canvasGesture.js) owns the move instead, and either
+      // way handlePointerUp must not read the release as a completed tap.
+      state.movedPastThreshold = true;
+      if (state.groupStartFeet) state.isDraggingGroup = true;
     }
+    if (!state.groupStartFeet) return; // nothing selected: the pan gesture owns this move
     const ctx = buildPointerContext(svg, event, getTransform());
     if (!ctx || !state.downCtx) return;
     updateGroupPosition(ctx);
@@ -314,6 +344,7 @@ export function createPlantDragController({
 
     const wasDraggingGroup = state.isDraggingGroup;
     const moved = state.hasMoved;
+    const movedPastThreshold = state.movedPastThreshold;
     const downCtx = state.downCtx;
     const downClient = state.downClient;
     cancelActive();
@@ -321,7 +352,19 @@ export function createPlantDragController({
       if (moved) onChangeCommit?.();
       return;
     }
+    if (movedPastThreshold) return; // a pan (nothing selected) or an aborted drag, not a tap
     resolveTap(downCtx, downClient);
+  }
+
+  /** See the module comment on handlePointerDown's !event.isPrimary branch:
+   * a second finger cancels this controller's own tracked touch gesture,
+   * salvaging a group drag already under way exactly like pointercancel
+   * does. */
+  function cancelTouchForSecondPointer() {
+    const wasDraggingGroup = state.isDraggingGroup;
+    const moved = state.hasMoved;
+    cancelActive();
+    if (moved && wasDraggingGroup) onChangeCommit?.();
   }
 
   function handlePointerCancel(event) {
@@ -526,6 +569,7 @@ export function createPlantDragController({
     state.downCtx = null;
     state.groupStartFeet = null;
     state.isDraggingGroup = false;
+    state.movedPastThreshold = false;
     state.pendingDrillIn = null;
     // Resting cursor comes from is-drag-enabled in styles.css, not from here:
     // this element can have several controllers, and whichever last wrote
@@ -640,6 +684,11 @@ export function createElevationDragController({
     axisKey: '',
     groupStartAxis: null, // Map<plantId, axisValue>, or null if nothing was selected
     isDraggingGroup: false,
+    // See createPlantDragController's own copy of this field: past the tap
+    // threshold regardless of selection, so a one-finger pan with nothing
+    // selected (src/interaction/canvasGesture.js, nl-o47.4) cannot also read
+    // as a completed tap at pointerup.
+    movedPastThreshold: false,
     tapCandidate: null,
   };
 
@@ -688,7 +737,15 @@ export function createElevationDragController({
   }
 
   function handlePointerDown(event) {
-    if (state.locked || !event.isPrimary) return;
+    if (state.locked) return;
+    if (!event.isPrimary) {
+      // See createPlantDragController's identical branch: a second touch/pen
+      // finger hands off to the phone editor's pinch/pan (nl-o47.4).
+      if (event.pointerType !== 'mouse' && state.pointerType !== 'mouse' && state.pointerId !== null) {
+        cancelTouchForSecondPointer();
+      }
+      return;
+    }
 
     if (event.pointerType === 'mouse') {
       if (event.button !== 0) return;
@@ -752,6 +809,7 @@ export function createElevationDragController({
     state.downPlantId = elevationHitPlantId(event, getDriftContext());
     state.isDraggingGroup = false;
     state.hasMoved = false;
+    state.movedPastThreshold = false;
     state.groupStartAxis = null;
     state.downAxisFeet = ctx ? pointerAxisFeet(ctx) : null;
     state.axisKey = ctx ? axisKeyFor(ctx) : '';
@@ -779,13 +837,15 @@ export function createElevationDragController({
     }
 
     if (event.pointerId !== state.pointerId) return;
-    if (!state.groupStartAxis) return;
     const dxClient = event.clientX - state.downClient.x;
     const dyClient = event.clientY - state.downClient.y;
-    if (!state.isDraggingGroup) {
-      if (!exceedsTapThreshold(dxClient, dyClient)) return;
-      state.isDraggingGroup = true;
+    if (!state.movedPastThreshold && exceedsTapThreshold(dxClient, dyClient)) {
+      // See the plan controller's identical fix: tracked regardless of
+      // selection, so a pan with nothing selected cannot also read as a tap.
+      state.movedPastThreshold = true;
+      if (state.groupStartAxis) state.isDraggingGroup = true;
     }
+    if (!state.groupStartAxis) return; // nothing selected: the pan gesture owns this move
     const ctx = buildPointerContext(svg, event, getTransform());
     if (!ctx || state.downAxisFeet === null) return;
     updateGroupAxisPosition(ctx);
@@ -809,6 +869,7 @@ export function createElevationDragController({
 
     const wasDraggingGroup = state.isDraggingGroup;
     const moved = state.hasMoved;
+    const movedPastThreshold = state.movedPastThreshold;
     const downPlantId = state.downPlantId;
     const downClient = state.downClient;
     cancelActive();
@@ -816,6 +877,7 @@ export function createElevationDragController({
       if (moved) onChangeCommit?.();
       return;
     }
+    if (movedPastThreshold) return; // a pan (nothing selected) or an aborted drag, not a tap
     const candidates = downPlantId ? [{ id: downPlantId }] : [];
     const { selectedId, nextTap } = resolveTapSelection(candidates, downClient, state.tapCandidate);
     state.tapCandidate = nextTap;
@@ -824,6 +886,14 @@ export function createElevationDragController({
     // drift's own dimmed-and-unhittable member", so resolveDriftAction's
     // plain 'clear' on a miss is exactly right, with no gap-tap fallback.
     applyDriftAction(resolveDriftAction({ selectedId, driftContext: getDriftContext(), plants: getPlants() }));
+  }
+
+  /** See createPlantDragController's identical helper. */
+  function cancelTouchForSecondPointer() {
+    const wasDraggingGroup = state.isDraggingGroup;
+    const moved = state.hasMoved;
+    cancelActive();
+    if (moved && wasDraggingGroup) onChangeCommit?.();
   }
 
   /** Shared by touch's tap resolution above and mouse's own drift-aware press
@@ -963,6 +1033,7 @@ export function createElevationDragController({
     state.axisKey = '';
     state.groupStartAxis = null;
     state.isDraggingGroup = false;
+    state.movedPastThreshold = false;
     state.pendingDrillIn = null;
     // See createPlantDragController's cancelActive: this element can have
     // several controllers sharing svg.style.cursor (nl-jfm), so this one only
