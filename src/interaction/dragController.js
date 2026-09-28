@@ -402,7 +402,11 @@ export function createPlantDragController({
       return;
     }
 
-    const containingDriftIds = point ? containingDriftIdsByDistance(plants, point) : [];
+    // containingDriftIdsByDistance tests a YARD-FEET point (it compares
+    // against driftOutline, which lives in feet); ctx.positionFeet, not the
+    // raw client/screen `point` resolveTapSelection's own same-spot check
+    // above uses.
+    const containingDriftIds = ctx?.positionFeet ? containingDriftIdsByDistance(plants, ctx.positionFeet) : [];
     const { selectedId: gapDriftId, nextTap: nextGapTap } = resolveTapSelection(
       containingDriftIds.map((id) => ({ id })),
       point,

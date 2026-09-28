@@ -2202,6 +2202,16 @@ select {
   min-width: 0;
 }
 
+/* `display: flex` above otherwise beats the UA stylesheet's own `[hidden] {
+   display: none }` rule (equal specificity, later source order), so toggling
+   `hidden` on this element would stop actually hiding it — the bug this once
+   shipped with: a drilled-into member's bar still showed the whole-drift
+   name group underneath it. Same fix below for .selection-bar__count and
+   .selection-bar__drift-actions, the other two elements this module toggles. */
+.selection-bar__drift-name[hidden] {
+  display: none;
+}
+
 .selection-bar__rename {
   font: inherit;
   font-weight: 600;
@@ -2248,6 +2258,10 @@ select {
   gap: 0.3rem;
 }
 
+.selection-bar__count[hidden] {
+  display: none;
+}
+
 .selection-bar__count-value {
   min-width: 1.6rem;
   text-align: center;
@@ -2259,6 +2273,10 @@ select {
    the SAME flex row as .selection-bar__actions, rather than as one wide item. */
 .selection-bar__drift-actions {
   display: contents;
+}
+
+.selection-bar__drift-actions[hidden] {
+  display: none;
 }
 
 @media (min-width: 640px) {
