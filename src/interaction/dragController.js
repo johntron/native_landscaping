@@ -1,8 +1,31 @@
 import { clientPointToViewBox } from '../render/screenPoint.js';
 import { exceedsTapThreshold, resolveTapSelection } from './tapSelection.js';
 import { clampGroupAxisDelta, clampGroupDelta } from '../render/groupClamp.js';
+import { driftMembers } from '../state/driftGeometry.js';
+import {
+  containingDriftIdsByDistance,
+  isPointInsideDrift,
+  resolveDriftAction,
+  resolveGapTapAction,
+} from './driftHitTest.js';
 
 const MIN_HITBOX_RADIUS_PX = 28; // generous target for touch devices
+
+/** Every current member id of `driftId`, as strings, for filtering candidates. */
+function memberIdSet(plants, driftId) {
+  return new Set(driftMembers(plants, driftId).map((m) => String(m.id)));
+}
+
+/** A selection's current positions, keyed by id — the group-drag start snapshot
+ * (nl-o47.2's touch path and, since nl-o47.6.2, mouse's drift group-drag too). */
+function snapshotGroupStartFeet(selection, plants) {
+  if (!selection || !selection.size) return null;
+  const snapshot = new Map();
+  plants.forEach((plant) => {
+    if (selection.has(String(plant.id))) snapshot.set(String(plant.id), { x: plant.x, y: plant.y });
+  });
+  return snapshot.size ? snapshot : null;
+}
 
 /**
  * Enables drag-to-move on the plan view while keeping rendering logic separate.
@@ -29,6 +52,11 @@ const MIN_HITBOX_RADIUS_PX = 28; // generous target for touch devices
  * @param {() => Set<string>} [options.getSelection]   the current Edit-mode selection
  * @param {(plantId: string) => void} [options.onSelectPlant]   replace the selection with just this plant
  * @param {() => void} [options.onClearSelection]
+ * @param {() => {selectedDriftId: string, driftDrilledIn: boolean}} [options.getDriftContext]
+ *   the selection's drift context (nl-o47.6.2, src/ui/plantSelection.js)
+ * @param {(driftId: string) => void} [options.onSelectDrift]   select every current member of a drift
+ * @param {(plantId: string, driftId: string) => void} [options.onDrillIntoDriftMember]
+ *   narrow the selection to one member, keeping the drift context active
  */
 export function createPlantDragController({
   svg,
@@ -41,6 +69,9 @@ export function createPlantDragController({
   getSelection = () => new Set(),
   onSelectPlant = () => {},
   onClearSelection = () => {},
+  getDriftContext = () => ({ selectedDriftId: '', driftDrilledIn: false }),
+  onSelectDrift = () => {},
+  onDrillIntoDriftMember = () => {},
 }) {
   const state = {
     locked: true,
@@ -53,6 +84,13 @@ export function createPlantDragController({
     // Mouse only: the single plant grabbed on pointerdown.
     activePlant: null,
     offsetFeet: { x: 0, y: 0 },
+    // Mouse only (nl-o47.6.2): pressing a member of an ALREADY whole-selected
+    // drift starts a group drag immediately (so the whole drift can still be
+    // dragged), but only drills into that specific member if the press turns
+    // out to be a plain click (no movement) — resolved at pointerup, since a
+    // single mouse gesture both selects and starts a drag with no separate
+    // "tap" step the way touch has. { plantId, driftId } or null.
+    pendingDrillIn: null,
 
     // Touch/pen only: the pending gesture, decided at pointerup as a tap or a
     // (group) drag. downCtx is the full pointer context computed at
@@ -63,8 +101,16 @@ export function createPlantDragController({
     groupStartFeet: null, // Map<plantId, {x,y}> snapshot, or null if nothing was selected
     isDraggingGroup: false,
     // The tap-cycle tracker, kept ACROSS gestures (reset only on setLocked):
-    // {point, order, index}. See tapSelection.js.
+    // {point, order, index}. See tapSelection.js. Reset to a fresh {index:-1}
+    // tracker the instant a tap ENTERS a drift (see resolveTap), so the very
+    // next tap lands on the nearest overlapping member rather than resuming a
+    // cycle computed before isolation existed.
     tapCandidate: null,
+    // The gap-tap cycle tracker (nl-o47.6.2): same shape as tapCandidate, but
+    // over driftIds from containingDriftIdsByDistance rather than plant ids —
+    // a separate sequence because a tap between members (no plant hit at all)
+    // and a tap ON a member are different candidate spaces.
+    gapTapCandidate: null,
   };
 
   if (!svg) {
@@ -86,42 +132,83 @@ export function createPlantDragController({
   ];
   listeners.forEach(([type, handler]) => svg.addEventListener(type, handler));
 
+  /**
+   * Mouse pointerdown: pick the nearest hit, filtered to the isolated drift's
+   * own members when one is active (a non-member is dimmed and unhittable,
+   * nl-o47.6.2). No hit at all either leaves an isolated drift (a click
+   * outside its outline) — clearing, unless the point is still inside that
+   * SAME outline (a gap between members, a no-op) — or plainly clears.
+   */
+  function handleMousePointerDown(event) {
+    if (event.button !== 0) return;
+    const ctx = buildPointerContext(svg, event, getTransform());
+    if (!ctx) {
+      notifyHover('');
+      return;
+    }
+    const plants = getPlants();
+    const driftContext = getDriftContext();
+    const isolatedMemberIds = driftContext.selectedDriftId ? memberIdSet(plants, driftContext.selectedDriftId) : null;
+    const hits = pickPlantHits(plants, ctx);
+    const filteredHits = isolatedMemberIds ? hits.filter((h) => isolatedMemberIds.has(String(h.plant.id))) : hits;
+    const selectedId = filteredHits[0] ? String(filteredHits[0].plant.id) : null;
+
+    if (!selectedId) {
+      // A precise pointer needs no gap-tap cycling the way touch does — see
+      // resolveTap's own comment on why touch cycles overlapping outlines.
+      if (isolatedMemberIds && ctx.positionFeet && isPointInsideDrift(plants, driftContext.selectedDriftId, ctx.positionFeet)) {
+        return; // still inside the isolated drift's own outline: no-op
+      }
+      notifyHover('');
+      onClearSelection();
+      return;
+    }
+
+    const action = resolveDriftAction({ selectedId, driftContext, plants });
+    state.pendingDrillIn = null;
+    state.pointerId = event.pointerId;
+    state.pointerType = 'mouse';
+    state.hasMoved = false;
+
+    if (action.type === 'selectDrift' || (action.type === 'drillInto' && !driftContext.driftDrilledIn)) {
+      // A fresh press entering a whole drift, OR a press on a member of one
+      // ALREADY whole-selected: either way, drag the WHOLE group. Only the
+      // second case might still drill in — deferred to pointerup, since a
+      // plain click (no movement) and the start of a drag look identical here.
+      if (action.type === 'drillInto') {
+        state.pendingDrillIn = { plantId: action.plantId, driftId: action.driftId };
+      } else {
+        onSelectDrift(action.driftId);
+      }
+      state.activePlant = null;
+      state.groupStartFeet = snapshotGroupStartFeet(getSelection(), plants);
+      state.downCtx = ctx;
+      notifyHover('');
+    } else {
+      // Already drilled into some member (press switches the target
+      // immediately), or a plain non-drift plant: single-plant drag, exactly
+      // as before nl-o47.6.2.
+      if (action.type === 'drillInto') {
+        onDrillIntoDriftMember(action.plantId, action.driftId);
+      } else {
+        onSelectPlant(action.plantId);
+      }
+      const target = plants.find((p) => String(p.id) === action.plantId);
+      state.activePlant = target;
+      state.offsetFeet = { x: ctx.positionFeet.x - target.x, y: ctx.positionFeet.y - target.y };
+      notifyHover(target.id);
+    }
+
+    svg.setPointerCapture(event.pointerId);
+    svg.style.cursor = 'grabbing';
+    event.preventDefault();
+  }
+
   function handlePointerDown(event) {
     if (state.locked || !event.isPrimary) return;
 
     if (event.pointerType === 'mouse') {
-      if (event.button !== 0) return;
-      const ctx = buildPointerContext(svg, event, getTransform());
-      if (!ctx) {
-        notifyHover('');
-        return;
-      }
-      const hit = pickPlantHit(getPlants(), ctx);
-      if (!hit) {
-        notifyHover('');
-        onClearSelection();
-        return;
-      }
-      state.activePlant = hit.plant;
-      state.pointerId = event.pointerId;
-      state.pointerType = 'mouse';
-      state.offsetFeet = {
-        x: ctx.positionFeet.x - hit.plant.x,
-        y: ctx.positionFeet.y - hit.plant.y,
-      };
-      svg.setPointerCapture(event.pointerId);
-      svg.style.cursor = 'grabbing';
-      notifyHover(state.activePlant.id);
-      state.hasMoved = false;
-      // Pressing a plant also selects it (nl-o47.2) — mouse never needs a
-      // separate tap step the way touch does. This renders SYNCHRONOUSLY
-      // (selectPlants -> render()), unlike anything pointerdown used to
-      // trigger, which is exactly what exposed setupController.js/
-      // featureController.js's own setLocked to being called redundantly
-      // inside this same call stack and clearing the cursor just set above —
-      // see their setLocked for the idempotency guard that now prevents it.
-      onSelectPlant(state.activePlant.id);
-      event.preventDefault();
+      handleMousePointerDown(event);
       return;
     }
 
@@ -134,18 +221,7 @@ export function createPlantDragController({
     state.downCtx = ctx;
     state.isDraggingGroup = false;
     state.hasMoved = false;
-    state.groupStartFeet = null;
-
-    const selection = getSelection();
-    if (selection.size && ctx) {
-      const snapshot = new Map();
-      getPlants().forEach((plant) => {
-        if (selection.has(String(plant.id))) {
-          snapshot.set(String(plant.id), { x: plant.x, y: plant.y });
-        }
-      });
-      if (snapshot.size) state.groupStartFeet = snapshot;
-    }
+    state.groupStartFeet = ctx ? snapshotGroupStartFeet(getSelection(), getPlants()) : null;
     // Captured unconditionally, whether or not a drag turns out to be
     // possible: once a group move starts, onPositionsChange re-renders the
     // panel on every frame, which REPLACES the element that received this
@@ -160,10 +236,18 @@ export function createPlantDragController({
     if (event.pointerType === 'mouse') {
       const ctx = buildPointerContext(svg, event, getTransform());
       updateHoverFromContext(event, ctx);
-      if (!state.activePlant || event.pointerId !== state.pointerId) return;
+      if (event.pointerId !== state.pointerId) return;
       if (!ctx) return;
-      updatePlantPosition(ctx);
-      event.preventDefault();
+      if (state.activePlant) {
+        updatePlantPosition(ctx);
+        event.preventDefault();
+      } else if (state.groupStartFeet) {
+        // A whole-drift group drag (nl-o47.6.2): any movement here means the
+        // press was a drag, not the plain click a pending drill-in waits for.
+        state.pendingDrillIn = null;
+        updateGroupPosition(ctx);
+        event.preventDefault();
+      }
       return;
     }
 
@@ -186,8 +270,15 @@ export function createPlantDragController({
     if (state.pointerType === 'mouse') {
       const ctx = buildPointerContext(svg, event, getTransform());
       const moved = state.hasMoved;
+      const pendingDrillIn = state.pendingDrillIn;
       cancelActive();
-      if (moved) onChangeCommit?.();
+      if (moved) {
+        onChangeCommit?.();
+      } else if (pendingDrillIn) {
+        // A plain click (no movement) on a member of an already whole-
+        // selected drift: narrow to just that member (nl-o47.6.2).
+        onDrillIntoDriftMember(pendingDrillIn.plantId, pendingDrillIn.driftId);
+      }
       updateHoverFromContext(event, ctx);
       return;
     }
@@ -219,19 +310,79 @@ export function createPlantDragController({
     }
   }
 
-  /** A completed tap (touch/pen): select the nearest candidate at the down
-   * position, or cycle to the next one if this repeats the last tap's spot. */
-  function resolveTap(ctx, point) {
-    const candidates = ctx
-      ? pickPlantHits(getPlants(), ctx).map((hit) => ({ id: hit.plant.id }))
-      : [];
-    const { selectedId, nextTap } = resolveTapSelection(candidates, point, state.tapCandidate);
-    state.tapCandidate = nextTap;
-    if (selectedId) {
-      onSelectPlant(selectedId);
-    } else {
-      onClearSelection();
+  /** Apply a resolveDriftAction/resolveGapTapAction result. Shared by both the
+   * touch tap resolution below and (with its own drill-in timing) mouse. */
+  function applyDriftAction(action) {
+    switch (action.type) {
+      case 'noop':
+        return;
+      case 'clear':
+        onClearSelection();
+        return;
+      case 'selectDrift':
+        onSelectDrift(action.driftId);
+        return;
+      case 'drillInto':
+        onDrillIntoDriftMember(action.plantId, action.driftId);
+        return;
+      default:
+        onSelectPlant(action.plantId);
     }
+  }
+
+  /**
+   * A completed tap (touch/pen): select the nearest candidate at the down
+   * position, or cycle to the next one if this repeats the last tap's spot —
+   * restricted to an isolated drift's own members when one is active
+   * (nl-o47.6.2), since a non-member is dimmed and unhittable.
+   *
+   * With no plant hit at all, a gap between members inside one or more drift
+   * outlines is tried next, cycled the SAME way (resolveTapSelection again,
+   * over driftIds this time) so a repeat tap into an interwoven planting
+   * steps through the overlapping drifts one at a time, exactly like cycling
+   * overlapping plants — see driftHitTest.js's own comment on why this is a
+   * separate candidate space from the plant-id one above.
+   */
+  function resolveTap(ctx, point) {
+    const plants = getPlants();
+    const driftContext = getDriftContext();
+    const isolatedMemberIds = driftContext.selectedDriftId ? memberIdSet(plants, driftContext.selectedDriftId) : null;
+    const rawCandidateIds = ctx ? pickPlantHits(plants, ctx).map((hit) => String(hit.plant.id)) : [];
+    const candidateIds = isolatedMemberIds ? rawCandidateIds.filter((id) => isolatedMemberIds.has(id)) : rawCandidateIds;
+
+    const { selectedId, nextTap } = resolveTapSelection(
+      candidateIds.map((id) => ({ id })),
+      point,
+      state.tapCandidate
+    );
+    state.tapCandidate = nextTap;
+
+    if (selectedId) {
+      state.gapTapCandidate = null; // a real hit always cancels any pending gap-cycle
+      const action = resolveDriftAction({ selectedId, driftContext, plants });
+      applyDriftAction(action);
+      if (action.type === 'selectDrift') {
+        // Freshly entered isolation via a direct member hit: the NEXT tap
+        // must land on the nearest overlapping member at this same spot, not
+        // resume cycling an order computed before isolation existed — see the
+        // module comment on tapCandidate.
+        const enteredMemberIds = memberIdSet(plants, action.driftId);
+        const filteredHere = rawCandidateIds.filter((id) => enteredMemberIds.has(id));
+        state.tapCandidate = filteredHere.length ? { point, order: filteredHere, index: -1 } : null;
+      }
+      return;
+    }
+
+    const containingDriftIds = point ? containingDriftIdsByDistance(plants, point) : [];
+    const { selectedId: gapDriftId, nextTap: nextGapTap } = resolveTapSelection(
+      containingDriftIds.map((id) => ({ id })),
+      point,
+      state.gapTapCandidate
+    );
+    state.gapTapCandidate = nextGapTap;
+    const gapAction = resolveGapTapAction(gapDriftId, driftContext);
+    applyDriftAction(gapAction);
+    if (gapAction.type === 'selectDrift') state.tapCandidate = null; // entered via a gap: no member was hit to cycle from
   }
 
   function handlePointerLeave() {
@@ -241,13 +392,16 @@ export function createPlantDragController({
 
   /** Mouse-only: hover has no touch equivalent, and updating it from a
    * touch's pointermove would draw a target ring chasing the finger during a
-   * group drag (nl-o47.2). */
+   * group drag (nl-o47.2). Mouse's OWN group drag (nl-o47.6.2, a whole-drift
+   * drag) gets the same treatment: no single plant to hover, and re-picking
+   * every frame would chase the pointer just the same. */
   function updateHoverFromContext(event, context) {
     if (!event?.isPrimary) return;
     if (state.activePlant) {
       notifyHover(state.activePlant.id);
       return;
     }
+    if (state.groupStartFeet) return;
     if (!context) {
       notifyHover('');
       return;
@@ -339,6 +493,7 @@ export function createPlantDragController({
     state.downCtx = null;
     state.groupStartFeet = null;
     state.isDraggingGroup = false;
+    state.pendingDrillIn = null;
     // Resting cursor comes from is-drag-enabled in styles.css, not from here:
     // this element can have several controllers, and whichever last wrote
     // svg.style.cursor used to decide it for all of them (nl-jfm). Clearing
@@ -360,6 +515,7 @@ export function createPlantDragController({
       // A stale cycle position must not survive a mode change (nl-o47.2):
       // "clear on mode change" applies to where the NEXT tap starts from too.
       state.tapCandidate = null;
+      state.gapTapCandidate = null;
       svg.classList.remove('is-selection-active');
     }
     // A class, not svg.style.touchAction: the setup controller shares this
@@ -425,6 +581,9 @@ export function createElevationDragController({
   getSelection = () => new Set(),
   onSelectPlant = () => {},
   onClearSelection = () => {},
+  getDriftContext = () => ({ selectedDriftId: '', driftDrilledIn: false }),
+  onSelectDrift = () => {},
+  onDrillIntoDriftMember = () => {},
 }) {
   const state = {
     locked: true,
@@ -437,6 +596,9 @@ export function createElevationDragController({
     // Mouse only.
     activePlant: null,
     axisOffsetFeet: 0,
+    // Mouse only (nl-o47.6.2): see createPlantDragController's own field —
+    // the same deferred-drill-in timing, one axis instead of two.
+    pendingDrillIn: null,
 
     // Touch/pen only.
     downClient: null,
@@ -447,6 +609,17 @@ export function createElevationDragController({
     isDraggingGroup: false,
     tapCandidate: null,
   };
+
+  /** A selection's current axis values, keyed by id — this controller's own
+   * group-drag start snapshot, one axis instead of x/y. */
+  function snapshotAxisStartFor(selection, plants, axisKey) {
+    if (!selection || !selection.size) return null;
+    const snapshot = new Map();
+    plants.forEach((plant) => {
+      if (selection.has(String(plant.id))) snapshot.set(String(plant.id), Number(plant[axisKey]) || 0);
+    });
+    return snapshot.size ? snapshot : null;
+  }
 
   if (!svg) {
     return {
@@ -467,6 +640,20 @@ export function createElevationDragController({
   ];
   listeners.forEach(([type, handler]) => svg.addEventListener(type, handler));
 
+  /**
+   * A DOM hit (findPlantIdFromEvent), filtered to the isolated drift's own
+   * members when one is active. Belt-and-suspenders alongside the CSS that
+   * dims (and makes unhittable, pointer-events:none) every non-member: this
+   * is what keeps that guarantee even if the render pass has not caught up.
+   */
+  function elevationHitPlantId(event, driftContext) {
+    const plantId = findPlantIdFromEvent(event);
+    if (!plantId) return '';
+    if (!driftContext.selectedDriftId) return plantId;
+    const plant = getPlants().find((p) => String(p.id) === String(plantId));
+    return plant?.driftId === driftContext.selectedDriftId ? plantId : '';
+  }
+
   function handlePointerDown(event) {
     if (state.locked || !event.isPrimary) return;
 
@@ -477,29 +664,50 @@ export function createElevationDragController({
         notifyHover('');
         return;
       }
-      const plantId = findPlantIdFromEvent(event);
-      if (!plantId) {
+      const plants = getPlants();
+      const driftContext = getDriftContext();
+      const selectedId = elevationHitPlantId(event, driftContext) || null;
+
+      if (!selectedId) {
         notifyHover('');
         onClearSelection();
         return;
       }
-      const target = getPlants().find((plant) => String(plant.id) === String(plantId));
-      if (!target) {
-        notifyHover('');
-        onClearSelection();
-        return;
-      }
-      state.activePlant = target;
+
+      const action = resolveDriftAction({ selectedId, driftContext, plants });
+      state.pendingDrillIn = null;
       state.pointerId = event.pointerId;
       state.pointerType = 'mouse';
-      const axisPosition = pointerAxisFeet(ctx);
-      const axisValue = Number(target[axisKeyFor(ctx)]) || 0;
-      state.axisOffsetFeet = axisPosition - axisValue;
+      state.hasMoved = false;
+      const axisKey = axisKeyFor(ctx);
+
+      if (action.type === 'selectDrift' || (action.type === 'drillInto' && !driftContext.driftDrilledIn)) {
+        if (action.type === 'drillInto') {
+          state.pendingDrillIn = { plantId: action.plantId, driftId: action.driftId };
+        } else {
+          onSelectDrift(action.driftId);
+        }
+        state.activePlant = null;
+        state.axisKey = axisKey;
+        state.groupStartAxis = snapshotAxisStartFor(getSelection(), plants, axisKey);
+        state.downAxisFeet = pointerAxisFeet(ctx);
+        notifyHover('');
+      } else {
+        if (action.type === 'drillInto') {
+          onDrillIntoDriftMember(action.plantId, action.driftId);
+        } else {
+          onSelectPlant(action.plantId);
+        }
+        const target = plants.find((p) => String(p.id) === action.plantId);
+        state.activePlant = target;
+        const axisPosition = pointerAxisFeet(ctx);
+        const axisValue = Number(target[axisKey]) || 0;
+        state.axisOffsetFeet = axisPosition - axisValue;
+        notifyHover(target.id);
+      }
+
       svg.setPointerCapture(event.pointerId);
       svg.style.cursor = 'grabbing';
-      notifyHover(target.id);
-      state.hasMoved = false;
-      onSelectPlant(target.id);
       event.preventDefault();
       return;
     }
@@ -508,24 +716,13 @@ export function createElevationDragController({
     state.pointerId = event.pointerId;
     state.pointerType = event.pointerType;
     state.downClient = { x: event.clientX, y: event.clientY };
-    state.downPlantId = findPlantIdFromEvent(event);
+    state.downPlantId = elevationHitPlantId(event, getDriftContext());
     state.isDraggingGroup = false;
     state.hasMoved = false;
     state.groupStartAxis = null;
     state.downAxisFeet = ctx ? pointerAxisFeet(ctx) : null;
     state.axisKey = ctx ? axisKeyFor(ctx) : '';
-
-    const selection = getSelection();
-    if (selection.size && ctx) {
-      const axisKey = state.axisKey;
-      const snapshot = new Map();
-      getPlants().forEach((plant) => {
-        if (selection.has(String(plant.id))) {
-          snapshot.set(String(plant.id), Number(plant[axisKey]) || 0);
-        }
-      });
-      if (snapshot.size) state.groupStartAxis = snapshot;
-    }
+    state.groupStartAxis = ctx ? snapshotAxisStartFor(getSelection(), getPlants(), state.axisKey) : null;
     // See the plan controller's own comment: captured unconditionally so a
     // group move's re-renders cannot orphan later pointer events.
     svg.setPointerCapture(event.pointerId);
@@ -535,10 +732,16 @@ export function createElevationDragController({
     if (event.pointerType === 'mouse') {
       const ctx = buildPointerContext(svg, event, getTransform());
       updateHoverFromContext(event);
-      if (!state.activePlant || event.pointerId !== state.pointerId) return;
+      if (event.pointerId !== state.pointerId) return;
       if (!ctx) return;
-      updatePlantPosition(ctx);
-      event.preventDefault();
+      if (state.activePlant) {
+        updatePlantPosition(ctx);
+        event.preventDefault();
+      } else if (state.groupStartAxis) {
+        state.pendingDrillIn = null; // movement: this press is a drag, not a click
+        updateGroupAxisPosition(ctx);
+        event.preventDefault();
+      }
       return;
     }
 
@@ -560,8 +763,13 @@ export function createElevationDragController({
 
     if (state.pointerType === 'mouse') {
       const moved = state.hasMoved;
+      const pendingDrillIn = state.pendingDrillIn;
       cancelActive();
-      if (moved) onChangeCommit?.();
+      if (moved) {
+        onChangeCommit?.();
+      } else if (pendingDrillIn) {
+        onDrillIntoDriftMember(pendingDrillIn.plantId, pendingDrillIn.driftId);
+      }
       updateHoverFromContext(event);
       return;
     }
@@ -578,10 +786,30 @@ export function createElevationDragController({
     const candidates = downPlantId ? [{ id: downPlantId }] : [];
     const { selectedId, nextTap } = resolveTapSelection(candidates, downClient, state.tapCandidate);
     state.tapCandidate = nextTap;
-    if (selectedId) {
-      onSelectPlant(selectedId);
-    } else {
-      onClearSelection();
+    // No outline/gap concept in an elevation (one axis, no y-depth to test a
+    // hull against): a miss here is always either "outside" or "not this
+    // drift's own dimmed-and-unhittable member", so resolveDriftAction's
+    // plain 'clear' on a miss is exactly right, with no gap-tap fallback.
+    applyDriftAction(resolveDriftAction({ selectedId, driftContext: getDriftContext(), plants: getPlants() }));
+  }
+
+  /** Shared by touch's tap resolution above and mouse's own drift-aware press
+   * (with its own drill-in timing) — see the plan controller's own copy. */
+  function applyDriftAction(action) {
+    switch (action.type) {
+      case 'noop':
+        return;
+      case 'clear':
+        onClearSelection();
+        return;
+      case 'selectDrift':
+        onSelectDrift(action.driftId);
+        return;
+      case 'drillInto':
+        onDrillIntoDriftMember(action.plantId, action.driftId);
+        return;
+      default:
+        onSelectPlant(action.plantId);
     }
   }
 
@@ -608,6 +836,7 @@ export function createElevationDragController({
       notifyHover(state.activePlant.id);
       return;
     }
+    if (state.groupStartAxis) return; // mid group drag: don't chase the pointer
     const plantId = findPlantIdFromEvent(event);
     notifyHover(plantId);
   }
@@ -701,6 +930,7 @@ export function createElevationDragController({
     state.axisKey = '';
     state.groupStartAxis = null;
     state.isDraggingGroup = false;
+    state.pendingDrillIn = null;
     // See createPlantDragController's cancelActive: this element can have
     // several controllers sharing svg.style.cursor (nl-jfm), so this one only
     // clears its own inline value and lets the is-drag-enabled rule resume.
