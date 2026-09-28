@@ -12,6 +12,7 @@ export function renderViews(panels, plantStates, options = {}) {
     showLabels = false,
     hiddenLayerCount = 0,
     highlightedSpeciesKey = '',
+    highlightedDriftId = '',
     targetedPlantId = '',
     hoveredPlantId = '',
     selectedPlantIds = null,
@@ -23,6 +24,7 @@ export function renderViews(panels, plantStates, options = {}) {
   const renderOptions = {
     showLabels,
     highlightedSpeciesKey,
+    highlightedDriftId,
     targetedPlantId,
     hoveredPlantId,
     selectedPlantIds,

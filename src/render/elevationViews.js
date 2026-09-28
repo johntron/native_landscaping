@@ -42,6 +42,7 @@ export function renderElevationView(svg, plantStates, view, options = {}) {
   const {
     showLabels = false,
     highlightedSpeciesKey = '',
+    highlightedDriftId = '',
     targetedPlantId = '',
     hoveredPlantId = '',
     selectedPlantIds = null,
@@ -49,6 +50,7 @@ export function renderElevationView(svg, plantStates, view, options = {}) {
     features = [],
   } = options;
   const normalizedHighlightKey = (highlightedSpeciesKey || '').toLowerCase();
+  const normalizedHighlightDriftId = String(highlightedDriftId || '');
   const normalizedTargetId = String(targetedPlantId || '');
   const normalizedHoveredId = String(hoveredPlantId || '');
   const highlightTargets = [];
@@ -73,7 +75,11 @@ export function renderElevationView(svg, plantStates, view, options = {}) {
     }
     const { plant, state } = item;
     const speciesKey = getSpeciesKey(plant);
-    const isHighlighted = Boolean(normalizedHighlightKey && speciesKey === normalizedHighlightKey);
+    // Same priority rule as topView.js: a drift highlight REPLACES the
+    // species highlight rather than adding to it (nl-o47.6.7).
+    const isHighlighted = normalizedHighlightDriftId
+      ? plant.driftId === normalizedHighlightDriftId
+      : Boolean(normalizedHighlightKey && speciesKey === normalizedHighlightKey);
     const isTargeted = normalizedTargetId && String(plant.id) === normalizedTargetId;
     const isHovered = normalizedHoveredId && String(plant.id) === normalizedHoveredId;
     const isSelected = Boolean(selectedPlantIds && selectedPlantIds.has(String(plant.id)));
