@@ -20,16 +20,28 @@ import { resolveYardBounds } from '../render/yardBounds.js';
 import { createPlantFromSpecies } from '../data/plantParser.js';
 import { LIFECYCLE_KEYS } from '../data/plantLifecycle.js';
 import { slugifyDriftLabel } from '../data/driftId.js';
+import { addPlantFromCatalog } from './plantEdits.js';
 import { buildCloneId, buildDriftId, buildNewPlantId } from './plantIds.js';
 import {
   allDrifts,
   clampGroup,
+  clumpPositions,
+  DEFAULT_MEMBER_RADIUS_FT,
   driftMembers,
   driftSpacing,
   memberToRemove,
   nextMemberPosition,
+  SPACING_FACTOR,
   spreadPositions,
 } from './driftGeometry.js';
+
+/**
+ * "How many?" ceiling in the Add plant sheet (nl-o47.6.3): OUR JUDGEMENT, not
+ * a technical limit. The sheet is a search-and-tap picker, not a bulk-planting
+ * tool — someone wanting more than this is better served planting in a few
+ * batches, or (later) painting a drift along a stroke (nl-o47.6.6).
+ */
+export const MAX_DRIFT_COUNT = 50;
 
 /**
  * Every driftId currently used in the yard.
@@ -38,6 +50,74 @@ import {
  */
 function existingDriftIds(plants) {
   return allDrifts(plants).map((drift) => drift.driftId);
+}
+
+/**
+ * Add N plants of one species from the catalog (nl-o47.6.3, the Add plant
+ * sheet's "How many?"), at `at` in yard feet (or the plan's own middle — see
+ * addPlantFromCatalog) when the visible centre could not be computed.
+ *
+ * N=1 is exactly src/state/plantEdits.js's addPlantFromCatalog: no driftId,
+ * today's single-plant behaviour unchanged. That function is called once and
+ * REUSED for N>1 too, rather than re-implemented here, purely to learn the
+ * centre point it already clamps to the declared yard and the species' own
+ * resolved width (its plants.csv width_ft, or createPlantFromSpecies' own
+ * estimate when that is blank) — exactly what a clump needs, computed exactly
+ * the way a single plant is placed today. For N>1 that one probe plant is
+ * discarded (state.plants is put back the way addPlantFromCatalog found it)
+ * and replaced by the whole clump: an evenly spaced sunflower/phyllotaxis
+ * layout (src/state/driftGeometry.js clumpPositions) at spacing = the
+ * species' width x SPACING_FACTOR (OUR JUDGEMENT — see driftGeometry.js),
+ * translated to fit the declared yard as a GROUP so the clump keeps its shape
+ * (clumpPositions already calls clampGroup; never clamped point-by-point,
+ * which would flatten the pattern's edge against the boundary). Every member
+ * is built the same way addDriftMember builds a new one (createPlantFromSpecies,
+ * a fresh id from buildNewPlantId each time) and shares one new driftId,
+ * minted (buildDriftId) from the species' common name, else its botanical
+ * name — never from a name the person typed, since nothing here asks for one.
+ * @param {{ plants: object[], species: object[], project: object }} state
+ * @param {string} speciesId plants.csv's `id` for the species
+ * @param {number} count how many to add; clamped to [1, MAX_DRIFT_COUNT]
+ * @param {{ at?: { x: number, y: number } }} [options]
+ * @returns {{ plants: object[], driftId: string|null }} the plants that were
+ *   added (empty when the species or plan view is gone); `driftId` is null
+ *   for a lone plant, which carries no drift label
+ */
+export function addDriftFromCatalog(state, speciesId, count, { at } = {}) {
+  const n = Math.min(MAX_DRIFT_COUNT, Math.max(1, Math.trunc(Number(count)) || 1));
+
+  const before = state.plants;
+  const probe = addPlantFromCatalog(state, speciesId, { at });
+  if (!probe) return { plants: [], driftId: null };
+  if (n <= 1) return { plants: [probe], driftId: null };
+
+  // n > 1: `probe` only taught us the clamped centre and the species'
+  // resolved width; put the plants back the way addPlantFromCatalog found
+  // them and build the real clump below instead of keeping it.
+  state.plants = before;
+
+  const speciesEntry = state.species.find((entry) => entry.speciesId === probe.speciesId);
+  const bounds = resolveYardBounds(state.project);
+  const spacing = (Number(probe.width) || DEFAULT_MEMBER_RADIUS_FT * 2) * SPACING_FACTOR;
+  const positions = clumpPositions(n, spacing, { x: probe.x, y: probe.y }, bounds);
+  const driftId = buildDriftId(
+    existingDriftIds(state.plants),
+    speciesEntry?.commonName || speciesEntry?.botanicalName || probe.speciesId
+  );
+
+  let plants = state.plants;
+  const created = positions.map((position) => {
+    const member = createPlantFromSpecies(speciesEntry, {
+      id: buildNewPlantId(plants, speciesEntry.botanicalName || speciesEntry.speciesId),
+      x: position.x,
+      y: position.y,
+      driftId,
+    });
+    plants = [...plants, member];
+    return member;
+  });
+  state.plants = plants;
+  return { plants: created, driftId };
 }
 
 /**

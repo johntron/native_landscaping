@@ -2,14 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseSpeciesCsv, createPlantFromSpecies } from '../src/data/plantParser.js';
 import {
+  addDriftFromCatalog,
   addDriftMember,
   cloneDrift,
   dissolveDrift,
+  MAX_DRIFT_COUNT,
   removeDriftMember,
   removePlantFromDrift,
   renameDrift,
   spreadDrift,
 } from '../src/state/driftEdits.js';
+import { clumpPositions, driftSpacing, SPACING_FACTOR } from '../src/state/driftGeometry.js';
 
 const speciesHeader = 'id,common_name,botanical_name,growing_season_months,flowering_season_months,foliage_color_spring,foliage_color_summer,foliage_color_fall,foliage_color_winter,flower_color,width_ft,height_ft,growth_shape';
 const species = parseSpeciesCsv(
@@ -22,12 +25,28 @@ const horseherb = species.find((s) => s.speciesId === 'horseherb');
 
 const YARD = { yardFt: { width: 40, depth: 40 } };
 
+// A plan view + declared yard, for addDriftFromCatalog (nl-o47.6.3), which
+// calls addPlantFromCatalog (src/state/plantEdits.js) and needs one to place
+// anything at all — mirrors tests/plantEdits.test.js's own fixture.
+const PLAN_VIEW = {
+  id: 'plan',
+  type: 'plan',
+  viewBox: { width: 400, height: 400 },
+  extentFt: { width: 40, height: 40 },
+  originFt: { x: 0, y: 0 },
+};
+const YARD_WITH_PLAN = { views: [PLAN_VIEW], yardFt: { width: 40, depth: 40 } };
+
 function plant(speciesEntry, id, x, y, extra = {}) {
   return createPlantFromSpecies(speciesEntry, { id, x, y, ...extra });
 }
 
 function makeState(plants) {
   return { plants, species, project: YARD };
+}
+
+function makePlanState(plants) {
+  return { plants, species, project: YARD_WITH_PLAN };
 }
 
 /** Deep-freezes a fixture so any in-place mutation throws (strict-mode ES modules). */
@@ -273,4 +292,103 @@ test('dissolveDrift removes driftId from every member, leaving positions and eve
 
 test('dissolveDrift on an unknown driftId', () => {
   assert.deepStrictEqual(dissolveDrift(makeState(baseDrift()), 'nope'), { members: [], reason: 'no such drift' });
+});
+
+// --- addDriftFromCatalog (nl-o47.6.3, the Add plant sheet's "How many?") ------------
+
+test('addDriftFromCatalog with count=1 behaves exactly like addPlantFromCatalog: no driftId', () => {
+  const state = makePlanState([]);
+  const { plants: created, driftId } = addDriftFromCatalog(state, 'winecup', 1, { at: { x: 5, y: 6 } });
+  assert.equal(driftId, null);
+  assert.equal(created.length, 1);
+  assert.equal(created[0].x, 5);
+  assert.equal(created[0].y, 6);
+  assert.equal(created[0].driftId, undefined);
+  assert.equal(state.plants.length, 1);
+  assert.equal(state.plants[0], created[0]);
+});
+
+test('addDriftFromCatalog treats 0, a negative count, or a missing count the same as 1', () => {
+  assert.equal(addDriftFromCatalog(makePlanState([]), 'winecup', 0).driftId, null);
+  assert.equal(addDriftFromCatalog(makePlanState([]), 'winecup', -3).driftId, null);
+  assert.equal(addDriftFromCatalog(makePlanState([]), 'winecup', undefined).plants.length, 1);
+});
+
+test('addDriftFromCatalog places N plants of the species, all sharing one new driftId distinct from a drift already in the yard', () => {
+  const existing = baseDrift(); // already has a winecup drift named 'winecup-strip'
+  const state = { plants: existing, species, project: YARD_WITH_PLAN };
+  const { plants: created, driftId } = addDriftFromCatalog(state, 'winecup', 5);
+  assert.equal(created.length, 5);
+  assert.ok(driftId, 'a driftId was minted');
+  assert.notEqual(driftId, 'winecup-strip');
+  created.forEach((p) => {
+    assert.equal(p.speciesId, 'winecup');
+    assert.equal(p.driftId, driftId);
+  });
+  // The existing drift and the unrelated horseherb are untouched.
+  assert.equal(state.plants.filter((p) => p.driftId === 'winecup-strip').length, 3);
+  assert.equal(state.plants.length, existing.length + 5);
+});
+
+test('addDriftFromCatalog mints a unique id for every new member, colliding with none already in the yard', () => {
+  const existing = baseDrift();
+  const state = { plants: existing, species, project: YARD_WITH_PLAN };
+  const { plants: created } = addDriftFromCatalog(state, 'winecup', 8);
+  const ids = created.map((p) => p.id);
+  assert.equal(new Set(ids).size, ids.length, 'every new id is unique');
+  const existingIds = new Set(existing.map((p) => p.id));
+  ids.forEach((id) => assert.ok(!existingIds.has(id), `new id "${id}" collided with an existing plant`));
+});
+
+test('addDriftFromCatalog spaces members at roughly the species width x SPACING_FACTOR', () => {
+  const state = makePlanState([]);
+  const { plants: created } = addDriftFromCatalog(state, 'winecup', 7);
+  const expected = winecup.width * SPACING_FACTOR; // 3 ft x 0.5 = 1.5 ft
+  const measured = driftSpacing(created, winecup.width);
+  assert.ok(
+    Math.abs(measured - expected) < expected * 0.1,
+    `measured spacing ${measured} not close to expected ${expected}`
+  );
+});
+
+test('addDriftFromCatalog clamps a clump that would overhang the yard, as a group, keeping its shape', () => {
+  const state = makePlanState([]);
+  const { plants: created } = addDriftFromCatalog(state, 'winecup', 6, { at: { x: 1, y: 1 } });
+  assert.equal(created.length, 6);
+  created.forEach((p) => {
+    assert.ok(p.x >= 0 && p.x <= 40, `x ${p.x} escaped the yard`);
+    assert.ok(p.y >= 0 && p.y <= 40, `y ${p.y} escaped the yard`);
+  });
+  // clampGroup only translates the whole clump, so its pairwise distances
+  // survive exactly; a per-point clamp would have flattened them instead.
+  const raw = clumpPositions(6, winecup.width * SPACING_FACTOR, { x: 1, y: 1 }, null);
+  const pairwiseDistances = (points) =>
+    points
+      .flatMap((a, i) => points.slice(i + 1).map((b) => Math.hypot(a.x - b.x, a.y - b.y)))
+      .sort((a, b) => a - b);
+  const createdDistances = pairwiseDistances(created.map((p) => ({ x: p.x, y: p.y })));
+  const rawDistances = pairwiseDistances(raw);
+  createdDistances.forEach((d, i) => assert.ok(Math.abs(d - rawDistances[i]) < 1e-6));
+});
+
+test('addDriftFromCatalog never mutates the plants array it is given', () => {
+  const plants = deepFreeze(baseDrift());
+  const state = { plants, species, project: YARD_WITH_PLAN };
+  addDriftFromCatalog(state, 'winecup', 4);
+  assert.equal(plants.length, 4, 'the input array itself is untouched');
+});
+
+test('addDriftFromCatalog adds nothing for an unknown species, or a project with no plan view', () => {
+  const state = makePlanState([]);
+  assert.deepStrictEqual(addDriftFromCatalog(state, 'no-such-species', 5), { plants: [], driftId: null });
+  assert.equal(state.plants.length, 0);
+
+  const noPlan = { plants: [], species, project: { views: [], yardFt: { width: 40, depth: 40 } } };
+  assert.deepStrictEqual(addDriftFromCatalog(noPlan, 'winecup', 5), { plants: [], driftId: null });
+});
+
+test('addDriftFromCatalog caps the count at MAX_DRIFT_COUNT', () => {
+  const state = makePlanState([]);
+  const { plants: created } = addDriftFromCatalog(state, 'winecup', MAX_DRIFT_COUNT + 25);
+  assert.equal(created.length, MAX_DRIFT_COUNT);
 });
