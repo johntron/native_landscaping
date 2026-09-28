@@ -2422,6 +2422,13 @@ select {
     align-items: flex-start;
   }
 
+  /* A species in no drift has nothing to say here, and in a card a bare
+     "DRIFTS" heading reads as missing data. The label is ::before, which
+     :empty ignores. */
+  .species-table__table td.species-table__drifts:empty {
+    display: none;
+  }
+
   .species-table__table tbody tr:nth-child(odd) {
     background-color: var(--surface-raised);
   }
