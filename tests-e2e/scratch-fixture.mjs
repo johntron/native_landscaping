@@ -60,6 +60,23 @@ export const SCRATCH_PROJECTS = [
   'touch-nudge', // the selection action bar's nudge arrows and undo (nl-o47.2)
   'touch-maximize', // maximized-panel drag scale (nl-o47.1), its own yard so a concurrent touch-plan drag cannot race it
   'touch-letterbox', // same bug, with the pre-fix CSS shear forced back on to isolate the JS mapping fix
+  // Select/isolate/resize a pre-seeded drift (nl-o47.6.2): each gets DRIFT_LAYOUT_CSV
+  // (see below), a 4-member winecup drift with a wide gap between members so a
+  // "between members" tap/click cannot also land within any one member's own
+  // hit radius, plus one unrelated plant far away. One project per test that
+  // WRITES (drag/count/spread/rename save through POST /api/layout); the
+  // read-only selection assertions share their own 'select' project.
+  'touch-drift-select',
+  'touch-drift-drag',
+  'touch-drift-count',
+  'touch-drift-spread',
+  'touch-drift-rename',
+  'desktop-drift-select',
+  'desktop-drift-drag',
+  'desktop-drift-count',
+  'desktop-drift-spread',
+  'desktop-drift-rename',
+  'desktop-drift-rename-refuse',
   'background-upload',
   'placed-photo',
   'features-save',
@@ -88,6 +105,42 @@ export const SCRATCH_PROJECTS = [
  * Kept out of projects/example-frontyard on purpose: that one is editable in
  * the app, and one Setup Save rewrote it and broke the suite (nl-2p3).
  */
+/**
+ * A pre-seeded drift for nl-o47.6.2's selection/isolation/resize specs: 4
+ * winecup plants at the corners of a 6x6 ft square (12,8)-(18,8)-(18,14)-
+ * (12,14), so the centroid (15,11) and every corner-to-corner gap are 6 ft
+ * apart — comfortably clear of MIN_HITBOX_RADIUS_PX's few feet even at a
+ * phone's smaller page scale, so a tap/click "between members" cannot also
+ * land inside any one member's own hit radius. One unrelated horseherb plant
+ * sits far off in a corner, for "outside the outline" and "this plant is not
+ * in the drift" cases. Written over each DRIFT_PROJECTS id's copied
+ * planting_layout.csv (backyard's own yard shape, 29.63 x 22.22 ft, is
+ * plenty of room around a drift this size).
+ */
+const DRIFT_LAYOUT_CSV = [
+  'id,species_id,x_ft,y_ft,drift_id',
+  'drift-a,winecup,12,8,winecup-drift',
+  'drift-b,winecup,18,8,winecup-drift',
+  'drift-c,winecup,12,14,winecup-drift',
+  'drift-d,winecup,18,14,winecup-drift',
+  'lone-plant,horseherb,4,4,',
+].join('\n');
+
+/** Every scratch project seeded with DRIFT_LAYOUT_CSV instead of backyard's own planting. */
+const DRIFT_PROJECTS = [
+  'touch-drift-select',
+  'touch-drift-drag',
+  'touch-drift-count',
+  'touch-drift-spread',
+  'touch-drift-rename',
+  'desktop-drift-select',
+  'desktop-drift-drag',
+  'desktop-drift-count',
+  'desktop-drift-spread',
+  'desktop-drift-rename',
+  'desktop-drift-rename-refuse',
+];
+
 const PLACED_PHOTO = {
   id: 'placed-photo',
   name: 'placed-photo',
@@ -302,6 +355,10 @@ export function buildScratchPublicDir() {
   // features.spec.js relies on drag-plan — a plain backyard copy — to still be a
   // project that has never drawn a feature, so its copy loses that file.
   rmSync(path.join(SCRATCH_DIR, 'projects', 'drag-plan', 'features.json'), { force: true });
+
+  DRIFT_PROJECTS.forEach((id) => {
+    writeFileSync(path.join(SCRATCH_DIR, 'projects', id, 'planting_layout.csv'), `${DRIFT_LAYOUT_CSV}\n`);
+  });
 
   // Written after the copy so it replaces the backyard project.json cpSync laid down.
   writeFileSync(

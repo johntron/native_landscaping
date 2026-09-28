@@ -72,6 +72,16 @@ export async function readScratchLayout(projectId) {
   }));
 }
 
+/** Same, plus each row's driftId ('' for a plant in none) — nl-o47.6.2's own specs. */
+export async function readScratchLayoutWithDrift(projectId) {
+  return parseLayoutCsv(await apiText(SCRATCH_BASE, '/api/layout', projectId)).map((row) => ({
+    id: row.id,
+    x: Number(row.x_ft),
+    y: Number(row.y_ft),
+    driftId: (row.drift_id || '').trim(),
+  }));
+}
+
 /** A scratch yard's saved features, or [] if it has none. */
 export async function readScratchFeatures(projectId) {
   return JSON.parse(await apiText(SCRATCH_BASE, '/api/features', projectId)).features || [];
@@ -181,6 +191,32 @@ export async function touchGesture(page, { x, y, dx = 0, dy = 0, steps = 10, hol
   }
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await cdp.detach();
+}
+
+/**
+ * A specific plant's on-screen centre, by id, mapped through the SVG's own
+ * screenCTM rather than a rect/viewBox ratio (only right when the panel
+ * shares the viewBox's own aspect — see src/render/screenPoint.js's own
+ * comment). The label sits exactly at the plant's centre and carries
+ * pointer-events: none, so it is a safe point to read without also being a
+ * hit target itself.
+ */
+export async function plantScreenPosition(page, svgId, plantId) {
+  // page.mouse works in viewport coordinates and does not scroll — see
+  // plantPointerTarget's own identical guard.
+  await page.locator(`#${svgId}`).scrollIntoViewIfNeeded();
+  return page.evaluate(
+    ({ svgId, plantId }) => {
+      const svg = document.getElementById(svgId);
+      const group = svg.querySelector(`g[data-plant-id="${plantId}"]`);
+      const label = group?.querySelector('text');
+      if (!label) return null;
+      const point = new DOMPoint(Number(label.getAttribute('x')), Number(label.getAttribute('y')));
+      const screen = point.matrixTransform(svg.getScreenCTM());
+      return { x: screen.x, y: screen.y };
+    },
+    { svgId, plantId }
+  );
 }
 
 /** Where a plant sits in yard feet, straight off the app's own state. */

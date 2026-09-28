@@ -296,12 +296,15 @@ test.describe('adding and removing plants', () => {
     await expect(page.locator('#addPlantSheet')).toBeHidden();
     await expect(planPlants(page)).toHaveCount(before + 5);
 
-    // Every new member is selected: one ring each (nl-o47.2), and the bar
-    // names the count — a regex, not the exact "5 plants" string, since a
-    // drift context (nl-o47.6.2) may relabel it.
+    // Every new member is selected: one ring each (nl-o47.2). Selecting
+    // exactly one drift's members is itself a whole-drift selection
+    // (nl-o47.6.2, src/state/driftSelection.js driftForExactSelection), so
+    // the bar shows the drift's own name+count group, not the plain
+    // selectionBarName label.
     await expect(page.locator('#topSvg circle[data-selection-ring]')).toHaveCount(5);
     await expect(page.locator('#selectionBar')).toBeVisible();
-    await expect(page.locator('#selectionBarName')).toHaveText(/5/);
+    await expect(page.locator('#selectionDriftNameGroup')).toBeVisible();
+    await expect(page.locator('#selectionDriftCountLabel')).toHaveText(/5/);
 
     // One history entry for the whole drift, not five.
     await expect

@@ -4,6 +4,7 @@ import {
   plantPointerTarget,
   plantPosition,
   readScratchLayout,
+  readScratchLayoutWithDrift,
   tap,
   touchGesture,
 } from './helpers.js';
@@ -397,5 +398,205 @@ test.describe('dragging a maximized view (nl-o47.1)', () => {
     expect(plantId, 'a plant is on the drawing').toBeTruthy();
 
     await assertDragTracksFinger(page, 'touch-letterbox', plantId);
+  });
+});
+
+test.describe('drifts (nl-o47.6.2)', () => {
+  // Seeded by tests-e2e/scratch-fixture.mjs's DRIFT_LAYOUT_CSV: a 6x6 ft
+  // square of 4 winecups (their own centroid is (15, 11)), plus one
+  // unrelated horseherb ('lone-plant') far off in a corner.
+  const DRIFT_MEMBERS = ['drift-a', 'drift-b', 'drift-c', 'drift-d'];
+  const SEEDED_POSITIONS = {
+    'drift-a': { x: 12, y: 8 },
+    'drift-b': { x: 18, y: 8 },
+    'drift-c': { x: 12, y: 14 },
+    'drift-d': { x: 18, y: 14 },
+  };
+
+  /** A drift member's on-screen centre — same screenCTM mapping as
+   * plantPointerTarget, but for a specific known id rather than "the first
+   * plant on the drawing". */
+  async function driftMemberScreen(page, plantId) {
+    // page.mouse/CDP touch coordinates are viewport-relative and do not
+    // scroll — see plantPointerTarget's own identical guard in helpers.js.
+    await page.locator('#topSvg').scrollIntoViewIfNeeded();
+    return page.evaluate((id) => {
+      const svg = document.getElementById('topSvg');
+      const group = svg.querySelector(`g[data-plant-id="${id}"]`);
+      const label = group?.querySelector('text');
+      const point = new DOMPoint(Number(label.getAttribute('x')), Number(label.getAttribute('y')));
+      const screen = point.matrixTransform(svg.getScreenCTM());
+      return { x: screen.x, y: screen.y };
+    }, plantId);
+  }
+
+  /** The midpoint between two members' own screen positions — a point
+   * strictly between them in yard feet too, since the plan's feet<->viewBox
+   * mapping is affine (planToViewBox(midpoint(A,B)) === midpoint(screen(A),
+   * screen(B))). drift-a/drift-d are diagonal corners, so this lands on the
+   * drift's own centroid without needing to replicate the app's transform
+   * math in the test. */
+  async function midpointOf(page, idA, idB) {
+    const a = await driftMemberScreen(page, idA);
+    const b = await driftMemberScreen(page, idB);
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  }
+
+  async function driftMemberIds(projectId) {
+    return (await readScratchLayoutWithDrift(projectId))
+      .filter((row) => row.driftId === 'winecup-drift')
+      .map((row) => row.id);
+  }
+
+  test('a tap on a member selects the whole drift; a tap between members does too; a second tap drills in; a tap outside leaves', async ({
+    page,
+  }) => {
+    await openScratchProject(page, 'touch-drift-select');
+    await page.locator('[data-mode="edit"]').click();
+
+    const target = await driftMemberScreen(page, 'drift-a');
+    await tap(page, target);
+
+    await expect(page.locator('#selectionBar')).toBeVisible();
+    await expect(page.locator('#selectionDriftNameGroup')).toBeVisible();
+    await expect(page.locator('#selectionDriftCountLabel')).toContainText('4 plants');
+    await expect(page.locator('#topSvg [data-drift-outline]')).toBeVisible();
+    // Every member gets a selection ring; the unrelated plant is dimmed, not ringed.
+    expect(await page.locator('#topSvg [data-selection-ring]').count()).toBe(4);
+    await expect(page.locator('#topSvg g[data-plant-id="lone-plant"]')).toHaveAttribute('data-dimmed', 'true');
+
+    // A tap in the gap between members, well inside the outline (the drift's
+    // own centroid — see midpointOf), also selects the whole drift.
+    await tap(page, await midpointOf(page, 'drift-a', 'drift-d'));
+    await expect(page.locator('#selectionDriftNameGroup')).toBeVisible();
+    await expect(page.locator('#selectionDriftCountLabel')).toContainText('4 plants');
+
+    // A further tap on a member drills into it: the plain single-plant bar
+    // returns, with the two drift-member extras.
+    await tap(page, target);
+    await expect(page.locator('#selectionDriftNameGroup')).toBeHidden();
+    await expect(page.locator('#selectionBarName')).toBeVisible();
+    await expect(page.locator('#selectionBackToDriftBtn')).toBeVisible();
+    await expect(page.locator('#selectionRemoveFromDriftBtn')).toBeVisible();
+
+    // A tap outside the (still isolated, now drilled-into) drift's own
+    // outline leaves it — the bar hides, same as tapping empty ground always has.
+    await tap(page, await emptySpotIn(page, 'topSvg'));
+    await expect(page.locator('#selectionBar')).toBeHidden();
+  });
+
+  test('a drag moves the whole drift by the finger delta, as one undo step, leaving the unrelated plant alone', async ({
+    page,
+  }) => {
+    await openScratchProject(page, 'touch-drift-drag');
+    await page.locator('[data-mode="edit"]').click();
+
+    await tap(page, await driftMemberScreen(page, 'drift-a'));
+    await expect(page.locator('#selectionDriftNameGroup')).toBeVisible();
+
+    const away = await emptySpotIn(page, 'topSvg');
+    await touchGesture(page, { x: away.x, y: away.y, dx: 40, dy: -30 });
+
+    await expect
+      .poll(
+        async () => (await readScratchLayoutWithDrift('touch-drift-drag')).find((r) => r.id === 'drift-a')?.x,
+        { timeout: 5000 }
+      )
+      .not.toBeCloseTo(SEEDED_POSITIONS['drift-a'].x, 3);
+
+    const after = await readScratchLayoutWithDrift('touch-drift-drag');
+    const deltas = DRIFT_MEMBERS.map((id) => {
+      const row = after.find((r) => r.id === id);
+      const seeded = SEEDED_POSITIONS[id];
+      return { dx: row.x - seeded.x, dy: row.y - seeded.y };
+    });
+    deltas.forEach((d) => {
+      expect(d.dx).toBeCloseTo(deltas[0].dx, 2);
+      expect(d.dy).toBeCloseTo(deltas[0].dy, 2);
+    });
+    expect(Math.abs(deltas[0].dx) + Math.abs(deltas[0].dy), 'the group actually moved').toBeGreaterThan(0.2);
+    const lone = after.find((r) => r.id === 'lone-plant');
+    expect(lone.x, 'the unrelated plant did not move').toBeCloseTo(4, 5);
+    expect(lone.y).toBeCloseTo(4, 5);
+
+    await page.locator('#undoLayoutBtn').click();
+    await expect
+      .poll(
+        async () => (await readScratchLayoutWithDrift('touch-drift-drag')).find((r) => r.id === 'drift-a')?.x,
+        { timeout: 5000 }
+      )
+      .toBeCloseTo(SEEDED_POSITIONS['drift-a'].x, 2);
+  });
+
+  test('+ adds a member and - removes one, each its own undo step', async ({ page }) => {
+    await openScratchProject(page, 'touch-drift-count');
+    await page.locator('[data-mode="edit"]').click();
+    await tap(page, await driftMemberScreen(page, 'drift-a'));
+    await expect(page.locator('#selectionDriftCountValue')).toHaveText('4');
+
+    await page.locator('#selectionDriftCountIncBtn').click();
+    await expect
+      .poll(async () => (await driftMemberIds('touch-drift-count')).length, { timeout: 5000 })
+      .toBe(5);
+    await expect(page.locator('#selectionDriftCountValue')).toHaveText('5');
+
+    await page.locator('#undoLayoutBtn').click();
+    await expect
+      .poll(async () => (await driftMemberIds('touch-drift-count')).length, { timeout: 5000 })
+      .toBe(4);
+
+    await page.locator('#selectionDriftCountDecBtn').click();
+    await expect
+      .poll(async () => (await driftMemberIds('touch-drift-count')).length, { timeout: 5000 })
+      .toBe(3);
+
+    await page.locator('#undoLayoutBtn').click();
+    await expect
+      .poll(async () => (await driftMemberIds('touch-drift-count')).length, { timeout: 5000 })
+      .toBe(4);
+  });
+
+  test('spread changes the distance between members', async ({ page }) => {
+    await openScratchProject(page, 'touch-drift-spread');
+    await page.locator('[data-mode="edit"]').click();
+    await tap(page, await driftMemberScreen(page, 'drift-a'));
+    await expect(page.locator('#selectionDriftNameGroup')).toBeVisible();
+
+    const distanceAB = async () => {
+      const rows = await readScratchLayoutWithDrift('touch-drift-spread');
+      const a = rows.find((r) => r.id === 'drift-a');
+      const b = rows.find((r) => r.id === 'drift-b');
+      return Math.hypot(a.x - b.x, a.y - b.y);
+    };
+    const before = await distanceAB(); // 6 ft, seeded
+
+    await page.locator('#selectionSpreadLooserBtn').click();
+    await expect.poll(distanceAB, { timeout: 5000 }).toBeGreaterThan(before + 0.1);
+    const afterLooser = await distanceAB();
+
+    await page.locator('#selectionSpreadTighterBtn').click();
+    await expect.poll(distanceAB, { timeout: 5000 }).toBeLessThan(afterLooser - 0.1);
+  });
+
+  test('rename changes the label and survives a reload', async ({ page }) => {
+    await openScratchProject(page, 'touch-drift-rename');
+    await page.locator('[data-mode="edit"]').click();
+    await tap(page, await driftMemberScreen(page, 'drift-a'));
+    await expect(page.locator('#selectionDriftNameGroup')).toBeVisible();
+
+    await page.locator('#selectionDriftNameInput').fill('Front Edge');
+    await page.locator('#selectionDriftNameInput').press('Enter');
+
+    await expect(page.locator('#selectionDriftNameInput')).toHaveValue('Front edge');
+    await expect
+      .poll(
+        async () => (await readScratchLayoutWithDrift('touch-drift-rename')).find((r) => r.id === 'drift-a')?.driftId,
+        { timeout: 5000 }
+      )
+      .toBe('front-edge');
+
+    await openScratchProject(page, 'touch-drift-rename'); // a fresh load of the same yard
+    await tap(page, await driftMemberScreen(page, 'drift-a'));
+    await expect(page.locator('#selectionDriftNameInput')).toHaveValue('Front edge');
   });
 });
