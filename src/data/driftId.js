@@ -82,3 +82,21 @@ export function humanizeDriftId(driftId) {
   const text = String(driftId || '').replace(/-/g, ' ');
   return text ? text.charAt(0).toUpperCase() + text.slice(1) : '';
 }
+
+/**
+ * A drift's full display label, humanizeDriftId(driftId) plus its member
+ * count spelled out — "Winecup · 17 plants" — the same text
+ * src/ui/selectionBar.js's action bar already assembles inline for the
+ * whole-drift mode (its own driftNameInput/driftCountLabel pair) and the
+ * species table's per-drift entries (nl-o47.6.7) share verbatim, so the two
+ * read identically wherever a person sees a drift named.
+ * @param {string} driftId
+ * @param {number} count
+ * @returns {string} '' for an unhumanizable id
+ */
+export function driftMemberCountLabel(driftId, count) {
+  const label = humanizeDriftId(driftId);
+  if (!label) return '';
+  const n = Number(count) || 0;
+  return `${label} · ${n} plant${n === 1 ? '' : 's'}`;
+}

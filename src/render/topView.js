@@ -6,11 +6,11 @@ import { clearSvg, createSvgElement } from './svgUtils.js';
 import { buildFeatureGroup } from './featureViews.js';
 import { buildFlowerCenters } from './inflorescenceStrategies.js';
 import { pointInPolygon, nearestFeature } from './geometry.js';
-import { buildPlantLabel } from './labels.js';
+import { buildDriftPlanLabel, buildPlantLabel, clampLabelPosition } from './labels.js';
 import { buildFruitCenters } from './fruitPlacement.js';
 import { buildSmoothPath } from './pathUtils.js';
 import { ECOTYPE_RING_RATIO, isLocalEcotype, outlineStatusAttributes, plantStatus } from './plantStatus.js';
-import { driftMembers, driftOutlinePolygon } from '../state/driftGeometry.js';
+import { allDrifts, driftCentroid, driftMembers, driftOutlinePolygon, memberRadiusFt } from '../state/driftGeometry.js';
 
 const HIGHLIGHT_COLOR = '#ef7d1a';
 const HIGHLIGHT_OUTLINE_OPACITY = 0.9;
@@ -34,6 +34,7 @@ export function renderTopView(svg, plantStates, view, options = {}) {
   const {
     showLabels = false,
     highlightedSpeciesKey = '',
+    highlightedDriftId = '',
     targetedPlantId = '',
     hoveredPlantId = '',
     selectedPlantIds = null,
@@ -42,6 +43,7 @@ export function renderTopView(svg, plantStates, view, options = {}) {
   } = options;
   clearSvg(svg);
   const normalizedHighlightKey = (highlightedSpeciesKey || '').toLowerCase();
+  const normalizedHighlightDriftId = String(highlightedDriftId || '');
   const normalizedTargetId = String(targetedPlantId || '');
   const normalizedHoveredId = String(hoveredPlantId || '');
   const toPixels = transform.toPx;
@@ -49,12 +51,13 @@ export function renderTopView(svg, plantStates, view, options = {}) {
   const targetMarkers = [];
   const selectionMarkers = [];
   const climbWarnings = [];
+  const plants = plantStates.map((ps) => ps.plant);
   // The isolated drift's own members (nl-o47.6.2): everything else dims and
   // is unhittable (styles.css '[data-dimmed]') while a drift is selected or
   // drilled into. Derived from THIS render's own plant list (whatever a
   // hidden layer already excluded, exactly like every other decoration here).
   const isolatedMemberIds = selectedDriftId
-    ? new Set(driftMembers(plantStates.map((ps) => ps.plant), selectedDriftId).map((m) => String(m.id)))
+    ? new Set(driftMembers(plants, selectedDriftId).map((m) => String(m.id)))
     : null;
 
   // A plan has no depth to sort on, so features go underneath the plants in the
@@ -63,7 +66,14 @@ export function renderTopView(svg, plantStates, view, options = {}) {
 
   plantStates.forEach(({ plant, state }) => {
     const speciesKey = getSpeciesKey(plant);
-    const isHighlighted = Boolean(normalizedHighlightKey && speciesKey === normalizedHighlightKey);
+    // A drift highlight (nl-o47.6.7, the species table's per-drift entries in
+    // View mode) takes over from the species highlight entirely rather than
+    // adding to it: OR-ing the two would ring every member of the SPECIES
+    // whenever a drift is highlighted, which is exactly the "can't tell the
+    // drift apart" bug a drift-scoped variant exists to avoid.
+    const isHighlighted = normalizedHighlightDriftId
+      ? plant.driftId === normalizedHighlightDriftId
+      : Boolean(normalizedHighlightKey && speciesKey === normalizedHighlightKey);
     const isTargeted = normalizedTargetId && String(plant.id) === normalizedTargetId;
     const isHovered = normalizedHoveredId && String(plant.id) === normalizedHoveredId;
     const isSelected = Boolean(selectedPlantIds && selectedPlantIds.has(String(plant.id)));
@@ -156,7 +166,13 @@ export function renderTopView(svg, plantStates, view, options = {}) {
       });
     }
 
-    if (showLabels) {
+    // A member of a drift OTHER than the selected/isolated one draws no label
+    // of its own (nl-o47.6.7): the drift is labelled once, below, at its
+    // centroid. A plant in no drift, or in the one currently
+    // selected/isolated (so a person editing it can tell members apart),
+    // keeps its own label exactly as before.
+    const showsOwnLabel = !plant.driftId || plant.driftId === selectedDriftId;
+    if (showLabels && showsOwnLabel) {
       const label = buildPlantLabel(plant);
       if (label) {
         const fontSize = Math.max(radius * 0.6, 16);
@@ -199,8 +215,57 @@ export function renderTopView(svg, plantStates, view, options = {}) {
   selectionMarkers.forEach((target) => appendSelectionRing(svg, target));
   climbWarnings.forEach((target) => appendClimbWarningRing(svg, target));
   if (isolatedMemberIds && isolatedMemberIds.size) {
-    appendDriftOutline(svg, driftMembers(plantStates.map((ps) => ps.plant), selectedDriftId), transform);
+    appendDriftOutline(svg, driftMembers(plants, selectedDriftId), transform);
   }
+  if (showLabels) {
+    // Every drift but the selected/isolated one (which just drew its own
+    // members' labels above) gets ONE label here, at its centroid — never
+    // inside a `g[data-plant-id]`, so it is neither counted as a plant nor
+    // draggable, and always `pointer-events: none` so the gap-tap/click
+    // hit-testing this same centroid is aimed at (driftHitTest.js) still
+    // lands on the plan, not on the label text.
+    allDrifts(plants)
+      .filter((drift) => drift.driftId !== selectedDriftId)
+      .forEach((drift) => appendDriftLabel(svg, drift, transform, Boolean(isolatedMemberIds)));
+  }
+}
+
+/**
+ * A drift's single on-plan label (nl-o47.6.7): humanizeDriftId(driftId) plus
+ * its member count ("Winecup ×17"), centred at driftCentroid and sized off
+ * the same member-radius math a plant's own label uses. Clamped inside the
+ * view's own viewBox (clampLabelPosition) so a drift sitting near the plan's
+ * edge does not draw text past it — the plan's `<svg>` itself never clips
+ * (`.view svg { overflow: visible }`), but its parent panel does
+ * (`overflow: hidden`, styles.css), and `captureViewToPng`'s export crops to
+ * this exact viewBox.
+ */
+function appendDriftLabel(svg, drift, transform, dimmed) {
+  const centroid = driftCentroid(drift.members);
+  if (!centroid) return;
+  const label = buildDriftPlanLabel(drift.driftId, drift.members.length);
+  if (!label) return;
+  const radiusFt = drift.members.reduce((max, m) => Math.max(max, memberRadiusFt(m)), 0);
+  const fontSize = Math.max(transform.toPx(radiusFt) * 0.6, 16);
+  const raw = transform.planToViewBox(centroid);
+  const pos = clampLabelPosition(raw, label, fontSize, transform.viewBox);
+  const text = createSvgElement('text', {
+    x: pos.x,
+    y: pos.y,
+    'text-anchor': 'middle',
+    'dominant-baseline': 'middle',
+    'font-size': fontSize,
+    'font-weight': 700,
+    fill: '#1b1b1b',
+    stroke: '#fff',
+    'stroke-width': Math.max(fontSize * 0.12, 1.2),
+    'paint-order': 'stroke fill',
+    'pointer-events': 'none',
+    'data-drift-label': drift.driftId,
+    ...(dimmed ? { 'data-dimmed': 'true' } : {}),
+  });
+  text.textContent = label;
+  svg.appendChild(text);
 }
 
 /**
