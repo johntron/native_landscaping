@@ -178,6 +178,32 @@ test.describe('dragging by touch', () => {
     await expect(page.locator('#addPlantSearch')).not.toBeFocused();
     await expect(page.locator('#addPlantSheetPanel')).toBeFocused();
   });
+
+  test('the "How many?" stepper sits ahead of the list and answers a real tap (nl-o47.6.3)', async ({
+    page,
+  }) => {
+    // Read-only (never taps a row), so this can share 'touch-hold' too.
+    await openScratchProject(page, 'touch-hold');
+    await page.locator('[data-mode="edit"]').click();
+    await page.locator('#addPlantBtn').click();
+    await expect(page.locator('#addPlantSheet')).toBeVisible();
+
+    const countField = page.locator('#addPlantCount');
+    await expect(countField).toHaveValue('1');
+
+    const tapCenterOf = async (locator) => {
+      const box = await locator.boundingBox();
+      await tap(page, { x: box.x + box.width / 2, y: box.y + box.height / 2 });
+    };
+
+    // "+"/"-" are real tap targets (min 44px, styles.css), not mouse-only
+    // buttons: a bare CDP touch event, the same tap() every other gesture in
+    // this file uses, has to move the count.
+    await tapCenterOf(page.locator('#addPlantCountPlus'));
+    await expect(countField).toHaveValue('2');
+    await tapCenterOf(page.locator('#addPlantCountMinus'));
+    await expect(countField).toHaveValue('1');
+  });
 });
 
 test.describe('the selection action bar (nl-o47.2)', () => {

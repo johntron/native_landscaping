@@ -2,7 +2,13 @@ import { readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
 import { parseCsv } from '../src/data/csvLoader.js';
 import { searchSpecies } from '../src/data/speciesSearch.js';
-import { openScratchProject, plantPointerTarget, readScratchHistory, readScratchLayout } from './helpers.js';
+import {
+  openScratchProject,
+  plantPointerTarget,
+  readScratchHistory,
+  readScratchLayout,
+  SCRATCH_BASE,
+} from './helpers.js';
 
 // Adding and removing both auto-save through POST /api/layout, so these run
 // against the throwaway document root built by scratch-fixture.mjs — never the
@@ -46,6 +52,17 @@ async function openAddPlantSheet(page) {
   await page.locator('[data-mode="edit"]').click();
   await page.locator('#addPlantBtn').click();
   await expect(page.locator('#addPlantSheet')).toBeVisible();
+}
+
+/**
+ * A scratch yard's saved layout as full CSV rows (id, species_id, drift_id, …),
+ * for nl-o47.6.3's drift assertions — readScratchLayout (helpers.js) only
+ * keeps {id, x, y}, dropping the drift_id column this needs.
+ */
+async function readScratchLayoutRows(projectId) {
+  const res = await fetch(`${SCRATCH_BASE}/api/layout?project=${encodeURIComponent(projectId)}`);
+  if (!res.ok) throw new Error(`/api/layout for ${projectId} answered ${res.status}`);
+  return parseCsv(await res.text());
 }
 
 test.describe('adding and removing plants', () => {
@@ -256,5 +273,93 @@ test.describe('adding and removing plants', () => {
         expect(Object.keys(plant).sort()).toEqual(['id', 'speciesId', 'x', 'y']);
       }
     }
+  });
+
+  test('the "How many?" stepper places a drift: N plants, one driftId, all selected, undone in one step (nl-o47.6.3)', async ({
+    page,
+  }) => {
+    await openScratchProject(page, 'plant-drift');
+    await openAddPlantSheet(page);
+
+    const before = await planPlants(page).count();
+    const idsBefore = await planPlants(page).evaluateAll((els) => els.map((el) => el.dataset.plantId));
+    const historyBefore = (await readScratchHistory('plant-drift'))?.entries.length ?? 0;
+
+    // Resets to 1 every time the sheet opens.
+    await expect(page.locator('#addPlantCount')).toHaveValue('1');
+    await page.locator('#addPlantCount').fill('5');
+
+    const firstRow = page.locator('#addPlantList .add-plant-sheet__row').first();
+    const speciesId = await firstRow.getAttribute('data-species-id');
+    await firstRow.locator('.add-plant-sheet__pick').click();
+
+    await expect(page.locator('#addPlantSheet')).toBeHidden();
+    await expect(planPlants(page)).toHaveCount(before + 5);
+
+    // Every new member is selected: one ring each (nl-o47.2), and the bar
+    // names the count — a regex, not the exact "5 plants" string, since a
+    // drift context (nl-o47.6.2) may relabel it.
+    await expect(page.locator('#topSvg circle[data-selection-ring]')).toHaveCount(5);
+    await expect(page.locator('#selectionBar')).toBeVisible();
+    await expect(page.locator('#selectionBarName')).toHaveText(/5/);
+
+    // One history entry for the whole drift, not five.
+    await expect
+      .poll(async () => (await readScratchHistory('plant-drift'))?.entries.length ?? 0, { timeout: 5000 })
+      .toBe(historyBefore + 1);
+    const history = await readScratchHistory('plant-drift');
+    expect(history.entries[history.entries.length - 1].description).toMatch(/^Added drift of 5 /);
+
+    // The 5 new plants (identified by diffing the plan's own plant ids, never
+    // an id read from projects/<slug>/) are all that species, and share one
+    // non-empty driftId that survived the round trip through POST /api/layout.
+    const idsAfter = await planPlants(page).evaluateAll((els) => els.map((el) => el.dataset.plantId));
+    const newIds = idsAfter.filter((id) => !idsBefore.includes(id));
+    expect(newIds.length).toBe(5);
+
+    const layoutRows = await readScratchLayoutRows('plant-drift');
+    const newRows = layoutRows.filter((row) => newIds.includes(row.id));
+    expect(newRows.length).toBe(5);
+    newRows.forEach((row) => expect(row.species_id).toBe(speciesId));
+    const driftIds = new Set(newRows.map((row) => row.drift_id));
+    expect(driftIds.size).toBe(1);
+    const [driftId] = driftIds;
+    expect(driftId).toBeTruthy();
+    // No pre-existing plant already carried it (a fresh id, not a name collision).
+    const oldRows = layoutRows.filter((row) => idsBefore.includes(row.id));
+    expect(oldRows.every((row) => row.drift_id !== driftId)).toBe(true);
+
+    // Undo removes the whole drift in one step.
+    await page.locator('#undoLayoutBtn').click();
+    await expect(planPlants(page)).toHaveCount(before);
+    await expect
+      .poll(async () => (await readScratchLayout('plant-drift')).length, { timeout: 5000 })
+      .toBe(before);
+  });
+
+  test('count 1 still adds a single plant with no driftId (today\'s behaviour, unchanged)', async ({ page }) => {
+    // Its own project, not 'plant-drift': fullyParallel (playwright.config.js)
+    // can run this alongside the drift test above, and both mutate a layout a
+    // `before` count is taken from.
+    await openScratchProject(page, 'plant-drift-one');
+    await openAddPlantSheet(page);
+
+    const before = await planPlants(page).count();
+    await expect(page.locator('#addPlantCount')).toHaveValue('1'); // the default
+
+    const firstRow = page.locator('#addPlantList .add-plant-sheet__row').first();
+    await firstRow.locator('.add-plant-sheet__pick').click();
+
+    await expect(planPlants(page)).toHaveCount(before + 1);
+    // Single-plant selection, exactly as tested in "adding a plant from the
+    // catalog…" above: one ring, no drift.
+    await expect(page.locator('#topSvg circle[data-selection-ring]')).toHaveCount(1);
+
+    await expect
+      .poll(async () => (await readScratchLayoutRows('plant-drift-one')).length, { timeout: 5000 })
+      .toBe(before + 1);
+    const layoutRows = await readScratchLayoutRows('plant-drift-one');
+    const newest = layoutRows[layoutRows.length - 1];
+    expect(newest.drift_id ?? '').toBe('');
   });
 });

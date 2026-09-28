@@ -51,6 +51,8 @@ export const SCRATCH_PROJECTS = [
   'plant-remove',
   'plant-undo',
   'plant-redo',
+  'plant-drift', // the Add plant sheet's "How many?", count > 1 (nl-o47.6.3)
+  'plant-drift-one', // same sheet, count 1: still no driftId (nl-o47.6.3)
   'touch-plan',
   'touch-hold',
   'touch-elevation',
