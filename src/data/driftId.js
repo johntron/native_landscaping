@@ -44,3 +44,24 @@ export function isValidDriftId(value) {
     DRIFT_ID_PATTERN.test(value)
   );
 }
+
+/**
+ * A label as a driftId slug: lower-cased, non-alphanumeric runs collapsed to
+ * one hyphen, leading/trailing hyphens trimmed, cut to DRIFT_ID_MAX_LENGTH.
+ * Never empty: a label with no usable characters slugs to 'drift'. The
+ * result always satisfies isValidDriftId. Shared by
+ * src/state/plantIds.js's buildDriftId (which walks past a collision by
+ * adding a numeric suffix) and src/state/driftEdits.js's renameDrift (which
+ * refuses one instead).
+ * @param {string} label
+ * @returns {string}
+ */
+export function slugifyDriftLabel(label) {
+  return (
+    String(label || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, DRIFT_ID_MAX_LENGTH) || 'drift'
+  );
+}
