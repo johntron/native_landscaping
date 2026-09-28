@@ -26,7 +26,7 @@
  * while the phone editor is open, so its border box IS the content box, with
  * no padding arithmetic to get right here).
  */
-import { FIT_STATE, clampZoomState, panBy, pinchUpdate } from '../render/canvasZoom.js';
+import { FIT_STATE, clampZoomState, isAtFit, panBy, pinchUpdate } from '../render/canvasZoom.js';
 
 function distance(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -39,9 +39,11 @@ function midpoint(a, b) {
  * @param {object} deps
  * @param {() => number} [deps.getSelectionSize]  the live Edit-mode selection
  *   size, so a one-finger move pans only while it is 0
- * @param {(state: {scale:number, tx:number, ty:number}) => void} [deps.onChange]
- *   called with the new state every time it changes (e.g. to sync a Fit
- *   button's enabled state)
+ * @param {(state: {scale:number, tx:number, ty:number}, atRest: boolean) => void} [deps.onChange]
+ *   called with the new state every time it changes, plus whether it is
+ *   already the (possibly letterboxed, so not necessarily FIT_STATE itself
+ *   — see canvasZoom.js's isAtFit) resting position, to sync a Fit button's
+ *   enabled state
  */
 export function createCanvasGesture({ getSelectionSize = () => 0, onChange = () => {} } = {}) {
   let panelEl = null;
@@ -101,7 +103,12 @@ export function createCanvasGesture({ getSelectionSize = () => 0, onChange = () 
     if (viewEl) {
       viewEl.style.transform = `translate(${state.tx}px, ${state.ty}px) scale(${state.scale})`;
     }
-    onChange(state);
+    // The resting position for THIS panel's own bounds, which is FIT_STATE
+    // only when the content happens to fill it exactly on both axes —
+    // otherwise it is a centered state (see clampTranslateAxis's own
+    // comment), and comparing against raw FIT_STATE would leave the Fit
+    // button reading as live forever on a letterboxed drawing.
+    onChange(state, isAtFit(state, clampZoomState(FIT_STATE, bounds())));
   }
 
   function handlePointerDown(event) {

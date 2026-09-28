@@ -714,3 +714,249 @@ test.describe('species table drift entries, by touch (nl-o47.6.7)', () => {
     await expect(page.locator('#plantsSheet')).toBeHidden();
   });
 });
+
+test.describe('the phone editor (nl-o47.4)', () => {
+  /** The maximized panel's own `.view` element's inline transform — what
+   * canvasGesture.js writes on every pinch/pan frame. */
+  async function viewTransform(page) {
+    return page.evaluate(() => document.querySelector('.view-panel.is-maximized .view')?.style.transform || '');
+  }
+
+  /** The screen-px <-> viewBox-unit scale `svg.getScreenCTM()` reports right
+   * now — matrixScale's own definition (src/render/screenPoint.js), inlined
+   * here since a page.evaluate closure cannot import that module. Pinching
+   * from `startDistance` to `endDistance` should grow this by about their
+   * ratio, whatever the starting zoom was. */
+  async function svgScreenScale(page, svgId) {
+    return page.evaluate((id) => {
+      const m = document.getElementById(id).getScreenCTM();
+      return Math.hypot(m.a, m.b);
+    }, svgId);
+  }
+
+  /** The maximized `.view`'s own on-screen center — a safe, chrome-free
+   * pinch anchor regardless of which view is showing. */
+  async function viewCenter(page) {
+    return page.evaluate(() => {
+      const rect = document.querySelector('.view-panel.is-maximized .view').getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    });
+  }
+
+  /** The plan's own plant closest to a screen point, by its data-cx/data-cy
+   * (nl-o47.6.7) mapped through the SAME svg.getScreenCTM() every other
+   * screen-position helper in this file uses — the plant most likely to
+   * still be on screen after a pinch centered on that same point. */
+  async function plantNearestScreenPoint(page, svgId, point) {
+    return page.evaluate(
+      ({ svgId, point }) => {
+        const svg = document.getElementById(svgId);
+        let best = null;
+        let bestDist = Infinity;
+        svg.querySelectorAll('g[data-plant-id]').forEach((g) => {
+          const cx = Number(g.getAttribute('data-cx'));
+          const cy = Number(g.getAttribute('data-cy'));
+          if (!Number.isFinite(cx) || !Number.isFinite(cy)) return;
+          const screen = new DOMPoint(cx, cy).matrixTransform(svg.getScreenCTM());
+          const dist = Math.hypot(screen.x - point.x, screen.y - point.y);
+          if (dist < bestDist) {
+            bestDist = dist;
+            best = { id: g.getAttribute('data-plant-id'), x: screen.x, y: screen.y };
+          }
+        });
+        return best;
+      },
+      { svgId, point }
+    );
+  }
+
+  test('entering the editor: a fixed full-screen canvas, tabs, and the idle bar; the page does not scroll', async ({
+    page,
+  }) => {
+    await openScratchProject(page, 'touch-editor');
+    await expect(page.locator('#phoneEditorTabs')).toBeHidden();
+
+    await page.locator('[data-mode="edit"]').click();
+
+    await expect(page.locator('.views[data-maximized]')).toHaveCount(1);
+    await expect(page.locator('#phoneEditorTabs')).toBeVisible();
+    await expect(page.locator('#phoneEditorBar')).toBeVisible(); // nothing selected yet: the idle bar
+    await expect(page.locator('#selectionBar')).toBeHidden();
+    await expect(page.locator('body')).toHaveClass(/is-phone-editor-open/);
+    expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).toBe('hidden');
+
+    // A scroll attempt on the page behind the fixed editor goes nowhere.
+    await page.evaluate(() => window.scrollTo(0, 400));
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  });
+
+  test('the view switcher shows an elevation', async ({ page }) => {
+    await openScratchProject(page, 'touch-editor');
+    await page.locator('[data-mode="edit"]').click();
+    await page.locator('.views[data-maximized="plan"]').waitFor();
+
+    await page.locator('[data-view-tab="south"]').click();
+
+    await page.locator('.views[data-maximized="south"]').waitFor();
+    await expect(page.locator('[data-view-tab="south"]')).toHaveClass(/is-active/);
+    await expect(page.locator('[data-view-tab="plan"]')).not.toHaveClass(/is-active/);
+    // The elevation's own panel is what is actually visible now, not just
+    // named by data-maximized — configureViews keeps every panel in the DOM.
+    await expect(page.locator('.view-panel.is-maximized svg#southSvg')).toBeVisible();
+  });
+
+  test('month buttons change the month', async ({ page }) => {
+    await openScratchProject(page, 'touch-editor');
+    await page.locator('[data-mode="edit"]').click();
+
+    const before = await page.locator('#phoneEditorMonthLabel').textContent();
+    await page.locator('#phoneEditorMonthNextBtn').click();
+    const after = await page.locator('#phoneEditorMonthLabel').textContent();
+    expect(after).not.toBe(before);
+    // The one #monthSlider src/app.js already listens to is what actually moved.
+    await expect(page.locator('#monthReadout')).toHaveText(after);
+
+    await page.locator('#phoneEditorMonthPrevBtn').click();
+    await expect(page.locator('#phoneEditorMonthLabel')).toHaveText(before);
+  });
+
+  test('Plants sheet opens and hosts the species table; a species row still highlights', async ({ page }) => {
+    await openScratchProject(page, 'touch-editor');
+    await page.locator('[data-mode="edit"]').click();
+
+    await page.locator('#phoneEditorPlantsBtn').click();
+    await expect(page.locator('#plantsSheet')).toBeVisible();
+    // #speciesTable itself moved in, not a copy of it.
+    await expect(page.locator('#plantsSheetBody #speciesTable')).toHaveCount(1);
+
+    const row = page.locator('#speciesTable tr[data-species-key]').first();
+    await row.hover();
+    await expect(row).toHaveClass(/is-highlighted/);
+
+    // The close BUTTON, not the backdrop: the backdrop spans the whole
+    // viewport (position: absolute; inset: 0), and its geometric center —
+    // where Playwright clicks by default — sits UNDER the sheet's own
+    // bottom-anchored panel, which intercepts the click there.
+    await page.locator('.plants-sheet__close').click();
+    await expect(page.locator('#plantsSheet')).toBeHidden();
+    // Closing the sheet does not tear the table down — reopening shows it again.
+    await page.locator('#phoneEditorPlantsBtn').click();
+    await expect(page.locator('#plantsSheetBody #speciesTable')).toHaveCount(1);
+  });
+
+  test('Done leaves the editor back to View mode', async ({ page }) => {
+    await openScratchProject(page, 'touch-editor');
+    await page.locator('[data-mode="edit"]').click();
+    await expect(page.locator('#phoneEditorBar')).toBeVisible();
+
+    await page.locator('#phoneEditorDoneBtn').click();
+
+    await expect(page.locator('[data-mode="view"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#phoneEditorTabs')).toBeHidden();
+    await expect(page.locator('#phoneEditorBar')).toBeHidden();
+    await expect(page.locator('.views[data-maximized]')).toHaveCount(0);
+    await expect(page.locator('body')).not.toHaveClass(/is-phone-editor-open/);
+  });
+
+  test('a pinch zooms: a plant\'s on-screen size grows by about the pinch ratio, and Fit returns to the start', async ({
+    page,
+  }) => {
+    await openScratchProject(page, 'touch-editor');
+    await page.locator('[data-mode="edit"]').click();
+    await page.locator('.views[data-maximized="plan"]').waitFor();
+
+    const before = await svgScreenScale(page, 'topSvg');
+    const center = await viewCenter(page);
+    const RATIO = 2.5;
+    await expect(page.locator('#phoneEditorFitBtn')).toBeDisabled(); // already at fit
+
+    await pinchGesture(page, { center, startDistance: 100, endDistance: 100 * RATIO });
+
+    const after = await svgScreenScale(page, 'topSvg');
+    expect(after / before, 'the on-screen scale grew by about the pinch ratio').toBeGreaterThan(RATIO * 0.75);
+    expect(after / before).toBeLessThan(RATIO * 1.25);
+    await expect(page.locator('#phoneEditorFitBtn')).toBeEnabled();
+
+    await page.locator('#phoneEditorFitBtn').click();
+    const backToFit = await svgScreenScale(page, 'topSvg');
+    expect(backToFit).toBeCloseTo(before, 1);
+    await expect(page.locator('#phoneEditorFitBtn')).toBeDisabled();
+  });
+
+  test('after zooming, a one-finger drag with nothing selected pans the canvas; no plant moves', async ({ page }) => {
+    await openScratchProject(page, 'touch-editor-zoom');
+    await page.locator('[data-mode="edit"]').click();
+    await page.locator('.views[data-maximized="plan"]').waitFor();
+    const before = await readScratchLayout('touch-editor-zoom');
+
+    const center = await viewCenter(page);
+    await pinchGesture(page, { center, startDistance: 100, endDistance: 250 });
+    const transformAfterZoom = await viewTransform(page);
+
+    await expect(page.locator('#selectionBar')).toBeHidden(); // nothing selected
+    await touchGesture(page, { x: center.x, y: center.y, dx: 30, dy: 40, steps: 8 });
+
+    const transformAfterPan = await viewTransform(page);
+    expect(transformAfterPan, 'the pan moved the transform').not.toBe(transformAfterZoom);
+    expect(await readScratchLayout('touch-editor-zoom'), 'no plant moved').toEqual(before);
+  });
+
+  test('after zooming, tap-select + drag still moves the plant by the finger delta, undo reverts it, and a drift still selects with its outline', async ({
+    page,
+  }) => {
+    await openScratchProject(page, 'touch-editor-zoom-drift');
+    await page.locator('[data-mode="edit"]').click();
+    await page.locator('.views[data-maximized="plan"]').waitFor();
+
+    // DRIFT_LAYOUT_CSV's centroid (15, 11) sits close to backyard's own yard
+    // center, so a pinch centered on the view keeps the whole drift on
+    // screen once zoomed.
+    const center = await viewCenter(page);
+    await pinchGesture(page, { center, startDistance: 100, endDistance: 220 });
+
+    const target = await plantNearestScreenPoint(page, 'topSvg', center);
+    expect(target, 'a drift member is still on screen once zoomed').toBeTruthy();
+    const savedBefore = (await readScratchLayoutWithDrift('touch-editor-zoom-drift')).find(
+      (row) => row.id === target.id
+    );
+
+    await tap(page, target);
+    await expect(page.locator('#selectionDriftNameGroup')).toBeVisible();
+    await expect(page.locator('#topSvg [data-drift-outline]')).toBeVisible();
+
+    // Drag from elsewhere on screen — since nl-o47.2, a drag with a
+    // selection may start anywhere on the drawing — and measure the moved
+    // member's OWN on-screen delta through getScreenCTM (ground truth,
+    // exactly like the nl-o47.1 tests), which only stays exact under a CSS
+    // transform if screenPoint.js's CTM-based mapping (not a rect/viewBox
+    // ratio) is what both hit-testing and this measurement go through.
+    const D = 50;
+    const before = await plantNearestScreenPoint(page, 'topSvg', center);
+    const away = { x: center.x - 80, y: center.y - 80 };
+    await touchGesture(page, { x: away.x, y: away.y, dx: D, dy: D, steps: 10 });
+    const after = await plantNearestScreenPoint(page, 'topSvg', { x: before.x + D, y: before.y + D });
+
+    expect(Math.hypot(after.x - before.x - D, after.y - before.y - D), 'the drag tracked the finger').toBeLessThan(
+      14
+    );
+
+    await expect
+      .poll(
+        async () => (await readScratchLayoutWithDrift('touch-editor-zoom-drift')).find((row) => row.id === target.id)
+          ?.x,
+        { timeout: 5000 }
+      )
+      .not.toBe(savedBefore.x);
+
+    // Undo lives in the idle bar, reachable once nothing is selected.
+    await page.locator('#selectionDoneBtn').click();
+    await page.locator('#undoLayoutBtn').click();
+    await expect
+      .poll(
+        async () => (await readScratchLayoutWithDrift('touch-editor-zoom-drift')).find((row) => row.id === target.id)
+          ?.x,
+        { timeout: 5000 }
+      )
+      .toBeCloseTo(savedBefore.x, 3);
+  });
+});

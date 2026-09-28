@@ -145,15 +145,23 @@ export function pinchUpdate(startState, startMid, startDist, currentMid, current
 }
 
 /**
- * Whether `state` is close enough to `FIT_STATE` that the Fit button has
+ * Whether `state` is close enough to `reference` that the Fit button has
  * nothing left to do (and can show as such rather than as a live toggle).
+ * `reference` defaults to the raw `FIT_STATE`, right when the content
+ * happens to fill its container exactly (no letterboxing on either axis);
+ * whenever it does not, the actual resting position is a CENTERED state —
+ * `clampZoomState(FIT_STATE, bounds)`, not `FIT_STATE` itself — and the
+ * caller (src/interaction/canvasGesture.js, which is the one place that
+ * knows `bounds`) passes that instead, or the Fit button would read as live
+ * even at rest.
  * @param {{scale:number, tx:number, ty:number}} state
+ * @param {{scale:number, tx:number, ty:number}} [reference]
  * @param {number} [epsilon]
  */
-export function isAtFit(state, epsilon = 0.001) {
+export function isAtFit(state, reference = FIT_STATE, epsilon = 0.001) {
   return (
-    Math.abs(state.scale - FIT_STATE.scale) < epsilon &&
-    Math.abs(state.tx - FIT_STATE.tx) < epsilon &&
-    Math.abs(state.ty - FIT_STATE.ty) < epsilon
+    Math.abs(state.scale - reference.scale) < epsilon &&
+    Math.abs(state.tx - reference.tx) < epsilon &&
+    Math.abs(state.ty - reference.ty) < epsilon
   );
 }

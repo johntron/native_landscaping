@@ -28,7 +28,6 @@
 import { MONTH_NAMES } from '../constants.js';
 import { clampMonthValue } from '../ui/controls.js';
 import { createCanvasGesture } from './canvasGesture.js';
-import { isAtFit } from '../render/canvasZoom.js';
 
 // The same breakpoint the rest of the phone layout already uses
 // (styles.css's `@media (max-width: 960px)`), so the editor and the CSS it
@@ -84,8 +83,8 @@ export function createPhoneEditor({
 
   const gesture = createCanvasGesture({
     getSelectionSize,
-    onChange: (state) => {
-      if (fitBtn) fitBtn.disabled = isAtFit(state);
+    onChange: (_state, atRest) => {
+      if (fitBtn) fitBtn.disabled = atRest;
     },
   });
 
@@ -212,6 +211,11 @@ export function createPhoneEditor({
     if (wanted) setMaximizedView(wanted);
     buildTabs();
     reparentIn();
+    // Both html and body: window.scrollTo/scrollY scroll whichever element
+    // is the document's own "scrolling element" (documentElement in
+    // standards mode, not body), so overflow:hidden on body alone left the
+    // page scrollable underneath the fixed editor.
+    document.documentElement.classList.add('is-phone-editor-open');
     document.body.classList.add('is-phone-editor-open');
     if (tabsEl) tabsEl.hidden = false;
     setEditorTouchClass(true);
@@ -226,6 +230,7 @@ export function createPhoneEditor({
     setEditorTouchClass(false);
     closePlants();
     reparentOut();
+    document.documentElement.classList.remove('is-phone-editor-open');
     document.body.classList.remove('is-phone-editor-open');
     if (tabsEl) tabsEl.hidden = true;
     if (idleBarEl) idleBarEl.hidden = true;

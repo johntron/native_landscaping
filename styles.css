@@ -2537,7 +2537,11 @@ select {
   /* The page behind the fixed editor panel must not also scroll (item 1:
      "the PAGE does not scroll while the editor is open") — locked here
      rather than on the panel itself, which is already `position: fixed`
-     and so already off the document's own scroll. */
+     and so already off the document's own scroll. Both html and body:
+     window.scrollTo/scrollY act on the document's own "scrolling element",
+     which is documentElement (html) in standards mode, not body, so
+     overflow:hidden on body alone leaves the page still scrollable. */
+  html.is-phone-editor-open,
   body.is-phone-editor-open {
     overflow: hidden;
     height: 100dvh;
