@@ -132,12 +132,26 @@ export function createPlantDragController({
   ];
   listeners.forEach(([type, handler]) => svg.addEventListener(type, handler));
 
+  /** Start a whole-drift group drag from a mouse press, common to a fresh
+   * entry (member or gap hit) and a press on an already whole-selected
+   * drift's member (which additionally arms a deferred drill-in). */
+  function beginMouseGroupDrag(event, ctx, plants) {
+    state.activePlant = null;
+    state.groupStartFeet = snapshotGroupStartFeet(getSelection(), plants);
+    state.downCtx = ctx;
+    notifyHover('');
+    svg.setPointerCapture(event.pointerId);
+    svg.style.cursor = 'grabbing';
+    event.preventDefault();
+  }
+
   /**
    * Mouse pointerdown: pick the nearest hit, filtered to the isolated drift's
    * own members when one is active (a non-member is dimmed and unhittable,
    * nl-o47.6.2). No hit at all either leaves an isolated drift (a click
    * outside its outline) — clearing, unless the point is still inside that
-   * SAME outline (a gap between members, a no-op) — or plainly clears.
+   * SAME outline (a gap between members, a no-op) — enters a fresh drift from
+   * a gap click, or plainly clears.
    */
   function handleMousePointerDown(event) {
     if (event.button !== 0) return;
@@ -153,19 +167,38 @@ export function createPlantDragController({
     const filteredHits = isolatedMemberIds ? hits.filter((h) => isolatedMemberIds.has(String(h.plant.id))) : hits;
     const selectedId = filteredHits[0] ? String(filteredHits[0].plant.id) : null;
 
+    state.pendingDrillIn = null;
+
     if (!selectedId) {
-      // A precise pointer needs no gap-tap cycling the way touch does — see
-      // resolveTap's own comment on why touch cycles overlapping outlines.
-      if (isolatedMemberIds && ctx.positionFeet && isPointInsideDrift(plants, driftContext.selectedDriftId, ctx.positionFeet)) {
-        return; // still inside the isolated drift's own outline: no-op
+      if (isolatedMemberIds) {
+        // Already isolated: a click still inside the SAME drift's own
+        // outline (a gap between its members) is a no-op; anywhere else leaves it.
+        if (ctx.positionFeet && isPointInsideDrift(plants, driftContext.selectedDriftId, ctx.positionFeet)) {
+          return;
+        }
+        notifyHover('');
+        onClearSelection();
+        return;
       }
-      notifyHover('');
-      onClearSelection();
+      // Not isolated: a click in a gap between some drift's members, inside
+      // its outline, enters it — the nearest one, if more than one outline
+      // covers the point. A precise pointer needs no cycling through an
+      // overlap the way touch's repeat-tap does (resolveTap's own comment).
+      const containing = ctx.positionFeet ? containingDriftIdsByDistance(plants, ctx.positionFeet) : [];
+      if (!containing.length) {
+        notifyHover('');
+        onClearSelection();
+        return;
+      }
+      onSelectDrift(containing[0]);
+      state.pointerId = event.pointerId;
+      state.pointerType = 'mouse';
+      state.hasMoved = false;
+      beginMouseGroupDrag(event, ctx, plants);
       return;
     }
 
     const action = resolveDriftAction({ selectedId, driftContext, plants });
-    state.pendingDrillIn = null;
     state.pointerId = event.pointerId;
     state.pointerType = 'mouse';
     state.hasMoved = false;
@@ -180,10 +213,7 @@ export function createPlantDragController({
       } else {
         onSelectDrift(action.driftId);
       }
-      state.activePlant = null;
-      state.groupStartFeet = snapshotGroupStartFeet(getSelection(), plants);
-      state.downCtx = ctx;
-      notifyHover('');
+      beginMouseGroupDrag(event, ctx, plants);
     } else {
       // Already drilled into some member (press switches the target
       // immediately), or a plain non-drift plant: single-plant drag, exactly
@@ -197,11 +227,10 @@ export function createPlantDragController({
       state.activePlant = target;
       state.offsetFeet = { x: ctx.positionFeet.x - target.x, y: ctx.positionFeet.y - target.y };
       notifyHover(target.id);
+      svg.setPointerCapture(event.pointerId);
+      svg.style.cursor = 'grabbing';
+      event.preventDefault();
     }
-
-    svg.setPointerCapture(event.pointerId);
-    svg.style.cursor = 'grabbing';
-    event.preventDefault();
   }
 
   function handlePointerDown(event) {
