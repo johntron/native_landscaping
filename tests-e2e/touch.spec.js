@@ -601,3 +601,26 @@ test.describe('drifts (nl-o47.6.2)', () => {
     await expect(page.locator('#selectionDriftNameInput')).toHaveValue('Front edge');
   });
 });
+
+test.describe('species table drift entries, by touch (nl-o47.6.7)', () => {
+  // Seeded by tests-e2e/scratch-fixture.mjs's SPECIES_DRIFT_LAYOUT_CSV: the
+  // desktop coverage (tests-e2e/driftSpeciesTable.spec.js) is thorough, so
+  // this stays to the one thing worth proving is real on a touch device — a
+  // tap (not a click) reaches the same handler.
+  test('a tap on a drift entry rings its members in View mode; a tap in Edit mode selects it', async ({ page }) => {
+    await openScratchProject(page, 'touch-drift-species');
+
+    const chip = page.locator('#speciesTable button.species-table__drift-chip[data-drift-id="winecup-2"]');
+    await chip.tap();
+    await expect(page.locator('#topSvg circle[stroke-dasharray="7 6"]')).toHaveCount(3);
+    await chip.tap();
+    await expect(page.locator('#topSvg circle[stroke-dasharray="7 6"]')).toHaveCount(0);
+
+    await page.locator('[data-mode="edit"]').click();
+    await page
+      .locator('#speciesTable button.species-table__drift-chip[data-drift-id="winecup-drift"]')
+      .tap();
+    await expect(page.locator('#selectionDriftNameGroup')).toBeVisible();
+    await expect(page.locator('#selectionDriftCountLabel')).toContainText('4 plants');
+  });
+});
