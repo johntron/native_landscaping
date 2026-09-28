@@ -201,3 +201,89 @@ test('a low-climber with no wall or box nearby keeps its declared width and no r
     .find((circle) => circle.getAttribute('stroke') === '#d64545');
   assert.equal(warningRing, undefined, 'no warning ring without a nearby feature');
 });
+
+function driftMemberState(id, x, y) {
+  return {
+    plant: {
+      id,
+      driftId: 'front-edge',
+      commonName: 'Winecup',
+      botanicalName: 'Callirhoe involucrata',
+      botanicalKey: 'callirhoe involucrata',
+      width: 3,
+      height: 1,
+      x,
+      y,
+    },
+    state: sharedState,
+  };
+}
+
+function singlePlantState(id, x, y) {
+  return {
+    plant: {
+      id,
+      commonName: 'Beta Grass',
+      botanicalName: 'Bouteloua curtipendula',
+      botanicalKey: 'bouteloua curtipendula',
+      width: 2,
+      height: 2,
+      x,
+      y,
+    },
+    state: sharedState,
+  };
+}
+
+test('with labels on, a drift is labelled once at its centroid instead of on every member (nl-o47.6.7)', () => {
+  const doc = resetDocument();
+  const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  const plantStates = [driftMemberState('m1', 5, 5), driftMemberState('m2', 15, 5), singlePlantState('lone', 2, 2)];
+
+  renderTopView(svg, plantStates, PLAN_VIEW, { showLabels: true });
+
+  const driftLabels = svg.querySelectorAll('text').filter((t) => t.getAttribute('data-drift-label'));
+  assert.equal(driftLabels.length, 1, 'exactly one grouped label for the drift');
+  assert.equal(driftLabels[0].getAttribute('data-drift-label'), 'front-edge');
+  assert.equal(driftLabels[0].textContent, 'Front edge ×2');
+  assert.equal(driftLabels[0].getAttribute('pointer-events'), 'none');
+  assert.equal(driftLabels[0].parentNode, svg, 'the drift label sits directly on the svg, not inside a plant group');
+
+  const memberGroups = ['m1', 'm2'].map((id) =>
+    svg.querySelectorAll('g[data-plant-id]').find((g) => g.getAttribute('data-plant-id') === id)
+  );
+  memberGroups.forEach((g) => {
+    assert.equal(g.querySelectorAll('text').length, 0, 'a grouped drift member draws no label of its own');
+  });
+
+  const loneGroup = svg.querySelectorAll('g[data-plant-id]').find((g) => g.getAttribute('data-plant-id') === 'lone');
+  assert.equal(loneGroup.querySelectorAll('text').length, 1, 'a plant in no drift keeps its own label');
+});
+
+test('while its drift is selected/isolated, members draw their own labels again and the group label disappears', () => {
+  const doc = resetDocument();
+  const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  const plantStates = [driftMemberState('m1', 5, 5), driftMemberState('m2', 15, 5)];
+
+  renderTopView(svg, plantStates, PLAN_VIEW, { showLabels: true, selectedDriftId: 'front-edge' });
+
+  const driftLabels = svg.querySelectorAll('text').filter((t) => t.getAttribute('data-drift-label'));
+  assert.equal(driftLabels.length, 0, 'the selected drift shows no single group label');
+
+  const memberGroups = ['m1', 'm2'].map((id) =>
+    svg.querySelectorAll('g[data-plant-id]').find((g) => g.getAttribute('data-plant-id') === id)
+  );
+  memberGroups.forEach((g) => {
+    assert.equal(g.querySelectorAll('text').length, 1, 'each member draws its own label while the drift is selected');
+  });
+});
+
+test('without labels on, no drift label or member label is drawn', () => {
+  const doc = resetDocument();
+  const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  const plantStates = [driftMemberState('m1', 5, 5), driftMemberState('m2', 15, 5)];
+
+  renderTopView(svg, plantStates, PLAN_VIEW, { showLabels: false });
+
+  assert.equal(svg.querySelectorAll('text').length, 0);
+});
