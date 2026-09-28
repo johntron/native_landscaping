@@ -756,6 +756,67 @@ commits through `layoutHistory.commit` only once something actually changed —
 actually changed the id, and compare member positions before/after a spread,
 before committing.
 
+**The species table and the plan/export label** (nl-o47.6.7). The species
+table (`src/render/speciesTable.js`, driven from `src/ui/speciesHighlight.js`)
+gains a "Drifts" column, kept with the always-visible Label/Botanical
+name/Common name columns rather than behind the row's own Details toggle —
+it is a tap target, not reference data. Empty for a species with none; for
+one that has drifts it shows a summary line ("Winecup — 2 drifts, 17
+plants") plus one button per drift (`driftMemberCountLabel`,
+`src/data/driftId.js`: "Winecup · 12 plants", the same text the action bar
+above already assembles inline) and an "N single" count for whatever is
+left. `groupSpeciesDrifts` (`src/render/speciesTable.js`, pure, exported for
+its own unit tests) splits a species' plants into its drifts and its
+singles, keyed by `getSpeciesKey` — the same lower-cased key the table
+already groups ROWS by, never `driftsOfSpecies`' raw, case-sensitive
+`speciesId` comparison. A drift button's click (`handleDriftClick`,
+`src/ui/speciesHighlight.js`) branches on `appState.mode` exactly like
+`setTargetedPlant` already does, but exclusively rather than additively:
+Edit mode calls `plantSelection.selectDrift` (wired from `src/app.js`, the
+same selection the drag controllers and action bar use); View mode instead
+toggles a sticky highlight (`appState.highlightedDriftId`, set/cleared by
+`setHighlightedDrift`/`toggleHighlightedDrift` — a click, not the species
+row's own hover, so it survives until clicked again, a different drift is
+picked, the drift stops existing, or the mode changes). `topView.js` and
+`elevationViews.js` both accept a `highlightedDriftId` option alongside
+`highlightedSpeciesKey`: when set it REPLACES the species highlight rather
+than adding to it, or highlighting one drift would ring every member of the
+whole species. `src/export/exportActions.js` gives it the same
+blank-for-capture/snapshot/restore treatment `selectedDriftId` already gets,
+since — unlike the transient hover ids there — it is sticky.
+
+With labels on, a drift is labelled **once**, at its centroid
+(`driftCentroid`), as `<humanized driftId> ×N` (`buildDriftPlanLabel`,
+`src/render/labels.js`: "Winecup ×17") instead of labelling every member —
+in the plan (`topView.js`; an elevation still labels every member, since it
+has no single drift-wide anchor the way a centroid gives the plan one) and
+so in the plan bundle and HOA packet exports, which capture that same
+renderer. The label sits directly on the `<svg>`, never inside a plant's own
+`g[data-plant-id]` (so it is neither counted as a plant nor draggable),
+`pointer-events: none` (so the gap-tap/click hit-testing aimed at this same
+centroid still lands on the plan), and clamped inside the view's own
+viewBox (`clampLabelPosition`, also in `labels.js`) so it cannot draw past
+the plan's edge — the plan's `<svg>` itself never clips
+(`overflow: visible`, styles.css) but its parent panel does
+(`overflow: hidden`), and `captureViewToPng`'s export crops to this exact
+viewBox. While a drift is selected/isolated in Edit mode
+(`appState.selectedDriftId`), its own members draw their individual labels
+again instead of the one grouped label, so a person editing it can tell
+members apart — since `selectedDriftId` is always blanked to `''` around an
+export capture, every drift gets the single grouped label in every exported
+PNG regardless of what was selected on screen. A plant in no drift keeps its
+label exactly as before, in every view.
+
+The rules engine and the shopping list are unchanged by any of this: both
+count plants (`src/analysis/ecology.js`'s `dedupeBySpecies`,
+`src/export/hoaPacket.js`'s `summarizePlacedSpecies`, `src/sourcing/
+shoppingList.js`), grouped by species, never by `driftId`.
+`src/analysis/rules/drifts.js` ("Rule 9") is a different, older concept with
+the same name — it judges whether same-species plants read as a visual MASS
+by measuring proximity directly off `plant.width`/`plant.x`/`plant.y`, and
+predates `driftId` entirely; it does not read that field and needed no
+change here.
+
 Group-selected, suggested, and painted drifts (the other three making
 methods in nl-o47.6's "MAKING" list) are later beads under nl-o47.6.
 
