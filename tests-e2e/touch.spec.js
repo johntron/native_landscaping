@@ -415,7 +415,9 @@ test.describe('drifts (nl-o47.6.2)', () => {
 
   /** A drift member's on-screen centre — same screenCTM mapping as
    * plantPointerTarget, but for a specific known id rather than "the first
-   * plant on the drawing". */
+   * plant on the drawing". Reads data-cx/data-cy (renderTopView, nl-o47.6.7)
+   * rather than a label's x/y: a grouped, unselected drift member draws no
+   * label of its own any more. */
   async function driftMemberScreen(page, plantId) {
     // page.mouse/CDP touch coordinates are viewport-relative and do not
     // scroll — see plantPointerTarget's own identical guard in helpers.js.
@@ -423,8 +425,7 @@ test.describe('drifts (nl-o47.6.2)', () => {
     return page.evaluate((id) => {
       const svg = document.getElementById('topSvg');
       const group = svg.querySelector(`g[data-plant-id="${id}"]`);
-      const label = group?.querySelector('text');
-      const point = new DOMPoint(Number(label.getAttribute('x')), Number(label.getAttribute('y')));
+      const point = new DOMPoint(Number(group.getAttribute('data-cx')), Number(group.getAttribute('data-cy')));
       const screen = point.matrixTransform(svg.getScreenCTM());
       return { x: screen.x, y: screen.y };
     }, plantId);

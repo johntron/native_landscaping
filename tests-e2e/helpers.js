@@ -197,9 +197,12 @@ export async function touchGesture(page, { x, y, dx = 0, dy = 0, steps = 10, hol
  * A specific plant's on-screen centre, by id, mapped through the SVG's own
  * screenCTM rather than a rect/viewBox ratio (only right when the panel
  * shares the viewBox's own aspect — see src/render/screenPoint.js's own
- * comment). The label sits exactly at the plant's centre and carries
- * pointer-events: none, so it is a safe point to read without also being a
- * hit target itself.
+ * comment). Reads the plant's own `data-cx`/`data-cy` (renderTopView stamps
+ * every plan plant with its centre in viewBox pixels, nl-o47.6.7) rather than
+ * a label's x/y: a grouped, unselected drift member draws no label of its
+ * own — the drift is labelled once, at its centroid, instead — so a label
+ * is no longer a safe stand-in for "this plant's centre" the way it was
+ * before drifts existed.
  */
 export async function plantScreenPosition(page, svgId, plantId) {
   // page.mouse works in viewport coordinates and does not scroll — see
@@ -209,9 +212,8 @@ export async function plantScreenPosition(page, svgId, plantId) {
     ({ svgId, plantId }) => {
       const svg = document.getElementById(svgId);
       const group = svg.querySelector(`g[data-plant-id="${plantId}"]`);
-      const label = group?.querySelector('text');
-      if (!label) return null;
-      const point = new DOMPoint(Number(label.getAttribute('x')), Number(label.getAttribute('y')));
+      if (!group || !group.hasAttribute('data-cx')) return null;
+      const point = new DOMPoint(Number(group.getAttribute('data-cx')), Number(group.getAttribute('data-cy')));
       const screen = point.matrixTransform(svg.getScreenCTM());
       return { x: screen.x, y: screen.y };
     },
@@ -219,12 +221,11 @@ export async function plantScreenPosition(page, svgId, plantId) {
   );
 }
 
-/** Where a plant sits in yard feet, straight off the app's own state. */
+/** Where a plant sits on the plan, in viewBox pixels (data-cx/data-cy, nl-o47.6.7 — see plantScreenPosition's own comment). */
 export async function plantPosition(page, plantId) {
   return page.evaluate((id) => {
     const group = document.querySelector(`#topSvg g[data-plant-id="${id}"]`);
-    if (!group) return null;
-    const label = group.querySelector('text');
-    return label ? { x: Number(label.getAttribute('x')), y: Number(label.getAttribute('y')) } : null;
+    if (!group || !group.hasAttribute('data-cx')) return null;
+    return { x: Number(group.getAttribute('data-cx')), y: Number(group.getAttribute('data-cy')) };
   }, plantId);
 }

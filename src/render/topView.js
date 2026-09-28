@@ -79,15 +79,22 @@ export function renderTopView(svg, plantStates, view, options = {}) {
     const isSelected = Boolean(selectedPlantIds && selectedPlantIds.has(String(plant.id)));
     const isDimmed = Boolean(isolatedMemberIds && !isolatedMemberIds.has(String(plant.id)));
     const status = plantStatus(plant);
+    const { x: cx, y: cy } = transform.planToViewBox(plant);
     const group = createSvgElement('g', {
       'data-name': plant.commonName,
       'data-plant-id': plant.id,
       'data-species-key': speciesKey,
       'data-status': status,
+      // The plant's own centre in this view's viewBox pixels, independent of
+      // whether a label is drawn here at all — a grouped (unselected) drift
+      // member draws none of its own (nl-o47.6.7, above), and this is what
+      // tests-e2e/helpers.js's plantScreenPosition reads instead of a
+      // label's x/y for exactly that case.
+      'data-cx': cx,
+      'data-cy': cy,
       ...(isLocalEcotype(plant) ? { 'data-local-ecotype': 'true' } : {}),
       ...(isDimmed ? { 'data-dimmed': 'true' } : {}),
     });
-    const { x: cx, y: cy } = transform.planToViewBox(plant);
     let effectiveWidth = plant.width;
     let isBoxWarning = false;
     if (plant.growthShape === 'low-climber') {
