@@ -73,10 +73,14 @@ export function createExportActions({
     // planting, and must never reach an export PNG — blanked here the same
     // way the target/hover rings above always have been. The drift context
     // (nl-o47.6.2, an outline plus everything-else-dimmed) is the same kind
-    // of apparatus and gets the same treatment.
+    // of apparatus and gets the same treatment; so does the View-mode drift
+    // highlight (nl-o47.6.7) — it is sticky (a click, not a hover), so unlike
+    // the transient hover/target ids above it needs the same blank-and-
+    // restore treatment selectedDriftId gets, not just a one-way clear.
     appState.selectedPlantIds = new Set();
     appState.selectedDriftId = '';
     appState.driftDrilledIn = false;
+    appState.highlightedDriftId = '';
     appState.month = EXPORT_MONTH;
     if (monthSlider) monthSlider.value = String(EXPORT_MONTH);
     if (monthReadout) monthReadout.textContent = MONTH_NAMES[EXPORT_MONTH - 1] || '';
@@ -185,6 +189,7 @@ function snapshotViewState({ monthSlider, monthReadout, state }) {
     month: state.month,
     hiddenLayerCount: state.hiddenLayerCount,
     highlightedSpeciesKey: state.highlightedSpeciesKey,
+    highlightedDriftId: state.highlightedDriftId || '',
     targetedPlantId: state.targetedPlantId,
     hoveredPlantId: state.hoveredPlantId,
     // Copied, not aliased: runExport blanks appState.selectedPlantIds to a
@@ -203,6 +208,7 @@ function restoreViewState(snapshot, { monthSlider, monthReadout, state, onRestor
   state.month = snapshot.month;
   state.hiddenLayerCount = snapshot.hiddenLayerCount;
   state.highlightedSpeciesKey = snapshot.highlightedSpeciesKey;
+  state.highlightedDriftId = snapshot.highlightedDriftId;
   state.targetedPlantId = snapshot.targetedPlantId;
   state.hoveredPlantId = snapshot.hoveredPlantId;
   state.selectedPlantIds = new Set(snapshot.selectedPlantIds);

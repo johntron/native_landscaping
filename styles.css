@@ -1189,8 +1189,9 @@ select {
   outline-offset: -2px;
 }
 
-.species-table__table td:nth-child(4),
-.species-table__table td:nth-child(5) {
+/* Height, Width — pushed from (4)/(5) to (5)/(6) by the Drifts column at (4). */
+.species-table__table td:nth-child(5),
+.species-table__table td:nth-child(6) {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
@@ -1220,6 +1221,47 @@ select {
   text-transform: uppercase;
   color: var(--ink-deep);
   font-family: var(--font-ui);
+}
+
+/*
+ * The species table's per-drift entries (nl-o47.6.7): empty for a species
+ * with no drifts. A drift's own chip mirrors the row-highlight look
+ * (.is-highlighted below) rather than inventing a second amber treatment —
+ * both mean "this data is shown in the drawing right now".
+ */
+.species-table__drifts-summary {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  margin-bottom: 0.25rem;
+}
+
+.species-table__drift-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.species-table__drift-chip {
+  border: 1px solid var(--rule-cool);
+  background-color: var(--surface-card);
+  color: var(--ink-deep);
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.species-table__drift-chip.is-highlighted {
+  background-color: var(--signal-wash);
+  outline: 2px solid var(--signal);
+  outline-offset: -2px;
+}
+
+.species-table__drift-single {
+  font-size: 0.78rem;
+  color: var(--ink-faint);
 }
 
 /*
@@ -2371,6 +2413,13 @@ select {
     text-transform: uppercase;
     letter-spacing: 0.02em;
     font-size: 0.82rem;
+  }
+
+  /* The Drifts cell's own content (a summary line plus a wrapping chip list)
+     reads better stacked under its label than squeezed onto one flex row. */
+  .species-table__table td.species-table__drifts {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .species-table__table tbody tr:nth-child(odd) {

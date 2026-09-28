@@ -109,6 +109,13 @@ const appState = {
   showLabels: false,
   hiddenLayerCount: 0,
   highlightedSpeciesKey: '',
+  // The View-mode drift highlight (nl-o47.6.7): '' for none, else a driftId
+  // clicked in the species table (src/ui/speciesHighlight.js owns it). Unlike
+  // highlightedSpeciesKey above (hover-driven, transient) this is a click
+  // toggle and stays set across a hover elsewhere — see
+  // src/render/topView.js's own comment for why it REPLACES rather than adds
+  // to the species highlight when both would otherwise apply.
+  highlightedDriftId: '',
   targetedPlantId: '',
   hoveredPlantId: '',
   // The Edit-mode selection (nl-o47.2): a SET of plant ids, owned by
@@ -400,6 +407,12 @@ async function init() {
     ecologyContainer: document.getElementById('ecologyCheck'),
     render: () => render(),
     onSelectPlant: (plantId) => plantSelection.selectPlants([plantId]),
+    // The species table's per-drift entries (nl-o47.6.7): in Edit mode a
+    // click selects the drift (the same plantSelection.selectDrift the drag
+    // controllers use, nl-o47.6.2); speciesHighlight.js decides which mode
+    // applies and calls this only for Edit — View mode highlights instead,
+    // entirely inside speciesHighlight.js's own state.
+    onSelectDrift: (driftId) => plantSelection.selectDrift(driftId),
   });
   // Prune the selection everywhere refreshSpeciesTable already runs (add,
   // clone, remove, undo/redo, the initial load): exactly the events that can
@@ -980,7 +993,14 @@ async function init() {
     // a Setup edit, which would otherwise drop a selection on every geometry
     // tweak. syncSelectionTouchAction always re-applies, since a rebuild hands
     // out fresh controller instances that start with no class of their own.
-    if (changingMode) plantSelection.clearSelection();
+    // The View-mode drift highlight means nothing once Edit mode's own
+    // selection takes over that ring (or once leaving Edit for some other
+    // mode) — cleared on any real mode change, the same trigger that already
+    // clears the plain selection.
+    if (changingMode) {
+      plantSelection.clearSelection();
+      speciesHighlight.clearHighlightedDrift();
+    }
     syncSelectionTouchAction();
     setupMode.sync();
     featuresMode.sync();
@@ -1145,6 +1165,7 @@ async function init() {
       showLabels: appState.showLabels,
       hiddenLayerCount: appState.hiddenLayerCount,
       highlightedSpeciesKey: appState.highlightedSpeciesKey,
+      highlightedDriftId: appState.highlightedDriftId,
       // The right-click/detail-sheet "target" ring would double up with the
       // selection ring below in Edit mode, since setTargetedPlant also
       // selects there (nl-o47.2, src/ui/speciesHighlight.js) — show only the

@@ -8,9 +8,19 @@ import { formatSoil } from './tooltip.js';
 import { formatMonthRange } from '../state/seasonalState.js';
 import { ecologicalFitNotes } from '../analysis/hostGenera.js';
 import { getGenus, getSpeciesKey } from '../utils/speciesKey.js';
+import { driftMemberCountLabel } from '../data/driftId.js';
+
+// The columns before this one (Label, Botanical name, Common name, Drifts)
+// stay visible on a phone; everything from here on hides behind the row's
+// own Details toggle (species-table__extra, styles.css). Drifts sits with
+// the always-visible three, not the details, because it is the compact
+// per-drift ENTRY POINT (nl-o47.6.7) a person taps to select/highlight a
+// drift — the same reason it is never a mouseenter/mouseleave affordance
+// like a plain species row's hover highlight.
+const FIRST_EXTRA_COLUMN_INDEX = 4;
 
 export function renderSpeciesTable(container, plants, hostGenera, handlers = {}) {
-  const { onHoverStart, onHoverEnd } = handlers;
+  const { onHoverStart, onHoverEnd, onDriftClick, highlightedDriftId = '' } = handlers;
   if (!container) return;
   container.innerHTML = '';
   if (!plants?.length) return;
@@ -41,6 +51,7 @@ export function renderSpeciesTable(container, plants, hostGenera, handlers = {})
     'Label',
     'Botanical name',
     'Common name',
+    'Drifts',
     'Height (ft)',
     'Width (ft)',
     'Growth form',
@@ -68,10 +79,12 @@ export function renderSpeciesTable(container, plants, hostGenera, handlers = {})
     tr.dataset.speciesKey = speciesKey;
     tr.addEventListener('mouseenter', () => onHoverStart?.(speciesKey, tr));
     tr.addEventListener('mouseleave', () => onHoverEnd?.(speciesKey, tr));
+    const speciesLabel = plant.commonName || plant.common_name || plant.botanicalName || plant.botanical_name || '';
     const cells = [
       { value: buildPlantLabel(plant), className: 'species-table__label' },
       { value: plant.botanicalName || plant.botanical_name || '', italic: true },
       { value: plant.commonName || plant.common_name || '' },
+      null, // the Drifts cell is built separately below — it holds buttons, not text
       { value: formatFeet(plant.height) },
       { value: formatFeet(plant.width) },
       { value: plant.growthShape || plant.growth_shape || '' },
@@ -91,6 +104,19 @@ export function renderSpeciesTable(container, plants, hostGenera, handlers = {})
     ];
 
     cells.forEach((cell, idx) => {
+      if (idx === 3) {
+        tr.appendChild(
+          buildDriftCell({
+            label: headers[idx],
+            plants,
+            speciesKey,
+            speciesLabel,
+            highlightedDriftId,
+            onDriftClick,
+          })
+        );
+        return;
+      }
       const td = document.createElement('td');
       if (cell.italic && cell.value) {
         const em = document.createElement('em');
@@ -102,7 +128,7 @@ export function renderSpeciesTable(container, plants, hostGenera, handlers = {})
       td.dataset.label = headers[idx];
       if (cell.className) td.className = cell.className;
       if (cell.title) td.title = cell.title;
-      if (idx > 2) td.classList.add('species-table__extra');
+      if (idx >= FIRST_EXTRA_COLUMN_INDEX) td.classList.add('species-table__extra');
       tr.appendChild(td);
     });
 
@@ -125,6 +151,87 @@ export function renderSpeciesTable(container, plants, hostGenera, handlers = {})
   });
   table.appendChild(tbody);
   container.appendChild(table);
+}
+
+/**
+ * A species' plants split into its drifts and its ungrouped ("single")
+ * members, for the species table's compact per-species drift summary
+ * (nl-o47.6.7): "Winecup — 2 drifts, 17 plants" plus one entry per drift and
+ * an "N single" count for whatever is left. Pure (no DOM) so it is unit
+ * tested on its own; `renderSpeciesTable` is the only caller.
+ *
+ * `speciesKey` must be the same lower-cased key src/utils/speciesKey.js's
+ * getSpeciesKey groups table ROWS by — never a raw speciesId, which
+ * src/state/driftGeometry.js's own driftsOfSpecies compares case-sensitively
+ * and this table does not.
+ * @param {Array<object>} plants every plant in the yard (the table's own list)
+ * @param {string} speciesKey
+ * @returns {{ drifts: Array<{driftId: string, count: number}>, singleCount: number, totalCount: number }}
+ *   `drifts` in the order each driftId first appears among this species' plants
+ */
+export function groupSpeciesDrifts(plants, speciesKey) {
+  const ofSpecies = (plants || []).filter((plant) => getSpeciesKey(plant) === speciesKey);
+  const order = [];
+  const countsById = new Map();
+  let singleCount = 0;
+  ofSpecies.forEach((plant) => {
+    const driftId = plant?.driftId;
+    if (!driftId) {
+      singleCount += 1;
+      return;
+    }
+    if (!countsById.has(driftId)) {
+      countsById.set(driftId, 0);
+      order.push(driftId);
+    }
+    countsById.set(driftId, countsById.get(driftId) + 1);
+  });
+  const drifts = order.map((driftId) => ({ driftId, count: countsById.get(driftId) }));
+  return { drifts, singleCount, totalCount: ofSpecies.length };
+}
+
+/**
+ * The Drifts column's cell (nl-o47.6.7): empty for a species with no drifts
+ * ("keep the table's existing behaviour for species rows" — nothing new to
+ * show), else a short summary line plus one button per drift
+ * (driftMemberCountLabel's "Winecup · 12 plants") and an "N single" count for
+ * whatever is left. A drift's button click routes through `onDriftClick`,
+ * which src/ui/speciesHighlight.js resolves against the current mode
+ * (Edit selects it, View highlights it) — this module knows nothing about
+ * modes or selection, only DOM.
+ */
+function buildDriftCell({ label, plants, speciesKey, speciesLabel, highlightedDriftId, onDriftClick }) {
+  const td = document.createElement('td');
+  td.dataset.label = label;
+  td.className = 'species-table__drifts';
+  const { drifts, singleCount, totalCount } = groupSpeciesDrifts(plants, speciesKey);
+  if (!drifts.length) return td;
+
+  const summary = document.createElement('div');
+  summary.className = 'species-table__drifts-summary';
+  summary.textContent = `${speciesLabel} — ${drifts.length} drift${drifts.length === 1 ? '' : 's'}, ${totalCount} plant${totalCount === 1 ? '' : 's'}`;
+  td.appendChild(summary);
+
+  const list = document.createElement('div');
+  list.className = 'species-table__drift-list';
+  drifts.forEach(({ driftId, count }) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'species-table__drift-chip';
+    btn.dataset.driftId = driftId;
+    btn.textContent = driftMemberCountLabel(driftId, count);
+    if (driftId === highlightedDriftId) btn.classList.add('is-highlighted');
+    btn.addEventListener('click', () => onDriftClick?.(driftId, btn));
+    list.appendChild(btn);
+  });
+  if (singleCount > 0) {
+    const single = document.createElement('span');
+    single.className = 'species-table__drift-single';
+    single.textContent = `${singleCount} single`;
+    list.appendChild(single);
+  }
+  td.appendChild(list);
+  return td;
 }
 
 function formatFeet(value) {

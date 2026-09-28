@@ -23,6 +23,9 @@ import { getSpeciesKey } from '../utils/speciesKey.js';
  * @param {() => void} deps.render
  * @param {(plantId: string) => void} [deps.onSelectPlant]  called by
  *   setTargetedPlant while Edit mode is on (nl-o47.2) — see its own comment
+ * @param {(driftId: string) => void} [deps.onSelectDrift]  called by
+ *   handleDriftClick while Edit mode is on (nl-o47.6.7) — the species
+ *   table's per-drift entries; src/app.js passes plantSelection.selectDrift
  */
 export function createSpeciesHighlight({
   appState,
@@ -30,8 +33,10 @@ export function createSpeciesHighlight({
   ecologyContainer,
   render,
   onSelectPlant = () => {},
+  onSelectDrift = () => {},
 }) {
   let highlightedRowEl = null;
+  let highlightedDriftEl = null;
 
   const setHighlightedSpecies = (speciesKey, rowEl) => {
     const normalized = (speciesKey || '').toLowerCase();
@@ -60,6 +65,53 @@ export function createSpeciesHighlight({
     if (appState.highlightedSpeciesKey) {
       appState.highlightedSpeciesKey = '';
       render();
+    }
+  };
+
+  /**
+   * The species table's per-drift entries, View mode (nl-o47.6.7): set
+   * `driftId` (with the button that named it, so its own `.is-highlighted`
+   * class can be toggled the same way a hovered species row's is) as the
+   * ring in the plan/elevations — see topView.js's own comment for why this
+   * REPLACES highlightedSpeciesKey rather than adding to it. `el` may be
+   * null (clearing programmatically, not from a click).
+   */
+  const setHighlightedDrift = (driftId, el) => {
+    const normalized = driftId ? String(driftId) : '';
+    if (highlightedDriftEl && highlightedDriftEl !== el) {
+      highlightedDriftEl.classList.remove('is-highlighted');
+    }
+    if (normalized && el) {
+      el.classList.add('is-highlighted');
+      highlightedDriftEl = el;
+    } else {
+      highlightedDriftEl = null;
+    }
+    if (appState.highlightedDriftId !== normalized) {
+      appState.highlightedDriftId = normalized;
+      render();
+    }
+  };
+
+  /** A click on an already-highlighted drift's entry clears it — a sticky toggle, not a hover. */
+  const toggleHighlightedDrift = (driftId, el) => {
+    setHighlightedDrift(appState.highlightedDriftId === driftId ? '' : driftId, el);
+  };
+
+  const clearHighlightedDrift = () => setHighlightedDrift('', null);
+
+  /**
+   * The species table's per-drift entries' one click handler (nl-o47.6.7):
+   * Edit mode selects the drift (the same selection the drag controllers and
+   * the action bar use); View mode highlights it instead — mirroring
+   * setTargetedPlant's own mode branch below, but exclusive rather than
+   * additive, since View mode has no selection to layer a highlight under.
+   */
+  const handleDriftClick = (driftId, el) => {
+    if (appState.mode === 'edit') {
+      onSelectDrift(driftId);
+    } else {
+      toggleHighlightedDrift(driftId, el);
     }
   };
 
@@ -96,16 +148,36 @@ export function createSpeciesHighlight({
    */
   const refreshSpeciesTable = () => {
     highlightedRowEl = null;
+    highlightedDriftEl = null;
     const stillPlaced = appState.plants.some(
       (plant) => getSpeciesKey(plant) === appState.highlightedSpeciesKey
     );
     if (appState.highlightedSpeciesKey && !stillPlaced) {
       appState.highlightedSpeciesKey = '';
     }
+    // Same check for the drift highlight: a rename, remove, or undo can take
+    // the highlighted drift out from under it (its own id, or every one of
+    // its members) between one refresh and the next.
+    const driftStillExists = appState.plants.some(
+      (plant) => plant.driftId === appState.highlightedDriftId
+    );
+    if (appState.highlightedDriftId && !driftStillExists) {
+      appState.highlightedDriftId = '';
+    }
     renderSpeciesTable(speciesTableContainer, appState.plants, appState.hostGenera, {
       onHoverStart: (speciesKey, rowEl) => setHighlightedSpecies(speciesKey, rowEl),
       onHoverEnd: (_speciesKey, rowEl) => clearHighlightedSpecies(rowEl),
+      onDriftClick: handleDriftClick,
+      highlightedDriftId: appState.highlightedDriftId,
     });
+    // The rebuild above already drew the still-highlighted drift's own
+    // button with its `.is-highlighted` class (the highlightedDriftId prop
+    // just passed), but that button is a brand new element — re-point the
+    // closure at it so a later click on some OTHER drift can find and clear
+    // it. Unlike the species row's highlightedRowEl above, a drift highlight
+    // is a sticky click, not a hover, so leaving this stale would let two
+    // chips read highlighted at once after an unrelated add/remove/undo.
+    highlightedDriftEl = findDriftButtonEl(appState.highlightedDriftId);
     refreshEcologyPanel();
   };
 
@@ -139,6 +211,16 @@ export function createSpeciesHighlight({
       ) || null
     );
   };
+  const findDriftButtonEl = (driftId) => {
+    if (!driftId) return null;
+    const container = speciesTableContainer;
+    if (!container) return null;
+    return (
+      Array.from(container.querySelectorAll('button[data-drift-id]')).find(
+        (btn) => btn.dataset.driftId === driftId
+      ) || null
+    );
+  };
   const setHoveredPlant = (plantId) => {
     const normalized = plantId ? String(plantId) : '';
     if (normalized === appState.hoveredPlantId) return;
@@ -153,5 +235,5 @@ export function createSpeciesHighlight({
     render();
   };
 
-  return { refresh: refreshSpeciesTable, setTargetedPlant, setHoveredPlant };
+  return { refresh: refreshSpeciesTable, setTargetedPlant, setHoveredPlant, clearHighlightedDrift };
 }
