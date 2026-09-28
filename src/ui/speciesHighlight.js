@@ -75,8 +75,16 @@ export function createSpeciesHighlight({
    * ring in the plan/elevations — see topView.js's own comment for why this
    * REPLACES highlightedSpeciesKey rather than adding to it. `el` may be
    * null (clearing programmatically, not from a click).
+   *
+   * Also clears any active species-row hover highlight, every time — a
+   * drift chip sits INSIDE its species row, so a click on it (or on a
+   * person's own pointer resting there) has already fired that row's
+   * mouseenter; without this, toggling a drift's highlight back OFF while
+   * the pointer is still over the row would leave the stale species
+   * highlight showing (every plant of the species ringed, not none).
    */
   const setHighlightedDrift = (driftId, el) => {
+    clearHighlightedSpecies();
     const normalized = driftId ? String(driftId) : '';
     if (highlightedDriftEl && highlightedDriftEl !== el) {
       highlightedDriftEl.classList.remove('is-highlighted');
@@ -84,7 +92,13 @@ export function createSpeciesHighlight({
     if (normalized && el) {
       el.classList.add('is-highlighted');
       highlightedDriftEl = el;
-    } else {
+    } else if (!normalized) {
+      // Clearing back to none: strip the class from whatever is CURRENTLY
+      // highlighted even when that happens to be `el` itself (toggling the
+      // same chip off) — the guard above only fires for a *different*
+      // element, so without this branch a toggle-off would leave the class
+      // in place.
+      if (highlightedDriftEl) highlightedDriftEl.classList.remove('is-highlighted');
       highlightedDriftEl = null;
     }
     if (appState.highlightedDriftId !== normalized) {
