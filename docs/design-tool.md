@@ -656,9 +656,11 @@ dissolve, and single-linkage suggestion clusters over an existing planting —
 live in `src/state/driftGeometry.js` and `src/state/driftEdits.js`, pure and
 unit-tested like `plantEdits.js`/`yardEdits.js`. Every authored constant there
 (a spacing factor, a suggestion-clustering distance, hull padding) is a named
-export commented as our judgement, not a sourced fact. Nothing in `design.html`
-draws or edits a drift yet — that is later beads under nl-o47.6 — so today a
-`driftId` only ever reaches a placement by hand or through a future save path.
+export commented as our judgement, not a sourced fact. The Add plant sheet's
+"How many?" (nl-o47.6.3, below) is the first of these to reach `design.html`:
+a count over 1 places a clump instead of one plant, and mints its `driftId`.
+Drawing a drift's outline, selecting or isolating one, and the other three
+making methods (nl-o47.6's "MAKING" list) are later beads under nl-o47.6.
 
 ### Species are keyed by id, not by name (nl-3s5.18)
 
@@ -887,22 +889,32 @@ Top view uses the yard coordinate system (origin at SW corner, y increasing nort
   (`src/ui/addPlantSheet.js`, `.add-plant-sheet` in styles.css) — a bottom sheet
   under 640px, a centred dialog from it, the same pattern as the plant detail
   sheet — with search, "Native to NCTX" / "Favorites" filter chips, a sort
-  choice, and a scrollable, tappable list; tapping a row adds that species and
-  closes the sheet (nl-o47.3). It places the plant at the centre of whatever
-  part of the plan view is actually on screen — the plan SVG's own rect
-  intersected with the visible viewport (`window.visualViewport` when
-  present), mapped to yard feet through the plan's view transform and clamped
-  to the declared yard (`src/render/yardBounds.js`) — rather than the plan's
-  true middle, which is routinely scrolled off a phone screen; screen-rect math
-  is a small pure helper, `src/render/visiblePlanCenter.js`, called from
-  `src/app.js` (which owns the DOM/window reads) and passed into
-  `addPlantFromCatalog` as an optional `{ at }` point. With no part of the plan
-  on screen it falls back to the plan's own middle and scrolls the plan into
-  view instead. The new plant is targeted the way a click on it would be
-  (`speciesHighlight`'s `setTargetedPlant`); the plant's own detail sheet and
-  right-click menu carry Clone and Remove. All three go through the same
-  commit path as a drag, so undo/redo and the auto-save (`POST /api/layout`)
-  come for free — there is no separate confirmation step.
+  choice, a "How many?" −/N/+ stepper (nl-o47.6.3, default 1, resetting to 1
+  every time the sheet opens, bounded by `MAX_DRIFT_COUNT` — a named judgement,
+  `src/state/driftEdits.js` — and placed ahead of the list so it is reachable
+  on a phone before tapping a row), and a scrollable, tappable list; tapping a
+  row adds that species and closes the sheet (nl-o47.3). It places the plant
+  (count 1) or the whole clump (count > 1) at the centre of whatever part of
+  the plan view is actually on screen — the plan SVG's own rect intersected
+  with the visible viewport (`window.visualViewport` when present), mapped to
+  yard feet through the plan's view transform and clamped to the declared yard
+  (`src/render/yardBounds.js`) — rather than the plan's true middle, which is
+  routinely scrolled off a phone screen; screen-rect math is a small pure
+  helper, `src/render/visiblePlanCenter.js`, called from `src/app.js` (which
+  owns the DOM/window reads) and passed into `addDriftFromCatalog`
+  (`src/state/driftEdits.js`) as an optional `{ at }` point. With no part of
+  the plan on screen it falls back to the plan's own middle and scrolls the
+  plan into view instead. Count 1 places one plant, targeted the way a click
+  on it would be (`speciesHighlight`'s `setTargetedPlant`); count > 1 places an
+  evenly spaced clump of that many (driftGeometry's phyllotaxis
+  `clumpPositions`, at spacing = the species' width × `SPACING_FACTOR`,
+  clamped to the yard as a group) sharing one new `driftId`, as one history
+  entry ("Added drift of 7 Winecup"), with every member selected
+  (`plantSelection.selectPlants`) so the next drag moves the whole clump
+  (nl-o47.2's group drag). The plant's own detail sheet and right-click menu
+  carry Clone and Remove. All of this goes through the same commit path as a
+  drag, so undo/redo and the auto-save (`POST /api/layout`) come for free —
+  there is no separate confirmation step.
 - The plan bundle export uses `buildLayoutCsv` to include the current layout as `planting_layout.csv`.
 - SVG `<title>` tooltips (built by `render/tooltip.js`) display common + botanical names plus horticultural prefs on hover.
 - When data fails to load, `src/app.js` surfaces a lightweight error banner: sign in (a 401), start a yard (an empty list), or serve the app with `node server.js`.
@@ -966,7 +978,8 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
   `buildDriftId` mints one. `src/state/driftGeometry.js` and `src/state/driftEdits.js` – a
   drift's derived geometry (members, centroid, outline hull, spacing, phyllotaxis clump
   layout, suggestion clusters) and its edits (add/remove a member, spread, rename, clone,
-  dissolve), pure like `plantEdits.js` (see "Drifts" above).
+  dissolve, and `addDriftFromCatalog` — place N of one species as a fresh drift, nl-o47.6.3),
+  pure like `plantEdits.js` (see "Drifts" above).
 - `src/ui/speciesHighlight.js` – the table ↔ drawing link: highlighted species, targeted and
   hovered plant, and `refresh()` (rebuild the table, re-grade the ecology check). Its
   `setTargetedPlant` also selects (`src/ui/plantSelection.js`) while Edit mode is on (nl-o47.2).
@@ -977,8 +990,8 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
 - `src/ui/detailSheet.js` – the plant detail sheet: facts for the month, keystone/larval-host
   notes, and nearby animals that use the genus.
 - `src/ui/addPlantSheet.js` – the Add plant sheet: search, filter chips, sort,
-  and the tappable species list, over `src/data/speciesSearch.js` and the
-  `/api/favorites` calls (nl-o47.3).
+  the "How many?" stepper (nl-o47.6.3), and the tappable species list, over
+  `src/data/speciesSearch.js` and the `/api/favorites` calls (nl-o47.3).
 - `src/ui/projectPicker.js` – the project picker and new-project form; `src/ui/controls.js` – the
   month slider, zoom controls, scale bars, and button/download helpers.
 

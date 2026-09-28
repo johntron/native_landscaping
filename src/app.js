@@ -45,7 +45,8 @@ import { createPlantSelection } from './ui/plantSelection.js';
 import { createSelectionBar } from './ui/selectionBar.js';
 import { nudgeSelection } from './state/nudgeSelection.js';
 import { patchView } from './state/yardEdits.js';
-import { addPlantFromCatalog, clonePlantById, removePlantById } from './state/plantEdits.js';
+import { clonePlantById, removePlantById } from './state/plantEdits.js';
+import { addDriftFromCatalog } from './state/driftEdits.js';
 import { createAddPlantSheet } from './ui/addPlantSheet.js';
 import { createPlantMenu } from './interaction/plantMenu.js';
 import { createPlantLifecyclePanel } from './interaction/plantLifecyclePanel.js';
@@ -161,6 +162,9 @@ async function init() {
   const addPlantFavoritesChip = document.getElementById('addPlantFavoritesChip');
   const addPlantStatus = document.getElementById('addPlantStatus');
   const addPlantList = document.getElementById('addPlantList');
+  const addPlantCount = document.getElementById('addPlantCount');
+  const addPlantCountMinus = document.getElementById('addPlantCountMinus');
+  const addPlantCountPlus = document.getElementById('addPlantCountPlus');
   // Set once the sheet is built in initAddPlantControl(); the Escape handler
   // near the end of init() closes it the same way it closes detailSheet.
   let closeAddPlantSheet = () => {};
@@ -672,7 +676,8 @@ async function init() {
    * the one place that reads the DOM and window for it.
    * @returns {{ at: {x:number,y:number}|null, planEntry: object|null }}
    *   `at` is null when no part of the plan is on screen (or there is no
-   *   plan view yet), in which case addPlantFromCatalog falls back to the
+   *   plan view yet), in which case addDriftFromCatalog (nl-o47.6.3, which
+   *   calls addPlantFromCatalog for its own centre point) falls back to the
    *   plan's own middle and the caller scrolls the plan into view instead.
    */
   function computeAddPlantAtPoint() {
@@ -721,19 +726,32 @@ async function init() {
         sort: addPlantSort,
         status: addPlantStatus,
         list: addPlantList,
+        count: addPlantCount,
+        countMinus: addPlantCountMinus,
+        countPlus: addPlantCountPlus,
       },
       appState,
       trigger: addPlantButton,
-      onPick: (speciesId) => {
+      onPick: (speciesId, count) => {
         const { at, planEntry } = computeAddPlantAtPoint();
-        const added = addPlantFromCatalog(appState, speciesId, at ? { at } : undefined);
-        if (!added) return;
+        const { plants: added, driftId } = addDriftFromCatalog(appState, speciesId, count, at ? { at } : undefined);
+        if (!added.length) return;
         render();
         refreshSpeciesTable();
-        commitLayoutChange('Added plant');
-        // Target the new plant the way a click on it would (speciesHighlight);
-        // a later bead (nl-o47.2) turns this into a real selection.
-        setTargetedPlant(added.id);
+        if (driftId) {
+          // count > 1 (nl-o47.6.3): one history entry for the whole drift,
+          // then select every member so the next drag moves the whole clump
+          // (group drag, nl-o47.2) rather than targeting a single plant.
+          const label = added[0].commonName || added[0].botanicalName || speciesId;
+          commitLayoutChange(`Added drift of ${added.length} ${label}`);
+          setTargetedPlant(''); // clear any stale single-plant highlight
+          plantSelection.selectPlants(added.map((plant) => plant.id));
+        } else {
+          commitLayoutChange('Added plant');
+          // Target the new plant the way a click on it would (speciesHighlight);
+          // a later bead (nl-o47.2) turns this into a real selection.
+          setTargetedPlant(added[0].id);
+        }
         if (!at) planEntry?.panel?.scrollIntoView({ block: 'center', inline: 'center' });
       },
     });

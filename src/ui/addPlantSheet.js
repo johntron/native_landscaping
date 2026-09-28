@@ -20,6 +20,7 @@
  * in; this module only queries within the elements it is handed.
  */
 import { nativeStanding, searchSpecies } from '../data/speciesSearch.js';
+import { MAX_DRIFT_COUNT } from '../state/driftEdits.js';
 
 /** Native standing per row: a short badge plus the same title text the old
  * "Native only" checkbox carried, kept verbatim (nl-5j5's own wording). */
@@ -34,16 +35,43 @@ const BADGE_TEXT = Object.freeze({
 /**
  * @param {object} deps
  * @param {object} deps.elements  every DOM node the sheet touches: `sheet`,
- *   `panel`, `search`, `nativeChip`, `favoritesChip`, `sort`, `status`, `list`
+ *   `panel`, `search`, `nativeChip`, `favoritesChip`, `sort`, `status`, `list`,
+ *   plus the "How many?" stepper (nl-o47.6.3): `count`, `countMinus`, `countPlus`
  * @param {object} deps.appState  read for the species catalog (`appState.species`)
  * @param {HTMLElement} deps.trigger  the "Add plant" button; focus returns
  *   here on close
- * @param {(speciesId: string) => void} deps.onPick  called when a row is
- *   tapped, then the sheet closes itself
+ * @param {(speciesId: string, count: number) => void} deps.onPick  called
+ *   when a row is tapped, with the stepper's current count (1 when there is
+ *   no stepper), then the sheet closes itself
  * @returns {{ open: () => void, close: () => void }}
  */
 export function createAddPlantSheet({ elements, appState, trigger, onPick }) {
-  const { sheet, panel, search, nativeChip, favoritesChip, sort, status, list } = elements;
+  const { sheet, panel, search, nativeChip, favoritesChip, sort, status, list, count, countMinus, countPlus } =
+    elements;
+
+  // "How many?" (nl-o47.6.3): defaults to 1 (today's single-plant behaviour,
+  // unchanged) and resets every time the sheet opens, so a forgotten count
+  // never surprises the next add. Bounded by MAX_DRIFT_COUNT, a named
+  // judgement call (src/state/driftEdits.js), not a technical limit.
+  if (count) count.max = String(MAX_DRIFT_COUNT);
+
+  const clampCount = (value) => {
+    const n = Math.trunc(Number(value));
+    return Number.isFinite(n) ? Math.min(MAX_DRIFT_COUNT, Math.max(1, n)) : 1;
+  };
+  const getCount = () => clampCount(count?.value);
+  const setCount = (value) => {
+    const next = clampCount(value);
+    if (count) count.value = String(next);
+    if (countMinus) countMinus.disabled = next <= 1;
+    if (countPlus) countPlus.disabled = next >= MAX_DRIFT_COUNT;
+  };
+
+  countMinus?.addEventListener('click', () => setCount(getCount() - 1));
+  countPlus?.addEventListener('click', () => setCount(getCount() + 1));
+  // Normalize a stray typed value (blank, out of range) once the person is
+  // done editing, rather than fighting every keystroke.
+  count?.addEventListener('change', () => setCount(count.value));
 
   // The signed-in person's favorite species (nl-3on). Stars stay off (and the
   // Favorites chip hidden) until this loads; a failed load costs only that.
@@ -93,7 +121,7 @@ export function createAddPlantSheet({ elements, appState, trigger, onPick }) {
     // is already hidden and cannot be told apart from any other outside click.
     pick.addEventListener('click', (event) => {
       event.stopPropagation();
-      onPick(entry.speciesId);
+      onPick(entry.speciesId, getCount());
       close();
     });
     li.appendChild(pick);
@@ -192,6 +220,7 @@ export function createAddPlantSheet({ elements, appState, trigger, onPick }) {
   function open() {
     if (!sheet) return;
     sheet.hidden = false;
+    setCount(1);
     renderList();
     if (isTouchInput()) {
       // Still move focus into the dialog, so aria-modal is honoured, but onto

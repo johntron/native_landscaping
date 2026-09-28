@@ -1766,6 +1766,57 @@ select {
   margin-bottom: 0.6rem;
 }
 
+/* "How many?" (nl-o47.6.3): chrome, like the selection bar's nudge buttons
+   below — only the plants it goes on to draw glow. */
+.add-plant-sheet__count {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.add-plant-sheet__count-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.add-plant-sheet__count-btn {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 6px;
+  background: var(--surface-card);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.add-plant-sheet__count-btn:hover,
+.add-plant-sheet__count-btn:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent-deep);
+  outline: none;
+}
+
+.add-plant-sheet__count-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.add-plant-sheet__count-value {
+  width: 3rem;
+  min-height: 44px;
+  padding: 0.3rem;
+  border: 1px solid var(--rule-cool);
+  border-radius: 0.4rem;
+  background-color: var(--surface-card);
+  font: inherit;
+  font-size: 0.95rem;
+  color: var(--ink);
+  text-align: center;
+}
+
 .add-plant-sheet__chips {
   display: flex;
   flex-wrap: wrap;

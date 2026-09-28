@@ -260,7 +260,9 @@
       under 640px, a centred dialog from it, same as #detailSheet above.
       panel gets tabindex="-1" so it can take focus itself when opened on
       touch, without moving focus onto the search field and raising the
-      keyboard over the list it filters.
+      keyboard over the list it filters. The "How many?" stepper (nl-o47.6.3)
+      sits in the controls row, ahead of the list, so it is reachable before
+      tapping a row; count > 1 makes a tap place a drift instead of one plant.
     -->
     <div class="add-plant-sheet" id="addPlantSheet" hidden>
       <div class="add-plant-sheet__backdrop" data-add-plant-close></div>
@@ -283,6 +285,20 @@
           autocomplete="off"
         />
         <div class="add-plant-sheet__controls">
+          <div class="add-plant-sheet__count" role="group" aria-label="How many to add">
+            <span class="add-plant-sheet__count-label">How many?</span>
+            <button type="button" id="addPlantCountMinus" class="add-plant-sheet__count-btn" aria-label="Fewer">−</button>
+            <input
+              id="addPlantCount"
+              class="add-plant-sheet__count-value"
+              type="number"
+              inputmode="numeric"
+              min="1"
+              value="1"
+              aria-label="How many plants to add"
+            />
+            <button type="button" id="addPlantCountPlus" class="add-plant-sheet__count-btn" aria-label="More">+</button>
+          </div>
           <div class="add-plant-sheet__chips" role="group" aria-label="Filter plants">
             <button
               type="button"
