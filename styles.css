@@ -2188,6 +2188,79 @@ select {
   min-height: 44px;
 }
 
+/*
+ * A whole drift's name + count (nl-o47.6.2), replacing .selection-bar__name
+ * in that one mode — src/ui/selectionBar.js toggles [hidden] on whichever of
+ * the two applies, never both. The input IS the rename field: no separate
+ * edit affordance, no window.prompt.
+ */
+.selection-bar__drift-name {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin-right: auto;
+  min-width: 0;
+}
+
+.selection-bar__rename {
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--ink);
+  background: var(--surface-card);
+  border: 1px solid var(--rule-strong);
+  border-radius: 6px;
+  padding: 0.3rem 0.5rem;
+  min-height: 36px;
+  width: 9rem;
+  max-width: 40vw;
+}
+
+.selection-bar__rename:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.selection-bar__count-label {
+  font-size: 0.82rem;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+
+/* A refused rename (empty or colliding name) — visible, not just a dropped
+   keystroke, since there is no window.alert to fall back on. */
+.selection-bar__status {
+  flex-basis: 100%;
+  order: 1;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--danger-soft);
+}
+
+.selection-bar__status[hidden] {
+  display: none;
+}
+
+/* The drift member count stepper: same compact 44px square as a nudge arrow. */
+.selection-bar__count {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.selection-bar__count-value {
+  min-width: 1.6rem;
+  text-align: center;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+/* display:contents so a drift's own action buttons wrap alongside Done in
+   the SAME flex row as .selection-bar__actions, rather than as one wide item. */
+.selection-bar__drift-actions {
+  display: contents;
+}
+
 @media (min-width: 640px) {
   .detail-sheet,
   .add-plant-sheet {

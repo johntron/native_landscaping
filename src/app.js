@@ -46,7 +46,16 @@ import { createSelectionBar } from './ui/selectionBar.js';
 import { nudgeSelection } from './state/nudgeSelection.js';
 import { patchView } from './state/yardEdits.js';
 import { clonePlantById, removePlantById } from './state/plantEdits.js';
-import { addDriftFromCatalog } from './state/driftEdits.js';
+import {
+  addDriftFromCatalog,
+  addDriftMember,
+  cloneDrift,
+  removeDrift,
+  removeDriftMember,
+  removePlantFromDrift,
+  renameDrift,
+  spreadDrift,
+} from './state/driftEdits.js';
 import { createAddPlantSheet } from './ui/addPlantSheet.js';
 import { createPlantMenu } from './interaction/plantMenu.js';
 import { createPlantLifecyclePanel } from './interaction/plantLifecyclePanel.js';
@@ -62,6 +71,10 @@ import {
 const MODE_KEY = 'native-landscaping-mode';
 const LEGACY_LOCK_STATE_KEY = 'native-landscaping-positions-locked';
 const MODES = ['view', 'edit', 'setup', 'features'];
+// Judgement call (nl-o47.6.2): the factor one Tighter press applies to a
+// drift's spread; Looser is its exact reciprocal, so a Tighter immediately
+// followed by a Looser (or vice versa) lands back where it started.
+const DRIFT_SPREAD_STEP = 0.9;
 
 
 const appState = {
@@ -102,6 +115,13 @@ const appState = {
   // src/ui/plantSelection.js. Only single selection has UI today; the Set
   // model is ready for a drift's several plants (nl-o47.6).
   selectedPlantIds: new Set(),
+  // The selection's drift context (nl-o47.6.2), also owned by
+  // src/ui/plantSelection.js: '' when the selection names no drift; set (with
+  // driftDrilledIn false) when it IS a whole drift's members; set (drilledIn
+  // true) when it has been narrowed to one of that drift's own members. See
+  // src/state/driftSelection.js for the two fields' own reasoning.
+  selectedDriftId: '',
+  driftDrilledIn: false,
   maximizedViewId: '',
   // The Setup-mode ruler: {viewId, from, to} in that view's viewBox pixels,
   // standing from the end of the drag until a length is applied or it is
@@ -178,6 +198,23 @@ async function init() {
   const selectionNudgeE = document.getElementById('selectionNudgeE');
   const selectionNudgeS = document.getElementById('selectionNudgeS');
   const selectionNudgeW = document.getElementById('selectionNudgeW');
+  // nl-o47.6.2: the drift variants of the selection bar.
+  const selectionDriftNameGroup = document.getElementById('selectionDriftNameGroup');
+  const selectionDriftNameInput = document.getElementById('selectionDriftNameInput');
+  const selectionDriftCountLabel = document.getElementById('selectionDriftCountLabel');
+  const selectionDriftNameStatus = document.getElementById('selectionDriftNameStatus');
+  const selectionDriftCountGroup = document.getElementById('selectionDriftCountGroup');
+  const selectionDriftCountDecBtn = document.getElementById('selectionDriftCountDecBtn');
+  const selectionDriftCountValue = document.getElementById('selectionDriftCountValue');
+  const selectionDriftCountIncBtn = document.getElementById('selectionDriftCountIncBtn');
+  const selectionDriftGroup = document.getElementById('selectionDriftGroup');
+  const selectionSpreadTighterBtn = document.getElementById('selectionSpreadTighterBtn');
+  const selectionSpreadLooserBtn = document.getElementById('selectionSpreadLooserBtn');
+  const selectionCloneDriftBtn = document.getElementById('selectionCloneDriftBtn');
+  const selectionRemoveDriftBtn = document.getElementById('selectionRemoveDriftBtn');
+  const selectionDriftMemberGroup = document.getElementById('selectionDriftMemberGroup');
+  const selectionRemoveFromDriftBtn = document.getElementById('selectionRemoveFromDriftBtn');
+  const selectionBackToDriftBtn = document.getElementById('selectionBackToDriftBtn');
 
   let projectIndex;
   let project;
@@ -450,6 +487,9 @@ async function init() {
         getSelection: () => plantSelection.getSelection(),
         onSelectPlant: (plantId) => plantSelection.selectPlants([plantId]),
         onClearSelection: () => plantSelection.clearSelection(),
+        getDriftContext: () => plantSelection.getDriftContext(),
+        onSelectDrift: (driftId) => plantSelection.selectDrift(driftId),
+        onDrillIntoDriftMember: (plantId, driftId) => plantSelection.drillIntoDriftMember(plantId, driftId),
       };
       return view.type === 'plan'
         ? createPlantDragController(shared)
@@ -627,6 +667,22 @@ async function init() {
       nudgeE: selectionNudgeE,
       nudgeS: selectionNudgeS,
       nudgeW: selectionNudgeW,
+      driftNameGroup: selectionDriftNameGroup,
+      driftNameInput: selectionDriftNameInput,
+      driftCountLabel: selectionDriftCountLabel,
+      driftNameStatus: selectionDriftNameStatus,
+      driftCountGroup: selectionDriftCountGroup,
+      driftCountDecBtn: selectionDriftCountDecBtn,
+      driftCountValue: selectionDriftCountValue,
+      driftCountIncBtn: selectionDriftCountIncBtn,
+      driftGroup: selectionDriftGroup,
+      spreadTighterBtn: selectionSpreadTighterBtn,
+      spreadLooserBtn: selectionSpreadLooserBtn,
+      cloneDriftBtn: selectionCloneDriftBtn,
+      removeDriftBtn: selectionRemoveDriftBtn,
+      driftMemberGroup: selectionDriftMemberGroup,
+      removeFromDriftBtn: selectionRemoveFromDriftBtn,
+      backToDriftBtn: selectionBackToDriftBtn,
     },
     appState,
     onDetails: () => {
@@ -636,6 +692,10 @@ async function init() {
     onClone: () => {
       const id = soleSelectedPlantId();
       if (!id) return;
+      // clonePlantById copies every field but the lifecycle ones, driftId
+      // included — a drilled-in member's clone stays in its drift (nl-o47.6's
+      // own design), and plantSelection infers that from the clone's own
+      // driftId the same way any selectPlants call would.
       const clone = clonePlantById(appState, id);
       if (!clone) return;
       render();
@@ -651,6 +711,85 @@ async function init() {
     },
     onDone: () => plantSelection.clearSelection(),
     onNudge: handleNudge,
+    onRename: (driftId, label) => {
+      const result = renameDrift(appState, driftId, label);
+      // A refused name, or a no-op rename to the name it already has, edits
+      // nothing (renameDrift's own contract) — nothing to render or commit.
+      if (result.reason || result.driftId === driftId) return result;
+      render();
+      refreshSpeciesTable(); // its pruneSelection resyncs selectedDriftId to the new id (src/state/driftSelection.js)
+      commitLayoutChange('Renamed drift');
+      return result;
+    },
+    onCountChange: (delta) => {
+      const driftId = appState.selectedDriftId;
+      if (!driftId) return;
+      const { plant, reason } =
+        delta > 0 ? addDriftMember(appState, driftId) : removeDriftMember(appState, driftId);
+      if (!plant) return; // the bar's own disabled state already guards this; stay defensive
+      render();
+      refreshSpeciesTable();
+      commitLayoutChange(delta > 0 ? 'Added drift member' : 'Removed drift member');
+    },
+    onSpread: (direction) => {
+      const driftId = appState.selectedDriftId;
+      if (!driftId) return;
+      const factor = direction === 'looser' ? 1 / DRIFT_SPREAD_STEP : DRIFT_SPREAD_STEP;
+      // spreadDrift returns success-shaped results even on a no-op (already
+      // at MIN_SPREAD_FACTOR, or the requested factor rounds to no visible
+      // change once clamped) — check positions actually moved before committing.
+      const before = new Map(appState.plants.map((p) => [String(p.id), { x: p.x, y: p.y }]));
+      const { reason } = spreadDrift(appState, driftId, factor);
+      if (reason) return;
+      const moved = appState.plants.some((p) => {
+        const prev = before.get(String(p.id));
+        return prev && (Math.abs(prev.x - p.x) > 1e-6 || Math.abs(prev.y - p.y) > 1e-6);
+      });
+      if (!moved) return;
+      render();
+      refreshSpeciesTable();
+      commitLayoutChange(direction === 'looser' ? 'Spread drift looser' : 'Spread drift tighter');
+    },
+    onCloneDrift: () => {
+      const driftId = appState.selectedDriftId;
+      if (!driftId) return;
+      const result = cloneDrift(appState, driftId);
+      if (!result.driftId) return;
+      render();
+      refreshSpeciesTable();
+      plantSelection.selectDrift(result.driftId);
+      commitLayoutChange('Cloned drift');
+    },
+    onRemoveDrift: () => {
+      const driftId = appState.selectedDriftId;
+      if (!driftId) return;
+      const { removedCount, dissolvedCount, reason } = removeDrift(appState, driftId);
+      if (reason || (!removedCount && !dissolvedCount)) return;
+      render();
+      refreshSpeciesTable();
+      // The drift itself no longer exists; leaving the automatic prune to
+      // pick a plain multi-select of whatever planted members survived would
+      // land in a state nl-o47.2 has no real UI for. Done is the clean exit.
+      plantSelection.clearSelection();
+      commitLayoutChange('Removed drift');
+    },
+    onRemoveFromDrift: () => {
+      const id = soleSelectedPlantId();
+      if (!id) return;
+      const before = appState.plants.find((p) => String(p.id) === id);
+      if (!before?.driftId) return; // already not in a drift (shouldn't be reachable): nothing to do
+      removePlantFromDrift(appState, id);
+      render();
+      // refreshSpeciesTable's pruneSelection drops the drift context on its
+      // own here (the drilled-into plant no longer carries this driftId),
+      // landing back on a plain single-plant selection of the same plant.
+      refreshSpeciesTable();
+      commitLayoutChange('Removed plant from drift');
+    },
+    onBackToDrift: () => {
+      const driftId = appState.selectedDriftId;
+      if (driftId) plantSelection.selectDrift(driftId); // a selection change, not an edit: no commit
+    },
   });
 
   // Arrow keys nudge on desktop while a selection exists and focus is not in
@@ -1013,6 +1152,10 @@ async function init() {
       targetedPlantId: appState.mode === 'edit' ? '' : appState.targetedPlantId,
       hoveredPlantId: appState.hoveredPlantId,
       selectedPlantIds: appState.selectedPlantIds,
+      // Like selectedPlantIds above, this is already '' outside Edit mode
+      // (applyMode clears the whole selection, drift context included, on
+      // every real mode change) — nothing extra to gate here.
+      selectedDriftId: appState.selectedDriftId,
       features: appState.features,
     });
     selectionBar.sync();

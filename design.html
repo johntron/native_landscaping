@@ -339,19 +339,53 @@
       reachable on a phone with no scrolling. Nudges move the selection in
       yard feet, labelled by compass point rather than up/down/left/right so
       the arrows never disagree with which way is which on a mirrored elevation.
+
+      nl-o47.6.2 adds a DRIFT variant, shown/hidden by src/ui/selectionBar.js
+      alongside the plain one above rather than as a separate element: whole-
+      drift mode hides selectionBarName/Details/Clone/Remove and shows
+      selectionDriftGroup (rename input, count stepper, spread, clone/remove
+      drift) instead; drilled-into-one-member mode keeps the plain
+      Details/Clone/Remove and adds selectionDriftMemberGroup (Remove from
+      drift, Back to drift). Nudges and Done are shared by every mode.
     -->
     <div class="selection-bar" id="selectionBar" hidden role="toolbar" aria-label="Selected plant">
       <span class="selection-bar__name" id="selectionBarName"></span>
+      <div class="selection-bar__drift-name" id="selectionDriftNameGroup" hidden>
+        <input
+          type="text"
+          class="selection-bar__rename"
+          id="selectionDriftNameInput"
+          aria-label="Drift name"
+          autocomplete="off"
+        />
+        <span class="selection-bar__count-label" id="selectionDriftCountLabel"></span>
+      </div>
+      <p class="selection-bar__status" id="selectionDriftNameStatus" role="status" hidden></p>
       <div class="selection-bar__nudges" role="group" aria-label="Nudge the selection">
         <button type="button" class="selection-bar__nudge" id="selectionNudgeN" aria-label="Nudge north">N</button>
         <button type="button" class="selection-bar__nudge" id="selectionNudgeE" aria-label="Nudge east">E</button>
         <button type="button" class="selection-bar__nudge" id="selectionNudgeS" aria-label="Nudge south">S</button>
         <button type="button" class="selection-bar__nudge" id="selectionNudgeW" aria-label="Nudge west">W</button>
       </div>
+      <div class="selection-bar__count" id="selectionDriftCountGroup" role="group" aria-label="Drift member count" hidden>
+        <button type="button" class="selection-bar__nudge" id="selectionDriftCountDecBtn" aria-label="Remove one plant from the drift">−</button>
+        <span class="selection-bar__count-value" id="selectionDriftCountValue"></span>
+        <button type="button" class="selection-bar__nudge" id="selectionDriftCountIncBtn" aria-label="Add one plant to the drift">+</button>
+      </div>
       <div class="selection-bar__actions">
         <button type="button" class="button pill-button" id="selectionDetailsBtn">Details</button>
         <button type="button" class="button pill-button" id="selectionCloneBtn">Clone</button>
         <button type="button" class="button pill-button pill-button--danger" id="selectionRemoveBtn">Remove</button>
+        <div class="selection-bar__drift-actions" id="selectionDriftGroup" hidden>
+          <button type="button" class="button pill-button" id="selectionSpreadTighterBtn">Tighter</button>
+          <button type="button" class="button pill-button" id="selectionSpreadLooserBtn">Looser</button>
+          <button type="button" class="button pill-button" id="selectionCloneDriftBtn">Clone drift</button>
+          <button type="button" class="button pill-button pill-button--danger" id="selectionRemoveDriftBtn">Remove drift</button>
+        </div>
+        <div class="selection-bar__drift-actions" id="selectionDriftMemberGroup" hidden>
+          <button type="button" class="button pill-button" id="selectionRemoveFromDriftBtn">Remove from drift</button>
+          <button type="button" class="button pill-button" id="selectionBackToDriftBtn">Back to drift</button>
+        </div>
         <button type="button" class="button pill-button" id="selectionDoneBtn">Done</button>
       </div>
     </div>
