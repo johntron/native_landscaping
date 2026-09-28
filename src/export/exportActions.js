@@ -71,8 +71,12 @@ export function createExportActions({
     appState.targetedPlantId = '';
     // The Edit-mode selection ring (nl-o47.2) is apparatus, not part of the
     // planting, and must never reach an export PNG — blanked here the same
-    // way the target/hover rings above always have been.
+    // way the target/hover rings above always have been. The drift context
+    // (nl-o47.6.2, an outline plus everything-else-dimmed) is the same kind
+    // of apparatus and gets the same treatment.
     appState.selectedPlantIds = new Set();
+    appState.selectedDriftId = '';
+    appState.driftDrilledIn = false;
     appState.month = EXPORT_MONTH;
     if (monthSlider) monthSlider.value = String(EXPORT_MONTH);
     if (monthReadout) monthReadout.textContent = MONTH_NAMES[EXPORT_MONTH - 1] || '';
@@ -187,6 +191,8 @@ function snapshotViewState({ monthSlider, monthReadout, state }) {
     // NEW Set for the capture, and restoring must not hand back that same
     // (now-cleared) instance.
     selectedPlantIds: new Set(state.selectedPlantIds),
+    selectedDriftId: state.selectedDriftId || '',
+    driftDrilledIn: Boolean(state.driftDrilledIn),
     monthSliderValue: monthSlider ? monthSlider.value : null,
     monthReadoutText: monthReadout ? monthReadout.textContent : null,
   };
@@ -200,6 +206,8 @@ function restoreViewState(snapshot, { monthSlider, monthReadout, state, onRestor
   state.targetedPlantId = snapshot.targetedPlantId;
   state.hoveredPlantId = snapshot.hoveredPlantId;
   state.selectedPlantIds = new Set(snapshot.selectedPlantIds);
+  state.selectedDriftId = snapshot.selectedDriftId;
+  state.driftDrilledIn = snapshot.driftDrilledIn;
   if (monthSlider && snapshot.monthSliderValue !== null) {
     monthSlider.value = snapshot.monthSliderValue;
   }

@@ -10,6 +10,7 @@ import { buildPlantLabel } from './labels.js';
 import { buildFruitCenters } from './fruitPlacement.js';
 import { buildSmoothPath } from './pathUtils.js';
 import { ECOTYPE_RING_RATIO, isLocalEcotype, outlineStatusAttributes, plantStatus } from './plantStatus.js';
+import { driftMembers, driftOutlinePolygon } from '../state/driftGeometry.js';
 
 const HIGHLIGHT_COLOR = '#ef7d1a';
 const HIGHLIGHT_OUTLINE_OPACITY = 0.9;
@@ -36,6 +37,7 @@ export function renderTopView(svg, plantStates, view, options = {}) {
     targetedPlantId = '',
     hoveredPlantId = '',
     selectedPlantIds = null,
+    selectedDriftId = '',
     features = [],
   } = options;
   clearSvg(svg);
@@ -47,6 +49,13 @@ export function renderTopView(svg, plantStates, view, options = {}) {
   const targetMarkers = [];
   const selectionMarkers = [];
   const climbWarnings = [];
+  // The isolated drift's own members (nl-o47.6.2): everything else dims and
+  // is unhittable (styles.css '[data-dimmed]') while a drift is selected or
+  // drilled into. Derived from THIS render's own plant list (whatever a
+  // hidden layer already excluded, exactly like every other decoration here).
+  const isolatedMemberIds = selectedDriftId
+    ? new Set(driftMembers(plantStates.map((ps) => ps.plant), selectedDriftId).map((m) => String(m.id)))
+    : null;
 
   // A plan has no depth to sort on, so features go underneath the plants in the
   // order they were authored — the authoring order IS the z-order.
@@ -58,6 +67,7 @@ export function renderTopView(svg, plantStates, view, options = {}) {
     const isTargeted = normalizedTargetId && String(plant.id) === normalizedTargetId;
     const isHovered = normalizedHoveredId && String(plant.id) === normalizedHoveredId;
     const isSelected = Boolean(selectedPlantIds && selectedPlantIds.has(String(plant.id)));
+    const isDimmed = Boolean(isolatedMemberIds && !isolatedMemberIds.has(String(plant.id)));
     const status = plantStatus(plant);
     const group = createSvgElement('g', {
       'data-name': plant.commonName,
@@ -65,6 +75,7 @@ export function renderTopView(svg, plantStates, view, options = {}) {
       'data-species-key': speciesKey,
       'data-status': status,
       ...(isLocalEcotype(plant) ? { 'data-local-ecotype': 'true' } : {}),
+      ...(isDimmed ? { 'data-dimmed': 'true' } : {}),
     });
     const { x: cx, y: cy } = transform.planToViewBox(plant);
     let effectiveWidth = plant.width;
@@ -187,6 +198,33 @@ export function renderTopView(svg, plantStates, view, options = {}) {
   targetMarkers.forEach((target) => appendTargetRing(svg, target));
   selectionMarkers.forEach((target) => appendSelectionRing(svg, target));
   climbWarnings.forEach((target) => appendClimbWarningRing(svg, target));
+  if (isolatedMemberIds && isolatedMemberIds.size) {
+    appendDriftOutline(svg, driftMembers(plantStates.map((ps) => ps.plant), selectedDriftId), transform);
+  }
+}
+
+/**
+ * A selected drift's outline (nl-o47.6.2): the padded hull
+ * (src/state/driftGeometry.js driftOutlinePolygon — the Minkowski-sum
+ * approximation that agrees with isPointInDriftOutline's own hit region),
+ * mapped into viewBox space and smoothed the same way a plant's own wavy
+ * canopy is (buildSmoothPath) so it reads as an organic zone rather than a
+ * faceted polygon. Cyan/apparatus (`.plant-selection-ring`'s own token), not
+ * life, and never drawn into an export (src/export/exportActions.js blanks
+ * the drift context around every capture, same as the selection ring).
+ */
+function appendDriftOutline(svg, members, transform) {
+  const polygon = driftOutlinePolygon(members);
+  if (polygon.length < 2) return;
+  const points = polygon.map((point) => transform.planToViewBox(point));
+  svg.appendChild(
+    createSvgElement('path', {
+      d: buildSmoothPath(points),
+      class: 'drift-outline',
+      'pointer-events': 'none',
+      'data-drift-outline': 'true',
+    })
+  );
 }
 
 function renderFoliageDome(group, { cx, cy, radius, color, rng, outlinePoints, status }) {

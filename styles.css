@@ -1538,6 +1538,33 @@ select {
   stroke-dasharray: 4 4;
 }
 
+/*
+ * A selected drift's outline (nl-o47.6.2, src/render/topView.js): the same
+ * cyan/apparatus token as the selection ring above, in the plan only (an
+ * elevation has no y-depth to draw a hull against). Filled with a faint wash
+ * of the same colour so the "far bigger target than one small plant" the
+ * design calls for actually reads as a zone, not just a line.
+ */
+.drift-outline {
+  fill: var(--accent-wash);
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 5;
+}
+
+/*
+ * Everything outside an isolated drift dims and stops being a hit target
+ * (nl-o47.6.2): the plan controller filters its OWN proximity-based hit
+ * testing separately (src/interaction/dragController.js) since it never
+ * reads pointer-events, but this is what keeps the elevation's DOM-based
+ * hit-testing (findPlantIdFromEvent) — and every browser pointer event, mouse
+ * hover included — off a non-member for free.
+ */
+.view svg [data-dimmed='true'] {
+  opacity: 0.28;
+  pointer-events: none;
+}
+
 .context-menu {
   position: absolute;
   z-index: 20;

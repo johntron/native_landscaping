@@ -17,6 +17,7 @@ import { buildPlantLabel } from './labels.js';
 import { buildFruitCenters } from './fruitPlacement.js';
 import { buildSmoothPath } from './pathUtils.js';
 import { outlineStatusAttributes, plantStatus } from './plantStatus.js';
+import { driftMembers } from '../state/driftGeometry.js';
 
 const HIGHLIGHT_COLOR = '#ef7d1a';
 const HIGHLIGHT_OUTLINE_OPACITY = 0.9;
@@ -44,6 +45,7 @@ export function renderElevationView(svg, plantStates, view, options = {}) {
     targetedPlantId = '',
     hoveredPlantId = '',
     selectedPlantIds = null,
+    selectedDriftId = '',
     features = [],
   } = options;
   const normalizedHighlightKey = (highlightedSpeciesKey || '').toLowerCase();
@@ -52,6 +54,13 @@ export function renderElevationView(svg, plantStates, view, options = {}) {
   const highlightTargets = [];
   const targetMarkers = [];
   const selectionMarkers = [];
+  // The isolated drift's own members (nl-o47.6.2): everything else dims and
+  // is unhittable (styles.css '[data-dimmed]'). No outline here — an
+  // elevation has no y-depth to draw a hull against; that lives in the plan
+  // (src/render/topView.js) only.
+  const isolatedMemberIds = selectedDriftId
+    ? new Set(driftMembers(plantStates.map((ps) => ps.plant), selectedDriftId).map((m) => String(m.id)))
+    : null;
   appendGroundFills(svg, view, viewBox, groundY);
   // Features and plants are sorted as ONE list: that interleave is what lets a
   // fence hide the shrub standing behind it.
@@ -68,12 +77,14 @@ export function renderElevationView(svg, plantStates, view, options = {}) {
     const isTargeted = normalizedTargetId && String(plant.id) === normalizedTargetId;
     const isHovered = normalizedHoveredId && String(plant.id) === normalizedHoveredId;
     const isSelected = Boolean(selectedPlantIds && selectedPlantIds.has(String(plant.id)));
+    const isDimmed = Boolean(isolatedMemberIds && !isolatedMemberIds.has(String(plant.id)));
     const status = plantStatus(plant);
     const group = createSvgElement('g', {
       'data-name': plant.commonName,
       'data-plant-id': plant.id,
       'data-species-key': speciesKey,
       'data-status': status,
+      ...(isDimmed ? { 'data-dimmed': 'true' } : {}),
     });
     const canopySeed = seedForPlant(plant.id);
     const rng = makeRng(canopySeed);

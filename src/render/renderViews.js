@@ -15,6 +15,7 @@ export function renderViews(panels, plantStates, options = {}) {
     targetedPlantId = '',
     hoveredPlantId = '',
     selectedPlantIds = null,
+    selectedDriftId = '',
     features = [],
   } = options;
   const filtered = filterPlantStatesByHiddenLayers(plantStates, hiddenLayerCount);
@@ -25,6 +26,7 @@ export function renderViews(panels, plantStates, options = {}) {
     targetedPlantId,
     hoveredPlantId,
     selectedPlantIds,
+    selectedDriftId,
     features,
   };
   panels.forEach(({ view, svg }) => {
