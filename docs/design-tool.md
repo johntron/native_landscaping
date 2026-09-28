@@ -1039,7 +1039,8 @@ Top view uses the yard coordinate system (origin at SW corner, y increasing nort
   elevation controllers (`dragController.js`, `setupController.js`, `featureController.js`) does
   that mapping. It reads `svg.getScreenCTM().inverse()` — the browser's own user-space↔screen
   matrix, already carrying the viewBox's scale and origin, any `preserveAspectRatio="xMidYMid
-  meet"` letterbox offset, and a future CSS zoom transform — rather than dividing
+  meet"` letterbox offset, and a CSS transform on the element or an ancestor (the phone editor's
+  pinch-zoom/pan, nl-o47.4, below — exactly the case this comment used to say "a future" one for) — rather than dividing
   `viewBox.width` by `getBoundingClientRect().width` on each axis separately, which is only
   right when the box happens to share the viewBox's own aspect ratio. A maximized panel on a
   phone need not (nl-o47.1): that rect-based math undercounted one axis of a drag and
@@ -1090,6 +1091,133 @@ Top view uses the yard coordinate system (origin at SW corner, y increasing nort
 
 Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
 
+### The phone editor (nl-o47.4)
+
+Edit mode on a phone-width screen (`max-width: 960px`, the same breakpoint the rest of the
+phone layout already uses) is not the long scrolling page the other three modes still are: it
+is a full-screen editor, entered and left automatically as Edit mode itself turns on and off (or
+the viewport crosses the breakpoint while Edit mode stays on — a rotation, say). It solves the
+three problems nl-o47's own notes named: controls scrolled out of view, no way to zoom before
+dragging, and a drawing that claimed every touch leaving nothing to scroll the page by (that
+last one is moot now — see "Two fingers" below).
+
+`src/interaction/phoneEditor.js` owns the whole thing and is the only new module wired into
+`src/app.js`'s `applyMode()` (enter/exit) and `render()` (the idle bar's cheap per-frame
+visibility toggle). It builds on nl-o47.1's maximize mechanism rather than a parallel one:
+entering the editor is "auto-maximize a view" (`appState.maximizedViewId`, the same
+`.views[data-maximized]` CSS a manual Maximize/Restore toggle drives in View mode) plus a few
+more pieces that only exist while it is open:
+
+- **A top tab strip** (`#phoneEditorTabs`) replaces the per-panel Maximize/Restore toggle, which
+  `body.is-phone-editor-open .view-panel__header { display: none; }` hides for the duration —
+  view switching without scrolling to a panel. Plan first, then every other view in
+  `project.views`' own order. Tapping a tab calls `src/app.js`'s `setMaximizedView(viewId)`,
+  which always SETS the maximized view (unlike the desktop toggle's `toggleViewMaximization`,
+  which flips it off on a second click of the same view — the tab strip has no "nothing
+  maximized" state to flip back to). A **Fit** button next to the tabs resets zoom/pan to
+  `FIT_STATE` (below); it disables itself once already there.
+- **One bottom bar**, never two stacked. With nothing selected, `#phoneEditorBar` (the idle bar)
+  shows month back/forward (driving the existing `#monthSlider` by dispatching its own `input`
+  event, so `src/app.js`'s one month listener is still the only thing that renders a month
+  change), Add plant, Plants, Undo, Redo, and Done (leaves the editor — `applyMode('view')`).
+  With a selection, `#selectionBar` (unchanged logic, restructured markup — see below) takes the
+  exact same fixed-bottom slot instead; the two are mutually exclusive by construction
+  (`phoneEditor.js`'s `syncBar()` and `selectionBar.js`'s own `sync()` each hide their own bar on
+  the other's condition) and share a `min-height` so a selection starting or ending never
+  resizes the canvas above them. Add plant/Undo/Redo are the SAME real toolbar buttons
+  everywhere else, not copies: `phoneEditor.js` reparents them (and `#speciesTable`, into the
+  Plants sheet) into the editor's own slots while it is open and back to their normal positions
+  when it closes, so every id, handler, and disabled-state keeps working unchanged on both sides
+  — `#addPlantBtn`'s own click handler, `layoutHistoryController`'s undo/redo wiring, and
+  `speciesHighlight.js`'s rendering into `#speciesTable` none of them know the table or the
+  buttons ever moved.
+- **The selection bar's "More" popover.** nl-o47.6.2's own review found the whole-drift bar at
+  four rows on a phone. `src/ui/selectionBar.js`'s logic is untouched (same elements, same
+  handlers); `design.html`'s markup now splits into `.selection-bar__primary` (the label/rename,
+  a More toggle, and Done — the only three things that reliably fit one row at 393px once a
+  drift's rename field or "N plants" is counted) and `.selection-bar__more` (everything else:
+  Details/Clone/Remove, nudges, the drift count stepper, spread, clone/remove drift, the
+  drilled-in Remove-from-drift/Back-to-drift pair), shown as a popover anchored above the bar.
+  `selectionBar.js` opens/closes it on its own button and closes it whenever the bar's context
+  changes (hidden entirely, or a different drift/plain selection) — not on every `sync()` call,
+  which fires on every render including a bare month tick, or pressing "Looser" twice from
+  inside the popover would close it after the first press. On desktop (`min-width: 961px`)
+  `.selection-bar__primary`/`.selection-bar__more`/`.selection-bar__actions` all become
+  `display: contents` and the More button hides, so every control renders inline in one flat,
+  wrapping row exactly as before nl-o47.4 — `order` restores the original sequence, since
+  flattening three levels of grouping instead of one can no longer rely on DOM order alone to
+  reproduce it.
+- **The Plants sheet** (`#plantsSheet`) hosts the real `#speciesTable` (reparented in on entry,
+  back out on exit) behind a bottom sheet, the same pattern as the Add plant/detail sheets. A
+  drift chip inside it (`species-table__drift-chip`, nl-o47.6.7) still selects the drift through
+  `speciesHighlight.js`'s own unchanged `handleDriftClick`; `phoneEditor.js` adds one more,
+  delegated listener next to it that closes the sheet on that same click in Edit mode, so the
+  selection it just made is not left hidden behind the sheet that made it.
+
+**Pinch-zoom/pan** (`src/interaction/canvasGesture.js`, driven by the pure math in
+`src/render/canvasZoom.js`) is a CSS `transform: translate(tx, ty) scale(scale)` on `.view`
+inside its clip container (`.view-panel.is-maximized`, `overflow: clip` and zero padding while
+the editor is open) — never a viewBox rewrite. The photo is a CSS background sized as
+percentages of the viewBox (`src/render/photoPlacement.js`); rewriting the viewBox on zoom would
+slide plants off it, while a CSS transform scales both together, and `getScreenCTM` (the
+`clientPointToViewBox` bullet above) already follows a transform on the element or an ancestor —
+hit-testing, drags, and drift outlines all stay correct under it with no changes of their own.
+
+- **The gesture model**, decided in `src/interaction/canvasGesture.js` from real pointer events,
+  listening on the maximized panel in BUBBLE phase (after `dragController.js`'s own svg-level
+  listener has already run):
+  - **Two fingers always pinch-zoom and pan**, selection or none — `dragController.js`'s own
+    `handlePointerDown` hands off the instant a second touch/pen finger arrives (salvaging a
+    group drag already under way exactly like a lost pointer/`pointercancel` does), so nothing
+    is left fighting `canvasGesture.js` for the first finger. `pinchUpdate` (`canvasZoom.js`)
+    combines zoom (from the two fingers' distance ratio) and pan (from their midpoint's own
+    movement) in one pass, anchored to the CONTENT-SPACE point under the gesture's own STARTING
+    midpoint for its whole duration — recomputing the anchor every frame would let a slow pinch
+    drift. A finger left over after a pinch is ignored (no pan, no tap) until it, too, lifts.
+  - **One finger with a selection** moves it — nl-o47.2's group drag, unchanged.
+  - **One finger with nothing selected pans** — there is no page left to scroll behind a
+    `position: fixed; inset: 0` editor panel, so `touch-action: none` now also applies whenever
+    the editor is open (`is-phone-editor-active`, alongside `is-selection-active`/
+    `is-setup-enabled`/`is-features-enabled` in the "Touch: who owns the finger" comment in
+    `styles.css`) even with nothing selected. `dragController.js`'s own touch handling already
+    let a "nothing selected" move pass through untouched; the one real fix it needed
+    (`movedPastThreshold`, tracked regardless of selection) stops it from ALSO reading the
+    release at the end of that pan as a completed tap.
+  - **A tap still selects**, exactly as nl-o47.2 left it: `canvasGesture.js` never touches a
+    one-finger gesture that does not move past the tap threshold.
+- **Zoom limits and the "fit" state are named judgement calls** (`src/render/canvasZoom.js`):
+  `MIN_ZOOM` (1 — the floor; nothing is gained by shrinking the drawing past what its own clip
+  box already draws it at) and `MAX_ZOOM` (6 — chosen so a small plant's `MIN_HITBOX_RADIUS_PX`
+  becomes a comfortably large on-screen target well before the drawing turns to mush).
+  `FIT_STATE` (`{ scale: 1, tx: 0, ty: 0 }`) is the identity transform, but it is NOT always the
+  actual resting position a viewer sees: `.view`'s own CSS keeps the viewBox's aspect ratio
+  (nl-o47.1), and a drawing whose aspect ratio does not match a portrait phone's letterboxes —
+  the resting position is then a CENTERED state with a nonzero `tx` or `ty`
+  (`clampZoomState(FIT_STATE, bounds)`, not `FIT_STATE` itself), which is what the Fit button and
+  `isAtFit`'s own `reference` parameter compare against, and what `gesture.reset()` actually
+  applies. Letterboxing itself is not new here — it is the same "contain" fit the desktop
+  Maximize toggle already produces on a landscape-vs-portrait mismatch — pinching in is how a
+  phone makes a specific part of the drawing fill the screen; Fit is how you get the whole
+  drawing back.
+- **Pan bounds**: the content may slide until either edge of its (scaled) box reaches the clip
+  container's own edge, and no further — panning past that would show empty margin the drawing
+  does not have. Fully covered — clamp limits, pan bounds, scaling about a midpoint (both a
+  one-shot `zoomAbout` for a button and the live `pinchUpdate`) — by `tests/canvasZoom.test.js`,
+  with no DOM.
+- Zoom/pan state is per session, held only inside `canvasGesture.js`'s own closure; it is never
+  saved, and switching the maximized view (a tab, or re-entering the editor) resets to fit —
+  carrying a zoom level across two different drawings would be disorienting, not a convenience.
+- The page-scroll lock (item 1: "the page does not scroll while the editor is open") applies to
+  both `documentElement` and `body`: `window.scrollTo`/`scrollY` act on the document's own
+  "scrolling element", which is `documentElement` (`html`) in standards mode, not `body` — an
+  `overflow: hidden` on `body` alone left the page still scrollable underneath the fixed panel
+  (caught by `tests-e2e/touch.spec.js`'s own "the page does not scroll" test).
+- **Desktop is unchanged.** The editor only ever activates for `appState.mode === 'edit'` at
+  `max-width: 960px`; View, Setup, and Features modes, and every width above that breakpoint,
+  keep exactly their pre-nl-o47.4 behaviour — including the desktop/View-mode manual Maximize
+  toggle, still covered on its own by `tests-e2e/touch.spec.js`'s "View mode: maximizing a view
+  on a phone keeps the viewBox aspect ratio" test.
+
 ---
 
 ## Key modules
@@ -1127,7 +1255,19 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
   and elevation views; since nl-o47.2, mouse's press-and-drag and touch/pen's tap-to-select +
   drag-the-selection are two branches of the same controllers (see "Interaction and controls").
   Since nl-o47.6.2 it is also drift-aware: every hit/miss routes through
-  `src/interaction/driftHitTest.js` to decide select-the-whole-drift / drill-in / leave.
+  `src/interaction/driftHitTest.js` to decide select-the-whole-drift / drill-in / leave. Since
+  nl-o47.4, `handlePointerDown` also hands off to a second finger (see "The phone editor" above)
+  instead of ignoring it outright, and `movedPastThreshold` tracks the tap-movement threshold
+  regardless of selection, so a one-finger pan with nothing selected cannot also read as a tap.
+- `src/interaction/phoneEditor.js` – the phone editor itself (nl-o47.4): entering/leaving it,
+  the tab strip, reparenting the shared toolbar buttons and `#speciesTable` into its own slots
+  and back, the Plants sheet, and wiring `canvasGesture.js` to whichever panel is currently
+  maximized. See "The phone editor" above.
+- `src/interaction/canvasGesture.js` – the DOM glue for pinch-zoom/pan (nl-o47.4): real pointer
+  events in, `canvasZoom.js` calls and a CSS transform on `.view` out.
+- `src/render/canvasZoom.js` – pure: the transform math behind pinch-zoom/pan (nl-o47.4) —
+  clamping scale and pan to their limits, zooming about an anchor point (a button) or a live
+  pinch's own start snapshot. No DOM; unit-tested in `tests/canvasZoom.test.js`.
 - `src/interaction/tapSelection.js` – pure: tap-vs-drag classification and which candidate a tap
   selects or cycles to, given the previous tap.
 - `src/interaction/driftHitTest.js` – pure (nl-o47.6.2): `resolveDriftAction` (what a hit or a
@@ -1149,7 +1289,8 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
   compass nudge arrows, shared by every selection; the drift-specific controls (rename, count,
   spread, clone/remove drift, drilled-in's extra two buttons) are described under "Drifts"
   above. `src/state/nudgeSelection.js` is the pure move-by-one-step-and-clamp behind the
-  arrows and the desktop keyboard bonus.
+  arrows and the desktop keyboard bonus. Since nl-o47.4 it also owns the "More" popover's
+  open/closed state (design.html's `.selection-bar__more`) — see "The phone editor" above.
 - `src/history/layoutHistory.js` – the undo/redo stack: one full snapshot (placements, config, features) per revision; server-backed via `/api/history`.
 - `src/history/reconcileLayout.js` – which history entry a legacy layout file was showing; used only by the import.
 - `src/data/placements.js` – a plant reduced to its placement, and `sameLayout`.
