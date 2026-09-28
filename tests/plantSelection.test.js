@@ -66,3 +66,103 @@ test('pruneSelection with nothing to drop does not re-render', () => {
   selection.pruneSelection();
   assert.equal(renders, 0);
 });
+
+// --- drift context (nl-o47.6.2) --------------------------------------------------
+
+function makeDriftAppState() {
+  return makeAppState([
+    { id: 'wc-1', driftId: 'winecup' },
+    { id: 'wc-2', driftId: 'winecup' },
+    { id: 'wc-3', driftId: 'winecup' },
+    { id: 'hh-1' },
+  ]);
+}
+
+test('selectPlants with a drift\'s exact full membership enters whole-drift mode', () => {
+  const appState = makeDriftAppState();
+  const selection = createPlantSelection({ appState, render: () => {} });
+  selection.selectPlants(['wc-1', 'wc-2', 'wc-3']);
+  assert.deepEqual(selection.getDriftContext(), { selectedDriftId: 'winecup', driftDrilledIn: false });
+});
+
+test('selectPlants with one plant of the ALREADY-active drift drills in, keeping context', () => {
+  const appState = makeDriftAppState();
+  const selection = createPlantSelection({ appState, render: () => {} });
+  selection.selectPlants(['wc-1', 'wc-2', 'wc-3']);
+  selection.selectPlants(['wc-2']); // Details/Clone/the detail sheet all do this
+  assert.deepEqual(selection.getDriftContext(), { selectedDriftId: 'winecup', driftDrilledIn: true });
+  assert.deepEqual([...selection.getSelection()], ['wc-2']);
+});
+
+test('selectPlants with one drift member and NO prior context is a plain single-plant selection', () => {
+  const appState = makeDriftAppState();
+  const selection = createPlantSelection({ appState, render: () => {} });
+  selection.selectPlants(['wc-2']);
+  assert.deepEqual(selection.getDriftContext(), { selectedDriftId: '', driftDrilledIn: false });
+});
+
+test('selectPlants with a plain plant, or a subset of a drift, carries no drift context', () => {
+  const appState = makeDriftAppState();
+  const selection = createPlantSelection({ appState, render: () => {} });
+  selection.selectPlants(['hh-1']);
+  assert.deepEqual(selection.getDriftContext(), { selectedDriftId: '', driftDrilledIn: false });
+  selection.selectPlants(['wc-1', 'wc-2']);
+  assert.deepEqual(selection.getDriftContext(), { selectedDriftId: '', driftDrilledIn: false });
+});
+
+test('drillIntoDriftMember sets the selection to just that plant, in drift context', () => {
+  const appState = makeDriftAppState();
+  const selection = createPlantSelection({ appState, render: () => {} });
+  selection.drillIntoDriftMember('wc-2', 'winecup');
+  assert.deepEqual([...selection.getSelection()], ['wc-2']);
+  assert.deepEqual(selection.getDriftContext(), { selectedDriftId: 'winecup', driftDrilledIn: true });
+});
+
+test('selectDrift selects every current member, whole mode', () => {
+  const appState = makeDriftAppState();
+  const selection = createPlantSelection({ appState, render: () => {} });
+  selection.selectDrift('winecup');
+  assert.deepEqual([...selection.getSelection()].sort(), ['wc-1', 'wc-2', 'wc-3']);
+  assert.deepEqual(selection.getDriftContext(), { selectedDriftId: 'winecup', driftDrilledIn: false });
+});
+
+test('clearSelection drops the drift context too', () => {
+  const appState = makeDriftAppState();
+  const selection = createPlantSelection({ appState, render: () => {} });
+  selection.selectDrift('winecup');
+  selection.clearSelection();
+  assert.equal(selection.getSelection().size, 0);
+  assert.deepEqual(selection.getDriftContext(), { selectedDriftId: '', driftDrilledIn: false });
+});
+
+test('pruneSelection resyncs whole-drift ids to the CURRENT membership, not the stale snapshot', () => {
+  const appState = makeDriftAppState();
+  const selection = createPlantSelection({ appState, render: () => {} });
+  selection.selectDrift('winecup'); // ids: wc-1, wc-2, wc-3
+  // "+" (src/state/driftEdits.js addDriftMember) added a member elsewhere,
+  // without going through this selection.
+  appState.plants = [...appState.plants, { id: 'wc-4', driftId: 'winecup' }];
+  selection.pruneSelection();
+  assert.deepEqual([...selection.getSelection()].sort(), ['wc-1', 'wc-2', 'wc-3', 'wc-4']);
+  assert.deepEqual(selection.getDriftContext(), { selectedDriftId: 'winecup', driftDrilledIn: false });
+});
+
+test('pruneSelection drops drift context once a drilled-into plant is removed', () => {
+  const appState = makeDriftAppState();
+  const selection = createPlantSelection({ appState, render: () => {} });
+  selection.drillIntoDriftMember('wc-2', 'winecup');
+  appState.plants = appState.plants.filter((p) => p.id !== 'wc-2');
+  selection.pruneSelection();
+  assert.equal(selection.getSelection().size, 0);
+  assert.deepEqual(selection.getDriftContext(), { selectedDriftId: '', driftDrilledIn: false });
+});
+
+test('renaming a drift and re-selecting its (unchanged) plant ids picks up the new driftId', () => {
+  const appState = makeDriftAppState();
+  const selection = createPlantSelection({ appState, render: () => {} });
+  selection.selectDrift('winecup');
+  // renameDrift (src/state/driftEdits.js) rewrites driftId on every member in place.
+  appState.plants = appState.plants.map((p) => (p.driftId === 'winecup' ? { ...p, driftId: 'front-edge' } : p));
+  selection.selectPlants(['wc-1', 'wc-2', 'wc-3']); // same ids, new driftId
+  assert.deepEqual(selection.getDriftContext(), { selectedDriftId: 'front-edge', driftDrilledIn: false });
+});
