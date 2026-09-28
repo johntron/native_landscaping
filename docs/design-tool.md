@@ -798,14 +798,19 @@ Top view uses the yard coordinate system (origin at SW corner, y increasing nort
   photos), and Features (draw the yard model).
 - **The Edit-mode selection (nl-o47.2): a SET of plant ids** (`appState.selectedPlantIds`),
   owned by `src/ui/plantSelection.js` (`selectPlants`, `clearSelection`, `getSelection`,
-  `pruneSelection`). Only single selection has UI today — the Set model is what a drift's
-  several plants (nl-o47.6) will select as one. Pruned everywhere the species table already
-  refreshes (add, clone, remove, undo/redo, load: `src/app.js`'s `refreshSpeciesTable`
-  wrapper), so a plant that stops existing cannot linger in the selection; cleared on every
-  real mode change, and for free on a project switch (the whole page reloads).
+  `pruneSelection`). Single selection is the only case with a full action bar today (Details,
+  Clone, Remove, which all resolve one plant id) — the Set model is what a drift's several
+  plants select as one. The Add plant sheet's "How many?" (nl-o47.6.3) is the first caller to
+  put more than one id in it: count 1 still goes through `setTargetedPlant` below like every
+  other single add, but count > 1 calls `selectPlants` directly with every new member, so the
+  bar shows "N plants" and Nudge/Done work on the whole clump while Details/Clone/Remove wait
+  on a drift-aware bar (nl-o47.6.2). Pruned everywhere the species table already refreshes
+  (add, clone, remove, undo/redo, load: `src/app.js`'s `refreshSpeciesTable` wrapper), so a
+  plant that stops existing cannot linger in the selection; cleared on every real mode change,
+  and for free on a project switch (the whole page reloads).
   `src/ui/speciesHighlight.js`'s `setTargetedPlant` also SELECTS while Edit mode is on — the
-  one hook every other caller routes through (right-click, the detail sheet, the Add plant
-  sheet's `onPick`) without needing to know the selection module exists. Rendering draws the
+  hook every other single-plant caller routes through (right-click, the detail sheet, the Add
+  plant sheet's `onPick` at count 1) without needing to know the selection module exists. Rendering draws the
   selection ring (`.plant-selection-ring`, `var(--accent)`, cyan/apparatus) instead of the
   older "targeted plant" ring while in Edit mode, so a targeted-and-selected plant shows one
   ring, not two; the target ring is unchanged in every other mode. Cleared from `appState`
