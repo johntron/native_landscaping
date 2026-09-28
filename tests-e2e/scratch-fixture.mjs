@@ -77,6 +77,13 @@ export const SCRATCH_PROJECTS = [
   'desktop-drift-spread',
   'desktop-drift-rename',
   'desktop-drift-rename-refuse',
+  // The species table's per-drift entries and the plan's single grouped
+  // label (nl-o47.6.7): each gets SPECIES_DRIFT_LAYOUT_CSV, below. Read-only
+  // (clicking a drift entry selects/highlights but never writes), but the
+  // custom layout only exists on the scratch server, so these still open
+  // through openScratchProject like every other drift fixture here.
+  'desktop-drift-species',
+  'touch-drift-species',
   'background-upload',
   'placed-photo',
   'features-save',
@@ -140,6 +147,35 @@ const DRIFT_PROJECTS = [
   'desktop-drift-rename',
   'desktop-drift-rename-refuse',
 ];
+
+/**
+ * The species table's per-drift entries and the plan's single grouped label
+ * (nl-o47.6.7): winecup gets TWO drifts (4 members at the same square
+ * DRIFT_LAYOUT_CSV uses, so its centroid/spacing/label math is already
+ * proven by nl-o47.6.2's own specs, plus 3 more well clear of it and of
+ * everything else) and one winecup planted in no drift at all, so the
+ * species table has both "2 drifts, 8 plants" and "1 single" to assert on in
+ * the same row. horseherb gets one lone plant and NO drift, so its own row's
+ * Drifts cell stays empty — "keep the table's existing behaviour for
+ * species rows" with nothing to show. Every group sits far enough from every
+ * other (see DRIFT_LAYOUT_CSV's own comment on MIN_HITBOX_RADIUS_PX) that a
+ * click aimed at one drift's member or gap cannot land near another's.
+ */
+const SPECIES_DRIFT_LAYOUT_CSV = [
+  'id,species_id,x_ft,y_ft,drift_id',
+  'wa,winecup,12,8,winecup-drift',
+  'wb,winecup,18,8,winecup-drift',
+  'wc,winecup,12,14,winecup-drift',
+  'wd,winecup,18,14,winecup-drift',
+  'wx,winecup,3,3,winecup-2',
+  'wy,winecup,3,7,winecup-2',
+  'wz,winecup,7,5,winecup-2',
+  'single-winecup,winecup,25,18,',
+  'lone-horseherb,horseherb,25,3,',
+].join('\n');
+
+/** Every scratch project seeded with SPECIES_DRIFT_LAYOUT_CSV instead of backyard's own planting. */
+const SPECIES_DRIFT_PROJECTS = ['desktop-drift-species', 'touch-drift-species'];
 
 const PLACED_PHOTO = {
   id: 'placed-photo',
@@ -358,6 +394,10 @@ export function buildScratchPublicDir() {
 
   DRIFT_PROJECTS.forEach((id) => {
     writeFileSync(path.join(SCRATCH_DIR, 'projects', id, 'planting_layout.csv'), `${DRIFT_LAYOUT_CSV}\n`);
+  });
+
+  SPECIES_DRIFT_PROJECTS.forEach((id) => {
+    writeFileSync(path.join(SCRATCH_DIR, 'projects', id, 'planting_layout.csv'), `${SPECIES_DRIFT_LAYOUT_CSV}\n`);
   });
 
   // Written after the copy so it replaces the backyard project.json cpSync laid down.
