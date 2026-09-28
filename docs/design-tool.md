@@ -649,18 +649,115 @@ ids are minted by `src/state/plantIds.js`'s `buildDriftId`, unique in the yard
 and readable (from a given name, else the species).
 
 The pure geometry and edits a drift needs — members and their centroid, a
-padded outline hull for drawing and point-in-outline hit-testing, spacing (the
-members' median nearest-neighbour distance), phyllotaxis clump layout, where
-"+" adds a member and which member "−" removes, spread, rename, clone,
-dissolve, and single-linkage suggestion clusters over an existing planting —
-live in `src/state/driftGeometry.js` and `src/state/driftEdits.js`, pure and
-unit-tested like `plantEdits.js`/`yardEdits.js`. Every authored constant there
-(a spacing factor, a suggestion-clustering distance, hull padding) is a named
-export commented as our judgement, not a sourced fact. The Add plant sheet's
-"How many?" (nl-o47.6.3, below) is the first of these to reach `design.html`:
-a count over 1 places a clump instead of one plant, and mints its `driftId`.
-Drawing a drift's outline, selecting or isolating one, and the other three
-making methods (nl-o47.6's "MAKING" list) are later beads under nl-o47.6.
+padded outline hull for drawing and point-in-outline hit-testing (and a
+`driftOutlinePolygon` to actually DRAW that padded hull, ringing each hull
+vertex and re-hulling the samples so the drawn shape agrees with the hit
+region exactly, including along a straight bed edge and for a 1- or 2-member
+drift), spacing (the members' median nearest-neighbour distance), phyllotaxis
+clump layout, where "+" adds a member and which member "−" removes, spread,
+rename, clone, dissolve, remove (delete every planned member, dissolve the
+label on planted ones), and single-linkage suggestion clusters over an
+existing planting — live in `src/state/driftGeometry.js` and
+`src/state/driftEdits.js`, pure and unit-tested like
+`plantEdits.js`/`yardEdits.js`. Every authored constant there (a spacing
+factor, a suggestion-clustering distance, hull padding) is a named export
+commented as our judgement, not a sourced fact. The Add plant sheet's "How
+many?" (nl-o47.6.3, `addDriftFromCatalog`) is the first making method to
+reach `design.html`: a count over 1 places a clump instead of one plant and
+mints its `driftId`, then selects every member it just placed — which is
+exactly the ids `selectPlants` needs to enter whole-drift mode, below.
+
+#### Selecting, isolating, and the drift action bar (nl-o47.6.2)
+
+Selection (nl-o47.2's Set of plant ids) gains a **drift context**, two more
+`appState` fields owned by the same `src/ui/plantSelection.js`:
+`selectedDriftId` (`''` for none) and `driftDrilledIn`. A drift id alone
+cannot say whether the selection IS the whole drift or has been narrowed to
+one of its members — a 1-member drift makes the two indistinguishable by ids
+alone — so both fields are needed; see `src/state/driftSelection.js` for the
+pure decisions (`driftForExactSelection`, `inferDriftContext`,
+`pruneDriftContext`) and their own reasoning. `selectPlants(ids)` — the one
+entry point every caller already used (right-click, the detail sheet, the Add
+plant sheet's `onPick`, nl-o47.6.3's "add N of a species") — infers the
+context from the ids themselves: handing it exactly one drift's current full
+membership enters that drift, whole; narrowing an ALREADY-active drift
+context down to one of its own members drills into it (so Details/Clone/the
+detail sheet do not drop isolation the instant they touch the selection); a
+cold single-plant selection invents no drift context. `drillIntoDriftMember`
+and `selectDrift` are the two lower-level entry points the drag controllers
+and the action bar call directly. `pruneSelection` (run everywhere
+`refreshSpeciesTable` already runs) re-syncs whole mode to the drift's
+CURRENT membership rather than a stale id snapshot, so a "+"/"-" elsewhere —
+or an undo/redo of one — keeps showing every member and the right count.
+
+Tap/click resolution (`src/interaction/dragController.js`, decided by the
+pure `src/interaction/driftHitTest.js`): a tap/click on a member of a drift,
+or inside its outline between members (the "far bigger target" the outline
+exists for), selects the WHOLE drift; a further tap on a member of the
+now-selected drift drills into it; while drilled in, a tap on ANOTHER member
+switches straight to it; a tap outside the isolated drift's own outline
+leaves it. Several overlapping outlines (an interwoven planting) resolve to
+the nearest centroid first, and repeat taps into the overlap cycle between
+them exactly like `tapSelection.js` already cycles overlapping plants — the
+gap-tap cycle is a second, parallel tracker over drift ids rather than plant
+ids. **Isolation**: while a drift is selected or drilled into, every plant
+outside it dims (`[data-dimmed="true"]`, `styles.css`) and stops being a hit
+target — the plan controller filters its own proximity hit-testing in JS,
+and an elevation's DOM-based `findPlantIdFromEvent` gets the same exclusion
+for free from `pointer-events: none` on the dimmed group (plus a defensive
+driftId re-check in case a render pass hasn't caught up). Mouse has no
+separate tap step, so pressing a member of an ALREADY whole-selected drift
+starts the group drag immediately (the whole drift can still be dragged) and
+only narrows to that one member if the press turns out to be a plain click,
+resolved at pointerup since a single gesture both selects and starts a drag
+here; pressing a member of an unselected drift enters it and drags the whole
+group right away; pressing a member while already drilled in switches the
+target immediately and drags just it. The group drag itself needed almost no
+new code for touch: a drag already moves "whatever the selection currently
+is" (nl-o47.2), so once a tap enters a drift the very next drag gesture picks
+up every member for free, clamped as a group exactly like today, in the plan
+and along an elevation's one axis alike.
+
+**Drawing**: the selected drift's outline is drawn in the plan only (an
+elevation has no y-depth to test a hull against) in the cyan "apparatus"
+token (`.drift-outline`, the same family as `.plant-selection-ring`), built
+from `driftOutlinePolygon` and smoothed with `buildSmoothPath` so it reads as
+an organic zone rather than a faceted polygon. Members get the ordinary
+selection ring, in both views, exactly as any selected plant does. None of it
+— outline, dimming, or the drift context itself — may reach an export:
+`src/export/exportActions.js` blanks `selectedDriftId`/`driftDrilledIn`
+around every capture and snapshots/restores them around it, the same
+treatment `selectedPlantIds` already got.
+
+**The action bar** (`src/ui/selectionBar.js`) has three modes, none of them a
+separate element — the module just shows/hides pieces of the one bar. A
+drift's **label** is its driftId humanized (`src/data/driftId.js`
+`humanizeDriftId`: hyphens to spaces, first letter capitalised) plus its
+member count — no separate "named" flag distinguishes a species-minted id
+("winecup-2") from a person's own rename ("front-edge"); both read the same
+way once humanized. Whole-drift mode: the label plus an inline rename text
+field (never `window.prompt`, refusing an empty name or one that collides
+with another drift — `renameDrift`'s own refusal, shown inline), a count
+`-`/N/`+` stepper (`addDriftMember`/`removeDriftMember`, each button
+disabling itself with the reason `driftGeometry.js` already computes when
+nothing can be added/removed), Tighter/Looser spread (`spreadDrift`, a factor
+per press that is a named judgement constant, `DRIFT_SPREAD_STEP` in
+`src/app.js`), Clone drift (selects the new one), and Remove drift (deletes
+every planned member and dissolves the label on planted ones, its own label
+saying the two counts before it acts, since there is no `window.confirm`
+either). Drilled-into-one-member mode keeps the ordinary single-plant bar
+(Details/Clone/Remove act on that one plant; `clonePlantById` already carries
+`driftId` through like any other field, so cloning a member keeps the clone in
+the drift) and adds "Remove from drift" (`removePlantFromDrift`) and "Back to
+drift". Nudges and Done are shared by every mode, unchanged. Every edit
+commits through `layoutHistory.commit` only once something actually changed —
+`spreadDrift`/`renameDrift` return success-shaped results on a no-op
+(nl-o47.6.1's own hand-off note), so `src/app.js`'s handlers check a rename
+actually changed the id, and compare member positions before/after a spread,
+before committing.
+
+Group-selected, suggested, and painted drifts (the other three making
+methods in nl-o47.6's "MAKING" list) are later beads under nl-o47.6.
 
 ### Species are keyed by id, not by name (nl-3s5.18)
 
@@ -798,16 +895,17 @@ Top view uses the yard coordinate system (origin at SW corner, y increasing nort
   photos), and Features (draw the yard model).
 - **The Edit-mode selection (nl-o47.2): a SET of plant ids** (`appState.selectedPlantIds`),
   owned by `src/ui/plantSelection.js` (`selectPlants`, `clearSelection`, `getSelection`,
-  `pruneSelection`). Single selection is the only case with a full action bar today (Details,
-  Clone, Remove, which all resolve one plant id) — the Set model is what a drift's several
-  plants select as one. The Add plant sheet's "How many?" (nl-o47.6.3) is the first caller to
-  put more than one id in it: count 1 still goes through `setTargetedPlant` below like every
-  other single add, but count > 1 calls `selectPlants` directly with every new member, so the
-  bar shows "N plants" and Nudge/Done work on the whole clump while Details/Clone/Remove wait
-  on a drift-aware bar (nl-o47.6.2). Pruned everywhere the species table already refreshes
-  (add, clone, remove, undo/redo, load: `src/app.js`'s `refreshSpeciesTable` wrapper), so a
-  plant that stops existing cannot linger in the selection; cleared on every real mode change,
-  and for free on a project switch (the whole page reloads).
+  `pruneSelection`, and since nl-o47.6.2 `drillIntoDriftMember`/`selectDrift`/
+  `getDriftContext`). A drift's several members select as one Set, the multi-select case the
+  Set model was built for; see "Drifts" above for the drift context two more `appState` fields
+  carry alongside it. The Add plant sheet's "How many?" (nl-o47.6.3) is the caller that puts
+  more than one id in it: count 1 still goes through `setTargetedPlant` below like every other
+  single add, but count > 1 calls `selectPlants` directly with every new member — exactly the
+  ids `inferDriftContext` reads as "enter this drift, whole." Pruned everywhere the species
+  table already refreshes (add, clone, remove, undo/redo, load: `src/app.js`'s
+  `refreshSpeciesTable` wrapper), so a plant that stops existing cannot linger in the
+  selection; cleared on every real mode change, and for free on a project switch (the whole
+  page reloads).
   `src/ui/speciesHighlight.js`'s `setTargetedPlant` also SELECTS while Edit mode is on — the
   hook every other single-plant caller routes through (right-click, the detail sheet, the Add
   plant sheet's `onPick` at count 1) without needing to know the selection module exists. Rendering draws the
@@ -819,7 +917,10 @@ Top view uses the yard coordinate system (origin at SW corner, y increasing nort
 - **Gestures, powered by `createPlantDragController`/`createElevationDragController`
   (`src/interaction/dragController.js`), diverge by pointer type.** Mouse keeps the original
   model: press a plant to grab AND select it (`onSelectPlant`), drag to move it, exactly as
-  before nl-o47.2. Touch/pen no longer grabs on pointerdown at all: a **tap** — pointerdown to
+  before nl-o47.2 for a plant in no drift. A press on a drift member instead drags the whole
+  drift (or, once already drilled into one member, just that plant) — see "Drifts" above for
+  the deferred-drill-in timing a single mouse gesture needs that touch's separate tap step
+  does not. Touch/pen no longer grabs on pointerdown at all: a **tap** — pointerdown to
   pointerup with at most `TAP_MOVEMENT_THRESHOLD_PX` of movement (~8 CSS px, a judgement call,
   `src/interaction/tapSelection.js`) — selects the nearest overlapping candidate
   (`pickPlantHits`' own order), or cycles to the next one if it repeats the previous tap's spot
@@ -843,7 +944,9 @@ Top view uses the yard coordinate system (origin at SW corner, y increasing nort
   selection: the plant's name (or "N plants"), Details (opens the existing detail sheet), Clone
   (selects the clone), Remove (the ensuing prune clears the selection), Done, and four nudge
   arrows labelled by compass point in yard feet (`src/state/nudgeSelection.js`,
-  `NUDGE_STEP_FT` = 0.5 ft, a judgement call, clamped as a group like a drag). Arrow keys nudge
+  `NUDGE_STEP_FT` = 0.5 ft, a judgement call, clamped as a group like a drag) — this is the bar
+  a plain plant or a drilled-into drift member gets; a whole drift's own controls (rename,
+  count, spread, clone/remove drift) are described under "Drifts" above. Arrow keys nudge
   on desktop too, while a selection exists and focus is not in a form field. Every nudge
   commits immediately as its own history entry rather than coalescing a burst into one: a
   delayed commit racing an Undo pressed in the same window could record the just-undone
@@ -962,29 +1065,43 @@ Keep interactions lightweight and accessible; no heavy UI frameworks are needed.
 - `src/interaction/dragController.js` – pointer events + hit-testing for moving plants in plan
   and elevation views; since nl-o47.2, mouse's press-and-drag and touch/pen's tap-to-select +
   drag-the-selection are two branches of the same controllers (see "Interaction and controls").
+  Since nl-o47.6.2 it is also drift-aware: every hit/miss routes through
+  `src/interaction/driftHitTest.js` to decide select-the-whole-drift / drill-in / leave.
 - `src/interaction/tapSelection.js` – pure: tap-vs-drag classification and which candidate a tap
   selects or cycles to, given the previous tap.
+- `src/interaction/driftHitTest.js` – pure (nl-o47.6.2): `resolveDriftAction` (what a hit or a
+  miss on a member should do to the selection) and the gap-tap machinery
+  (`containingDriftIdsByDistance`/`resolveGapTapAction`) for a tap between members, inside a
+  drift's outline, including cycling into a different drift when two outlines overlap.
 - `src/render/groupClamp.js` – pure: clamping a delta applied to every member of a selection at
   once, so a group move or nudge keeps the group's shape (generalizes `yardBounds.js`'s
-  single-plant clamp to a set of points sharing one delta).
+  single-plant clamp to a set of points sharing one delta). Powers a drift's group drag/nudge
+  too, unchanged: both already move "whatever the selection currently is."
 - `src/state/selection.js` – pure: pruning a selection Set against the current plant list, and
   Set equality. `src/ui/plantSelection.js` is the stateful wrapper (owns
-  `appState.selectedPlantIds`) that `src/app.js` and `dragController.js` actually call.
+  `appState.selectedPlantIds`, and since nl-o47.6.2 `selectedDriftId`/`driftDrilledIn`) that
+  `src/app.js` and `dragController.js` actually call.
+- `src/state/driftSelection.js` – pure (nl-o47.6.2): the selection's drift-context state
+  machine — `driftForExactSelection`, `inferDriftContext` (what `selectPlants(ids)` should set
+  the context to), `pruneDriftContext` (what survives a prune) — behind `plantSelection.js`.
 - `src/ui/selectionBar.js` – the selection action bar: Details, Clone, Remove, Done, and the
-  compass nudge arrows. `src/state/nudgeSelection.js` is the pure move-by-one-step-and-clamp
-  behind the arrows and the desktop keyboard bonus.
+  compass nudge arrows, shared by every selection; the drift-specific controls (rename, count,
+  spread, clone/remove drift, drilled-in's extra two buttons) are described under "Drifts"
+  above. `src/state/nudgeSelection.js` is the pure move-by-one-step-and-clamp behind the
+  arrows and the desktop keyboard bonus.
 - `src/history/layoutHistory.js` – the undo/redo stack: one full snapshot (placements, config, features) per revision; server-backed via `/api/history`.
 - `src/history/reconcileLayout.js` – which history entry a legacy layout file was showing; used only by the import.
 - `src/data/placements.js` – a plant reduced to its placement, and `sameLayout`.
 - `src/history/layoutHistoryController.js` – the page's side of it: undo/redo buttons, the save-status line, `commit()` / `commitSetup()` / `commitFeatures()` (record, persist through one queue, check the server's cursor), and restoring a revision's setup and features on undo/redo.
 - `src/state/plantEdits.js` – add, clone, and remove a plant; `src/state/yardEdits.js` – scale and
   shift features, patch a view. Pure, and unit-tested directly.
-- `src/data/driftId.js` – a drift id's slug shape (`isValidDriftId`); `src/state/plantIds.js`'s
-  `buildDriftId` mints one. `src/state/driftGeometry.js` and `src/state/driftEdits.js` – a
-  drift's derived geometry (members, centroid, outline hull, spacing, phyllotaxis clump
-  layout, suggestion clusters) and its edits (add/remove a member, spread, rename, clone,
-  dissolve, and `addDriftFromCatalog` — place N of one species as a fresh drift, nl-o47.6.3),
-  pure like `plantEdits.js` (see "Drifts" above).
+- `src/data/driftId.js` – a drift id's slug shape (`isValidDriftId`) and its display label
+  (`humanizeDriftId`, nl-o47.6.2); `src/state/plantIds.js`'s `buildDriftId` mints one.
+  `src/state/driftGeometry.js` and `src/state/driftEdits.js` – a drift's derived geometry
+  (members, centroid, outline hull, the actual padded polygon to draw it, spacing, phyllotaxis
+  clump layout, suggestion clusters) and its edits (add/remove a member, spread, rename, clone,
+  dissolve, remove the whole drift, and `addDriftFromCatalog` — place N of one species as a
+  fresh drift, nl-o47.6.3), pure like `plantEdits.js` (see "Drifts" above).
 - `src/ui/speciesHighlight.js` – the table ↔ drawing link: highlighted species, targeted and
   hovered plant, and `refresh()` (rebuild the table, re-grade the ecology check). Its
   `setTargetedPlant` also selects (`src/ui/plantSelection.js`) while Edit mode is on (nl-o47.2).
