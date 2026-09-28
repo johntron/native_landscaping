@@ -208,6 +208,25 @@ test('cloneDrift keeps the copy inside the declared yard', () => {
   });
 });
 
+test('cloneDrift offsets the whole copy clear of the original, not by a fixed nudge that would interleave a multi-member drift', () => {
+  // Members ~1-2 ft apart (a realistic groundcover spacing); a fixed 1.1 ft
+  // nudge would land clones on top of or between the originals.
+  const plants = [
+    plant(winecup, 'a', 10, 10, { driftId: 'strip' }),
+    plant(winecup, 'b', 11.5, 10, { driftId: 'strip' }),
+    plant(winecup, 'c', 10.75, 11.5, { driftId: 'strip' }),
+  ];
+  const state = makeState(plants);
+  const { plants: clones } = cloneDrift(state, 'strip');
+  const minGap = Math.min(
+    ...clones.flatMap((clone) => plants.map((original) => Math.hypot(clone.x - original.x, clone.y - original.y)))
+  );
+  // These 3 members' own median nearest-neighbour distance is exactly 1.5 ft
+  // (a-b); the offset is the members' own x-spread plus that spacing, so the
+  // closest an original and a clone ever land is exactly that spacing.
+  assert.ok(minGap >= 1.5 - 1e-9, `clone landed only ${minGap} ft from an original`);
+});
+
 test('cloneDrift on an unknown driftId', () => {
   assert.deepStrictEqual(cloneDrift(makeState(baseDrift()), 'nope'), { driftId: null, plants: [], reason: 'no such drift' });
 });

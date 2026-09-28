@@ -149,10 +149,12 @@ test('clumpPositions: 0 plants is [], 1 plant sits exactly at the centre', () =>
 });
 
 test('clumpPositions keeps the median (and minimum) nearest-neighbour distance close to the requested spacing, for a wide range of N', () => {
-  // Property test, not an exact-constant test: golden-angle phyllotaxis is not
-  // a perfect hexagonal lattice, so nearest-neighbour distance is consistently
-  // a bit under the target rather than exactly on it. Empirically ~0.8-0.95x
-  // across N; the tolerance below is deliberately generous around that.
+  // Property test, not an exact-constant test: PHYLLOTAXIS_C is an empirical
+  // correction (see its comment) so that median nearest-neighbour distance
+  // lands close to the requested spacing for a typical clump size. N=2 is a
+  // measured outlier (a lone pair sits ~8.6% over spacing; there is no
+  // "median" to average it against), so it gets a looser band; N>=3 is held
+  // to +-5%.
   for (const n of [2, 3, 5, 8, 13, 21, 34, 40]) {
     const spacing = 2;
     const points = clumpPositions(n, spacing, { x: 0, y: 0 }, null);
@@ -162,8 +164,21 @@ test('clumpPositions keeps the median (and minimum) nearest-neighbour distance c
     );
     const sorted = [...nn].sort((a, b) => a - b);
     const median = sorted.length % 2 ? sorted[(sorted.length - 1) / 2] : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
-    assert.ok(median > spacing * 0.7 && median < spacing * 1.05, `n=${n}: median nn ${median} not close to spacing ${spacing}`);
+    const tolerance = n === 2 ? 0.1 : 0.05;
+    assert.ok(
+      median > spacing * (1 - tolerance) && median < spacing * (1 + tolerance),
+      `n=${n}: median nn ${median} not within ${tolerance * 100}% of spacing ${spacing}`
+    );
     assert.ok(Math.min(...nn) > spacing * 0.5, `n=${n}: some pair much closer than spacing (min nn ${Math.min(...nn)})`);
+  }
+});
+
+test('round-trip: driftSpacing of a freshly generated clump comes back close to the spacing it was generated at', () => {
+  for (const n of [3, 8, 20, 40]) {
+    const spacing = 1.5;
+    const points = clumpPositions(n, spacing, { x: 0, y: 0 }, null);
+    const measured = driftSpacing(points, 10 /* width fallback unused: n >= 2 */);
+    assert.ok(Math.abs(measured - spacing) < spacing * 0.05, `n=${n}: measured spacing ${measured} vs requested ${spacing}`);
   }
 });
 
@@ -261,6 +276,36 @@ test('nextMemberPosition returns a reason instead of a position when nothing fit
   const result = nextMemberPosition(members, 3, tight);
   assert.equal(result.position, null);
   assert.match(result.reason, /no room/);
+});
+
+test('nextMemberPosition: a wide gap (a ring open on one side) still lands AT spacing from its nearest member, not merely past it', () => {
+  // Five members on a radius-5 circle spanning only the western semicircle
+  // (90, 135, 180, 225, 270 degrees), leaving one huge gap on the east side.
+  // The unpulled candidate there sits well past spacing from every member;
+  // this is exactly the case nextMemberPosition pulls back toward its
+  // nearest neighbour for.
+  const members = [90, 135, 180, 225, 270].map((deg) => {
+    const a = (deg * Math.PI) / 180;
+    return { id: `m${deg}`, x: 5 * Math.cos(a), y: 5 * Math.sin(a) };
+  });
+  const spacing = 4;
+  const { position, reason } = nextMemberPosition(members, spacing, null);
+  assert.equal(reason, null);
+  const distances = members.map((m) => Math.hypot(position.x - m.x, position.y - m.y));
+  assert.ok(Math.abs(Math.min(...distances) - spacing) < 1e-6, `nearest member should be exactly spacing away, got ${Math.min(...distances)}`);
+  assert.ok(distances.every((d) => d >= spacing - 1e-9), 'never closer than spacing to any member');
+});
+
+test('nextMemberPosition: a single member near one fence still finds room on another side', () => {
+  const bounds = { x: { min: 0, max: 10 }, y: { min: 0, max: 10 } };
+  const members = [{ x: 9.5, y: 5 }]; // 0.5 ft from the east fence
+  const spacing = 3; // +x candidate (12.5) is outside; +y/-x/-y should work
+  const { position, reason } = nextMemberPosition(members, spacing, bounds);
+  assert.equal(reason, null);
+  assert.notEqual(position.x, members[0].x + spacing, 'the blocked +x direction was not used');
+  assert.ok(position.x >= bounds.x.min && position.x <= bounds.x.max);
+  assert.ok(position.y >= bounds.y.min && position.y <= bounds.y.max);
+  assert.equal(Math.hypot(position.x - members[0].x, position.y - members[0].y), spacing);
 });
 
 test('nextMemberPosition on an empty drift', () => {

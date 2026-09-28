@@ -44,13 +44,22 @@ export const MIN_SUGGESTION_CLUSTER_SIZE = 2;
 export const MIN_SPREAD_FACTOR = 0.05;
 
 /**
- * Vogel/sunflower phyllotaxis spiral constant, derived so that at spacing `s`
- * a clump's points come out close to a hexagonal packing (each point's area,
- * pi*c^2, matches a hexagonal lattice's area per point, (sqrt(3)/2)*s^2):
+ * Vogel/sunflower phyllotaxis spiral constant. The starting point is derived
+ * so that at spacing `s` a clump's points come out close to a hexagonal
+ * packing (each point's area, pi*c^2, matches a hexagonal lattice's area per
+ * point, (sqrt(3)/2)*s^2):
  *   pi*c^2 = (sqrt(3)/2)*s^2  =>  c = s * sqrt(sqrt(3) / (2*pi)) =~ 0.525*s
- * See clumpPositions, which multiplies this by spacingFt and sqrt(i + 0.5).
+ * A golden-angle spiral is not actually a hexagonal lattice, though, and
+ * measuring clumpPositions' own output (median nearest-neighbour distance
+ * over N = 2..100 points) showed that theoretical c realises a median spacing
+ * of only about 0.87-0.88x the target, consistently across N. PHYLLOTAXIS_C
+ * is that theoretical value scaled up by the measured correction (1/0.875
+ * =~ 1.143) so the clump's own measured spacing lands within about 1% of
+ * what was asked for; tests/driftGeometry.test.js checks the property this
+ * constant exists to satisfy, not the constant's value itself. See
+ * clumpPositions, which multiplies this by spacingFt and sqrt(i + 0.5).
  */
-const PHYLLOTAXIS_C = Math.sqrt(Math.sqrt(3) / (2 * Math.PI));
+const PHYLLOTAXIS_C = 0.6;
 
 /** The golden angle, in radians: successive points never re-align radially. */
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
@@ -366,10 +375,15 @@ export function nextMemberPosition(members, spacingFt, bounds = null) {
   const centroid = driftCentroid(members);
 
   if (members.length === 1) {
-    const point = { x: centroid.x + spacing, y: centroid.y };
-    return withinBounds(point, bounds)
-      ? { position: point, reason: null }
-      : { position: null, reason: 'no room for another member inside the yard' };
+    // No angular gap to speak of with only one member: try the four cardinal
+    // directions, in a fixed order, before giving up — a member sitting
+    // within spacing of one fence should still find room on another side,
+    // rather than "no room" the instant its one fixed direction is blocked.
+    for (const dir of [{ x: 1, y: 0 }, { x: 0, y: 1 }, { x: -1, y: 0 }, { x: 0, y: -1 }]) {
+      const point = { x: centroid.x + spacing * dir.x, y: centroid.y + spacing * dir.y };
+      if (withinBounds(point, bounds)) return { position: point, reason: null };
+    }
+    return { position: null, reason: 'no room for another member inside the yard' };
   }
 
   const angles = members
@@ -395,9 +409,43 @@ export function nextMemberPosition(members, spacingFt, bounds = null) {
       }
     });
     const point = { x: centroid.x + t * u.x, y: centroid.y + t * u.y };
-    if (withinBounds(point, bounds)) return { position: point, reason: null };
+    // `point` is guaranteed >= spacing from every member (that's what `t` was
+    // chosen for), but in a wide gap (a ring of members with one open side,
+    // say) it can land much farther than spacing from its nearest one. Pull
+    // it in along the line from that member, to "at the drift's spacing",
+    // not just "at least" it — but only if doing so still respects spacing to
+    // every OTHER member; otherwise the original, farther point is used.
+    const pulled = pullTowardNearestMember(point, members, spacing);
+    for (const candidate of pulled ? [pulled, point] : [point]) {
+      if (withinBounds(candidate, bounds)) return { position: candidate, reason: null };
+    }
   }
   return { position: null, reason: 'no room for another member inside the yard' };
+}
+
+/**
+ * `point`, pulled along the line from its nearest member (ties broken by id)
+ * until it is exactly `spacing` away — or null if it already is (nothing to
+ * pull) or pulling it would land closer than `spacing` to some OTHER member.
+ */
+function pullTowardNearestMember(point, members, spacing) {
+  let nearest = null;
+  let nearestDist = Infinity;
+  members.forEach((m) => {
+    const d = Math.hypot(point.x - m.x, point.y - m.y);
+    if (d < nearestDist - 1e-9 || (Math.abs(d - nearestDist) <= 1e-9 && (!nearest || String(m.id) < String(nearest.id)))) {
+      nearest = m;
+      nearestDist = d;
+    }
+  });
+  if (!(nearestDist > spacing) || nearestDist === 0) return null;
+  const pulled = {
+    x: nearest.x + (spacing * (point.x - nearest.x)) / nearestDist,
+    y: nearest.y + (spacing * (point.y - nearest.y)) / nearestDist,
+  };
+  const EPSILON = 1e-6;
+  const respectsEveryMember = members.every((m) => Math.hypot(pulled.x - m.x, pulled.y - m.y) >= spacing - EPSILON);
+  return respectsEveryMember ? pulled : null;
 }
 
 function withinBounds(point, bounds) {

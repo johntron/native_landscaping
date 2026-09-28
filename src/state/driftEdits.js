@@ -59,7 +59,10 @@ export function addDriftMember(state, driftId) {
   if (!speciesEntry) return { plant: null, reason: 'the drift\'s species is no longer in the catalog' };
 
   const bounds = resolveYardBounds(state.project);
-  const spacing = driftSpacing(members, speciesEntry.width);
+  // Every member already carries its own `.width` from createPlantFromSpecies
+  // (species catalog width, or an estimate when the species has none); read
+  // it from a member rather than the species row, which can be blank.
+  const spacing = driftSpacing(members, members[0].width);
   const { position, reason } = nextMemberPosition(members, spacing, bounds);
   if (!position) return { plant: null, reason };
 
@@ -142,9 +145,13 @@ export function renameDrift(state, driftId, label) {
  * is not in the ground and came from nowhere), the copy gets one new driftId
  * (buildDriftId, from the species — a fresh drift, not the original, so it is
  * named afresh rather than inheriting whatever name the original was given),
- * and the whole copy is offset and clamped to the yard as a group, the same
- * translate-to-fit spreadDrift/clumpPositions use, so the copy does not land
- * on top of the original nor spill out of the yard.
+ * and the whole copy is offset on the x axis by the original drift's own
+ * width plus its spacing — clear of every original member, not a fixed nudge
+ * that would work for one plant but interleave a whole mass planting with
+ * its copy — then clamped to the yard as a group (clampGroup), the same
+ * translate-to-fit spreadDrift/clumpPositions use. If offsetting to the east
+ * would not fit the yard, west is tried instead; if neither cleanly fits,
+ * east is kept and clampGroup does its best effort.
  * @param {{ plants: object[], project: object }} state
  * @param {string} driftId
  * @returns {{ driftId: string|null, plants: object[], reason: string|null }}
@@ -155,7 +162,13 @@ export function cloneDrift(state, driftId) {
 
   const newDriftId = buildDriftId(existingDriftIds(state.plants), members[0].speciesId);
   const bounds = resolveYardBounds(state.project);
-  const offsetFt = 1.1; // same nudge clonePlantById uses, so a clone is visibly distinct but still adjacent
+  const spacing = driftSpacing(members, members[0].width);
+  const xs = members.map((m) => m.x);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const offsetFt = maxX - minX + spacing;
+  const dx = bounds && maxX + offsetFt > bounds.x.max && minX - offsetFt >= bounds.x.min ? -offsetFt : offsetFt;
+
   let plants = state.plants;
   const clones = [];
   members.forEach((member) => {
@@ -165,8 +178,8 @@ export function cloneDrift(state, driftId) {
       ...copied,
       id: buildCloneId(plants, member.id),
       driftId: newDriftId,
-      x: member.x + offsetFt,
-      y: member.y + offsetFt * 0.6,
+      x: member.x + dx,
+      y: member.y,
     };
     plants = [...plants, clone];
     clones.push(clone);
