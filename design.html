@@ -347,35 +347,63 @@
       drift) instead; drilled-into-one-member mode keeps the plain
       Details/Clone/Remove and adds selectionDriftMemberGroup (Remove from
       drift, Back to drift). Nudges and Done are shared by every mode.
+
+      nl-o47.4 restructures the markup (never the logic) for the phone
+      editor, where this bar IS the editor's one bottom bar whenever a
+      selection exists: a compact .selection-bar__primary row (label/rename +
+      Details/Clone/Remove where those apply + a More toggle + Done) and
+      .selection-bar__more, everything else (nudges, the drift count
+      stepper, spread, clone/remove drift, the drilled-in extras), as a
+      popover the More button shows/hides — never a third thing stacked
+      under the primary row, so the bar stays at most the one row plus that
+      on-demand popover (the nl-o47.6.2 review's "at most two rows"). On
+      desktop styles.css makes .selection-bar__more `display: contents` and
+      hides the More button outright, so nothing there changes: every
+      control still shows inline in one row, as it always has.
     -->
     <div class="selection-bar" id="selectionBar" hidden role="toolbar" aria-label="Selected plant">
-      <span class="selection-bar__name" id="selectionBarName"></span>
-      <div class="selection-bar__drift-name" id="selectionDriftNameGroup" hidden>
-        <input
-          type="text"
-          class="selection-bar__rename"
-          id="selectionDriftNameInput"
-          aria-label="Drift name"
-          autocomplete="off"
-        />
-        <span class="selection-bar__count-label" id="selectionDriftCountLabel"></span>
+      <div class="selection-bar__primary">
+        <span class="selection-bar__name" id="selectionBarName"></span>
+        <div class="selection-bar__drift-name" id="selectionDriftNameGroup" hidden>
+          <input
+            type="text"
+            class="selection-bar__rename"
+            id="selectionDriftNameInput"
+            aria-label="Drift name"
+            autocomplete="off"
+          />
+          <span class="selection-bar__count-label" id="selectionDriftCountLabel"></span>
+        </div>
+        <div class="selection-bar__actions">
+          <button type="button" class="button pill-button" id="selectionDetailsBtn">Details</button>
+          <button type="button" class="button pill-button" id="selectionCloneBtn">Clone</button>
+          <button type="button" class="button pill-button pill-button--danger" id="selectionRemoveBtn">Remove</button>
+          <button
+            type="button"
+            class="button pill-button selection-bar__more-btn"
+            id="selectionBarMoreBtn"
+            aria-haspopup="true"
+            aria-expanded="false"
+            aria-controls="selectionBarMore"
+          >
+            More
+          </button>
+          <button type="button" class="button pill-button" id="selectionDoneBtn">Done</button>
+        </div>
       </div>
       <p class="selection-bar__status" id="selectionDriftNameStatus" role="status" hidden></p>
-      <div class="selection-bar__nudges" role="group" aria-label="Nudge the selection">
-        <button type="button" class="selection-bar__nudge" id="selectionNudgeN" aria-label="Nudge north">N</button>
-        <button type="button" class="selection-bar__nudge" id="selectionNudgeE" aria-label="Nudge east">E</button>
-        <button type="button" class="selection-bar__nudge" id="selectionNudgeS" aria-label="Nudge south">S</button>
-        <button type="button" class="selection-bar__nudge" id="selectionNudgeW" aria-label="Nudge west">W</button>
-      </div>
-      <div class="selection-bar__count" id="selectionDriftCountGroup" role="group" aria-label="Drift member count" hidden>
-        <button type="button" class="selection-bar__nudge" id="selectionDriftCountDecBtn" aria-label="Remove one plant from the drift">−</button>
-        <span class="selection-bar__count-value" id="selectionDriftCountValue"></span>
-        <button type="button" class="selection-bar__nudge" id="selectionDriftCountIncBtn" aria-label="Add one plant to the drift">+</button>
-      </div>
-      <div class="selection-bar__actions">
-        <button type="button" class="button pill-button" id="selectionDetailsBtn">Details</button>
-        <button type="button" class="button pill-button" id="selectionCloneBtn">Clone</button>
-        <button type="button" class="button pill-button pill-button--danger" id="selectionRemoveBtn">Remove</button>
+      <div class="selection-bar__more" id="selectionBarMore">
+        <div class="selection-bar__nudges" role="group" aria-label="Nudge the selection">
+          <button type="button" class="selection-bar__nudge" id="selectionNudgeN" aria-label="Nudge north">N</button>
+          <button type="button" class="selection-bar__nudge" id="selectionNudgeE" aria-label="Nudge east">E</button>
+          <button type="button" class="selection-bar__nudge" id="selectionNudgeS" aria-label="Nudge south">S</button>
+          <button type="button" class="selection-bar__nudge" id="selectionNudgeW" aria-label="Nudge west">W</button>
+        </div>
+        <div class="selection-bar__count" id="selectionDriftCountGroup" role="group" aria-label="Drift member count" hidden>
+          <button type="button" class="selection-bar__nudge" id="selectionDriftCountDecBtn" aria-label="Remove one plant from the drift">−</button>
+          <span class="selection-bar__count-value" id="selectionDriftCountValue"></span>
+          <button type="button" class="selection-bar__nudge" id="selectionDriftCountIncBtn" aria-label="Add one plant to the drift">+</button>
+        </div>
         <div class="selection-bar__drift-actions" id="selectionDriftGroup" hidden>
           <button type="button" class="button pill-button" id="selectionSpreadTighterBtn">Tighter</button>
           <button type="button" class="button pill-button" id="selectionSpreadLooserBtn">Looser</button>
@@ -386,7 +414,66 @@
           <button type="button" class="button pill-button" id="selectionRemoveFromDriftBtn">Remove from drift</button>
           <button type="button" class="button pill-button" id="selectionBackToDriftBtn">Back to drift</button>
         </div>
-        <button type="button" class="button pill-button" id="selectionDoneBtn">Done</button>
+      </div>
+    </div>
+    <!--
+      The phone editor (nl-o47.4, src/interaction/phoneEditor.js): Edit mode
+      on a phone-width screen (max-width: 960px) becomes a full-screen
+      editor rather than a long scrolling page. Entering it auto-maximizes a
+      view (reusing appState.maximizedViewId/.views[data-maximized] from
+      nl-o47.1) and shows the three pieces below; leaving it (Done, or a
+      mode/width change) hides them again and restores the normal page.
+
+      The tab strip replaces the per-panel Maximize/Restore toggle (hidden
+      while the editor is open, styles.css) with a compact switcher across
+      every view, plan first, plus a Fit button back to the un-zoomed view
+      (src/render/canvasZoom.js's FIT_STATE) — the pinch-zoom/pan gesture
+      itself (src/interaction/canvasGesture.js) has no other on-screen
+      control; two fingers anywhere on the drawing always reach it.
+    -->
+    <div class="phone-editor-tabs" id="phoneEditorTabs" hidden>
+      <div class="phone-editor-tabs__list" id="phoneEditorTabsList" role="tablist" aria-label="Switch view"></div>
+      <button type="button" class="phone-editor-tabs__fit" id="phoneEditorFitBtn" disabled>Fit</button>
+    </div>
+    <!--
+      The editor's OWN bottom bar, shown whenever the editor is open and
+      nothing is selected; #selectionBar above takes over the exact same
+      fixed-bottom slot the instant a selection exists (its own sync() hides
+      it otherwise), so the two alternate rather than ever stacking. Add
+      plant/Undo/Redo are the SAME real toolbar buttons as everywhere else —
+      phoneEditor.js moves them into the empty slots below while the editor
+      is open (never a duplicate id) and back to their normal toolbar
+      position when it closes. Month back/forward drive the existing
+      #monthSlider (dispatching its own 'input' event), so src/app.js's one
+      month listener is still the only place that renders a month change.
+    -->
+    <div class="phone-editor-bar" id="phoneEditorBar" hidden>
+      <div class="phone-editor-bar__row">
+        <button type="button" class="phone-editor-bar__btn" id="phoneEditorMonthPrevBtn" aria-label="Previous month">‹</button>
+        <span class="phone-editor-bar__month" id="phoneEditorMonthLabel"></span>
+        <button type="button" class="phone-editor-bar__btn" id="phoneEditorMonthNextBtn" aria-label="Next month">›</button>
+        <div class="phone-editor-bar__slot" id="phoneEditorAddPlantSlot"></div>
+        <button type="button" class="button pill-button" id="phoneEditorPlantsBtn">Plants</button>
+      </div>
+      <div class="phone-editor-bar__row">
+        <div class="phone-editor-bar__slot" id="phoneEditorUndoSlot"></div>
+        <div class="phone-editor-bar__slot" id="phoneEditorRedoSlot"></div>
+        <button type="button" class="button pill-button" id="phoneEditorDoneBtn">Done</button>
+      </div>
+    </div>
+    <!--
+      The Plants sheet: a bottom sheet hosting the SAME #speciesTable the
+      normal page shows below the drawing (src/ui/speciesHighlight.js keeps
+      rendering into it exactly as it always has; only its DOM parent
+      changes while the editor is open). Same open/close pattern as
+      #detailSheet/#addPlantSheet above.
+    -->
+    <div class="plants-sheet" id="plantsSheet" hidden>
+      <div class="plants-sheet__backdrop" data-plants-close></div>
+      <div class="plants-sheet__panel" id="plantsSheetPanel" role="dialog" aria-modal="true" aria-labelledby="plantsSheetTitle">
+        <button type="button" class="plants-sheet__close" data-plants-close aria-label="Close plants list">×</button>
+        <h2 class="plants-sheet__title" id="plantsSheetTitle">Plants in this yard</h2>
+        <div class="plants-sheet__body" id="plantsSheetBody"></div>
       </div>
     </div>
     <script src="node_modules/jszip/dist/jszip.min.js"></script>

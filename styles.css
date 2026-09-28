@@ -2165,6 +2165,19 @@ select {
  * .view-panel.is-maximized's 50, below the modal sheets' 60, so opening
  * Details from it still layers a sheet on top). A small floating bar on
  * desktop too. Every button is at least 44px in either dimension.
+ *
+ * nl-o47.4: this bar IS the phone editor's bottom bar whenever a selection
+ * exists (#phoneEditorBar, further down, takes the same fixed-bottom slot
+ * the rest of the time -- see its own comment on why the two never stack).
+ * .selection-bar__primary/.selection-bar__more split what used to be one
+ * flat row into a compact primary row plus an on-demand "More" popover for
+ * everything else, ONLY below 961px; the @media block near the end of this
+ * rule group makes both `display: contents` above it, so nothing here
+ * changes on desktop -- every control still renders as one flat, wrapping
+ * row, in the same order it always has (restored with `order`, since
+ * flattening two more levels of grouping cannot otherwise put Done back
+ * after the drift-specific actions the way the original single-level
+ * markup did).
  */
 .selection-bar {
   position: fixed;
@@ -2184,6 +2197,20 @@ select {
 
 .selection-bar[hidden] {
   display: none;
+}
+
+.selection-bar__primary {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.selection-bar__primary .selection-bar__name,
+.selection-bar__primary .selection-bar__drift-name {
+  min-width: 0; /* lets the label/rename field shrink+ellipsize instead of forcing the row wide */
 }
 
 .selection-bar__name {
@@ -2311,14 +2338,109 @@ select {
   color: var(--ink);
 }
 
-/* display:contents so a drift's own action buttons wrap alongside Done in
-   the SAME flex row as .selection-bar__actions, rather than as one wide item. */
+/* display:contents so a drift's own action buttons flow as individual items
+   of whatever flex row now contains .selection-bar__more (nl-o47.4: the
+   popover below on a phone, or -- flattened again -- .selection-bar itself
+   on desktop) rather than as one wide item. */
 .selection-bar__drift-actions {
   display: contents;
 }
 
 .selection-bar__drift-actions[hidden] {
   display: none;
+}
+
+/*
+ * The "More" popover (nl-o47.4): everything besides the label/rename,
+ * Details/Clone/Remove, and Done -- nudges, the drift count stepper,
+ * spread/clone/remove-drift, the drilled-in extras. Closed by default
+ * (src/ui/selectionBar.js toggles .is-open); anchored ABOVE the bar rather
+ * than pushing it taller, so selecting something never changes the bar's
+ * own height (which would shift the canvas underneath a finger still on
+ * it -- see #phoneEditorBar's matching min-height below for the other half
+ * of that same guarantee). .selection-bar is already `position: fixed`,
+ * which is itself a containing block, so no extra `position: relative` is
+ * needed here.
+ */
+.selection-bar__more {
+  display: none;
+  flex-direction: column;
+  gap: 0.5rem;
+  position: absolute;
+  left: 0.75rem;
+  right: 0.75rem;
+  bottom: 100%;
+  margin-bottom: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--surface-raised);
+  border: 1px solid var(--rule-strong);
+  border-radius: 10px;
+  box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.18);
+  max-height: 60dvh;
+  overflow-y: auto;
+}
+
+.selection-bar__more.is-open {
+  display: flex;
+}
+
+.selection-bar__more .button,
+.selection-bar__more .selection-bar__nudge {
+  min-height: 44px;
+}
+
+.selection-bar__more-btn[aria-expanded='true'] {
+  background-color: var(--accent);
+  border-color: var(--accent-deep);
+  color: var(--surface-raised);
+}
+
+@media (min-width: 961px) {
+  /* Above the phone breakpoint, none of the phone-only grouping above
+     applies: every child of .selection-bar__primary/.selection-bar__more/
+     .selection-bar__actions becomes a direct flex item of .selection-bar
+     itself again (display: contents skips the wrapper's own box, keeping
+     its children in the DOM for CSS/JS but not in the render tree), so the
+     bar is one flat, wrapping row exactly as before nl-o47.4. `order`
+     restores the original sequence -- name/rename, nudges, the drift count
+     stepper, Details/Clone/Remove, the drift-specific actions (or the
+     drilled-in extras), Done, then the rename-refusal message last -- since
+     flattening three levels instead of one can no longer rely on DOM order
+     alone to reproduce it. */
+  .selection-bar__primary,
+  .selection-bar__actions {
+    display: contents;
+  }
+  /* !important: without it, a `.is-open` class left over from a narrower
+     viewport (opened, then the window widened past 961px without a click to
+     clear it) would win on specificity alone and revert this to the phone
+     popover's `display: flex`. */
+  .selection-bar__more {
+    display: contents !important;
+  }
+  .selection-bar__more-btn {
+    display: none; /* nothing is hidden behind it on desktop for it to open */
+  }
+  .selection-bar__nudges {
+    order: 1;
+  }
+  .selection-bar__count {
+    order: 2;
+  }
+  #selectionDetailsBtn,
+  #selectionCloneBtn,
+  #selectionRemoveBtn {
+    order: 3;
+  }
+  .selection-bar__drift-actions > * {
+    order: 4;
+  }
+  #selectionDoneBtn {
+    order: 5;
+  }
+  .selection-bar__status {
+    order: 6;
+  }
 }
 
 @media (min-width: 640px) {
@@ -2371,6 +2493,63 @@ select {
        taller than what is actually on screen while the chrome (still)
        shows; dvh tracks the viewport that is visible right now. */
     width: min(100%, calc((100dvh - 3.5rem) * var(--view-aspect-ratio, 4 / 3)));
+  }
+
+  /*
+   * The phone editor (nl-o47.4, src/interaction/phoneEditor.js): Edit mode
+   * auto-maximizes a view, and while `body.is-phone-editor-open` a few more
+   * overrides on top of plain maximize (above) turn that into the editor:
+   *
+   * - The per-panel header (label + Maximize/Restore toggle) is replaced by
+   *   #phoneEditorTabs, so it is hidden here rather than fought for room
+   *   alongside the tab strip; nl-o47.1's dragTracksFinger-style tests
+   *   exercise the drag/letterbox fix through the editor now, and a
+   *   SEPARATE test keeps exercising the manual toggle in View mode, where
+   *   this rule never applies (see tests-e2e/touch.spec.js).
+   * - The header being gone frees the 3.5rem the plain-maximize width
+   *   formula above reserves for it, so `.view` may as well use the full
+   *   100dvh.
+   * - `overflow: clip` (never programmatically scrollable, unlike `hidden`)
+   *   and zero padding turn this panel into an exact clip box for
+   *   src/interaction/canvasGesture.js's pinch-zoom/pan transform on `.view`
+   *   below: its own bounds() math reads this panel's plain
+   *   getBoundingClientRect(), which only equals its usable content box when
+   *   there is no padding to subtract.
+   */
+  body.is-phone-editor-open .view-panel__header {
+    display: none;
+  }
+
+  body.is-phone-editor-open .views[data-maximized] .view-panel.is-maximized {
+    padding: 0;
+    overflow: clip;
+  }
+
+  body.is-phone-editor-open .views[data-maximized] .view {
+    width: min(100%, calc(100dvh * var(--view-aspect-ratio, 4 / 3)));
+    /* canvasGesture.js applies `translate(tx, ty) scale(scale)` measured
+       from .view's own top-left corner (src/render/canvasZoom.js's whole
+       coordinate frame assumes it); the default center origin would zoom
+       around the middle of the drawing instead of the pinch's own anchor. */
+    transform-origin: 0 0;
+  }
+
+  /* The page behind the fixed editor panel must not also scroll (item 1:
+     "the PAGE does not scroll while the editor is open") — locked here
+     rather than on the panel itself, which is already `position: fixed`
+     and so already off the document's own scroll. */
+  body.is-phone-editor-open {
+    overflow: hidden;
+    height: 100dvh;
+  }
+
+  /* Matches #phoneEditorBar's own min-height (styles.css, further down) and
+     the same box-sizing, so a selection starting or ending — which swaps
+     which of the two bars is showing — never changes the reserved height
+     the canvas above them is fitted around. */
+  body.is-phone-editor-open #selectionBar {
+    min-height: 6.6rem;
+    box-sizing: border-box;
   }
 
   .view-meta {
@@ -2925,13 +3104,26 @@ select {
  * start of each gesture. Setup and Features keep claiming every touch
  * outright — this bead did not redo their camera/photo/footprint drags.
  *
+ * nl-o47.4 adds a fourth claimant, is-phone-editor-active (toggled by
+ * src/interaction/phoneEditor.js, never by a drag controller): while the
+ * phone editor is open there is no PAGE left behind the drawing to scroll —
+ * it is `position: fixed; inset: 0` — so a bare one-finger touch with
+ * nothing selected must still reach src/interaction/canvasGesture.js's pan,
+ * not fall through to whatever touch-action:auto would otherwise do (mostly
+ * nothing, on an element with no scrollable ancestor of its own, but never
+ * relied on). dragController.js's own tap-vs-drag machinery is unaffected —
+ * it already lets a "nothing selected" move pass through untouched (see its
+ * movedPastThreshold comment); this class only changes what the BROWSER does
+ * with the gesture before either controller sees it.
+ *
  * Several controllers share each SVG, so this is driven by a class per
  * controller rather than by svg.style.touchAction, which they used to overwrite
  * in turn.
  */
 .view svg.is-selection-active,
 .view svg.is-setup-enabled,
-.view svg.is-features-enabled {
+.view svg.is-features-enabled,
+.view svg.is-phone-editor-active {
   touch-action: none;
 }
 
@@ -2949,6 +3141,223 @@ select {
 }
 .view svg.is-features-enabled {
   cursor: crosshair;
+}
+
+/*
+ * The phone editor's top tab strip and idle bottom bar (nl-o47.4,
+ * src/interaction/phoneEditor.js). Both are fixed, safe-area aware, and read
+ * as chrome floating over the full-bleed drawing rather than panels sharing
+ * its space — cyan/chrome tokens only, nothing here glows; only the plants
+ * the drawing itself renders do.
+ */
+.phone-editor-tabs {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 56; /* above .view-panel.is-maximized's 50; does not overlap the bottom bar, so 55 vs it never matters */
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: calc(0.4rem + env(safe-area-inset-top)) 0.6rem 0.4rem;
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--rule-strong);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+}
+
+.phone-editor-tabs[hidden] {
+  display: none;
+}
+
+.phone-editor-tabs__list {
+  display: flex;
+  gap: 0.3rem;
+  overflow-x: auto;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.phone-editor-tabs__tab {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--surface-card);
+  color: var(--ink-deep);
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.phone-editor-tabs__tab.is-active {
+  background: var(--accent);
+  border-color: var(--accent-deep);
+  color: var(--surface-raised);
+}
+
+.phone-editor-tabs__fit {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--rule-cool);
+  border-radius: 999px;
+  background: var(--surface-card);
+  color: var(--accent-deep);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.phone-editor-tabs__fit:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/*
+ * The editor's idle bottom bar (month/Add plant/Plants/Undo/Redo/Done): the
+ * SAME fixed slot #selectionBar occupies (identical position/z-index) — the
+ * two are mutually exclusive (src/interaction/phoneEditor.js's syncBar(),
+ * #selectionBar's own sync()), never stacked, and a min-height close to
+ * #selectionBar's own primary-row height keeps the canvas above it from
+ * resizing when a selection starts or ends.
+ */
+.phone-editor-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 55;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-height: 6.6rem;
+  padding: 0.5rem 0.75rem calc(0.5rem + env(safe-area-inset-bottom));
+  background: var(--surface-raised);
+  border-top: 1px solid var(--rule-strong);
+  box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.18);
+  box-sizing: border-box;
+}
+
+.phone-editor-bar[hidden] {
+  display: none;
+}
+
+.phone-editor-bar__row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.phone-editor-bar__row:last-child {
+  justify-content: flex-end;
+}
+
+.phone-editor-bar__btn {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 6px;
+  background: var(--surface-card);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.phone-editor-bar__btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.phone-editor-bar__month {
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--ink);
+  min-width: 4.5rem;
+  text-align: center;
+}
+
+/* The reparented real #addPlantBtn/#undoLayoutBtn/#redoLayoutBtn ARE these
+   slots' content (src/interaction/phoneEditor.js) — display:contents so the
+   slot itself adds no box, and the real button's own .button/.pill-button
+   styling (plus the min-height guarantee below) is all that shows. */
+.phone-editor-bar__slot {
+  display: contents;
+}
+
+.phone-editor-bar .button {
+  min-height: 44px;
+}
+
+/*
+ * The Plants sheet (nl-o47.4): the same bottom-sheet / centred-dialog
+ * pattern as .add-plant-sheet above, hosting the SAME #speciesTable the
+ * normal page shows below the drawing — src/interaction/phoneEditor.js
+ * reparents it in and out, never clones it, so nothing here styles the
+ * table itself.
+ */
+.plants-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.plants-sheet[hidden] {
+  display: none;
+}
+
+.plants-sheet__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(20, 20, 18, 0.45);
+}
+
+.plants-sheet__panel {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+  max-height: 70dvh;
+  background: var(--surface-raised);
+  border-radius: 12px 12px 0 0;
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.25);
+  padding: 1.25rem 1.25rem calc(1rem + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.plants-sheet__close {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.5rem;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  font-size: 1.4rem;
+  line-height: 1;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+.plants-sheet__title {
+  margin: 0 1.5rem 0.75rem 0;
+  font-size: 1.15rem;
+}
+
+.plants-sheet__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 /* Features mode: one add button per primitive, and the read-only kind field. */

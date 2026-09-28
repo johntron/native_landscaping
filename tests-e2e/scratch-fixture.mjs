@@ -60,6 +60,8 @@ export const SCRATCH_PROJECTS = [
   'touch-nudge', // the selection action bar's nudge arrows and undo (nl-o47.2)
   'touch-maximize', // maximized-panel drag scale (nl-o47.1), its own yard so a concurrent touch-plan drag cannot race it
   'touch-letterbox', // same bug, with the pre-fix CSS shear forced back on to isolate the JS mapping fix
+  'touch-editor', // the phone editor itself: scroll lock, tabs, Plants sheet, month buttons, Fit, Done (nl-o47.4)
+  'touch-editor-zoom', // pinch-zoom then tap-select + drag, and a one-finger pan with nothing selected (nl-o47.4)
   // Select/isolate/resize a pre-seeded drift (nl-o47.6.2): each gets DRIFT_LAYOUT_CSV
   // (see below), a 4-member winecup drift with a wide gap between members so a
   // "between members" tap/click cannot also land within any one member's own

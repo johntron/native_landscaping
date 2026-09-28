@@ -1,8 +1,10 @@
 import { test, expect } from '@playwright/test';
 import {
   openScratchProject,
+  pinchGesture,
   plantPointerTarget,
   plantPosition,
+  plantScreenPosition,
   readScratchLayout,
   readScratchLayoutWithDrift,
   tap,

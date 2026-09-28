@@ -175,6 +175,33 @@ export async function tap(page, { x, y }) {
   await touchGesture(page, { x, y, steps: 0 });
 }
 
+/**
+ * A two-finger pinch through CDP, centered at `center` (viewport px, e.g. the
+ * middle of the phone editor's clip box). The two touch points sit
+ * `startDistance` apart along the x axis and move to `endDistance` apart
+ * over `steps` frames, then lift together — the phone editor's own pinch
+ * math (src/render/canvasZoom.js, driven by src/interaction/canvasGesture.js)
+ * only cares about the two points' midpoint and separation, not which axis
+ * they are spread along. Each point needs its OWN `id`: CDP tracks fingers
+ * by it, and two points sharing one (or omitting it) collapse onto a single
+ * touch rather than driving a pinch at all (nl-o47.4).
+ */
+export async function pinchGesture(page, { center, startDistance, endDistance, steps = 12 }) {
+  const cdp = await page.context().newCDPSession(page);
+  const touchPointsAt = (distance) => [
+    { x: center.x - distance / 2, y: center.y, id: 0 },
+    { x: center.x + distance / 2, y: center.y, id: 1 },
+  ];
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: touchPointsAt(startDistance) });
+  for (let step = 1; step <= steps; step += 1) {
+    const distance = startDistance + ((endDistance - startDistance) * step) / steps;
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: touchPointsAt(distance) });
+    await page.waitForTimeout(16);
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.detach();
+}
+
 export async function touchGesture(page, { x, y, dx = 0, dy = 0, steps = 10, holdMs = 0 }) {
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Input.dispatchTouchEvent', {

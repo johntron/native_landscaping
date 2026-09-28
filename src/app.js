@@ -30,6 +30,7 @@ import { loadEcologyTables } from './data/ecologyTables.js';
 import { loadYardSite } from './data/yardSite.js';
 import { configureViews } from './render/viewConfig.js';
 import { createPlantDragController, createElevationDragController } from './interaction/dragController.js';
+import { createPhoneEditor } from './interaction/phoneEditor.js';
 import { clampHiddenLayerCount } from './state/layers.js';
 import { workingExtentFt } from './render/setupOverlay.js';
 import { resolveYardBounds } from './render/yardBounds.js';
@@ -201,6 +202,8 @@ async function init() {
   const selectionCloneBtn = document.getElementById('selectionCloneBtn');
   const selectionRemoveBtn = document.getElementById('selectionRemoveBtn');
   const selectionDoneBtn = document.getElementById('selectionDoneBtn');
+  const selectionBarMoreBtn = document.getElementById('selectionBarMoreBtn'); // nl-o47.4
+  const selectionBarMore = document.getElementById('selectionBarMore'); // nl-o47.4
   const selectionNudgeN = document.getElementById('selectionNudgeN');
   const selectionNudgeE = document.getElementById('selectionNudgeE');
   const selectionNudgeS = document.getElementById('selectionNudgeS');
@@ -222,6 +225,28 @@ async function init() {
   const selectionDriftMemberGroup = document.getElementById('selectionDriftMemberGroup');
   const selectionRemoveFromDriftBtn = document.getElementById('selectionRemoveFromDriftBtn');
   const selectionBackToDriftBtn = document.getElementById('selectionBackToDriftBtn');
+
+  // The phone editor (nl-o47.4): full-screen Edit mode on a phone-width
+  // screen. See src/interaction/phoneEditor.js for what each piece is.
+  const phoneEditorTabsEl = document.getElementById('phoneEditorTabs');
+  const phoneEditorTabsListEl = document.getElementById('phoneEditorTabsList');
+  const phoneEditorFitBtn = document.getElementById('phoneEditorFitBtn');
+  const phoneEditorBarEl = document.getElementById('phoneEditorBar');
+  const phoneEditorMonthPrevBtn = document.getElementById('phoneEditorMonthPrevBtn');
+  const phoneEditorMonthNextBtn = document.getElementById('phoneEditorMonthNextBtn');
+  const phoneEditorMonthLabel = document.getElementById('phoneEditorMonthLabel');
+  const phoneEditorAddPlantSlot = document.getElementById('phoneEditorAddPlantSlot');
+  const phoneEditorPlantsBtn = document.getElementById('phoneEditorPlantsBtn');
+  const phoneEditorUndoSlot = document.getElementById('phoneEditorUndoSlot');
+  const phoneEditorRedoSlot = document.getElementById('phoneEditorRedoSlot');
+  const phoneEditorDoneBtn = document.getElementById('phoneEditorDoneBtn');
+  const plantsSheetEl = document.getElementById('plantsSheet');
+  const plantsSheetBody = document.getElementById('plantsSheetBody');
+  const plantsCloseEls = Array.from(document.querySelectorAll('[data-plants-close]'));
+  const speciesTableEl = document.getElementById('speciesTable');
+  const speciesTableAnchor = document.getElementById('ecologyCheck'); // #speciesTable's normal previous sibling
+  const addPlantAnchor = document.getElementById('addPlantRow'); // #addPlantBtn's normal parent
+  const historyControlsEl = document.querySelector('#historyRow .history-controls'); // undo/redo's normal parent
 
   let projectIndex;
   let project;
@@ -342,10 +367,20 @@ async function init() {
     });
   };
 
+  // Always SETS (never toggles) — the desktop/View-mode Maximize button below
+  // still wants toggle-off-if-already-maximized, but the phone editor's tab
+  // strip (nl-o47.4, src/interaction/phoneEditor.js) wants "switch to this
+  // view," full stop: a second tap on the already-active tab must not drop
+  // back to the un-maximized (scroll-everything) layout the editor exists to
+  // avoid.
+  const setMaximizedView = (viewId) => {
+    appState.maximizedViewId = viewId ? String(viewId) : '';
+    refreshMaximizedView();
+  };
+
   const toggleViewMaximization = (viewId) => {
     const normalized = viewId ? String(viewId) : '';
-    appState.maximizedViewId = appState.maximizedViewId === normalized ? '' : normalized;
-    refreshMaximizedView();
+    setMaximizedView(appState.maximizedViewId === normalized ? '' : normalized);
   };
 
   // Delegated so the handler survives configureViews replacing panels.
@@ -676,6 +711,8 @@ async function init() {
       cloneBtn: selectionCloneBtn,
       removeBtn: selectionRemoveBtn,
       doneBtn: selectionDoneBtn,
+      moreBtn: selectionBarMoreBtn,
+      moreGroup: selectionBarMore,
       nudgeN: selectionNudgeN,
       nudgeE: selectionNudgeE,
       nudgeS: selectionNudgeS,
@@ -803,6 +840,43 @@ async function init() {
       const driftId = appState.selectedDriftId;
       if (driftId) plantSelection.selectDrift(driftId); // a selection change, not an edit: no commit
     },
+  });
+
+  // The phone editor (nl-o47.4). applyMode is referenced before its own
+  // declaration further down — safe, since it is a hoisted function
+  // declaration and phoneEditor only ever CALLS it later, from a click.
+  const phoneEditor = createPhoneEditor({
+    elements: {
+      tabsEl: phoneEditorTabsEl,
+      tabsListEl: phoneEditorTabsListEl,
+      fitBtn: phoneEditorFitBtn,
+      idleBarEl: phoneEditorBarEl,
+      monthPrevBtn: phoneEditorMonthPrevBtn,
+      monthNextBtn: phoneEditorMonthNextBtn,
+      monthLabelEl: phoneEditorMonthLabel,
+      addPlantSlot: phoneEditorAddPlantSlot,
+      plantsBtn: phoneEditorPlantsBtn,
+      undoSlot: phoneEditorUndoSlot,
+      redoSlot: phoneEditorRedoSlot,
+      idleDoneBtn: phoneEditorDoneBtn,
+      plantsSheetEl,
+      plantsCloseEls,
+      plantsSheetBody,
+      speciesTableEl,
+      speciesTableAnchor,
+      addPlantButton,
+      addPlantAnchor,
+      undoButton,
+      redoButton,
+      historyControlsEl,
+      monthSlider,
+    },
+    appState,
+    getProject: () => project,
+    getViewPanels: () => viewPanels,
+    setMaximizedView,
+    applyMode: (mode) => applyMode(mode),
+    getSelectionSize: () => plantSelection.getSelection().size,
   });
 
   // Arrow keys nudge on desktop while a selection exists and focus is not in
@@ -1004,6 +1078,12 @@ async function init() {
     syncSelectionTouchAction();
     setupMode.sync();
     featuresMode.sync();
+    // Phone editor last: it reads appState.mode (just settled above) and may
+    // itself set appState.maximizedViewId, which the maximize refresh above
+    // has therefore already run once for — rebuildViews (Setup) calls
+    // applyMode again with the SAME mode, and phoneEditor.sync() is a no-op
+    // whenever shouldBeActive already matches, so this costs nothing there.
+    phoneEditor.sync();
     // Not over the example: its forced View must not become the mode the
     // viewer's own yards open in.
     if (!readOnly) persistMode(next);
@@ -1180,6 +1260,10 @@ async function init() {
       features: appState.features,
     });
     selectionBar.sync();
+    // Cheap: toggles one hidden attribute against the current selection size,
+    // never rebuilds anything — safe to run on every render(), including a
+    // bare month-slider tick.
+    phoneEditor.syncBar();
     setupMode.sync();
     featuresMode.sync();
     // An undo or redo can change the open plant's status under the sheet.

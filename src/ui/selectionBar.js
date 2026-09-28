@@ -23,6 +23,16 @@
  * (this module never calls driftEdits.js/layoutHistory itself). The
  * exception is validating a typed drift name (empty, or a collision reported
  * back by onRename) — purely about what this INPUT accepts, not the edit.
+ *
+ * nl-o47.4 adds one more purely-local bit of state: whether the "More"
+ * popover (nudges, the drift count stepper, spread, clone/remove drift, the
+ * drilled-in extras — everything styles.css moves off the bar's one primary
+ * row on a phone) is open. Desktop hides the toggle and forces the popover's
+ * content inline via CSS, so this never has anything to do there; on a
+ * phone it opens/closes on its own button and closes itself whenever the
+ * bar's own context changes (hidden entirely, or a different selection/drift
+ * mode) so a stale popover from the LAST selection can't linger open over a
+ * new one.
  */
 import { driftMembers, driftSpacing, memberToRemove, nextMemberPosition } from '../state/driftGeometry.js';
 import { humanizeDriftId } from '../data/driftId.js';
@@ -52,6 +62,8 @@ export function createSelectionBar({
     cloneBtn,
     removeBtn,
     doneBtn,
+    moreBtn,
+    moreGroup,
     nudgeN,
     nudgeE,
     nudgeS,
@@ -80,18 +92,45 @@ export function createSelectionBar({
     driftNameStatus.hidden = !message;
   };
 
+  const closeMore = () => {
+    if (!moreGroup) return;
+    moreGroup.classList.remove('is-open');
+    moreBtn?.setAttribute('aria-expanded', 'false');
+  };
+  moreBtn?.addEventListener('click', () => {
+    if (!moreGroup) return;
+    const willOpen = !moreGroup.classList.contains('is-open');
+    moreGroup.classList.toggle('is-open', willOpen);
+    moreBtn.setAttribute('aria-expanded', String(willOpen));
+  });
+  // What the popover is showing right now, so sync() (called on every
+  // render — every month-slider tick included) can tell "the same selection,
+  // possibly just nudged or spread from inside the popover itself" apart
+  // from "a genuinely different bar," and only force it shut for the latter.
+  // Pressing Looser five times in a row must not close the popover after
+  // the first press.
+  let lastBarKey = '';
+
   /** Re-read appState and show/hide/relabel the bar. Called from render(). */
   const sync = () => {
     if (!bar) return;
     const selection = appState.selectedPlantIds;
     const visible = appState.mode === 'edit' && Boolean(selection) && selection.size > 0;
     bar.hidden = !visible;
-    if (!visible) return;
+    if (!visible) {
+      closeMore();
+      lastBarKey = '';
+      return;
+    }
 
     const driftId = appState.selectedDriftId || '';
     const drilledIn = Boolean(appState.driftDrilledIn);
     const wholeDriftMode = Boolean(driftId) && !drilledIn;
     const drilledInMode = Boolean(driftId) && drilledIn;
+
+    const barKey = `${driftId}|${drilledIn}`;
+    if (barKey !== lastBarKey) closeMore();
+    lastBarKey = barKey;
 
     // Plain single-plant controls: shown for "no drift" AND "drilled in"
     // (drilled-in is the single-plant bar plus two extra buttons), hidden
