@@ -667,6 +667,33 @@ reach `design.html`: a count over 1 places a clump instead of one plant and
 mints its `driftId`, then selects every member it just placed — which is
 exactly the ids `selectPlants` needs to enter whole-drift mode, below.
 
+**A drift always has >= 2 members** (nl-o47.6.9, the owner's REVISED design,
+2026-09-28): the count stepper on the action bar (below) shows for a single
+plain plant too, reading 1 with "−" disabled (Remove already deletes a lone
+plant); "+" there converts it into a drift of 2 in one edit —
+`driftEdits.js`'s `convertToDrift` mints a driftId from the species, places
+the second member at the plant's own default spacing (`driftGeometry.js`'s
+`nextMemberPosition`, the same 1-member fallback a real drift's own "+"
+already reuses), and copies the plant's lifecycle onto the new member
+(nl-o47.6.10). Every edit that can leave a drift with one member — the count
+stepper's "−", "Remove from drift", and a drilled-in member's own Remove
+(`removeDriftAwarePlant`, which every one of `src/app.js`'s three single-
+plant Remove paths — the selection bar's, the detail sheet's, and the plant
+context menu's — goes through instead of `plantEdits.js`'s `removePlantById`
+directly) — drops the label from whatever member survives instead
+(`pruneUndersizedDrift`), so 1 → 2 → 1 hands back the original plant,
+unlabelled, with its original id. The tie-break a fresh 2-member drift's "−"
+has to make (both members sit exactly equidistant from their own centroid —
+the midpoint of a segment) goes to the MOST RECENTLY ADDED member (later in
+`state.plants`), not the smaller id, which is why 1 → 2 → 1 always returns
+the ORIGINAL plant rather than either one arbitrarily. `dropUndersizedDrifts`
+(`src/data/driftId.js`, re-exported from `driftEdits.js`) is the same rule
+for a whole plant list at once: `buildPlantsFromCsv` (a hand-edited or
+imported CSV) and `plantsFromPlacements` (every history load, undo, and
+redo) both call it, so a 1-member drift left over from before this rule
+existed never survives a reload with its "−" enabled and ready to delete the
+last plant.
+
 #### Selecting, isolating, and the drift action bar (nl-o47.6.2)
 
 Selection (nl-o47.2's Set of plant ids) gains a **drift context**, two more
@@ -733,28 +760,46 @@ treatment `selectedPlantIds` already got.
 separate element — the module just shows/hides pieces of the one bar. A
 drift's **label** is its driftId humanized (`src/data/driftId.js`
 `humanizeDriftId`: hyphens to spaces, first letter capitalised) plus its
-member count — no separate "named" flag distinguishes a species-minted id
-("winecup-2") from a person's own rename ("front-edge"); both read the same
-way once humanized. Whole-drift mode: the label plus an inline rename text
-field (never `window.prompt`, refusing an empty name or one that collides
-with another drift — `renameDrift`'s own refusal, shown inline), a count
-`-`/N/`+` stepper (`addDriftMember`/`removeDriftMember`, each button
-disabling itself with the reason `driftGeometry.js` already computes when
-nothing can be added/removed), Tighter/Looser spread (`spreadDrift`, a factor
-per press that is a named judgement constant, `DRIFT_SPREAD_STEP` in
-`src/app.js`), Clone drift (selects the new one), and Remove drift (deletes
-every planned member and dissolves the label on planted ones, its own label
-saying the two counts before it acts, since there is no `window.confirm`
-either). Drilled-into-one-member mode keeps the ordinary single-plant bar
-(Details/Clone/Remove act on that one plant; `clonePlantById` already carries
-`driftId` through like any other field, so cloning a member keeps the clone in
-the drift) and adds "Remove from drift" (`removePlantFromDrift`) and "Back to
-drift". Nudges and Done are shared by every mode, unchanged. Every edit
-commits through `layoutHistory.commit` only once something actually changed —
+member count (`driftMemberCountLabel`) — no separate "named" flag
+distinguishes a species-minted id ("winecup-2") from a person's own rename
+("front-edge"); both read the same way once humanized. The bar's own
+`selectionBarName` span shows this text — as plain, ellipsized text — in
+EVERY mode now (nl-o47.6.9's review): a plain plant's name or "N plants" as
+before, or the drift's label + count in whole-drift mode. Whole-drift mode
+also shows a count `-`/N/`+` stepper (`addDriftMember`/`removeDriftMember`,
+each button disabling itself with the reason `driftGeometry.js` already
+computes when nothing can be added/removed — nl-o47.6.9 gives a single plain
+plant this same stepper too, reading 1 with "−" disabled, its "+" going
+through `convertToDrift` instead, above), Tighter/Looser spread
+(`spreadDrift`, a factor per press that is a named judgement constant,
+`DRIFT_SPREAD_STEP` in `src/app.js`), an inline rename text field (never
+`window.prompt`, refusing an empty name or one that collides with another
+drift — `renameDrift`'s own refusal, shown inline), Clone drift (selects the
+new one), and Remove drift (deletes every planned member and dissolves the
+label on planted ones, its own label saying the two counts before it acts,
+since there is no `window.confirm` either). Drilled-into-one-member mode
+keeps the ordinary single-plant bar (Details/Clone/Remove act on that one
+plant; `clonePlantById` already carries `driftId` through like any other
+field, so cloning a member keeps the clone in the drift) and adds "Remove
+from drift" (`removePlantFromDrift`) and "Back to drift". Nudges and Done are
+shared by every mode, unchanged. Every edit commits through
+`layoutHistory.commit` only once something actually changed —
 `spreadDrift`/`renameDrift` return success-shaped results on a no-op
 (nl-o47.6.1's own hand-off note), so `src/app.js`'s handlers check a rename
 actually changed the id, and compare member positions before/after a spread,
 before committing.
+
+On a phone (nl-o47.4's `.selection-bar__primary`/`.selection-bar__more`
+split, below), the rename field and its count label no longer fit the
+primary row once a plain plant's own count reads there too ("Winecup d…" was
+the nl-o47.6.2 review's own screenshot finding) — they live in the "More"
+popover instead, alongside the count stepper, spread, and the rest; the
+primary row keeps only the plain-text label, Undo, the More toggle, and
+Done. Desktop is unaffected: `.selection-bar__more`'s `display: contents`
+still puts the rename field back inline in the same spot, and
+`styles.css`'s `[data-drift-whole="true"] .selection-bar__name { display:
+none }` hides the redundant plain-text label there instead, so the two are
+never shown at once on either width.
 
 **The species table and the plan/export label** (nl-o47.6.7). The species
 table (`src/render/speciesTable.js`, driven from `src/ui/speciesHighlight.js`)
@@ -1133,11 +1178,12 @@ more pieces that only exist while it is open:
   buttons ever moved.
 - **The selection bar's "More" popover.** nl-o47.6.2's own review found the whole-drift bar at
   four rows on a phone. `src/ui/selectionBar.js`'s logic is untouched (same elements, same
-  handlers); `design.html`'s markup now splits into `.selection-bar__primary` (the label/rename,
-  a More toggle, and Done — the only three things that reliably fit one row at 393px once a
-  drift's rename field or "N plants" is counted) and `.selection-bar__more` (everything else:
-  Details/Clone/Remove, nudges, the drift count stepper, spread, clone/remove drift, the
-  drilled-in Remove-from-drift/Back-to-drift pair), shown as a popover anchored above the bar.
+  handlers); `design.html`'s markup now splits into `.selection-bar__primary` (the plain-text
+  label, a More toggle, and Done — the only things that reliably fit one row at 393px once a
+  single plant's own count reads there too, nl-o47.6.9) and `.selection-bar__more` (everything
+  else: the drift's rename field, Details/Clone/Remove, nudges, the drift count stepper, spread,
+  clone/remove drift, the drilled-in Remove-from-drift/Back-to-drift pair), shown as a popover
+  anchored above the bar.
   `selectionBar.js` opens/closes it on its own button and closes it whenever the bar's context
   changes (hidden entirely, or a different drift/plain selection) — not on every `sync()` call,
   which fires on every render including a bare month tick, or pressing "Looser" twice from

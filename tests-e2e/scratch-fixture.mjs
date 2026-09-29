@@ -81,6 +81,11 @@ export const SCRATCH_PROJECTS = [
   'desktop-drift-spread',
   'desktop-drift-rename',
   'desktop-drift-rename-refuse',
+  // A single lone plant (SINGLE_PLANT_LAYOUT_CSV, below): "+" on it makes a
+  // drift of 2, "-" brings it back (nl-o47.6.9). One project per test that
+  // writes.
+  'desktop-drift-convert',
+  'touch-drift-convert',
   // The species table's per-drift entries and the plan's single grouped
   // label (nl-o47.6.7): each gets SPECIES_DRIFT_LAYOUT_CSV, below. Read-only
   // (clicking a drift entry selects/highlights but never writes), but the
@@ -152,6 +157,17 @@ const DRIFT_PROJECTS = [
   'desktop-drift-rename-refuse',
   'touch-editor-zoom-drift',
 ];
+
+/**
+ * One lone plant, well clear of the yard's edges, for "+" on a single plant
+ * (nl-o47.6.9's count conversion): plain enough that the count stepper's
+ * default 1-member fallback (driftGeometry.js's nextMemberPosition, tried in
+ * all four cardinal directions) always finds room for a second member.
+ */
+const SINGLE_PLANT_LAYOUT_CSV = ['id,species_id,x_ft,y_ft', 'solo,winecup,10,10'].join('\n');
+
+/** Every scratch project seeded with SINGLE_PLANT_LAYOUT_CSV instead of backyard's own planting. */
+const SINGLE_PLANT_PROJECTS = ['desktop-drift-convert', 'touch-drift-convert'];
 
 /**
  * The species table's per-drift entries and the plan's single grouped label
@@ -399,6 +415,10 @@ export function buildScratchPublicDir() {
 
   DRIFT_PROJECTS.forEach((id) => {
     writeFileSync(path.join(SCRATCH_DIR, 'projects', id, 'planting_layout.csv'), `${DRIFT_LAYOUT_CSV}\n`);
+  });
+
+  SINGLE_PLANT_PROJECTS.forEach((id) => {
+    writeFileSync(path.join(SCRATCH_DIR, 'projects', id, 'planting_layout.csv'), `${SINGLE_PLANT_LAYOUT_CSV}\n`);
   });
 
   SPECIES_DRIFT_PROJECTS.forEach((id) => {

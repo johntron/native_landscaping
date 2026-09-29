@@ -230,4 +230,66 @@ test.describe('drifts, by mouse (nl-o47.6.2)', () => {
     // itself is defined as a no-op, not a refusal, so this only checks that
     // an empty name specifically is refused and shown inline.
   });
+
+  test('"+" on a single plant makes it a drift of 2; "-" brings back the same plant; both undo/redo (nl-o47.6.9)', async ({
+    page,
+  }) => {
+    await openScratchProject(page, 'desktop-drift-convert');
+    await page.locator('[data-mode="edit"]').click();
+    const target = await plantScreenPosition(page, 'topSvg', 'solo');
+    await page.mouse.click(target.x, target.y);
+
+    await expect(page.locator('#selectionBar')).toBeVisible();
+    await expect(page.locator('#selectionBarName')).toHaveText('Winecup');
+    await expect(page.locator('#selectionDriftCountGroup')).toBeVisible();
+    await expect(page.locator('#selectionDriftCountValue')).toHaveText('1');
+    await expect(page.locator('#selectionDriftCountDecBtn')).toBeDisabled();
+    await expect(page.locator('#topSvg [data-drift-outline]')).toBeHidden();
+
+    await page.locator('#selectionDriftCountIncBtn').click();
+    await expect(page.locator('#selectionBarName')).toContainText('· 2 plants');
+    await expect(page.locator('#topSvg [data-drift-outline]')).toBeVisible();
+    await expect
+      .poll(async () => (await readScratchLayoutWithDrift('desktop-drift-convert')).length, { timeout: 5000 })
+      .toBe(2);
+    let rows = await readScratchLayoutWithDrift('desktop-drift-convert');
+    const solo = rows.find((r) => r.id === 'solo');
+    const other = rows.find((r) => r.id !== 'solo');
+    expect(solo.driftId, 'the original plant keeps its own id and gains a driftId').not.toBe('');
+    expect(other.driftId).toBe(solo.driftId);
+
+    // "-" (the tie-break: the newer member) hands the original plant back,
+    // unlabelled, still selected as a single plant.
+    await page.locator('#selectionDriftCountDecBtn').click();
+    await expect(page.locator('#selectionBarName')).toHaveText('Winecup');
+    await expect
+      .poll(async () => (await readScratchLayoutWithDrift('desktop-drift-convert')).length, { timeout: 5000 })
+      .toBe(1);
+    rows = await readScratchLayoutWithDrift('desktop-drift-convert');
+    expect(rows[0].id).toBe('solo');
+    expect(rows[0].driftId).toBe('');
+
+    // Undo brings the drift of 2 back; undo again returns to the plain plant.
+    await page.locator('#undoLayoutBtn').click();
+    await expect
+      .poll(async () => (await readScratchLayoutWithDrift('desktop-drift-convert')).length, { timeout: 5000 })
+      .toBe(2);
+    await page.locator('#undoLayoutBtn').click();
+    await expect
+      .poll(async () => (await readScratchLayoutWithDrift('desktop-drift-convert')).length, { timeout: 5000 })
+      .toBe(1);
+    rows = await readScratchLayoutWithDrift('desktop-drift-convert');
+    expect(rows[0].id).toBe('solo');
+    expect(rows[0].driftId).toBe('');
+
+    // Redo replays both steps.
+    await page.locator('#redoLayoutBtn').click();
+    await page.locator('#redoLayoutBtn').click();
+    await expect
+      .poll(async () => (await readScratchLayoutWithDrift('desktop-drift-convert')).length, { timeout: 5000 })
+      .toBe(1);
+    rows = await readScratchLayoutWithDrift('desktop-drift-convert');
+    expect(rows[0].id).toBe('solo');
+    expect(rows[0].driftId).toBe('');
+  });
 });

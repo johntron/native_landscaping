@@ -51,7 +51,7 @@
  * early and left the mirror stuck disabled.
  */
 import { driftMembers, driftSpacing, memberToRemove, nextMemberPosition } from '../state/driftGeometry.js';
-import { humanizeDriftId } from '../data/driftId.js';
+import { driftMemberCountLabel, humanizeDriftId } from '../data/driftId.js';
 import { lifecycleOf } from '../data/plantLifecycle.js';
 import { resolveYardBounds } from '../render/yardBounds.js';
 
@@ -150,6 +150,7 @@ export function createSelectionBar({
     if (!visible) {
       closeMore();
       lastBarKey = '';
+      bar.dataset.driftWhole = '';
       return;
     }
 
@@ -157,6 +158,20 @@ export function createSelectionBar({
     const drilledIn = Boolean(appState.driftDrilledIn);
     const wholeDriftMode = Boolean(driftId) && !drilledIn;
     const drilledInMode = Boolean(driftId) && drilledIn;
+    const soleId = selection.size === 1 ? [...selection][0] : '';
+    const solePlant = soleId ? appState.plants.find((candidate) => String(candidate.id) === soleId) : null;
+    // The count stepper also appears for a single PLAIN plant (nl-o47.6.9):
+    // "+" there converts it into a drift of 2. Excludes a COLD single-plant
+    // selection of an existing drift's member (no drift context active) —
+    // that plant already belongs to a real drift with its own count, so this
+    // is deliberately narrower than "selection.size === 1 && !wholeDriftMode".
+    const plainSingleMode = !wholeDriftMode && !drilledInMode && Boolean(solePlant) && !solePlant.driftId;
+
+    // styles.css hides .selection-bar__name on desktop in this one mode,
+    // where the rename field (flattened back inline there) already shows the
+    // same information; a phone shows both because the field lives in the
+    // "More" popover there instead.
+    bar.dataset.driftWhole = wholeDriftMode ? 'true' : '';
 
     const barKey = `${driftId}|${drilledIn}`;
     if (barKey !== lastBarKey) closeMore();
@@ -165,29 +180,28 @@ export function createSelectionBar({
     // Plain single-plant controls: shown for "no drift" AND "drilled in"
     // (drilled-in is the single-plant bar plus two extra buttons), hidden
     // only for whole-drift mode.
-    if (name) name.hidden = wholeDriftMode;
+    if (name) name.hidden = false; // shown in every mode now (nl-o47.6.9's review) — see syncDriftControls for whole-drift text
     if (detailsBtn) detailsBtn.hidden = wholeDriftMode;
     if (cloneBtn) cloneBtn.hidden = wholeDriftMode;
     if (removeBtn) removeBtn.hidden = wholeDriftMode;
-    if (!wholeDriftMode) {
+    if (!wholeDriftMode && name) {
       const ids = [...selection];
-      if (name) {
-        if (ids.length === 1) {
-          const plant = appState.plants.find((candidate) => String(candidate.id) === ids[0]);
-          name.textContent = plant?.commonName || plant?.botanicalName || '1 plant';
-        } else {
-          name.textContent = `${ids.length} plants`;
-        }
+      if (ids.length === 1) {
+        const plant = appState.plants.find((candidate) => String(candidate.id) === ids[0]);
+        name.textContent = plant?.commonName || plant?.botanicalName || '1 plant';
+      } else {
+        name.textContent = `${ids.length} plants`;
       }
     }
 
     if (driftNameGroup) driftNameGroup.hidden = !wholeDriftMode;
-    if (driftCountGroup) driftCountGroup.hidden = !wholeDriftMode;
+    if (driftCountGroup) driftCountGroup.hidden = !wholeDriftMode && !plainSingleMode;
     if (driftGroup) driftGroup.hidden = !wholeDriftMode;
     if (driftMemberGroup) driftMemberGroup.hidden = !drilledInMode;
     if (!wholeDriftMode) setStatus('');
 
     if (wholeDriftMode) syncDriftControls(driftId);
+    else if (plainSingleMode) syncSinglePlantCountControls(soleId);
   };
 
   function syncDriftControls(driftId) {
@@ -195,6 +209,7 @@ export function createSelectionBar({
     const label = humanizeDriftId(driftId);
     const count = members.length;
 
+    if (name) name.textContent = driftMemberCountLabel(driftId, count);
     if (driftNameInput && document.activeElement !== driftNameInput) {
       driftNameInput.value = label;
     }
@@ -217,6 +232,32 @@ export function createSelectionBar({
     }
     if (removeDriftBtn) {
       removeDriftBtn.textContent = describeRemoveDriftLabel(members);
+    }
+  }
+
+  /**
+   * The count stepper for a single PLAIN plant (nl-o47.6.9): always reads 1,
+   * "-" always disabled (Remove already deletes a lone plant), "+" disabled
+   * only when src/state/driftEdits.js's convertToDrift would itself refuse —
+   * the SAME check ("is there room for a second member?") it runs, computed
+   * here from the one plant rather than duplicating convertToDrift's whole
+   * edit just to read its answer.
+   */
+  function syncSinglePlantCountControls(plantId) {
+    if (driftCountValue) driftCountValue.textContent = '1';
+    if (driftCountDecBtn) {
+      driftCountDecBtn.disabled = true;
+      driftCountDecBtn.title = 'Remove deletes the plant';
+    }
+    if (driftCountIncBtn) {
+      const plant = appState.plants.find((candidate) => String(candidate.id) === plantId);
+      const bounds = resolveYardBounds(appState.project);
+      const spacing = plant ? driftSpacing([plant], plant.width) : 0;
+      const { position, reason } = plant
+        ? nextMemberPosition([plant], spacing, bounds)
+        : { position: null, reason: '' };
+      driftCountIncBtn.disabled = !position;
+      driftCountIncBtn.title = position ? '' : reason || '';
     }
   }
 

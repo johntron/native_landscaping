@@ -342,27 +342,37 @@
 
       nl-o47.6.2 adds a DRIFT variant, shown/hidden by src/ui/selectionBar.js
       alongside the plain one above rather than as a separate element: whole-
-      drift mode hides selectionBarName/Details/Clone/Remove and shows
-      selectionDriftGroup (rename input, count stepper, spread, clone/remove
-      drift) instead; drilled-into-one-member mode keeps the plain
-      Details/Clone/Remove and adds selectionDriftMemberGroup (Remove from
-      drift, Back to drift). Nudges and Done are shared by every mode.
+      drift mode hides Details/Clone/Remove and shows selectionDriftGroup
+      (count stepper, spread, clone/remove drift) instead; drilled-into-one-
+      member mode keeps the plain Details/Clone/Remove and adds
+      selectionDriftMemberGroup (Remove from drift, Back to drift).
+      selectionBarName itself is now shown in EVERY mode (nl-o47.6.9's review):
+      the species name, "N plants", or the drift's own humanized label + count
+      (driftMemberCountLabel), as plain ellipsized text — the drift's count
+      stepper also appears for a single plant, reading 1 with "-" disabled
+      (Remove already deletes a lone plant; "+" makes it a drift of 2,
+      src/state/driftEdits.js's convertToDrift). Nudges and Done are shared by
+      every mode.
 
       nl-o47.4 restructures the markup (never the logic) for the phone
       editor, where this bar IS the editor's one bottom bar whenever a
-      selection exists: a compact .selection-bar__primary row (the
-      label/rename, Undo, a More toggle, and Done — 393px has no room left
-      over for more than that once a rename field or a drift's own controls
-      are counted, see the nl-o47.4 bead's own screenshots) and
-      .selection-bar__more, everything else (Details/Clone/Remove, Redo,
-      nudges, the drift count stepper, spread, clone/remove drift, the
+      selection exists: a compact .selection-bar__primary row (the plain-text
+      label, Undo, a More toggle, and Done — 393px has no room left over for
+      more than that once a drift's own count is counted, see the nl-o47.4
+      bead's own screenshots) and .selection-bar__more, everything else
+      (Details/Clone/Remove, Redo, nudges, the drift count stepper, spread,
+      the drift's rename field (nl-o47.6.9's review: it no longer fits the
+      primary row once shown for a single plant too), clone/remove drift, the
       drilled-in extras), as a popover the More button shows/hides — never a
       third thing stacked under the primary row, so the bar stays at most the
       one row plus that on-demand popover (the nl-o47.6.2 review's "at most
       two rows"). On desktop styles.css makes .selection-bar__more
       `display: contents` and hides the More button outright, so nothing
       there changes: every control still shows inline in one row, in its
-      original order, as it always has.
+      original order, as it always has — INCLUDING the rename field, which
+      moving it into the DOM under .selection-bar__more does not hide there
+      (styles.css also hides the plain-text label there instead, in whole-
+      drift mode, so the two are never both shown at once).
 
       Undo/Redo here (#selectionUndoBtn/#selectionRedoBtn) are NOT the real
       #undoLayoutBtn/#redoLayoutBtn the toolbar and the editor's idle bar use
@@ -378,16 +388,6 @@
     <div class="selection-bar" id="selectionBar" hidden role="toolbar" aria-label="Selected plant">
       <div class="selection-bar__primary">
         <span class="selection-bar__name" id="selectionBarName"></span>
-        <div class="selection-bar__drift-name" id="selectionDriftNameGroup" hidden>
-          <input
-            type="text"
-            class="selection-bar__rename"
-            id="selectionDriftNameInput"
-            aria-label="Drift name"
-            autocomplete="off"
-          />
-          <span class="selection-bar__count-label" id="selectionDriftCountLabel"></span>
-        </div>
         <div class="selection-bar__actions">
           <button
             type="button"
@@ -411,8 +411,18 @@
           <button type="button" class="button pill-button" id="selectionDoneBtn">Done</button>
         </div>
       </div>
-      <p class="selection-bar__status" id="selectionDriftNameStatus" role="status" hidden></p>
       <div class="selection-bar__more" id="selectionBarMore">
+        <div class="selection-bar__drift-name" id="selectionDriftNameGroup" hidden>
+          <input
+            type="text"
+            class="selection-bar__rename"
+            id="selectionDriftNameInput"
+            aria-label="Drift name"
+            autocomplete="off"
+          />
+          <span class="selection-bar__count-label" id="selectionDriftCountLabel"></span>
+        </div>
+        <p class="selection-bar__status" id="selectionDriftNameStatus" role="status" hidden></p>
         <button type="button" class="button pill-button selection-bar__redo-btn" id="selectionRedoBtn">Redo</button>
         <div class="selection-bar__plain-actions">
           <button type="button" class="button pill-button" id="selectionDetailsBtn">Details</button>
@@ -425,6 +435,12 @@
           <button type="button" class="selection-bar__nudge" id="selectionNudgeS" aria-label="Nudge south">S</button>
           <button type="button" class="selection-bar__nudge" id="selectionNudgeW" aria-label="Nudge west">W</button>
         </div>
+        <!--
+          nl-o47.6.9: also shown, with "-" disabled, for a single plain plant
+          (no drift) — "+" there makes it a drift of 2
+          (src/state/driftEdits.js's convertToDrift). src/ui/selectionBar.js
+          decides which of the two cases this group is showing.
+        -->
         <div class="selection-bar__count" id="selectionDriftCountGroup" role="group" aria-label="Drift member count" hidden>
           <button type="button" class="selection-bar__nudge" id="selectionDriftCountDecBtn" aria-label="Remove one plant from the drift">−</button>
           <span class="selection-bar__count-value" id="selectionDriftCountValue"></span>

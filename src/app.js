@@ -46,12 +46,14 @@ import { createPlantSelection } from './ui/plantSelection.js';
 import { createSelectionBar } from './ui/selectionBar.js';
 import { nudgeSelection } from './state/nudgeSelection.js';
 import { patchView } from './state/yardEdits.js';
-import { clonePlantById, removePlantById } from './state/plantEdits.js';
+import { clonePlantById } from './state/plantEdits.js';
 import {
   addDriftFromCatalog,
   addDriftMember,
   cloneDrift,
+  convertToDrift,
   removeDrift,
+  removeDriftAwarePlant,
   removeDriftMember,
   removePlantFromDrift,
   renameDrift,
@@ -660,10 +662,15 @@ async function init() {
   /**
    * Drop the plant from the layout. Clearing the pointer state first matters:
    * renderViews is handed targeted/hovered ids, and an id with no plant behind
-   * it would survive as a highlight nothing can clear.
+   * it would survive as a highlight nothing can clear. Goes through
+   * removeDriftAwarePlant, not plantEdits.js's removePlantById directly, so a
+   * drift a drilled-in Remove (or the detail sheet's, or the plant menu's)
+   * leaves with exactly one member drops that member's driftId label too
+   * (nl-o47.6.9: a drift always has >= 2 members) — this is the ONE place
+   * every one of those three callers deletes a plant.
    */
   const removePlant = (plantId) => {
-    if (!removePlantById(appState, plantId)) return;
+    if (!removeDriftAwarePlant(appState, plantId)) return;
     plantMenu.hide();
     closeDetailSheet();
     appState.hoveredPlantId = '';
@@ -781,13 +788,29 @@ async function init() {
     },
     onCountChange: (delta) => {
       const driftId = appState.selectedDriftId;
-      if (!driftId) return;
-      const { plant, reason } =
-        delta > 0 ? addDriftMember(appState, driftId) : removeDriftMember(appState, driftId);
-      if (!plant) return; // the bar's own disabled state already guards this; stay defensive
+      if (driftId) {
+        const { plant, reason } =
+          delta > 0 ? addDriftMember(appState, driftId) : removeDriftMember(appState, driftId);
+        if (!plant) return; // the bar's own disabled state already guards this; stay defensive
+        render();
+        refreshSpeciesTable(); // if that was the drift's 2nd-to-last member, pruneSelection lands on the plain survivor (nl-o47.6.9)
+        commitLayoutChange(delta > 0 ? 'Added drift member' : 'Removed drift member');
+        return;
+      }
+      // nl-o47.6.9: "+" on a single plain plant (no drift context) makes it a
+      // drift of 2 — "-" there is always disabled (Remove deletes the plant
+      // instead), so the bar never calls this with delta <= 0 in that mode,
+      // but stay defensive rather than trust the DOM's disabled state alone.
+      if (delta <= 0) return;
+      const id = soleSelectedPlantId();
+      if (!id) return;
+      const result = convertToDrift(appState, id);
+      if (!result.driftId) return; // refused (already in a drift, no room, species gone) — the bar's own disabled state already guards the common case
       render();
       refreshSpeciesTable();
-      commitLayoutChange(delta > 0 ? 'Added drift member' : 'Removed drift member');
+      plantSelection.selectDrift(result.driftId); // whole-drift mode, both new members
+      const label = result.members[0]?.commonName || result.members[0]?.botanicalName || '';
+      commitLayoutChange(`Made a drift of 2${label ? ` ${label}` : ''}`);
     },
     onSpread: (direction) => {
       const driftId = appState.selectedDriftId;

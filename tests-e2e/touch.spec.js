@@ -558,8 +558,13 @@ test.describe('drifts (nl-o47.6.2)', () => {
     await tap(page, target);
 
     await expect(page.locator('#selectionBar')).toBeVisible();
-    await expect(page.locator('#selectionDriftNameGroup')).toBeVisible();
-    await expect(page.locator('#selectionDriftCountLabel')).toContainText('4 plants');
+    // nl-o47.6.9's review: the primary row shows the drift's label + count as
+    // plain, ellipsized text; the rename field itself now lives behind "More"
+    // (it no longer fits the primary row once a lone plant's own count reads
+    // there too).
+    await expect(page.locator('#selectionBarName')).toBeVisible();
+    await expect(page.locator('#selectionBarName')).toContainText('4 plants');
+    await expect(page.locator('#selectionDriftNameGroup')).toBeHidden();
     await expect(page.locator('#topSvg [data-drift-outline]')).toBeVisible();
     // Every member gets a selection ring; the unrelated plant is dimmed, not ringed.
     expect(await page.locator('#topSvg [data-selection-ring]').count()).toBe(4);
@@ -567,19 +572,27 @@ test.describe('drifts (nl-o47.6.2)', () => {
 
     // The bar never exceeds two rows with a whole drift selected (nl-o47.4;
     // the nl-o47.6.2 review found it at 4). Only the primary row is visible
-    // by default (the "More" popover is closed) — its own height, plus the
-    // rename-refusal status line's when it is showing, is the whole bar.
+    // by default (the "More" popover is closed) — its own height is the
+    // whole bar.
     const barBox = await page.locator('#selectionBar').boundingBox();
     const rowHeight = await page.locator('#selectionDoneBtn').boundingBox();
     expect(barBox.height, 'closed by default, the bar is at most two button-rows tall').toBeLessThan(
       rowHeight.height * 2 + 40 // + padding/gaps, not a third row's worth
     );
 
+    // The rename field (and its own count label) are behind "More".
+    await page.locator('#selectionBarMoreBtn').click();
+    await expect(page.locator('#selectionDriftNameGroup')).toBeVisible();
+    await expect(page.locator('#selectionDriftCountLabel')).toContainText('4 plants');
+    // Close it again before tapping the canvas — the open popover can cover
+    // part of the drawing near the bottom of a phone screen.
+    await page.locator('#selectionBarMoreBtn').click();
+    await expect(page.locator('#selectionDriftNameGroup')).toBeHidden();
+
     // A tap in the gap between members, well inside the outline (the drift's
     // own centroid — see midpointOf), also selects the whole drift.
     await tap(page, await midpointOf(page, 'drift-a', 'drift-d'));
-    await expect(page.locator('#selectionDriftNameGroup')).toBeVisible();
-    await expect(page.locator('#selectionDriftCountLabel')).toContainText('4 plants');
+    await expect(page.locator('#selectionBarName')).toContainText('4 plants');
 
     // A further tap on a member drills into it: the plain single-plant bar
     // returns, with the two drift-member extras — behind "More" on a phone
@@ -604,7 +617,7 @@ test.describe('drifts (nl-o47.6.2)', () => {
     await page.locator('[data-mode="edit"]').click();
 
     await tap(page, await driftMemberScreen(page, 'drift-a'));
-    await expect(page.locator('#selectionDriftNameGroup')).toBeVisible();
+    await expect(page.locator('#selectionBarName')).toContainText('4 plants');
 
     const away = await emptySpotIn(page, 'topSvg');
     await touchGesture(page, { x: away.x, y: away.y, dx: 40, dy: -30 });
@@ -682,7 +695,7 @@ test.describe('drifts (nl-o47.6.2)', () => {
     await openScratchProject(page, 'touch-drift-spread');
     await page.locator('[data-mode="edit"]').click();
     await tap(page, await driftMemberScreen(page, 'drift-a'));
-    await expect(page.locator('#selectionDriftNameGroup')).toBeVisible();
+    await expect(page.locator('#selectionBarName')).toContainText('4 plants');
     // Spread sits behind "More" on a phone (nl-o47.4).
     await page.locator('#selectionBarMoreBtn').click();
 
@@ -706,12 +719,16 @@ test.describe('drifts (nl-o47.6.2)', () => {
     await openScratchProject(page, 'touch-drift-rename');
     await page.locator('[data-mode="edit"]').click();
     await tap(page, await driftMemberScreen(page, 'drift-a'));
+    await expect(page.locator('#selectionBarName')).toContainText('4 plants');
+    // The rename field sits behind "More" on a phone (nl-o47.6.9's review).
+    await page.locator('#selectionBarMoreBtn').click();
     await expect(page.locator('#selectionDriftNameGroup')).toBeVisible();
 
     await page.locator('#selectionDriftNameInput').fill('Front Edge');
     await page.locator('#selectionDriftNameInput').press('Enter');
 
     await expect(page.locator('#selectionDriftNameInput')).toHaveValue('Front edge');
+    await expect(page.locator('#selectionBarName')).toContainText('Front edge');
     await expect
       .poll(
         async () => (await readScratchLayoutWithDrift('touch-drift-rename')).find((r) => r.id === 'drift-a')?.driftId,
@@ -721,7 +738,48 @@ test.describe('drifts (nl-o47.6.2)', () => {
 
     await openScratchProject(page, 'touch-drift-rename'); // a fresh load of the same yard
     await tap(page, await driftMemberScreen(page, 'drift-a'));
+    await page.locator('#selectionBarMoreBtn').click();
     await expect(page.locator('#selectionDriftNameInput')).toHaveValue('Front edge');
+  });
+
+  test('"+" on a single plant makes it a drift of 2; "-" brings back the same plant (nl-o47.6.9)', async ({ page }) => {
+    await openScratchProject(page, 'touch-drift-convert');
+    await page.locator('[data-mode="edit"]').click();
+    await tap(page, await driftMemberScreen(page, 'solo'));
+
+    await expect(page.locator('#selectionBar')).toBeVisible();
+    await expect(page.locator('#selectionBarName')).toHaveText('Winecup');
+    // The count stepper sits behind "More" on a phone (nl-o47.4), same as the
+    // whole-drift one just above.
+    await page.locator('#selectionBarMoreBtn').click();
+    await expect(page.locator('#selectionDriftCountGroup')).toBeVisible();
+    await expect(page.locator('#selectionDriftCountValue')).toHaveText('1');
+    await expect(page.locator('#selectionDriftCountDecBtn')).toBeDisabled();
+
+    await page.locator('#selectionDriftCountIncBtn').click();
+    await expect(page.locator('#selectionBarName')).toContainText('· 2 plants');
+    await expect(page.locator('#topSvg [data-drift-outline]')).toBeVisible();
+    await expect
+      .poll(async () => (await readScratchLayoutWithDrift('touch-drift-convert')).length, { timeout: 5000 })
+      .toBe(2);
+    let rows = await readScratchLayoutWithDrift('touch-drift-convert');
+    const solo = rows.find((r) => r.id === 'solo');
+    const other = rows.find((r) => r.id !== 'solo');
+    expect(solo.driftId).not.toBe('');
+    expect(other.driftId).toBe(solo.driftId);
+
+    // "More" closed itself the instant "+" changed the bar's context (no
+    // drift -> a real one), so it has to be reopened to reach "-", which
+    // hands the original plant back, unlabelled, still selected.
+    await page.locator('#selectionBarMoreBtn').click();
+    await page.locator('#selectionDriftCountDecBtn').click();
+    await expect(page.locator('#selectionBarName')).toHaveText('Winecup');
+    await expect
+      .poll(async () => (await readScratchLayoutWithDrift('touch-drift-convert')).length, { timeout: 5000 })
+      .toBe(1);
+    rows = await readScratchLayoutWithDrift('touch-drift-convert');
+    expect(rows[0].id).toBe('solo');
+    expect(rows[0].driftId).toBe('');
   });
 });
 
@@ -748,8 +806,7 @@ test.describe('species table drift entries, by touch (nl-o47.6.7)', () => {
     await page
       .locator('#speciesTable button.species-table__drift-chip[data-drift-id="winecup-drift"]')
       .tap();
-    await expect(page.locator('#selectionDriftNameGroup')).toBeVisible();
-    await expect(page.locator('#selectionDriftCountLabel')).toContainText('4 plants');
+    await expect(page.locator('#selectionBarName')).toContainText('4 plants');
     // Selecting the drift also closes the sheet, so the canvas underneath —
     // where the selection actually shows — is what the person sees next.
     await expect(page.locator('#plantsSheet')).toBeHidden();
@@ -962,7 +1019,7 @@ test.describe('the phone editor (nl-o47.4)', () => {
     );
 
     await tap(page, target);
-    await expect(page.locator('#selectionDriftNameGroup')).toBeVisible();
+    await expect(page.locator('#selectionBarName')).toContainText('4 plants');
     await expect(page.locator('#topSvg [data-drift-outline]')).toBeVisible();
 
     // Drag from elsewhere on screen — since nl-o47.2, a drag with a

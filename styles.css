@@ -2208,8 +2208,8 @@ select {
   min-width: 0;
 }
 
-.selection-bar__primary .selection-bar__name,
-.selection-bar__primary .selection-bar__drift-name {
+.selection-bar__name,
+.selection-bar__drift-name {
   min-width: 0; /* lets the label/rename field shrink+ellipsize instead of forcing the row wide */
 }
 
@@ -2279,10 +2279,14 @@ select {
 }
 
 /*
- * A whole drift's name + count (nl-o47.6.2), replacing .selection-bar__name
- * in that one mode — src/ui/selectionBar.js toggles [hidden] on whichever of
- * the two applies, never both. The input IS the rename field: no separate
- * edit affordance, no window.prompt.
+ * A whole drift's rename field + count label (nl-o47.6.2). Lives inside
+ * .selection-bar__more (nl-o47.6.9's review: it no longer fit the primary
+ * row once that row also has to show a plain-text label for a single plant's
+ * own count stepper) — a phone shows it only once "More" is opened; desktop's
+ * `display: contents` on .selection-bar__more puts it back inline, in the
+ * same spot .selection-bar__name sits (which desktop hides instead, in this
+ * one mode — see the `[data-drift-whole]` rule further down). The input IS
+ * the rename field: no separate edit affordance, no window.prompt.
  */
 .selection-bar__drift-name {
   display: flex;
@@ -2328,10 +2332,15 @@ select {
 }
 
 /* A refused rename (empty or colliding name) — visible, not just a dropped
-   keystroke, since there is no window.alert to fall back on. */
+   keystroke, since there is no window.alert to fall back on. Sits right next
+   to the rename field inside .selection-bar__more (nl-o47.6.9's review: it
+   used to be a bare sibling of .selection-bar's own primary/more, which on a
+   phone would show it in the always-visible bar while the field it refers to
+   sat hidden behind the "More" popover). No flex-basis/order needed for that
+   phone layout — .selection-bar__more's own `flex-direction: column` and
+   `align-items: stretch` (its default) already give a block-level <p> the
+   full row to itself; the desktop media query below still orders it last. */
 .selection-bar__status {
-  flex-basis: 100%;
-  order: 1;
   margin: 0;
   font-size: 0.8rem;
   color: var(--danger-soft);
@@ -2479,6 +2488,17 @@ select {
   }
   .selection-bar__status {
     order: 6;
+  }
+  /* nl-o47.6.9: .selection-bar__name is shown in every mode now (a phone
+     needs it, ellipsized, once the rename field moved out of the primary
+     row), but on desktop the rename field is already right there, inline
+     (the `display: contents` above puts it back in the same flat row) --
+     showing both at once would read as a duplicate of the same text.
+     src/ui/selectionBar.js sets this attribute on the bar itself, not on
+     .selection-bar__name directly, since it needs to keep working whichever
+     element ends up carrying the plain-text label. */
+  .selection-bar[data-drift-whole='true'] .selection-bar__name {
+    display: none;
   }
 }
 
