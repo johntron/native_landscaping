@@ -7,6 +7,7 @@ import {
   convexHull,
   distanceToHull,
   driftCentroid,
+  driftLifecycleSummary,
   driftMembers,
   driftOutline,
   driftOutlinePolygon,
@@ -337,12 +338,18 @@ test('memberToRemove refuses when only planted members remain, and on an empty d
   assert.match(memberToRemove([]).reason, /no members/);
 });
 
-test('memberToRemove breaks a distance tie by the smaller id', () => {
+// nl-o47.6's REVISED design (2026-09-28) changed the tie-break from "smaller
+// id" to "most recently added": `members` keeps its own array order, so the
+// LATER entry is the newer one, regardless of what its id happens to look
+// like. 'a' is first (older) and 'z' is second (newer) here specifically so
+// "smaller id" and "later in the array" disagree — the old rule would have
+// picked 'a', the new one picks 'z'.
+test('memberToRemove breaks a distance tie by the most recently added member, not the smaller id', () => {
   const members = [
-    { id: 'b', x: 2, y: 0 },
-    { id: 'a', x: -2, y: 0 },
+    { id: 'a', x: 2, y: 0 },
+    { id: 'z', x: -2, y: 0 },
   ];
-  assert.equal(memberToRemove(members).member.id, 'a');
+  assert.equal(memberToRemove(members).member.id, 'z');
 });
 
 // --- spread ---------------------------------------------------------------------
@@ -481,4 +488,34 @@ test('driftOutlinePolygon handles a 2-member (collinear) drift, a bed-edge shape
   // the offset, is inside — the padding reaches past a straight edge's
   // midpoint too, not just past its two ends.
   assert.ok(isPointInDriftOutline({ x: 3, y: outline.offsetFt - 0.05 }, outline));
+});
+
+// --- driftLifecycleSummary (nl-o47.6.10) ---------------------------------------
+
+test('driftLifecycleSummary reports the first member\'s lifecycle and true when every member agrees', () => {
+  const members = [
+    { id: 'a', status: 'planted', plantedOn: '2026-03-01' },
+    { id: 'b', status: 'planted', plantedOn: '2026-03-01' },
+  ];
+  const { lifecycle, uniform } = driftLifecycleSummary(members);
+  assert.equal(lifecycle.status, 'planted');
+  assert.equal(lifecycle.plantedOn, '2026-03-01');
+  assert.equal(uniform, true);
+});
+
+test('driftLifecycleSummary reports false, and the FIRST member\'s values, when members disagree', () => {
+  const members = [
+    { id: 'a', status: 'planted', plantedOn: '2026-03-01' },
+    { id: 'b' }, // still planned: an older import, or data from before nl-o47.6.10
+  ];
+  const { lifecycle, uniform } = driftLifecycleSummary(members);
+  assert.equal(uniform, false);
+  assert.equal(lifecycle.status, 'planted', 'the FIRST member\'s values, per nl-o47.6.10');
+});
+
+test('driftLifecycleSummary on an empty list reads as a planned plant with no source, uniform', () => {
+  assert.deepStrictEqual(driftLifecycleSummary([]), {
+    lifecycle: { status: 'planned', plantedOn: '', source: null, localEcotype: false },
+    uniform: true,
+  });
 });

@@ -100,3 +100,38 @@ export function driftMemberCountLabel(driftId, count) {
   const n = Number(count) || 0;
   return `${label} · ${n} plant${n === 1 ? '' : 's'}`;
 }
+
+/**
+ * Drop the driftId label from EVERY drift in `plants` that has fewer than two
+ * members (nl-o47.6.9's "a drift always has >= 2 members" rule, enforced for
+ * a whole plants list at once rather than one drift at a time): a CSV import
+ * (src/data/plantParser.js's buildPlantsFromCsv, for hand-edited or legacy
+ * planting_layout.csv files) and plants rebuilt from saved history
+ * (plantsFromPlacements — undo/redo and every page load) both call this, so
+ * an undersized drift a still-earlier bead's edits left behind never survives
+ * a reload with its "-" enabled and ready to delete the last plant.
+ * src/state/driftEdits.js re-exports this for its own callers, and its own
+ * pruneUndersizedDrift is the same rule for one drift at a time. Lives here,
+ * in src/data/, rather than beside pruneUndersizedDrift in src/state/, so
+ * plantParser.js can reach it without reaching into src/state/ (see this
+ * file's own module comment on that layering rule). Every drift with 2+
+ * members is untouched.
+ * @param {Array<object>} plants
+ * @returns {Array<object>}
+ */
+export function dropUndersizedDrifts(plants) {
+  if (!Array.isArray(plants)) return plants;
+  const counts = new Map();
+  plants.forEach((plant) => {
+    if (!plant?.driftId) return;
+    counts.set(plant.driftId, (counts.get(plant.driftId) || 0) + 1);
+  });
+  const undersized = new Set([...counts.entries()].filter(([, count]) => count < 2).map(([id]) => id));
+  if (!undersized.size) return plants;
+  return plants.map((plant) => {
+    if (!plant?.driftId || !undersized.has(plant.driftId)) return plant;
+    const next = { ...plant };
+    delete next.driftId;
+    return next;
+  });
+}

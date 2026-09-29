@@ -211,13 +211,18 @@ test('a plant\'s driftId round-trips through the layout CSV, and a file with no 
   const speciesCsv = `${speciesHeader}\n`
     + 'c,Autumn sage,Salvia greggii,3-11,3-11,,,,,red,3,3,mound';
   const species = parseSpeciesCsv(speciesCsv);
-  const plant = createPlantFromSpecies(species[0], { id: 'sage-1', x: 1, y: 1, driftId: 'winecup-strip' });
+  // Two members sharing a driftId, not one (nl-o47.6.9: a drift always has
+  // >= 2 members, so buildPlantsFromCsv would drop a lone one's label — see
+  // the dedicated test below for exactly that case).
+  const plantA = createPlantFromSpecies(species[0], { id: 'sage-1', x: 1, y: 1, driftId: 'winecup-strip' });
+  const plantB = createPlantFromSpecies(species[0], { id: 'sage-2', x: 2, y: 1, driftId: 'winecup-strip' });
 
-  const csv = buildLayoutCsv([plant]);
+  const csv = buildLayoutCsv([plantA, plantB]);
   assert.match(csv.split('\n')[0], /(?:^|,)drift_id(?:,|$)/);
 
   const reloaded = buildPlantsFromCsv(speciesCsv, csv);
   assert.equal(reloaded[0].driftId, 'winecup-strip');
+  assert.equal(reloaded[1].driftId, 'winecup-strip');
 
   // A file predating the column (only the original four columns) still loads, with no drift.
   const legacyCsv = 'id,botanical_name,x_ft,y_ft\nsage-1,Salvia greggii,1,1';
@@ -228,6 +233,15 @@ test('a plant\'s driftId round-trips through the layout CSV, and a file with no 
   const badCsv = 'id,species_id,x_ft,y_ft,drift_id\nsage-1,c,1,1,Not A Slug';
   const fromBad = buildPlantsFromCsv(speciesCsv, badCsv);
   assert.equal(fromBad[0].driftId, undefined);
+});
+
+test('a drift_id given to only one row loads with the label dropped: a drift always has >= 2 members (nl-o47.6.9)', () => {
+  const speciesCsv = `${speciesHeader}\n`
+    + 'c,Autumn sage,Salvia greggii,3-11,3-11,,,,,red,3,3,mound';
+  const csv = 'id,species_id,x_ft,y_ft,drift_id\nsage-1,c,1,1,winecup-strip\nsage-2,c,2,1,';
+  const plants = buildPlantsFromCsv(speciesCsv, csv);
+  assert.equal(plants[0].driftId, undefined);
+  assert.equal(plants[1].driftId, undefined);
 });
 
 /**

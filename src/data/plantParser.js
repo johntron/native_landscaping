@@ -4,7 +4,7 @@ import { buildSpeciesIndex, normalizeBotanicalName, resolveSpeciesRef } from './
 import { placementExtras } from './placements.js';
 import { lifecycleFromCsvRow } from './plantLifecycle.js';
 import { SITE_VOCABULARY } from './projectConfig.js';
-import { isValidDriftId } from './driftId.js';
+import { dropUndersizedDrifts, isValidDriftId } from './driftId.js';
 
 const DEFAULT_LEAF_COLOR = '#6b8e23';
 
@@ -342,7 +342,7 @@ export function buildPlantsFromCsv(speciesCsvText, layoutCsvText, { synonyms, dr
   const layout = parsePlantLayoutCsv(layoutCsvText);
   const index = buildSpeciesIndex(species, synonyms);
 
-  return layout.map((placement, idx) => {
+  const plants = layout.map((placement, idx) => {
     if (!placement.speciesId && !placement.botanicalName) {
       throw new LayoutDataError(`Layout row ${placement.id} is missing species_id`);
     }
@@ -362,6 +362,10 @@ export function buildPlantsFromCsv(speciesCsvText, layoutCsvText, { synonyms, dr
       id: placement.id || `plant-${idx + 1}`,
     });
   });
+  // A hand-edited or legacy planting_layout.csv can give a drift_id to only
+  // one row: a drift always has >= 2 members (nl-o47.6.9), so a lone one
+  // loads as a plain single plant instead.
+  return dropUndersizedDrifts(plants);
 }
 
 /**
@@ -383,6 +387,13 @@ export function buildPlantsFromCsv(speciesCsvText, layoutCsvText, { synonyms, dr
  * placement whose species has left plants.csv has none (see the report on
  * nl-3s5.19).
  *
+ * Also drops a driftId shared by fewer than 2 plants (dropUndersizedDrifts,
+ * src/data/driftId.js): a drift always has >= 2 members (nl-o47.6.9), and
+ * this is the one place every history entry (every undo/redo, and every page
+ * load) passes through, so a 1-member drift an older edit left behind — a
+ * path this rule predates, or a saved yard imported from files — never shows
+ * up with "-" enabled and ready to delete the last plant.
+ *
  * @param {Array<object>} placements placements (or legacy plant snapshots)
  * @param {Array<object>} species fresh rows from parseSpeciesCsv
  * @param {{synonyms?: Map<string, string>}} [options]
@@ -391,7 +402,7 @@ export function plantsFromPlacements(placements, species, { synonyms } = {}) {
   if (!Array.isArray(placements) || !placements.length) return placements || [];
   const index = buildSpeciesIndex(species, synonyms);
 
-  return placements.map((placement) => {
+  const plants = placements.map((placement) => {
     const resolved = resolveSpeciesRef(index, {
       speciesId: placement.speciesId,
       botanicalName: placement.botanicalName || placement.botanicalKey,
@@ -399,6 +410,7 @@ export function plantsFromPlacements(placements, species, { synonyms } = {}) {
     if (!resolved) return placement;
     return createPlantFromSpecies(resolved.entry, placement);
   });
+  return dropUndersizedDrifts(plants);
 }
 
 /**

@@ -5,9 +5,13 @@ import {
   addDriftFromCatalog,
   addDriftMember,
   cloneDrift,
+  convertToDrift,
   dissolveDrift,
+  dropUndersizedDrifts,
   MAX_DRIFT_COUNT,
+  pruneUndersizedDrift,
   removeDrift,
+  removeDriftAwarePlant,
   removeDriftMember,
   removePlantFromDrift,
   renameDrift,
@@ -433,4 +437,127 @@ test('removeDrift on an unknown driftId', () => {
     dissolvedCount: 0,
     reason: 'no such drift',
   });
+});
+
+// --- convertToDrift ("+" on a single plant, nl-o47.6.9) ------------------------
+
+test('convertToDrift turns a lone plant into a drift of 2: a fresh driftId on both, the new member at the default spacing, its own lifecycle copied', () => {
+  const plants = deepFreeze([
+    plant(winecup, 'solo', 10, 10, { status: 'planted', plantedOn: '2026-03-01', localEcotype: true }),
+    plant(horseherb, 'hh-1', 30, 30),
+  ]);
+  const state = makeState(plants);
+  const { driftId, members, reason } = convertToDrift(state, 'solo');
+  assert.equal(reason, null);
+  assert.ok(driftId, 'a driftId was minted');
+  assert.equal(members.length, 2);
+  assert.equal(state.plants.length, 3);
+  assert.notEqual(state.plants, plants, 'a new array, not the frozen input');
+
+  const original = state.plants.find((p) => p.id === 'solo');
+  const second = state.plants.find((p) => p.id !== 'solo' && p.id !== 'hh-1');
+  assert.equal(original.driftId, driftId);
+  assert.equal(second.driftId, driftId);
+  assert.equal(second.speciesId, 'winecup');
+  // nl-o47.6.10: the plant's own lifecycle is copied to the new member.
+  assert.equal(second.status, 'planted');
+  assert.equal(second.plantedOn, '2026-03-01');
+  assert.equal(second.localEcotype, true);
+  // The unrelated plant is untouched, and the original keeps its own id.
+  assert.equal(state.plants.find((p) => p.id === 'hh-1').driftId, undefined);
+});
+
+test('convertToDrift refuses a plant already in a drift, an unknown plant, or a species no longer in the catalog', () => {
+  assert.deepStrictEqual(convertToDrift(makeState(baseDrift()), 'nope'), {
+    driftId: null,
+    members: [],
+    reason: 'no such plant',
+  });
+  assert.equal(convertToDrift(makeState(baseDrift()), 'wc-1').reason, 'already in a drift');
+  const orphan = [{ id: 'a', speciesId: 'extinct-species', x: 5, y: 5, width: 2 }];
+  const result = convertToDrift(makeState(orphan), 'a');
+  assert.equal(result.driftId, null);
+  assert.match(result.reason, /no longer in the catalog/);
+});
+
+test('1 -> 2 -> 1 returns the original plant, with its original id and no driftId', () => {
+  const plants = [plant(winecup, 'solo', 10, 10)];
+  const state = makeState(plants);
+  const { driftId } = convertToDrift(state, 'solo');
+  assert.equal(state.plants.length, 2);
+
+  const { plant: removed, reason } = removeDriftMember(state, driftId);
+  assert.equal(reason, null);
+  assert.equal(state.plants.length, 1);
+  assert.notEqual(removed.id, 'solo', 'the NEW member is the one removed, per the most-recently-added tie-break');
+  const survivor = state.plants[0];
+  assert.equal(survivor.id, 'solo', 'the original plant, with its original id');
+  assert.equal(survivor.driftId, undefined, 'no longer labelled: a plain single plant again');
+});
+
+// --- the >= 2 members invariant (nl-o47.6.9) ------------------------------------
+
+test('removeDriftMember on a 2-member drift drops the driftId label from the survivor', () => {
+  const plants = [plant(winecup, 'a', 10, 10, { driftId: 'strip' }), plant(winecup, 'b', 12, 10, { driftId: 'strip' })];
+  const state = makeState(plants);
+  const { plant: removed, reason } = removeDriftMember(state, 'strip');
+  assert.equal(reason, null);
+  assert.equal(state.plants.length, 1);
+  const survivor = state.plants.find((p) => p.id !== removed.id);
+  assert.equal(survivor.driftId, undefined);
+});
+
+test('removePlantFromDrift on a 2-member drift drops the driftId label from the OTHER member too', () => {
+  const plants = [
+    plant(winecup, 'a', 10, 10, { driftId: 'strip' }),
+    plant(winecup, 'b', 12, 10, { driftId: 'strip' }),
+  ];
+  const state = makeState(plants);
+  const { plant: updated, reason } = removePlantFromDrift(state, 'a');
+  assert.equal(reason, null);
+  assert.equal(updated.driftId, undefined);
+  const other = state.plants.find((p) => p.id === 'b');
+  assert.equal(other.driftId, undefined, "the whole drift ends, not just a's membership in it");
+});
+
+test('removeDriftAwarePlant deletes the plant, dropping the driftId label from a 2-member drift\'s survivor', () => {
+  const plants = [
+    plant(winecup, 'a', 10, 10, { driftId: 'strip' }),
+    plant(winecup, 'b', 12, 10, { driftId: 'strip' }),
+  ];
+  const state = makeState(plants);
+  assert.equal(removeDriftAwarePlant(state, 'a'), true);
+  assert.equal(state.plants.length, 1);
+  assert.equal(state.plants[0].id, 'b');
+  assert.equal(state.plants[0].driftId, undefined);
+});
+
+test('removeDriftAwarePlant leaves a 3+-member drift\'s driftId alone, and behaves like removePlantById for a plant in no drift', () => {
+  const plants = deepFreeze(baseDrift());
+  const state = makeState(plants);
+  assert.equal(removeDriftAwarePlant(state, 'wc-1'), true);
+  assert.equal(state.plants.length, 3);
+  assert.ok(state.plants.every((p) => p.id !== 'wc-1'));
+  assert.equal(state.plants.find((p) => p.id === 'wc-2').driftId, 'winecup-strip');
+
+  const state2 = makeState(deepFreeze(baseDrift()));
+  assert.equal(removeDriftAwarePlant(state2, 'hh-1'), true);
+  assert.equal(state2.plants.length, 3);
+  assert.equal(removeDriftAwarePlant(state2, 'nope'), false);
+});
+
+test('pruneUndersizedDrift is a no-op for a drift with 2+ members or none at all', () => {
+  const plants = deepFreeze(baseDrift());
+  assert.equal(pruneUndersizedDrift(plants, 'winecup-strip'), plants);
+  assert.equal(pruneUndersizedDrift(plants, 'no-such-drift'), plants);
+  assert.equal(pruneUndersizedDrift(plants, ''), plants);
+});
+
+// dropUndersizedDrifts itself lives in, and is fully tested in, src/data/driftId.js
+// (tests/driftId.test.js) — re-exported here only so a caller that mints/edits
+// a drift can reach both rules through this one module (see the re-export's
+// own comment above).
+test('dropUndersizedDrifts is reachable through driftEdits.js\'s own re-export', () => {
+  const plants = [plant(winecup, 'lone', 1, 1, { driftId: 'orphan' }), plant(horseherb, 'hh', 20, 20)];
+  assert.equal(dropUndersizedDrifts(plants).find((p) => p.id === 'lone').driftId, undefined);
 });

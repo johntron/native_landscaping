@@ -497,7 +497,15 @@ function withinBounds(point, bounds) {
 /**
  * Which member "-" removes: the PLANNED member farthest from the centroid
  * (an owner's-choice rule — a planted member is never removed automatically).
- * Ties break by id, ascending, for a deterministic result.
+ * Ties go to the MOST RECENTLY ADDED member (nl-o47.6's REVISED design,
+ * 2026-09-28) rather than the smallest id: `members` keeps `state.plants`'
+ * own order, and every add appends, so the later member in this list is the
+ * newer one. This is what makes 1 -> 2 -> 1 (nl-o47.6.9's single-plant "+"/"-"
+ * conversion) return the original plant — a fresh 2-member drift's two points
+ * are always exactly equidistant from their own centroid (the midpoint of a
+ * segment), so the tie-break is the ONLY thing deciding which one survives.
+ * Comparing ids would be unreliable for "newer" anyway (a newer id is not
+ * reliably "larger" as a string: "...-9" sorts after "...-10").
  * @param {Array<object>} members full plant objects (lifecycleOf reads status)
  * @returns {{ member: object, reason: null } | { member: null, reason: string }}
  */
@@ -510,16 +518,37 @@ export function memberToRemove(members) {
   if (!planned.length) {
     return { member: null, reason: 'only planted members remain; remove one by hand first' };
   }
+  const TIE_EPSILON = 1e-9;
   const distance = (m) => Math.hypot(m.x - centroid.x, m.y - centroid.y);
-  const farthest = planned.reduce((best, m) => {
-    if (!best) return m;
+  let farthest = planned[0];
+  let farthestIndex = members.indexOf(planned[0]);
+  let farthestDistance = distance(planned[0]);
+  planned.forEach((m) => {
     const d = distance(m);
-    const bestD = distance(best);
-    if (d > bestD) return m;
-    if (d === bestD && String(m.id) < String(best.id)) return m;
-    return best;
-  }, null);
+    const index = members.indexOf(m);
+    if (d > farthestDistance + TIE_EPSILON || (Math.abs(d - farthestDistance) <= TIE_EPSILON && index > farthestIndex)) {
+      farthest = m;
+      farthestIndex = index;
+      farthestDistance = d;
+    }
+  });
   return { member: farthest, reason: null };
+}
+
+/**
+ * Whether every member of a drift shares the same lifecycle, and what to show
+ * for it — the FIRST member's values, since "one planting status per drift"
+ * (nl-o47.6.10) is enforced by every edit, but older data or a CSV import can
+ * still disagree (the one case this exists to detect and surface). The
+ * caller's next edit unifies every member, whatever it shows here.
+ * @param {Array<object>} members full plant objects
+ * @returns {{ lifecycle: ReturnType<typeof lifecycleOf>, uniform: boolean }}
+ */
+export function driftLifecycleSummary(members) {
+  const list = Array.isArray(members) ? members : [];
+  const lifecycle = lifecycleOf(list[0] || {});
+  const uniform = list.every((m) => JSON.stringify(lifecycleOf(m)) === JSON.stringify(lifecycle));
+  return { lifecycle, uniform };
 }
 
 /**

@@ -15,12 +15,28 @@
  * (docs/design-tool.md "Yard bounds"; src/render/yardBounds.js), so every
  * edit that can move or place a plant reads bounds from `resolveYardBounds`,
  * not from a view's origin/extent the way clonePlantById does.
+ *
+ * A DRIFT ALWAYS HAS AT LEAST 2 MEMBERS (nl-o47.6's REVISED design,
+ * 2026-09-28; nl-o47.6.9): pruneUndersizedDrift/dropUndersizedDrifts below are
+ * the one place that rule is enforced, called from every edit here that can
+ * leave a drift with fewer than two members (removeDriftMember,
+ * removePlantFromDrift, removeDriftAwarePlant) so a UI handler never has to
+ * remember to.
  */
 import { resolveYardBounds } from '../render/yardBounds.js';
 import { createPlantFromSpecies } from '../data/plantParser.js';
-import { LIFECYCLE_KEYS, lifecycleOf } from '../data/plantLifecycle.js';
-import { slugifyDriftLabel } from '../data/driftId.js';
-import { addPlantFromCatalog } from './plantEdits.js';
+import { LIFECYCLE_KEYS, lifecycleOf, validateLifecycle, withLifecycle } from '../data/plantLifecycle.js';
+import { dropUndersizedDrifts, slugifyDriftLabel } from '../data/driftId.js';
+import { addPlantFromCatalog, clonePlantById, removePlantById } from './plantEdits.js';
+
+// Re-exported so a caller that mints/edits/prunes a drift can reach the
+// whole-list version of the ">= 2 members" rule through "the drift edits
+// module" (this file), the same way src/state/plantIds.js re-exports
+// isValidDriftId — dropUndersizedDrifts itself lives in src/data/driftId.js,
+// not here, so src/data/ modules (plantParser.js's buildPlantsFromCsv and
+// plantsFromPlacements) can also reach it without reaching into src/state/
+// (see driftId.js's own module comment on that layering rule).
+export { dropUndersizedDrifts };
 import { buildCloneId, buildDriftId, buildNewPlantId } from './plantIds.js';
 import {
   allDrifts,
@@ -50,6 +66,29 @@ export const MAX_DRIFT_COUNT = 50;
  */
 function existingDriftIds(plants) {
   return allDrifts(plants).map((drift) => drift.driftId);
+}
+
+/**
+ * Drop the driftId label from `driftId`'s own members if fewer than two of
+ * them remain (nl-o47.6.9's ">= 2 members, always" rule) — a no-op when the
+ * drift still has 2+ members, or none at all. dropUndersizedDrifts (imported
+ * from src/data/driftId.js, re-exported below) is the whole-list version of
+ * this same rule, for a caller that builds a fresh plant list rather than
+ * editing one drift at a time.
+ * @param {Array<object>} plants
+ * @param {string} driftId
+ * @returns {Array<object>}
+ */
+export function pruneUndersizedDrift(plants, driftId) {
+  if (!driftId) return plants;
+  const members = driftMembers(plants, driftId);
+  if (members.length !== 1) return plants;
+  return plants.map((plant) => {
+    if (plant.driftId !== driftId) return plant;
+    const next = { ...plant };
+    delete next.driftId;
+    return next;
+  });
 }
 
 /**
@@ -121,6 +160,56 @@ export function addDriftFromCatalog(state, speciesId, count, { at } = {}) {
 }
 
 /**
+ * "+" on a SINGLE plant (nl-o47.6.9, the REVISED design's "count converts"):
+ * turn it into a drift of 2, seamlessly, in one edit. Mints a driftId from
+ * the species (buildDriftId, same as addDriftFromCatalog), places the second
+ * member at the plant's own default spacing — driftGeometry.js's
+ * nextMemberPosition, given just this one plant as its "members" array, is
+ * exactly the 1-member fallback (the four cardinal directions) addDriftMember
+ * already reuses for a real 1-member drift, so this is not a second
+ * implementation of "where does the next member go" — and copies the
+ * plant's own lifecycle onto it (nl-o47.6.10: a drift's members share one
+ * planting status, so the very first member it ever gets already agrees).
+ * `plantSelection.selectDrift(driftId)` (src/app.js) is what then makes the
+ * new drift the selection, whole; this function only edits `state.plants`.
+ * @param {{ plants: object[], species: object[], project: object }} state
+ * @param {string} plantId
+ * @returns {{ driftId: string|null, members: object[], reason: string|null }}
+ */
+export function convertToDrift(state, plantId) {
+  const index = state.plants.findIndex((plant) => String(plant.id) === String(plantId));
+  if (index < 0) return { driftId: null, members: [], reason: 'no such plant' };
+  const original = state.plants[index];
+  if (original.driftId) return { driftId: null, members: [], reason: 'already in a drift' };
+  const speciesEntry = (state.species || []).find((entry) => entry.speciesId === original.speciesId);
+  if (!speciesEntry) return { driftId: null, members: [], reason: 'the plant\'s species is no longer in the catalog' };
+
+  const bounds = resolveYardBounds(state.project);
+  const spacing = driftSpacing([original], original.width);
+  const { position, reason } = nextMemberPosition([original], spacing, bounds);
+  if (!position) return { driftId: null, members: [], reason };
+
+  const driftId = buildDriftId(
+    existingDriftIds(state.plants),
+    speciesEntry.commonName || speciesEntry.botanicalName || original.speciesId
+  );
+  const second = withLifecycle(
+    createPlantFromSpecies(speciesEntry, {
+      id: buildNewPlantId(state.plants, speciesEntry.botanicalName || speciesEntry.speciesId),
+      x: position.x,
+      y: position.y,
+      driftId,
+    }),
+    lifecycleOf(original)
+  );
+  const plants = [...state.plants];
+  plants[index] = { ...original, driftId };
+  plants.push(second);
+  state.plants = plants;
+  return { driftId, members: [plants[index], second], reason: null };
+}
+
+/**
  * "+": add one member to a drift, on its edge in the biggest angular gap, at
  * the drift's own spacing (src/state/driftGeometry.js nextMemberPosition).
  * The new plant is built the same way Add-from-catalog builds one
@@ -159,7 +248,9 @@ export function addDriftMember(state, driftId) {
 /**
  * "-": remove the drift's member src/state/driftGeometry.js's memberToRemove
  * picks (the farthest planned member from the centroid; refuses if only
- * planted members remain).
+ * planted members remain). If exactly one member would remain, it drops the
+ * driftId label with it (nl-o47.6.9: a drift always has >= 2 members; 1 -> 2
+ * -> 1 hands the original plant back, unlabelled, as a plain single plant).
  * @param {{ plants: object[] }} state
  * @param {string} driftId
  * @returns {{ plant: object|null, reason: string|null }}
@@ -169,7 +260,8 @@ export function removeDriftMember(state, driftId) {
   if (!members.length) return { plant: null, reason: 'no such drift' };
   const { member, reason } = memberToRemove(members);
   if (!member) return { plant: null, reason };
-  state.plants = state.plants.filter((plant) => plant.id !== member.id);
+  const remaining = state.plants.filter((plant) => plant.id !== member.id);
+  state.plants = pruneUndersizedDrift(remaining, driftId);
   return { plant: member, reason: null };
 }
 
@@ -283,7 +375,10 @@ export function cloneDrift(state, driftId) {
 
 /**
  * Remove one plant from its drift (it stays in the yard, just no longer
- * labelled). A no-op, not an error, for a plant already in no drift.
+ * labelled). A no-op, not an error, for a plant already in no drift. If doing
+ * so would leave exactly one member behind, that member loses the driftId
+ * label too (nl-o47.6.9: a drift always has >= 2 members) — the whole drift
+ * ends, not just this one plant's membership in it.
  * @param {{ plants: object[] }} state
  * @param {string} plantId
  * @returns {{ plant: object|null, reason: string|null }}
@@ -294,12 +389,37 @@ export function removePlantFromDrift(state, plantId) {
   if (index < 0) return { plant: null, reason: 'no such plant' };
   const current = state.plants[index];
   if (!current.driftId) return { plant: current, reason: null };
+  const driftId = current.driftId;
   const next = { ...current };
   delete next.driftId;
   const plants = [...state.plants];
   plants[index] = next;
-  state.plants = plants;
-  return { plant: next, reason: null };
+  state.plants = pruneUndersizedDrift(plants, driftId);
+  return { plant: state.plants[index], reason: null };
+}
+
+/**
+ * Delete one plant outright — plantEdits.js's own removePlantById, which
+ * knows nothing about drifts — except that if the deleted plant belonged to a
+ * drift and doing so leaves exactly one member behind, that member loses the
+ * driftId label too (nl-o47.6.9: a drift always has >= 2 members). This is
+ * NOT "Remove from drift" (removePlantFromDrift above), which unlabels a
+ * plant without deleting it: it is what a drilled-in member's own Remove, the
+ * detail sheet's Remove, and the plant context menu's Remove all mean — they
+ * delete the one plant they were opened for, drift or no drift, and every one
+ * of them goes through this rather than removePlantById directly so the
+ * invariant holds no matter which of them a person used.
+ * @param {{ plants: object[] }} state
+ * @param {string} plantId
+ * @returns {boolean} whether a plant was actually removed
+ */
+export function removeDriftAwarePlant(state, plantId) {
+  const target = state.plants.find((plant) => String(plant.id) === String(plantId));
+  if (!target) return false;
+  const driftId = target.driftId || '';
+  if (!removePlantById(state, plantId)) return false;
+  if (driftId) state.plants = pruneUndersizedDrift(state.plants, driftId);
+  return true;
 }
 
 /**
