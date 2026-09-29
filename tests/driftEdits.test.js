@@ -5,6 +5,7 @@ import {
   addDriftFromCatalog,
   addDriftMember,
   cloneDrift,
+  cloneDriftAwarePlant,
   convertToDrift,
   dissolveDrift,
   dropUndersizedDrifts,
@@ -15,6 +16,7 @@ import {
   removeDriftMember,
   removePlantFromDrift,
   renameDrift,
+  setDriftLifecycle,
   spreadDrift,
 } from '../src/state/driftEdits.js';
 import { clumpPositions, driftSpacing, SPACING_FACTOR } from '../src/state/driftGeometry.js';
@@ -560,4 +562,107 @@ test('pruneUndersizedDrift is a no-op for a drift with 2+ members or none at all
 test('dropUndersizedDrifts is reachable through driftEdits.js\'s own re-export', () => {
   const plants = [plant(winecup, 'lone', 1, 1, { driftId: 'orphan' }), plant(horseherb, 'hh', 20, 20)];
   assert.equal(dropUndersizedDrifts(plants).find((p) => p.id === 'lone').driftId, undefined);
+});
+
+// --- one planting status per drift (nl-o47.6.10) --------------------------------
+
+test('addDriftMember copies the drift\'s own (uniform) lifecycle onto the new member', () => {
+  const plants = [
+    plant(winecup, 'a', 10, 10, { driftId: 'strip', status: 'planted', plantedOn: '2026-02-01', localEcotype: true }),
+    plant(winecup, 'b', 12, 10, { driftId: 'strip', status: 'planted', plantedOn: '2026-02-01', localEcotype: true }),
+  ];
+  const state = makeState(plants);
+  const { plant: added, reason } = addDriftMember(state, 'strip');
+  assert.equal(reason, null);
+  assert.equal(added.status, 'planted');
+  assert.equal(added.plantedOn, '2026-02-01');
+  assert.equal(added.localEcotype, true);
+});
+
+test('addDriftMember on a drift whose members differ copies the FIRST member\'s lifecycle', () => {
+  // baseDrift: wc-1 and wc-2 planned, wc-3 planted — members disagree.
+  const state = makeState(deepFreeze(baseDrift()));
+  const { plant: added } = addDriftMember(state, 'winecup-strip');
+  assert.equal(added.status ?? undefined, undefined, 'planned, matching wc-1, the first member');
+});
+
+test('cloneDriftAwarePlant copies the source member\'s lifecycle when the clone stays in a drift', () => {
+  const plants = [
+    plant(winecup, 'a', 10, 10, { driftId: 'strip', status: 'planted', plantedOn: '2026-02-01' }),
+    plant(winecup, 'b', 12, 10, { driftId: 'strip', status: 'planted', plantedOn: '2026-02-01' }),
+  ];
+  const state = makePlanState(plants);
+  const clone = cloneDriftAwarePlant(state, 'a');
+  assert.ok(clone);
+  assert.equal(clone.driftId, 'strip');
+  assert.equal(clone.status, 'planted');
+  assert.equal(clone.plantedOn, '2026-02-01');
+  assert.equal(state.plants.find((p) => p.id === clone.id), clone);
+});
+
+test('cloneDriftAwarePlant behaves exactly like clonePlantById for a plant in no drift: the clone starts planned', () => {
+  const plants = [plant(winecup, 'solo', 10, 10, { status: 'planted', plantedOn: '2026-02-01' })];
+  const state = makePlanState(plants);
+  const clone = cloneDriftAwarePlant(state, 'solo');
+  assert.ok(clone);
+  assert.equal(clone.driftId, undefined);
+  assert.equal(clone.status ?? undefined, undefined, 'a clone is not in the ground, drift or no drift');
+});
+
+test('cloneDriftAwarePlant on an unknown plant id', () => {
+  assert.equal(cloneDriftAwarePlant(makePlanState(deepFreeze(baseDrift())), 'nope'), null);
+});
+
+test('setDriftLifecycle writes every member as one edit, and no-ops once every member already matches', () => {
+  const plants = [
+    plant(winecup, 'a', 10, 10, { driftId: 'strip' }),
+    plant(winecup, 'b', 12, 10, { driftId: 'strip' }),
+    plant(horseherb, 'hh-1', 30, 30),
+  ];
+  const state = makeState(plants);
+  const { members, problems } = setDriftLifecycle(state, 'strip', {
+    status: 'planted',
+    plantedOn: '2026-04-01',
+    source: { name: 'Native Gardeners' },
+  });
+  assert.deepStrictEqual(problems, []);
+  assert.equal(members.length, 2);
+  members.forEach((m) => {
+    assert.equal(m.status, 'planted');
+    assert.equal(m.plantedOn, '2026-04-01');
+    assert.deepStrictEqual(m.source, { name: 'Native Gardeners' });
+  });
+  assert.equal(state.plants.find((p) => p.id === 'hh-1').status ?? undefined, undefined, 'unrelated plant untouched');
+
+  // Applying the SAME fields again is a no-op: nothing to write, nothing to commit.
+  const noop = setDriftLifecycle(state, 'strip', { status: 'planted', plantedOn: '2026-04-01' });
+  assert.deepStrictEqual(noop, { members: [], problems: [] });
+});
+
+test('setDriftLifecycle unifies a drift whose members currently differ', () => {
+  const state = makeState(deepFreeze(baseDrift())); // wc-1/wc-2 planned, wc-3 planted
+  const { members, problems } = setDriftLifecycle(state, 'winecup-strip', { status: 'planted' });
+  assert.deepStrictEqual(problems, []);
+  assert.equal(members.length, 3);
+  members.forEach((m) => assert.equal(m.status, 'planted'));
+});
+
+test('setDriftLifecycle refuses a future planting date, changing nothing', () => {
+  const plants = [
+    plant(winecup, 'a', 10, 10, { driftId: 'strip' }),
+    plant(winecup, 'b', 12, 10, { driftId: 'strip' }),
+  ];
+  const state = makeState(plants);
+  const { members, problems } = setDriftLifecycle(state, 'strip', { status: 'planted', plantedOn: '2999-01-01' });
+  assert.equal(members.length, 0);
+  assert.ok(problems.length > 0);
+  assert.match(problems.join(' '), /future/);
+  assert.deepStrictEqual(state.plants, plants, 'a refused edit changes nothing');
+});
+
+test('setDriftLifecycle on an unknown driftId', () => {
+  assert.deepStrictEqual(setDriftLifecycle(makeState(baseDrift()), 'nope', { status: 'planted' }), {
+    members: [],
+    problems: [],
+  });
 });
