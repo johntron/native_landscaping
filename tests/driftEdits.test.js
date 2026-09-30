@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseSpeciesCsv, createPlantFromSpecies } from '../src/data/plantParser.js';
 import {
+  acceptDriftSuggestion,
   addDriftFromCatalog,
   addDriftMember,
   cloneDrift,
@@ -658,6 +659,108 @@ test('setDriftLifecycle refuses a future planting date, changing nothing', () =>
   assert.ok(problems.length > 0);
   assert.match(problems.join(' '), /future/);
   assert.deepStrictEqual(state.plants, plants, 'a refused edit changes nothing');
+});
+
+// --- acceptDriftSuggestion (nl-o47.6.5) --------------------------------------
+
+test('acceptDriftSuggestion mints one driftId and writes it onto exactly the given members, as one state.plants replacement', () => {
+  const plants = deepFreeze([
+    plant(winecup, 'wc-1', 10, 10),
+    plant(winecup, 'wc-2', 11, 10),
+    plant(winecup, 'wc-3', 10, 11),
+    plant(horseherb, 'hh-1', 30, 30),
+  ]);
+  const state = makeState(plants);
+  const { driftId, members, reason } = acceptDriftSuggestion(state, ['wc-1', 'wc-2', 'wc-3']);
+  assert.equal(reason, null);
+  assert.ok(driftId);
+  assert.equal(members.length, 3);
+  assert.ok(members.every((m) => m.driftId === driftId));
+  assert.equal(state.plants.find((p) => p.id === 'hh-1').driftId ?? undefined, undefined, 'unrelated plant untouched');
+  assert.notEqual(state.plants, plants, 'a new array, not the frozen input');
+});
+
+test('acceptDriftSuggestion refuses fewer than MIN_SUGGESTION_CLUSTER_SIZE members, changing nothing', () => {
+  const plants = deepFreeze([plant(winecup, 'wc-1', 10, 10)]);
+  const state = makeState(plants);
+  const { driftId, members, reason } = acceptDriftSuggestion(state, ['wc-1']);
+  assert.equal(driftId, null);
+  assert.deepStrictEqual(members, []);
+  assert.match(reason, /at least/);
+  assert.deepStrictEqual(state.plants, plants);
+});
+
+test('acceptDriftSuggestion refuses when a named plant no longer exists, changing nothing', () => {
+  const plants = deepFreeze([plant(winecup, 'wc-1', 10, 10), plant(winecup, 'wc-2', 11, 10)]);
+  const state = makeState(plants);
+  const { driftId, reason } = acceptDriftSuggestion(state, ['wc-1', 'gone']);
+  assert.equal(driftId, null);
+  assert.match(reason, /no longer exist/);
+  assert.deepStrictEqual(state.plants, plants);
+});
+
+test('acceptDriftSuggestion refuses a member already in a drift, changing nothing', () => {
+  const plants = deepFreeze([
+    plant(winecup, 'wc-1', 10, 10, { driftId: 'front-edge' }),
+    plant(winecup, 'wc-2', 11, 10),
+  ]);
+  const state = makeState(plants);
+  const { driftId, reason } = acceptDriftSuggestion(state, ['wc-1', 'wc-2']);
+  assert.equal(driftId, null);
+  assert.match(reason, /already in a drift/);
+  assert.deepStrictEqual(state.plants, plants);
+});
+
+test('acceptDriftSuggestion with disagreeing lifecycles and no chosen lifecycle is refused, changing nothing', () => {
+  const plants = deepFreeze([
+    plant(winecup, 'wc-1', 10, 10, { status: 'planted', plantedOn: '2026-03-01' }),
+    plant(winecup, 'wc-2', 11, 10),
+  ]);
+  const state = makeState(plants);
+  const { driftId, reason } = acceptDriftSuggestion(state, ['wc-1', 'wc-2']);
+  assert.equal(driftId, null);
+  assert.match(reason, /planting status/);
+  assert.deepStrictEqual(state.plants, plants);
+});
+
+test('acceptDriftSuggestion applies a chosen lifecycle to every member in the same call', () => {
+  const plants = deepFreeze([
+    plant(winecup, 'wc-1', 10, 10, { status: 'planted', plantedOn: '2026-03-01' }),
+    plant(winecup, 'wc-2', 11, 10),
+  ]);
+  const state = makeState(plants);
+  const { driftId, members, reason } = acceptDriftSuggestion(state, ['wc-1', 'wc-2'], {
+    lifecycle: { status: 'planted', plantedOn: '2026-03-01' },
+  });
+  assert.equal(reason, null);
+  assert.ok(driftId);
+  members.forEach((m) => {
+    assert.equal(m.status, 'planted');
+    assert.equal(m.plantedOn, '2026-03-01');
+  });
+});
+
+test('acceptDriftSuggestion rolls the driftId assignment back if the chosen lifecycle is refused', () => {
+  const plants = deepFreeze([plant(winecup, 'wc-1', 10, 10), plant(winecup, 'wc-2', 11, 10)]);
+  const state = makeState(plants);
+  const { driftId, reason } = acceptDriftSuggestion(state, ['wc-1', 'wc-2'], {
+    lifecycle: { status: 'planted', plantedOn: '2999-01-01' },
+  });
+  assert.equal(driftId, null);
+  assert.match(reason, /future/);
+  assert.deepStrictEqual(state.plants, plants, 'no driftId left dangling on a refused lifecycle');
+});
+
+test('acceptDriftSuggestion needs no explicit lifecycle when members already agree', () => {
+  const plants = deepFreeze([
+    plant(winecup, 'wc-1', 10, 10, { status: 'planted', plantedOn: '2026-03-01' }),
+    plant(winecup, 'wc-2', 11, 10, { status: 'planted', plantedOn: '2026-03-01' }),
+  ]);
+  const state = makeState(plants);
+  const { driftId, members, reason } = acceptDriftSuggestion(state, ['wc-1', 'wc-2']);
+  assert.equal(reason, null);
+  assert.ok(driftId);
+  members.forEach((m) => assert.equal(m.plantedOn, '2026-03-01'));
 });
 
 test('setDriftLifecycle on an unknown driftId', () => {

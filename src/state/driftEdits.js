@@ -47,6 +47,7 @@ import {
   driftMembers,
   driftSpacing,
   memberToRemove,
+  MIN_SUGGESTION_CLUSTER_SIZE,
   nextMemberPosition,
   SPACING_FACTOR,
   spreadPositions,
@@ -517,6 +518,66 @@ export function removeDrift(state, driftId) {
  *   new lifecycle applied, or [] with the problems (empty when the drift is
  *   gone or nothing actually changed)
  */
+/**
+ * Accept a suggested drift (nl-o47.6.5, "suggest drifts from an existing
+ * yard"): mint one driftId (buildDriftId, the same rule addDriftFromCatalog
+ * and convertToDrift already use) and write it onto exactly `memberIds` — the
+ * REVIEWED, possibly person-adjusted membership, not necessarily
+ * suggestClusters' own raw cluster — as ONE state.plants replacement, so a
+ * caller's single commit is one history entry regardless of whether a
+ * lifecycle was also unified in the same call.
+ *
+ * "One planting status per drift" (nl-o47.6.10) is enforced here, not left to
+ * the caller: if the members disagree and no `lifecycle` choice is given, the
+ * accept is refused outright — Accept must never silently pick one. When
+ * `lifecycle` IS given (the person's own choice among the distinct ones
+ * found, src/state/driftSuggestions.js's summarizeSuggestionLifecycle), it is
+ * applied through setDriftLifecycle in the SAME call; a refused lifecycle
+ * (validateLifecycle catches a future-dated plantedOn an old import can
+ * carry) rolls the driftId assignment back too, rather than leaving a fresh
+ * drift with no valid shared lifecycle.
+ * @param {{ plants: object[], species: object[] }} state
+ * @param {Iterable<string>} memberIds
+ * @param {{ lifecycle?: { status?: string, plantedOn?: string, source?: object|null, localEcotype?: boolean } }} [options]
+ * @returns {{ driftId: string|null, members: object[], reason: string|null }}
+ */
+export function acceptDriftSuggestion(state, memberIds, { lifecycle } = {}) {
+  const ids = new Set(Array.from(memberIds ?? [], String));
+  if (ids.size < MIN_SUGGESTION_CLUSTER_SIZE) {
+    return { driftId: null, members: [], reason: `a drift needs at least ${MIN_SUGGESTION_CLUSTER_SIZE} plants` };
+  }
+  const members = state.plants.filter((plant) => ids.has(String(plant.id)));
+  if (members.length !== ids.size) {
+    return { driftId: null, members: [], reason: 'some of these plants no longer exist' };
+  }
+  if (members.some((plant) => plant.driftId)) {
+    return { driftId: null, members: [], reason: 'a plant here is already in a drift' };
+  }
+  const speciesId = members[0].speciesId;
+  if (!speciesId || !members.every((plant) => plant.speciesId === speciesId)) {
+    return { driftId: null, members: [], reason: 'a drift is one species' };
+  }
+  if (!lifecycle && !driftLifecycleSummary(members).uniform) {
+    return { driftId: null, members: [], reason: 'choose the planting status these plants share' };
+  }
+
+  const before = state.plants;
+  const speciesEntry = (state.species || []).find((entry) => entry.speciesId === speciesId);
+  const driftId = buildDriftId(
+    existingDriftIds(state.plants),
+    speciesEntry?.commonName || speciesEntry?.botanicalName || speciesId
+  );
+  state.plants = state.plants.map((plant) => (ids.has(String(plant.id)) ? { ...plant, driftId } : plant));
+  if (lifecycle) {
+    const { problems } = setDriftLifecycle(state, driftId, lifecycle);
+    if (problems.length) {
+      state.plants = before; // never leave a driftId assigned with no valid shared lifecycle
+      return { driftId: null, members: [], reason: problems.join(' ') };
+    }
+  }
+  return { driftId, members: driftMembers(state.plants, driftId), reason: null };
+}
+
 export function setDriftLifecycle(state, driftId, fields, options) {
   const members = driftMembers(state.plants, driftId);
   if (!members.length) return { members: [], problems: [] };
