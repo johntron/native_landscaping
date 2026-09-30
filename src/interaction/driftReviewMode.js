@@ -336,6 +336,7 @@ export function createDriftReviewMode({
       skipBtn.hidden = false;
       skipBtn.textContent = 'Skip'; // group mode (renderGroup) relabels this "Cancel"
     }
+    if (stopBtn) stopBtn.hidden = false;
     return renderAcceptGate(members);
   }
 
@@ -344,6 +345,7 @@ export function createDriftReviewMode({
     if (label) label.textContent = 'Reviewed every suggested drift.';
     if (acceptBtn) acceptBtn.hidden = true;
     if (skipBtn) skipBtn.hidden = true;
+    if (stopBtn) stopBtn.hidden = false;
     if (lifecycleGroup) lifecycleGroup.hidden = true;
   }
 
@@ -364,6 +366,9 @@ export function createDriftReviewMode({
       skipBtn.hidden = false;
       skipBtn.textContent = 'Cancel';
     }
+    // Cancel already leaves without writing; a Stop in More would be the
+    // same button twice.
+    if (stopBtn) stopBtn.hidden = true;
     return renderAcceptGate(members);
   }
 

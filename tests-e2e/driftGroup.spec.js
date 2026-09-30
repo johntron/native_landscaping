@@ -60,6 +60,8 @@ test('Make drift entry, a different-species tap ignored, shift-click toggles, Ca
   await expect(label).toHaveText('CI (1x)');
   await expect(acceptBtn).toBeDisabled();
   await expect(cancelBtn).toHaveText('Cancel');
+  // Cancel is the way out here; a Stop in More would be the same button twice.
+  await expect(page.locator('#driftReviewStopBtn')).toBeHidden();
   await expect(page.locator('#selectionBar')).toBeHidden(); // the ordinary selection is cleared throughout
 
   // A different-species tap does nothing (nl-o47.6.5's own "Adjust" rule),
