@@ -287,3 +287,49 @@ test('without labels on, no drift label or member label is drawn', () => {
 
   assert.equal(svg.querySelectorAll('text').length, 0);
 });
+
+// --- nl-o47.6.5: a drift suggestion under review -----------------------------
+
+test('a drift suggestion under review dims every plant outside it and draws a distinct dashed outline, no real drift outline', () => {
+  const doc = resetDocument();
+  const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  const plantStates = [singlePlantState('a', 5, 5), singlePlantState('b', 15, 5), singlePlantState('c', 25, 5)];
+
+  renderTopView(svg, plantStates, PLAN_VIEW, { suggestedMemberIds: new Set(['a', 'b']) });
+
+  const groupFor = (id) => svg.querySelectorAll('g[data-plant-id]').find((g) => g.getAttribute('data-plant-id') === id);
+  assert.equal(groupFor('a').getAttribute('data-dimmed'), null, 'a suggestion member is not dimmed');
+  assert.equal(groupFor('b').getAttribute('data-dimmed'), null, 'a suggestion member is not dimmed');
+  assert.equal(groupFor('c').getAttribute('data-dimmed'), 'true', 'everything outside the suggestion dims');
+
+  const suggested = svg.querySelectorAll('path[data-suggestion-outline="true"]');
+  assert.equal(suggested.length, 1);
+  assert.equal(suggested[0].getAttribute('class'), 'drift-outline drift-outline--suggested');
+  assert.equal(suggested[0].getAttribute('pointer-events'), 'none');
+  assert.equal(svg.querySelectorAll('path[data-drift-outline="true"]').length, 0, 'never the real-drift outline too');
+});
+
+test('an empty suggestion (nothing left to review) dims nothing and draws no outline', () => {
+  const doc = resetDocument();
+  const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  const plantStates = [singlePlantState('a', 5, 5)];
+
+  renderTopView(svg, plantStates, PLAN_VIEW, { suggestedMemberIds: new Set() });
+
+  assert.equal(svg.querySelectorAll('g[data-plant-id]')[0].getAttribute('data-dimmed'), null);
+  assert.equal(svg.querySelectorAll('path[data-suggestion-outline="true"]').length, 0);
+});
+
+test('a real selected drift takes priority over a stale suggestedMemberIds prop, drawing only the real outline', () => {
+  const doc = resetDocument();
+  const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  const plantStates = [driftMemberState('m1', 5, 5), driftMemberState('m2', 15, 5)];
+
+  renderTopView(svg, plantStates, PLAN_VIEW, {
+    selectedDriftId: 'front-edge',
+    suggestedMemberIds: new Set(['m1']),
+  });
+
+  assert.equal(svg.querySelectorAll('path[data-drift-outline="true"]').length, 1);
+  assert.equal(svg.querySelectorAll('path[data-suggestion-outline="true"]').length, 0);
+});

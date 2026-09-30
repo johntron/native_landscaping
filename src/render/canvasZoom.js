@@ -145,6 +145,35 @@ export function pinchUpdate(startState, startMid, startDist, currentMid, current
 }
 
 /**
+ * The {scale, tx, ty} that frames a content-space rectangle (`.view`'s own
+ * untransformed CSS px — the same "local" space `zoomAbout`'s anchor and
+ * `pinchUpdate`'s midpoint are expressed in) centered in its container, with
+ * `paddingPx` of margin held clear where the zoom allows it (nl-o47.6.5: the
+ * drift-suggestion review frames the whole suggestion this way on a phone,
+ * the way Fit frames the whole drawing). Falls back to the plain, letterbox-
+ * aware fit (`clampZoomState(FIT_STATE, bounds)`) for a degenerate rect (no
+ * width/height — an empty suggestion), rather than dividing by zero.
+ * @param {{x:number, y:number, width:number, height:number}} rect
+ * @param {ZoomBounds} bounds
+ * @param {number} [paddingPx]
+ */
+export function fitRectState(rect, bounds, paddingPx = 0) {
+  if (!rect || !(rect.width > 0) || !(rect.height > 0)) {
+    return clampZoomState(FIT_STATE, bounds);
+  }
+  const availW = Math.max(bounds.containerWidth - paddingPx * 2, 1);
+  const availH = Math.max(bounds.containerHeight - paddingPx * 2, 1);
+  const scale = clampScale(Math.min(availW / rect.width, availH / rect.height));
+  const cx = rect.x + rect.width / 2;
+  const cy = rect.y + rect.height / 2;
+  // screen = translate + scale * local; centering the container on (cx, cy)
+  // at `scale` means solving translate from the container's own midpoint.
+  const tx = bounds.containerWidth / 2 - scale * cx;
+  const ty = bounds.containerHeight / 2 - scale * cy;
+  return clampZoomState({ scale, tx, ty }, bounds);
+}
+
+/**
  * Whether `state` is close enough to `reference` that the Fit button has
  * nothing left to do (and can show as such rather than as a live toggle).
  * `reference` defaults to the raw `FIT_STATE`, right when the content

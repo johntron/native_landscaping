@@ -26,7 +26,7 @@
  * while the phone editor is open, so its border box IS the content box, with
  * no padding arithmetic to get right here).
  */
-import { FIT_STATE, clampZoomState, isAtFit, panBy, pinchUpdate } from '../render/canvasZoom.js';
+import { FIT_STATE, clampZoomState, fitRectState, isAtFit, panBy, pinchUpdate } from '../render/canvasZoom.js';
 
 function distance(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -233,5 +233,19 @@ export function createCanvasGesture({ getSelectionSize = () => 0, onChange = () 
     return state;
   }
 
-  return { attachTo, detach, reset, getState };
+  /**
+   * Frame a content-space rectangle (`.view`'s own untransformed CSS px —
+   * see canvasZoom.js's fitRectState) centered, with `paddingPx` of margin.
+   * nl-o47.6.5: the drift-suggestion review calls this (through
+   * src/interaction/phoneEditor.js's focusOnPlants) so the whole suggestion
+   * lands in view when review starts or moves on, without requiring a manual
+   * pinch first the way an ordinary drift selection does.
+   * @param {{x:number, y:number, width:number, height:number}} rect
+   * @param {number} [paddingPx]
+   */
+  function focusRect(rect, paddingPx) {
+    apply(fitRectState(rect, bounds(), paddingPx));
+  }
+
+  return { attachTo, detach, reset, getState, getBounds: bounds, focusRect };
 }

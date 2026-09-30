@@ -39,6 +39,7 @@ export function renderTopView(svg, plantStates, view, options = {}) {
     hoveredPlantId = '',
     selectedPlantIds = null,
     selectedDriftId = '',
+    suggestedMemberIds = null,
     features = [],
   } = options;
   clearSvg(svg);
@@ -59,6 +60,14 @@ export function renderTopView(svg, plantStates, view, options = {}) {
   const isolatedMemberIds = selectedDriftId
     ? new Set(driftMembers(plants, selectedDriftId).map((m) => String(m.id)))
     : null;
+  // A drift SUGGESTION under review (nl-o47.6.5) isolates the same way, but
+  // is never a real drift — no driftId exists yet, so its membership comes
+  // straight from the caller (src/interaction/driftReviewMode.js's own
+  // adjusted set) rather than from driftMembers. Mutually exclusive with the
+  // real-drift isolation above in practice (review clears the selection), so
+  // either one alone decides dimming here.
+  const reviewMemberIds = suggestedMemberIds && suggestedMemberIds.size ? suggestedMemberIds : null;
+  const dimmedOutsideIds = isolatedMemberIds || reviewMemberIds;
 
   // A plan has no depth to sort on, so features go underneath the plants in the
   // order they were authored — the authoring order IS the z-order.
@@ -77,7 +86,7 @@ export function renderTopView(svg, plantStates, view, options = {}) {
     const isTargeted = normalizedTargetId && String(plant.id) === normalizedTargetId;
     const isHovered = normalizedHoveredId && String(plant.id) === normalizedHoveredId;
     const isSelected = Boolean(selectedPlantIds && selectedPlantIds.has(String(plant.id)));
-    const isDimmed = Boolean(isolatedMemberIds && !isolatedMemberIds.has(String(plant.id)));
+    const isDimmed = Boolean(dimmedOutsideIds && !dimmedOutsideIds.has(String(plant.id)));
     const status = plantStatus(plant);
     const { x: cx, y: cy } = transform.planToViewBox(plant);
     const group = createSvgElement('g', {
@@ -223,6 +232,13 @@ export function renderTopView(svg, plantStates, view, options = {}) {
   climbWarnings.forEach((target) => appendClimbWarningRing(svg, target));
   if (isolatedMemberIds && isolatedMemberIds.size) {
     appendDriftOutline(svg, driftMembers(plants, selectedDriftId), transform);
+  } else if (reviewMemberIds) {
+    appendDriftOutline(
+      svg,
+      plants.filter((plant) => reviewMemberIds.has(String(plant.id))),
+      transform,
+      { suggested: true }
+    );
   }
   if (showLabels) {
     // Every drift but the selected/isolated one (which just drew its own
@@ -276,27 +292,33 @@ function appendDriftLabel(svg, drift, transform, dimmed) {
 }
 
 /**
- * A selected drift's outline (nl-o47.6.2): the padded hull
+ * A selected drift's outline (nl-o47.6.2), or a SUGGESTED one under review
+ * (nl-o47.6.5, `{ suggested: true }`): the padded hull
  * (src/state/driftGeometry.js driftOutlinePolygon — the Minkowski-sum
  * approximation that agrees with isPointInDriftOutline's own hit region),
  * mapped into viewBox space and smoothed the same way a plant's own wavy
  * canopy is (buildSmoothPath) so it reads as an organic zone rather than a
- * faceted polygon. Cyan/apparatus (`.plant-selection-ring`'s own token), not
- * life, and never drawn into an export (src/export/exportActions.js blanks
- * the drift context around every capture, same as the selection ring).
+ * faceted polygon. A real drift's outline is cyan/apparatus
+ * (`.plant-selection-ring`'s own token); a suggestion draws `.drift-outline--
+ * suggested` instead — a different token AND a finer dash cadence (styles.css)
+ * so it reads as a PROPOSAL, never mistaken for a drift that already exists.
+ * Neither ever reaches an export (src/export/exportActions.js blanks both the
+ * drift context and the review's own field around every capture).
+ * @param {Array<object>} members
+ * @param {object} transform
+ * @param {{ suggested?: boolean }} [options]
  */
-function appendDriftOutline(svg, members, transform) {
+function appendDriftOutline(svg, members, transform, { suggested = false } = {}) {
   const polygon = driftOutlinePolygon(members);
   if (polygon.length < 2) return;
   const points = polygon.map((point) => transform.planToViewBox(point));
-  svg.appendChild(
-    createSvgElement('path', {
-      d: buildSmoothPath(points),
-      class: 'drift-outline',
-      'pointer-events': 'none',
-      'data-drift-outline': 'true',
-    })
-  );
+  const attrs = {
+    d: buildSmoothPath(points),
+    class: suggested ? 'drift-outline drift-outline--suggested' : 'drift-outline',
+    'pointer-events': 'none',
+  };
+  attrs[suggested ? 'data-suggestion-outline' : 'data-drift-outline'] = 'true';
+  svg.appendChild(createSvgElement('path', attrs));
 }
 
 function renderFoliageDome(group, { cx, cy, radius, color, rng, outlinePoints, status }) {

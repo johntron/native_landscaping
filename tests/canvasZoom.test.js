@@ -7,6 +7,7 @@ import {
   clampScale,
   clampTranslateAxis,
   clampZoomState,
+  fitRectState,
   isAtFit,
   panBy,
   pinchUpdate,
@@ -130,4 +131,52 @@ test('isAtFit', () => {
   assert.equal(isAtFit(FIT_STATE), true);
   assert.equal(isAtFit({ scale: 1.01, tx: 0, ty: 0 }, 0.001), false);
   assert.equal(isAtFit({ scale: 2, tx: 0, ty: 0 }), false);
+});
+
+// --- fitRectState (nl-o47.6.5: framing a drift suggestion on a phone) -------
+
+test('fitRectState floors at MIN_ZOOM for a rect no smaller than the container on every axis', () => {
+  // A 400x500 rect in a 300x400 container would want to shrink (scale < 1)
+  // to "fit" by this rect's own math — MIN_ZOOM refuses that (nothing is
+  // gained shrinking the drawing past what its own clip box already shows).
+  // At scale 1 with content == container there is nowhere left to pan either
+  // (clampTranslateAxis centers a zero-slack axis at exactly 0), regardless
+  // of where the rect itself sits.
+  const rect = { x: 0, y: 0, width: 400, height: 500 };
+  const next = fitRectState(rect, BOUNDS);
+  assert.equal(next.scale, MIN_ZOOM);
+  assert.equal(next.tx, 0);
+  assert.equal(next.ty, 0);
+});
+
+test('fitRectState zooms in to fill the container on the binding axis, centered on the rect', () => {
+  // A narrow, tall rect: width binds first (300/20 = 15, floored by MAX_ZOOM
+  // at 6) -- height at that scale (100*6=600) exceeds the 400-tall container,
+  // so height actually binds: scale = 400/100 = 4.
+  const rect = { x: 140, y: 150, width: 20, height: 100 };
+  const next = fitRectState(rect, BOUNDS);
+  assert.equal(next.scale, 4);
+  const cx = 150;
+  const cy = 200;
+  assert.equal(next.tx, 150 - 4 * cx);
+  assert.equal(next.ty, 200 - 4 * cy);
+});
+
+test('fitRectState respects paddingPx as margin on every side', () => {
+  // A 100x100 rect in a 300x400 container with 50px padding: available space
+  // shrinks to 200x300, so scale = min(200/100, 300/100) = 2.
+  const rect = { x: 100, y: 150, width: 100, height: 100 };
+  const next = fitRectState(rect, BOUNDS, 50);
+  assert.equal(next.scale, 2);
+});
+
+test('fitRectState clamps its own result to the zoom/pan bounds like every other transform here', () => {
+  const rect = { x: 0, y: 0, width: 1, height: 1 }; // tiny: would want a huge zoom
+  const next = fitRectState(rect, BOUNDS);
+  assert.equal(next.scale, MAX_ZOOM);
+});
+
+test('fitRectState falls back to the plain letterbox-aware fit for a degenerate (empty) rect', () => {
+  assert.deepEqual(fitRectState(null, BOUNDS), clampZoomState(FIT_STATE, BOUNDS));
+  assert.deepEqual(fitRectState({ x: 0, y: 0, width: 0, height: 0 }, BOUNDS), clampZoomState(FIT_STATE, BOUNDS));
 });

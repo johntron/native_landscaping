@@ -245,3 +245,19 @@ test('a low-climber contained by its wall stays narrow, no flare', () => {
   const adjustedWidthPx = Number(shade.getAttribute('rx')) / 0.38;
   assert.ok(adjustedWidthPx < 40, `canopy stays narrow when the wall contains it (got ${adjustedWidthPx}px)`);
 });
+
+// --- nl-o47.6.5: a drift suggestion under review -----------------------------
+
+test('a drift suggestion under review dims every plant outside it in an elevation too', () => {
+  const doc = resetDocument();
+  const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  const plantStates = [westPlant, eastPlant].map((plant) => ({ plant, state: evergreenState }));
+
+  renderElevationView(svg, plantStates, elevationView('south'), {
+    suggestedMemberIds: new Set(['west-plant']),
+  });
+
+  const groupFor = (id) => svg.querySelectorAll('g[data-plant-id]').find((g) => g.getAttribute('data-plant-id') === id);
+  assert.equal(groupFor('west-plant').getAttribute('data-dimmed'), null);
+  assert.equal(groupFor('east-plant').getAttribute('data-dimmed'), 'true');
+});

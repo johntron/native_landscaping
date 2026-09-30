@@ -47,6 +47,7 @@ export function renderElevationView(svg, plantStates, view, options = {}) {
     hoveredPlantId = '',
     selectedPlantIds = null,
     selectedDriftId = '',
+    suggestedMemberIds = null,
     features = [],
   } = options;
   const normalizedHighlightKey = (highlightedSpeciesKey || '').toLowerCase();
@@ -63,6 +64,10 @@ export function renderElevationView(svg, plantStates, view, options = {}) {
   const isolatedMemberIds = selectedDriftId
     ? new Set(driftMembers(plantStates.map((ps) => ps.plant), selectedDriftId).map((m) => String(m.id)))
     : null;
+  // A drift suggestion under review (nl-o47.6.5) dims the same way, from the
+  // caller's own adjusted membership — see topView.js's identical comment.
+  const reviewMemberIds = suggestedMemberIds && suggestedMemberIds.size ? suggestedMemberIds : null;
+  const dimmedOutsideIds = isolatedMemberIds || reviewMemberIds;
   appendGroundFills(svg, view, viewBox, groundY);
   // Features and plants are sorted as ONE list: that interleave is what lets a
   // fence hide the shrub standing behind it.
@@ -83,7 +88,7 @@ export function renderElevationView(svg, plantStates, view, options = {}) {
     const isTargeted = normalizedTargetId && String(plant.id) === normalizedTargetId;
     const isHovered = normalizedHoveredId && String(plant.id) === normalizedHoveredId;
     const isSelected = Boolean(selectedPlantIds && selectedPlantIds.has(String(plant.id)));
-    const isDimmed = Boolean(isolatedMemberIds && !isolatedMemberIds.has(String(plant.id)));
+    const isDimmed = Boolean(dimmedOutsideIds && !dimmedOutsideIds.has(String(plant.id)));
     const status = plantStatus(plant);
     const group = createSvgElement('g', {
       'data-name': plant.commonName,
