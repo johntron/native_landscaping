@@ -10,7 +10,8 @@ no composite score** — a 0–100 roll-up would need weights nobody can justify
 each dimension reports for itself and the reader decides what to fix first. Nine
 dimensions ship: bloom succession (6), fall/winter bird food (7), vertical layers
 (11), keystone genera (4/10), larval hosts (5), site match (8), local fauna
-support (below), drifts (9), and mature-size spacing (12).
+support (below), massing (9; id `drifts`, titled Massing since a person can declare
+a drift, nl-o47.6.8), and mature-size spacing (12).
 
 ```
 ecology/host-genera.csv          one genus-keyed table, shared by rules 4, 5, 10

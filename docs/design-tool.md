@@ -904,15 +904,16 @@ export capture, every drift gets the single grouped label in every exported
 PNG regardless of what was selected on screen. A plant in no drift keeps its
 label exactly as before, in every view.
 
-The rules engine and the shopping list are unchanged by any of this: both
-count plants (`src/analysis/ecology.js`'s `dedupeBySpecies`,
-`src/export/hoaPacket.js`'s `summarizePlacedSpecies`, `src/sourcing/
-shoppingList.js`), grouped by species, never by `driftId`.
-`src/analysis/rules/drifts.js` ("Rule 9") is a different, older concept with
-the same name — it judges whether same-species plants read as a visual MASS
-by measuring proximity directly off `plant.width`/`plant.x`/`plant.y`, and
-predates `driftId` entirely; it does not read that field and needed no
-change here.
+The shopping list and exports are unchanged by any of this: they count
+plants (`src/export/hoaPacket.js`'s `summarizePlacedSpecies`,
+`src/sourcing/shoppingList.js`), grouped by species, never by `driftId`.
+The ecology check's rule 9 (`src/analysis/rules/drifts.js`, id `drifts`) is
+titled **Massing**: it grades whether same-species plants read as one mass by
+measuring spacing (`plant.width`/`x`/`y`), never the label, so a declared
+drift planted too loosely does not count as a mass there. Its result names
+such a drift ("Front edge is spread too thin to read as one mass") so the plan
+and the check cannot silently disagree (nl-o47.6.8, the owner's choice over
+counting declared drifts).
 
 Group-selected, suggested, and painted drifts (the other three making
 methods in nl-o47.6's "MAKING" list) are later beads under nl-o47.6.

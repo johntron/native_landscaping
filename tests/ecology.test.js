@@ -751,14 +751,49 @@ test('drifts: a clump of 5-9 is a real but modest drift (partial)', () => {
   // all 6 individuals merge into one clump via the union-find chain.
   const result = run(placeSpaced(entry, 6, 0.5), { species: [entry] })['drifts'];
   assert.equal(result.status, STATUSES.PARTIAL);
-  assert.match(result.summary, /thin side of the 5-10\+/);
+  assert.match(result.summary, /thin side of the 5-10\+ this check looks for/);
 });
 
 test('drifts: a clump of 10+ reads as a real drift (ok)', () => {
   const entry = widthSpecies('Aaa aaa', 2);
   const result = run(placeSpaced(entry, 10, 0.5), { species: [entry] })['drifts'];
   assert.equal(result.status, STATUSES.OK);
-  assert.match(result.findings[0], /Largest drift: Aaa aaa, 10 plants/);
+  assert.match(result.findings[0], /Largest mass: Aaa aaa, 10 plants/);
+});
+
+test('drifts: titled Massing, since a declared drift is a different thing (nl-o47.6.8)', () => {
+  const entry = widthSpecies('Aaa aaa', 2);
+  const result = run(placeSpaced(entry, 10, 0.5), { species: [entry] })['drifts'];
+  assert.equal(result.title, 'Massing');
+});
+
+test('drifts: a declared drift spread too thin to read as one mass is named, and grades as what is on the ground', () => {
+  const entry = widthSpecies('Aaa aaa', 2);
+  // Four plants 6 ft apart in one declared drift: past the 3 ft clump
+  // threshold for width 2, so no two of them clump.
+  const loose = placeSpaced(entry, 4, 6).map((plant) => ({ ...plant, driftId: 'front-edge' }));
+  const tight = placeSpaced(widthSpecies('Bbb bbb', 2), 2, 0.5, 100);
+  const result = run([...loose, ...tight], { species: [entry] })['drifts'];
+  assert.equal(result.status, STATUSES.GAP, 'the label does not make a loose drift a mass');
+  assert.match(result.summary, /Front edge is spread too thin to read as one mass\./);
+  assert.ok(result.findings.some((f) => /^Front edge \(4 plants\) is spread too thin to read as one mass: its largest clump is 1\./.test(f)));
+});
+
+test('drifts: a declared drift that reads as one mass is not called out', () => {
+  const entry = widthSpecies('Aaa aaa', 2);
+  const drift = placeSpaced(entry, 6, 0.5).map((plant) => ({ ...plant, driftId: 'aaa-aaa' }));
+  const result = run(drift, { species: [entry] })['drifts'];
+  assert.equal(result.status, STATUSES.PARTIAL);
+  assert.doesNotMatch(result.summary, /spread too thin/);
+  assert.ok(!result.findings.some((f) => /spread too thin/.test(f)));
+});
+
+test('drifts: several loose declared drifts are counted in the summary', () => {
+  const a = placeSpaced(widthSpecies('Aaa aaa', 2), 3, 6).map((plant) => ({ ...plant, driftId: 'first' }));
+  const b = placeSpaced(widthSpecies('Bbb bbb', 2), 3, 6, 100).map((plant) => ({ ...plant, driftId: 'second' }));
+  const c = placeSpaced(widthSpecies('Ccc ccc', 2), 3, 6, 200).map((plant) => ({ ...plant, driftId: 'third' }));
+  const result = run([...a, ...b, ...c], { species: [] })['drifts'];
+  assert.match(result.summary, /First is spread too thin to read as one mass, and so are 2 other drifts\./);
 });
 
 /** Two plants of given species/width, `distance` ft apart on the x axis. */
