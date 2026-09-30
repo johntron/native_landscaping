@@ -36,11 +36,11 @@ test('the banner, reviewing, adjusting, Accept in one undo step, Undo recomputin
   const label = page.locator('#driftReviewLabel');
   await banner.click();
   // Opening review is Winecup's own 4-member mass — the larger of the two,
-  // reviewed first (largest-first).
+  // reviewed first (largest-first). The bar reads like a real drift's own
+  // label (nl-o47.6.11): driftLabel's species initials plus count, then the
+  // position in the session.
   await expect(bar).toBeVisible();
-  await expect(label).toContainText('suggestion 1 of 2');
-  await expect(label).toContainText('Winecup');
-  await expect(label).toContainText('4 plant');
+  await expect(label).toHaveText('CI (4x) · 1 of 2');
   await expect(banner).toBeHidden(); // the banner hides itself while a review is open
 
   // Drawing: a dashed, distinctly-tokened outline (never the real-drift one),
@@ -54,20 +54,20 @@ test('the banner, reviewing, adjusting, Accept in one undo step, Undo recomputin
   // Adjust: a tap on an existing member toggles it OUT.
   const wa4 = await plantScreenPosition(page, 'topSvg', 'sug-wa4');
   await page.mouse.click(wa4.x, wa4.y);
-  await expect(label).toContainText('3 plant');
+  await expect(label).toHaveText('CI (3x) · 1 of 2');
   await expect(page.locator('#topSvg g[data-plant-id="sug-wa4"]')).toHaveAttribute('data-dimmed', 'true');
 
   // A tap on a same-species, undrifted plant elsewhere in the yard (well
   // outside the algorithmic cluster) toggles it IN.
   const loner = await plantScreenPosition(page, 'topSvg', 'sug-wa-loner');
   await page.mouse.click(loner.x, loner.y);
-  await expect(label).toContainText('4 plant');
+  await expect(label).toHaveText('CI (4x) · 1 of 2');
   await expect(page.locator('#topSvg g[data-plant-id="sug-wa-loner"]')).not.toHaveAttribute('data-dimmed', 'true');
 
   // A tap on a DIFFERENT species does nothing (no count/hint change).
   const hb1 = await plantScreenPosition(page, 'topSvg', 'sug-hb1');
   await page.mouse.click(hb1.x, hb1.y);
-  await expect(label).toContainText('4 plant');
+  await expect(label).toHaveText('CI (4x) · 1 of 2');
 
   const historyBefore = await readScratchHistory(project);
   await page.locator('#driftReviewAcceptBtn').click();
@@ -88,8 +88,7 @@ test('the banner, reviewing, adjusting, Accept in one undo step, Undo recomputin
 
   // Moved on: the horseherb mass is next (the winecup one just accepted no
   // longer exists to suggest).
-  await expect(label).toContainText('suggestion 2 of 2');
-  await expect(label).toContainText('Horseherb');
+  await expect(label).toHaveText('CV (3x) · 2 of 2');
 
   // Undo reverts the accept in one step, and review recomputes cleanly
   // rather than showing a suggestion built on stale (now-drifted) plants:
@@ -100,14 +99,12 @@ test('the banner, reviewing, adjusting, Accept in one undo step, Undo recomputin
     .poll(async () => driftIdOf(project, 'sug-wa1'))
     .toBe('');
   expect(await driftIdOf(project, 'sug-wa-loner')).toBe('');
-  await expect(label).toContainText('suggestion 1 of 2');
-  await expect(label).toContainText('Winecup');
-  await expect(label).toContainText('4 plant'); // the toggle-out/toggle-in adjustment did not survive the recompute
+  // the toggle-out/toggle-in adjustment did not survive the recompute
+  await expect(label).toHaveText('CI (4x) · 1 of 2');
 
   // Skip writes nothing and moves on.
   await page.locator('#driftReviewSkipBtn').click();
-  await expect(label).toContainText('suggestion 2 of 2');
-  await expect(label).toContainText('Horseherb');
+  await expect(label).toHaveText('CV (3x) · 2 of 2');
   expect(await driftIdOf(project, 'sug-wa1')).toBe('');
 
   await page.locator('#driftReviewAcceptBtn').click();
@@ -139,8 +136,7 @@ test('a suggestion whose members disagree in lifecycle requires a choice before 
 
   await page.locator('#suggestDriftsBtn').click();
   const label = page.locator('#driftReviewLabel');
-  await expect(label).toContainText('suggestion 1 of 1');
-  await expect(label).toContainText('3 plant');
+  await expect(label).toHaveText('CB (3x) · 1 of 1');
 
   const acceptBtn = page.locator('#driftReviewAcceptBtn');
   await expect(acceptBtn).toBeDisabled();

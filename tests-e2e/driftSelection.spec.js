@@ -8,7 +8,7 @@ import { openScratchProject, plantScreenPosition, readScratchLayoutWithDrift } f
  * of an already whole-selected drift starts the group drag immediately, and
  * only narrows to that one member if the press turns out to be a plain click
  * (no movement) — see src/interaction/dragController.js's own comment. These
- * specs write (drag/count/spread/rename all auto-save), so they run against
+ * specs write (drag/count/spread all auto-save), so they run against
  * the scratch server, one project per test, never the repo's own projects/.
  */
 
@@ -60,8 +60,9 @@ test.describe('drifts, by mouse (nl-o47.6.2)', () => {
     await page.mouse.click(target.x, target.y);
 
     await expect(page.locator('#selectionBar')).toBeVisible();
-    await expect(page.locator('#selectionDriftNameGroup')).toBeVisible();
-    await expect(page.locator('#selectionDriftCountLabel')).toContainText('4 plants');
+    // The whole-drift label is driftLabel (nl-o47.6.11): the species' plan
+    // initials plus its count — "CI (4x)" for four winecup.
+    await expect(page.locator('#selectionBarName')).toHaveText('CI (4x)');
     await expect(page.locator('#topSvg [data-drift-outline]')).toBeVisible();
     expect(await page.locator('#topSvg [data-selection-ring]').count()).toBe(4);
     await expect(page.locator('#topSvg g[data-plant-id="lone-plant"]')).toHaveAttribute('data-dimmed', 'true');
@@ -70,14 +71,12 @@ test.describe('drifts, by mouse (nl-o47.6.2)', () => {
     // selects the whole drift — no member is directly under the pointer.
     const gap = await midpointOf(page, 'drift-a', 'drift-d');
     await page.mouse.click(gap.x, gap.y);
-    await expect(page.locator('#selectionDriftNameGroup')).toBeVisible();
-    await expect(page.locator('#selectionDriftCountLabel')).toContainText('4 plants');
+    await expect(page.locator('#selectionBarName')).toHaveText('CI (4x)');
 
     // A further click (no movement) on a member of the already whole-
     // selected drift drills into it.
     await page.mouse.click(target.x, target.y);
-    await expect(page.locator('#selectionDriftNameGroup')).toBeHidden();
-    await expect(page.locator('#selectionBarName')).toBeVisible();
+    await expect(page.locator('#selectionBarName')).toHaveText('Winecup');
     await expect(page.locator('#selectionBackToDriftBtn')).toBeVisible();
     await expect(page.locator('#selectionRemoveFromDriftBtn')).toBeVisible();
 
@@ -99,7 +98,7 @@ test.describe('drifts, by mouse (nl-o47.6.2)', () => {
     await page.mouse.down();
     // A fresh press on an unselected drift's member selects it and starts
     // dragging the whole group in the SAME gesture — no separate click first.
-    await expect(page.locator('#selectionDriftNameGroup')).toBeVisible();
+    await expect(page.locator('#selectionBarName')).toHaveText('CI (4x)');
     await page.mouse.move(target.x + 40, target.y - 30, { steps: 8 });
     await page.mouse.up();
 
@@ -168,7 +167,7 @@ test.describe('drifts, by mouse (nl-o47.6.2)', () => {
     await page.locator('[data-mode="edit"]').click();
     const target = await plantScreenPosition(page, 'topSvg', 'drift-a');
     await page.mouse.click(target.x, target.y);
-    await expect(page.locator('#selectionDriftNameGroup')).toBeVisible();
+    await expect(page.locator('#selectionBarName')).toHaveText('CI (4x)');
 
     const distanceAB = async () => {
       const rows = await readScratchLayoutWithDrift('desktop-drift-spread');
@@ -184,51 +183,6 @@ test.describe('drifts, by mouse (nl-o47.6.2)', () => {
 
     await page.locator('#selectionSpreadTighterBtn').click();
     await expect.poll(distanceAB, { timeout: 5000 }).toBeLessThan(afterLooser - 0.1);
-  });
-
-  test('rename changes the label and survives a reload', async ({ page }) => {
-    await openScratchProject(page, 'desktop-drift-rename');
-    await page.locator('[data-mode="edit"]').click();
-    const target = await plantScreenPosition(page, 'topSvg', 'drift-a');
-    await page.mouse.click(target.x, target.y);
-    await expect(page.locator('#selectionDriftNameGroup')).toBeVisible();
-
-    await page.locator('#selectionDriftNameInput').fill('Front Edge');
-    await page.locator('#selectionDriftNameInput').press('Enter');
-
-    await expect(page.locator('#selectionDriftNameInput')).toHaveValue('Front edge');
-    await expect
-      .poll(
-        async () =>
-          (await readScratchLayoutWithDrift('desktop-drift-rename')).find((r) => r.id === 'drift-a')?.driftId,
-        { timeout: 5000 }
-      )
-      .toBe('front-edge');
-
-    await openScratchProject(page, 'desktop-drift-rename'); // a fresh load of the same yard
-    const reloaded = await plantScreenPosition(page, 'topSvg', 'drift-a');
-    await page.mouse.click(reloaded.x, reloaded.y);
-    await expect(page.locator('#selectionDriftNameInput')).toHaveValue('Front edge');
-  });
-
-  test('a refused rename (empty, or colliding with another drift) is refused inline, no window.prompt', async ({
-    page,
-  }) => {
-    await openScratchProject(page, 'desktop-drift-rename-refuse');
-    await page.locator('[data-mode="edit"]').click();
-    const target = await plantScreenPosition(page, 'topSvg', 'drift-a');
-    await page.mouse.click(target.x, target.y);
-
-    const input = page.locator('#selectionDriftNameInput');
-    await input.fill('');
-    await input.press('Enter');
-    await expect(page.locator('#selectionDriftNameStatus')).toBeVisible();
-    await expect(page.locator('#selectionDriftNameStatus')).not.toBeEmpty();
-
-    // The drift's own id (winecup-drift, humanized "Winecup drift") is the
-    // only other name to collide with in this seeded yard — collide with
-    // itself is defined as a no-op, not a refusal, so this only checks that
-    // an empty name specifically is refused and shown inline.
   });
 
   test('"+" on a single plant makes it a drift of 2; "-" brings back the same plant; both undo/redo (nl-o47.6.9)', async ({
@@ -247,7 +201,7 @@ test.describe('drifts, by mouse (nl-o47.6.2)', () => {
     await expect(page.locator('#topSvg [data-drift-outline]')).toBeHidden();
 
     await page.locator('#selectionDriftCountIncBtn').click();
-    await expect(page.locator('#selectionBarName')).toContainText('· 2 plants');
+    await expect(page.locator('#selectionBarName')).toHaveText('CI (2x)');
     await expect(page.locator('#topSvg [data-drift-outline]')).toBeVisible();
     await expect
       .poll(async () => (await readScratchLayoutWithDrift('desktop-drift-convert')).length, { timeout: 5000 })

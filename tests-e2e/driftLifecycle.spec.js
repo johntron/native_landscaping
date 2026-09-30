@@ -31,7 +31,7 @@ test('marking a drift planted from its own editor sets status on every member in
   await page.locator('[data-mode="edit"]').click();
   const target = await plantScreenPosition(page, 'topSvg', 'drift-a');
   await page.mouse.click(target.x, target.y); // whole drift selected
-  await expect(page.locator('#selectionBarName')).toContainText('4 plants');
+  await expect(page.locator('#selectionBarName')).toHaveText('CI (4x)');
 
   // "Planting" opens #detailSheet drift-scoped, without drilling the
   // selection into one member (src/ui/detailSheet.js's `drift` option).
@@ -40,7 +40,7 @@ test('marking a drift planted from its own editor sets status on every member in
   await expect(sheet).toBeVisible();
   const section = sheet.locator('.plant-lifecycle');
   await expect(section).toBeVisible();
-  await expect(section.locator('.plant-lifecycle__scope')).toContainText('Applies to all 4 plants in Winecup drift');
+  await expect(section.locator('.plant-lifecycle__scope')).toContainText('Applies to all 4 plants in CI (4x)');
   // Opened for the whole drift, the sheet shows no one member's position and
   // no Clone/Remove row, which would act on a member nobody picked.
   await expect(sheet.locator('#detailSheetLines')).not.toContainText('Position:');
@@ -60,7 +60,7 @@ test('marking a drift planted from its own editor sets status on every member in
   // reaches this one edit directly.
   await page.keyboard.press('Escape');
   await expect(sheet).toBeHidden();
-  await expect(page.locator('#selectionBarName')).toContainText('4 plants');
+  await expect(page.locator('#selectionBarName')).toHaveText('CI (4x)');
   await page.locator('#undoLayoutBtn').click();
   await expect
     .poll(async () => (await driftMembersFromHistory()).filter((m) => m.status === 'planted').length, {
@@ -88,7 +88,7 @@ test('marking a drift planted from its own editor sets status on every member in
   await page.mouse.click(target.x, target.y);
   await page.locator('#selectionDetailsBtn').click();
   await expect(sheet).toBeVisible();
-  await expect(section.locator('.plant-lifecycle__scope')).toContainText('Applies to all 5 plants in Winecup drift');
+  await expect(section.locator('.plant-lifecycle__scope')).toContainText('Applies to all 5 plants in CI (5x)');
   // A drilled-in member is one plant again: its position and Clone/Remove are back.
   await expect(sheet.locator('#detailSheetLines')).toContainText('Position:');
   await expect(sheet.locator('#detailSheetRemoveBtn')).toBeVisible();

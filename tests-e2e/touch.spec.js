@@ -559,13 +559,11 @@ test.describe('drifts (nl-o47.6.2)', () => {
     await tap(page, target);
 
     await expect(page.locator('#selectionBar')).toBeVisible();
-    // nl-o47.6.9's review: the primary row shows the drift's label + count as
-    // plain, ellipsized text; the rename field itself now lives behind "More"
-    // (it no longer fits the primary row once a lone plant's own count reads
-    // there too).
-    await expect(page.locator('#selectionBarName')).toBeVisible();
-    await expect(page.locator('#selectionBarName')).toContainText('4 plants');
-    await expect(page.locator('#selectionDriftNameGroup')).toBeHidden();
+    // nl-o47.6.11: the primary row shows the drift's label as plain,
+    // ellipsized text — driftLabel's species initials plus count, "CI (4x)"
+    // for four winecup. There is no rename field: a drift has no name of its
+    // own to give one.
+    await expect(page.locator('#selectionBarName')).toHaveText('CI (4x)');
     await expect(page.locator('#topSvg [data-drift-outline]')).toBeVisible();
     // Every member gets a selection ring; the unrelated plant is dimmed, not ringed.
     expect(await page.locator('#topSvg [data-selection-ring]').count()).toBe(4);
@@ -581,26 +579,23 @@ test.describe('drifts (nl-o47.6.2)', () => {
       rowHeight.height * 2 + 40 // + padding/gaps, not a third row's worth
     );
 
-    // The rename field (and its own count label) are behind "More".
+    // The count stepper is behind "More".
     await page.locator('#selectionBarMoreBtn').click();
-    await expect(page.locator('#selectionDriftNameGroup')).toBeVisible();
-    await expect(page.locator('#selectionDriftCountLabel')).toContainText('4 plants');
+    await expect(page.locator('#selectionDriftCountValue')).toHaveText('4');
     // Close it again before tapping the canvas — the open popover can cover
     // part of the drawing near the bottom of a phone screen.
     await page.locator('#selectionBarMoreBtn').click();
-    await expect(page.locator('#selectionDriftNameGroup')).toBeHidden();
 
     // A tap in the gap between members, well inside the outline (the drift's
     // own centroid — see midpointOf), also selects the whole drift.
     await tap(page, await midpointOf(page, 'drift-a', 'drift-d'));
-    await expect(page.locator('#selectionBarName')).toContainText('4 plants');
+    await expect(page.locator('#selectionBarName')).toHaveText('CI (4x)');
 
     // A further tap on a member drills into it: the plain single-plant bar
     // returns, with the two drift-member extras — behind "More" on a phone
     // (nl-o47.4).
     await tap(page, target);
-    await expect(page.locator('#selectionDriftNameGroup')).toBeHidden();
-    await expect(page.locator('#selectionBarName')).toBeVisible();
+    await expect(page.locator('#selectionBarName')).toHaveText('Winecup');
     await page.locator('#selectionBarMoreBtn').click();
     await expect(page.locator('#selectionBackToDriftBtn')).toBeVisible();
     await expect(page.locator('#selectionRemoveFromDriftBtn')).toBeVisible();
@@ -618,7 +613,7 @@ test.describe('drifts (nl-o47.6.2)', () => {
     await page.locator('[data-mode="edit"]').click();
 
     await tap(page, await driftMemberScreen(page, 'drift-a'));
-    await expect(page.locator('#selectionBarName')).toContainText('4 plants');
+    await expect(page.locator('#selectionBarName')).toHaveText('CI (4x)');
 
     const away = await emptySpotIn(page, 'topSvg');
     await touchGesture(page, { x: away.x, y: away.y, dx: 40, dy: -30 });
@@ -696,7 +691,7 @@ test.describe('drifts (nl-o47.6.2)', () => {
     await openScratchProject(page, 'touch-drift-spread');
     await page.locator('[data-mode="edit"]').click();
     await tap(page, await driftMemberScreen(page, 'drift-a'));
-    await expect(page.locator('#selectionBarName')).toContainText('4 plants');
+    await expect(page.locator('#selectionBarName')).toHaveText('CI (4x)');
     // Spread sits behind "More" on a phone (nl-o47.4).
     await page.locator('#selectionBarMoreBtn').click();
 
@@ -716,33 +711,6 @@ test.describe('drifts (nl-o47.6.2)', () => {
     await expect.poll(distanceAB, { timeout: 5000 }).toBeLessThan(afterLooser - 0.1);
   });
 
-  test('rename changes the label and survives a reload', async ({ page }) => {
-    await openScratchProject(page, 'touch-drift-rename');
-    await page.locator('[data-mode="edit"]').click();
-    await tap(page, await driftMemberScreen(page, 'drift-a'));
-    await expect(page.locator('#selectionBarName')).toContainText('4 plants');
-    // The rename field sits behind "More" on a phone (nl-o47.6.9's review).
-    await page.locator('#selectionBarMoreBtn').click();
-    await expect(page.locator('#selectionDriftNameGroup')).toBeVisible();
-
-    await page.locator('#selectionDriftNameInput').fill('Front Edge');
-    await page.locator('#selectionDriftNameInput').press('Enter');
-
-    await expect(page.locator('#selectionDriftNameInput')).toHaveValue('Front edge');
-    await expect(page.locator('#selectionBarName')).toContainText('Front edge');
-    await expect
-      .poll(
-        async () => (await readScratchLayoutWithDrift('touch-drift-rename')).find((r) => r.id === 'drift-a')?.driftId,
-        { timeout: 5000 }
-      )
-      .toBe('front-edge');
-
-    await openScratchProject(page, 'touch-drift-rename'); // a fresh load of the same yard
-    await tap(page, await driftMemberScreen(page, 'drift-a'));
-    await page.locator('#selectionBarMoreBtn').click();
-    await expect(page.locator('#selectionDriftNameInput')).toHaveValue('Front edge');
-  });
-
   test('"+" on a single plant makes it a drift of 2; "-" brings back the same plant (nl-o47.6.9)', async ({ page }) => {
     await openScratchProject(page, 'touch-drift-convert');
     await page.locator('[data-mode="edit"]').click();
@@ -758,7 +726,7 @@ test.describe('drifts (nl-o47.6.2)', () => {
     await expect(page.locator('#selectionDriftCountDecBtn')).toBeDisabled();
 
     await page.locator('#selectionDriftCountIncBtn').click();
-    await expect(page.locator('#selectionBarName')).toContainText('· 2 plants');
+    await expect(page.locator('#selectionBarName')).toHaveText('CI (2x)');
     await expect(page.locator('#topSvg [data-drift-outline]')).toBeVisible();
     await expect
       .poll(async () => (await readScratchLayoutWithDrift('touch-drift-convert')).length, { timeout: 5000 })
@@ -796,7 +764,7 @@ test.describe('drifts (nl-o47.6.2)', () => {
     await openScratchProject(page, project);
     await page.locator('[data-mode="edit"]').click();
     await tap(page, await driftMemberScreen(page, 'drift-a'));
-    await expect(page.locator('#selectionBarName')).toContainText('4 plants');
+    await expect(page.locator('#selectionBarName')).toHaveText('CI (4x)');
 
     // "Planting" sits behind "More", like every other whole-drift-only control.
     await page.locator('#selectionBarMoreBtn').click();
@@ -806,7 +774,7 @@ test.describe('drifts (nl-o47.6.2)', () => {
     await expect(sheet).toBeVisible();
     const section = sheet.locator('.plant-lifecycle');
     await expect(section.locator('.plant-lifecycle__scope')).toContainText(
-      'Applies to all 4 plants in Winecup drift'
+      'Applies to all 4 plants in CI (4x)'
     );
 
     await section.locator('[data-lifecycle-status="planted"]').click();
@@ -821,7 +789,7 @@ test.describe('drifts (nl-o47.6.2)', () => {
     // reachable straight from the primary row, reverts every member at once.
     await page.keyboard.press('Escape');
     await expect(sheet).toBeHidden();
-    await expect(page.locator('#selectionBarName')).toContainText('4 plants');
+    await expect(page.locator('#selectionBarName')).toHaveText('CI (4x)');
     await page.locator('#selectionUndoBtn').click();
     await expect
       .poll(async () => (await driftMembersFromHistory()).filter((m) => m.status === 'planted').length, {
@@ -854,7 +822,7 @@ test.describe('species table drift entries, by touch (nl-o47.6.7)', () => {
     await page
       .locator('#speciesTable button.species-table__drift-chip[data-drift-id="winecup-drift"]')
       .tap();
-    await expect(page.locator('#selectionBarName')).toContainText('4 plants');
+    await expect(page.locator('#selectionBarName')).toHaveText('CI (4x)');
     // Selecting the drift also closes the sheet, so the canvas underneath —
     // where the selection actually shows — is what the person sees next.
     await expect(page.locator('#plantsSheet')).toBeHidden();
@@ -894,9 +862,9 @@ test.describe('suggesting drifts, by touch (nl-o47.6.5)', () => {
     // the suggestion's own outline shows, is what the person sees next.
     await expect(page.locator('#plantsSheet')).toBeHidden();
     await expect(bar).toBeVisible();
-    await expect(label).toContainText('suggestion 1 of 2');
-    await expect(label).toContainText('Winecup');
-    await expect(label).toContainText('4 plant');
+    // nl-o47.6.11: the review bar reads like a real drift's own label —
+    // driftLabel's species initials plus count — then the position.
+    await expect(label).toHaveText('CI (4x) · 1 of 2');
     // Skip and Accept are the two answers to every suggestion: both sit on
     // the primary row beside More, on one line, without opening More.
     const rowTops = await Promise.all(
@@ -915,7 +883,7 @@ test.describe('suggesting drifts, by touch (nl-o47.6.5)', () => {
     // (src/interaction/dragController.js's review branch).
     const wa4 = await plantScreenPosition(page, 'topSvg', 'sug-wa4');
     await tap(page, wa4);
-    await expect(label).toContainText('3 plant');
+    await expect(label).toHaveText('CI (3x) · 1 of 2');
 
     const historyBefore = await readScratchHistory(project);
     await page.locator('#driftReviewAcceptBtn').tap();
@@ -929,8 +897,7 @@ test.describe('suggesting drifts, by touch (nl-o47.6.5)', () => {
     expect(await driftIdOf(project, 'sug-wa4')).toBe('');
     const historyAfter = await readScratchHistory(project);
     expect(historyAfter.entries.length - historyBefore.entries.length).toBe(1);
-    await expect(label).toContainText('suggestion 2 of 2');
-    await expect(label).toContainText('Horseherb');
+    await expect(label).toHaveText('CV (3x) · 2 of 2');
 
     // The real Undo sits in the idle bar, hidden while reviewing; the review
     // bar's own mirror lives in "More".
@@ -940,14 +907,13 @@ test.describe('suggesting drifts, by touch (nl-o47.6.5)', () => {
     await page.locator('#driftReviewUndoBtn').tap();
     await expect.poll(async () => driftIdOf(project, 'sug-wa1')).toBe('');
     // Recomputed cleanly: the very same winecup mass is current again.
-    await expect(label).toContainText('suggestion 1 of 2');
-    await expect(label).toContainText('Winecup');
+    await expect(label).toHaveText('CI (4x) · 1 of 2');
 
     // Skip writes nothing and moves on ("More" closed itself on the Undo's
     // own recompute — a genuinely different suggestion — so it needs reopening).
     await page.locator('#driftReviewMoreBtn').tap();
     await page.locator('#driftReviewSkipBtn').tap();
-    await expect(label).toContainText('Horseherb');
+    await expect(label).toHaveText('CV (3x) · 2 of 2');
     expect(await driftIdOf(project, 'sug-wa1')).toBe('');
 
     await page.locator('#driftReviewAcceptBtn').tap();
@@ -1168,7 +1134,7 @@ test.describe('the phone editor (nl-o47.4)', () => {
     );
 
     await tap(page, target);
-    await expect(page.locator('#selectionBarName')).toContainText('4 plants');
+    await expect(page.locator('#selectionBarName')).toHaveText('CI (4x)');
     await expect(page.locator('#topSvg [data-drift-outline]')).toBeVisible();
 
     // Drag from elsewhere on screen — since nl-o47.2, a drag with a

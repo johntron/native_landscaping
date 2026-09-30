@@ -68,19 +68,16 @@ export const SCRATCH_PROJECTS = [
   // (see below), a 4-member winecup drift with a wide gap between members so a
   // "between members" tap/click cannot also land within any one member's own
   // hit radius, plus one unrelated plant far away. One project per test that
-  // WRITES (drag/count/spread/rename save through POST /api/layout); the
+  // WRITES (drag/count/spread save through POST /api/layout); the
   // read-only selection assertions share their own 'select' project.
   'touch-drift-select',
   'touch-drift-drag',
   'touch-drift-count',
   'touch-drift-spread',
-  'touch-drift-rename',
   'desktop-drift-select',
   'desktop-drift-drag',
   'desktop-drift-count',
   'desktop-drift-spread',
-  'desktop-drift-rename',
-  'desktop-drift-rename-refuse',
   // A single lone plant (SINGLE_PLANT_LAYOUT_CSV, below): "+" on it makes a
   // drift of 2, "-" brings it back (nl-o47.6.9). One project per test that
   // writes.
@@ -159,13 +156,10 @@ const DRIFT_PROJECTS = [
   'touch-drift-drag',
   'touch-drift-count',
   'touch-drift-spread',
-  'touch-drift-rename',
   'desktop-drift-select',
   'desktop-drift-drag',
   'desktop-drift-count',
   'desktop-drift-spread',
-  'desktop-drift-rename',
-  'desktop-drift-rename-refuse',
   'touch-editor-zoom-drift',
   'desktop-drift-lifecycle',
   'touch-drift-lifecycle',

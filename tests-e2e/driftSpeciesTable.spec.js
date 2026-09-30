@@ -30,8 +30,11 @@ test.describe('species table drift entries (nl-o47.6.7)', () => {
     const summary = winecupRow(page).locator('.species-table__drifts-summary');
     await expect(summary).toHaveText(/2 drifts, 8 plants/);
 
-    await expect(driftChip(page, 'winecup-drift')).toHaveText('Winecup drift · 4 plants');
-    await expect(driftChip(page, 'winecup-2')).toHaveText('Winecup 2 · 3 plants');
+    // nl-o47.6.11: a drift's chip text is driftLabel — species initials plus
+    // count — never its (now invisible) driftId; two drifts of one species
+    // read alike here except for their differing counts.
+    await expect(driftChip(page, 'winecup-drift')).toHaveText('CI (4x)');
+    await expect(driftChip(page, 'winecup-2')).toHaveText('CI (3x)');
     await expect(winecupRow(page).locator('.species-table__drift-single')).toHaveText('1 single');
 
     // horseherb has one plant and no drift at all: nothing new to show.
@@ -46,8 +49,7 @@ test.describe('species table drift entries (nl-o47.6.7)', () => {
 
     await driftChip(page, 'winecup-drift').click();
 
-    await expect(page.locator('#selectionDriftNameGroup')).toBeVisible();
-    await expect(page.locator('#selectionDriftCountLabel')).toContainText('4 plants');
+    await expect(page.locator('#selectionBarName')).toHaveText('CI (4x)');
     await expect(page.locator('#topSvg [data-drift-outline]')).toBeVisible();
     expect(await page.locator('#topSvg [data-selection-ring]').count()).toBe(4);
   });
@@ -84,8 +86,8 @@ test.describe('the plan’s single grouped drift label (nl-o47.6.7)', () => {
   }) => {
     await openScratchProject(page, 'desktop-drift-species');
 
-    await expect(page.locator('#topSvg text[data-drift-label="winecup-drift"]')).toHaveText('Winecup drift ×4');
-    await expect(page.locator('#topSvg text[data-drift-label="winecup-2"]')).toHaveText('Winecup 2 ×3');
+    await expect(page.locator('#topSvg text[data-drift-label="winecup-drift"]')).toHaveText('CI (4x)');
+    await expect(page.locator('#topSvg text[data-drift-label="winecup-2"]')).toHaveText('CI (3x)');
 
     // No member of either drift draws a label of its own.
     for (const id of ['wa', 'wb', 'wc', 'wd', 'wx', 'wy', 'wz']) {
@@ -103,14 +105,14 @@ test.describe('the plan’s single grouped drift label (nl-o47.6.7)', () => {
     await page.locator('[data-mode="edit"]').click();
 
     await driftChip(page, 'winecup-drift').click();
-    await expect(page.locator('#selectionDriftNameGroup')).toBeVisible();
+    await expect(page.locator('#selectionBarName')).toHaveText('CI (4x)');
 
     await expect(page.locator('#topSvg text[data-drift-label="winecup-drift"]')).toHaveCount(0);
     for (const id of ['wa', 'wb', 'wc', 'wd']) {
       await expect(page.locator(`#topSvg g[data-plant-id="${id}"] text`)).toHaveCount(1);
     }
     // The OTHER drift is untouched: still one grouped label, no member labels.
-    await expect(page.locator('#topSvg text[data-drift-label="winecup-2"]')).toHaveText('Winecup 2 ×3');
+    await expect(page.locator('#topSvg text[data-drift-label="winecup-2"]')).toHaveText('CI (3x)');
     for (const id of ['wx', 'wy', 'wz']) {
       await expect(page.locator(`#topSvg g[data-plant-id="${id}"] text`)).toHaveCount(0);
     }

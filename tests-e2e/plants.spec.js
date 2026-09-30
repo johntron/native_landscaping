@@ -299,12 +299,11 @@ test.describe('adding and removing plants', () => {
     // Every new member is selected: one ring each (nl-o47.2). Selecting
     // exactly one drift's members is itself a whole-drift selection
     // (nl-o47.6.2, src/state/driftSelection.js driftForExactSelection), so
-    // the bar shows the drift's own name+count group, not the plain
-    // selectionBarName label.
+    // the bar shows the drift's own label (driftLabel, nl-o47.6.11: the
+    // species' plan initials plus its count, e.g. "CI (5x)").
     await expect(page.locator('#topSvg circle[data-selection-ring]')).toHaveCount(5);
     await expect(page.locator('#selectionBar')).toBeVisible();
-    await expect(page.locator('#selectionDriftNameGroup')).toBeVisible();
-    await expect(page.locator('#selectionDriftCountLabel')).toHaveText(/5/);
+    await expect(page.locator('#selectionBarName')).toHaveText(/\(5x\)/);
 
     // One history entry for the whole drift, not five.
     await expect
