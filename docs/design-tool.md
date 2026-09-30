@@ -1022,9 +1022,12 @@ skips each one.
 - **Adjust**: while reviewing, a tap on a same-species plant not already in
   another drift toggles it in or out of the suggestion
   (`driftSuggestions.js`'s `toggleSuggestionMember`); a different-species tap,
-  or one on a plant already in some other drift, does nothing. A suggestion
-  may never drop below `MIN_SUGGESTION_CLUSTER_SIZE` members — the bar
-  refuses the toggle with a reason instead. `src/interaction/dragController.js`'s
+  or one on a plant already in some other drift, does nothing — SUGGESTION
+  mode only; a hand-made group (nl-o47.6.4, below) deliberately allows the
+  second case, since pulling in a plant from another drift is the whole point
+  of picking members by hand. A suggestion may never drop below
+  `MIN_SUGGESTION_CLUSTER_SIZE` members — the bar refuses the toggle with a
+  reason instead. `src/interaction/dragController.js`'s
   plan controller (mouse and touch alike) grows an `isReviewActive`/
   `onReviewTap` early branch for this: the nearest hit under a tap/click
   toggles, bypassing selection, drift isolation, and dragging entirely. Every
@@ -1058,8 +1061,77 @@ skips each one.
   (nl-o47.6.11: "CV (3x)"). There is no rename step: a drift has no name of
   its own to give one.
 
-Group-selected and painted drifts (the other two making methods in
-nl-o47.6's "MAKING" list) are later beads under nl-o47.6.
+**Making a drift by hand** (nl-o47.6.4, making method 2, "group selected
+plants"): a single selected plant that is NOT already in a drift gets "Make
+drift" in its selection bar (`design.html`'s `.selection-bar__plain-actions`,
+alongside Details/Clone/Remove — behind "More" on a phone, inline on desktop;
+`src/ui/selectionBar.js`'s `plainSingleMode` decides when it shows). It opens
+the exact SAME review UI a suggestion does — `src/interaction/
+driftReviewMode.js` gains a second, "group" mode on the one instance both
+share, rather than a parallel module, so every guard already keyed off
+`isActive()`/`handleTap()` (`src/app.js`'s `isDriftReviewActive`, every drag
+controller's `isReviewActive`/`onReviewTap`, the phone editor's idle-bar
+guard, the document click-away guard) keeps working unchanged. `mode`
+(`'suggestion' | 'group'`) is the only new piece of state kept there.
+
+- **Seeding**: `startGroup(plantId)` seeds the proposal from
+  `src/state/driftGroup.js`'s `seedGroupProposal` — one plant, alone (`null`,
+  defensively, for anything "Make drift" should never have been offered for)
+  — and enters review exactly like `start()` does: the ordinary selection is
+  cleared (the two never coexist), the elevation controllers lock, the phone
+  editor lands on the plan. Unlike a suggestion, there is no algorithmic
+  baseline and no queue: the bar's label drops the "· N of M" position
+  suffix, and Accept is simply disabled below `MIN_SUGGESTION_CLUSTER_SIZE`
+  members rather than the toggle itself being refused below a floor (a
+  suggestion never starts below that floor; a hand-made proposal always
+  starts at one).
+- **Adjust**: the SAME tap-to-toggle a suggestion review uses
+  (`src/interaction/dragController.js`'s `isReviewActive`/`onReviewTap`
+  branch, so shift-click toggles membership too on desktop — that branch
+  never looks at modifier keys, a plain click already toggles during review,
+  and no marquee is needed), through `driftGroup.js`'s `toggleGroupMember`:
+  a different-species tap is a silent no-op, with a reason the bar shows once
+  (below). The one place this differs from a suggestion's own
+  `toggleSuggestionMember`: a same-species plant that already belongs to
+  ANOTHER real drift is allowed IN, not refused — it is about to move, which
+  is the entire point of picking members by hand rather than accepting an
+  algorithmic cluster of untouched plants.
+- **The bar** reuses `#driftReviewBar` down to the DOM: the label
+  (`describeSuggestion`, the same one place every drift's name is composed)
+  with no position suffix, Accept, and the Skip button relabelled "Cancel" in
+  this mode (same slot, same "leave without writing" meaning `stop()` already
+  has) together on the primary row — "More" still holds Undo/Redo/Stop and
+  the lifecycle choice when members disagree, unchanged from a suggestion's
+  own bar. A second status line, `#driftReviewMovingHint`, is a DIRECT CHILD
+  of the bar rather than tucked inside `#driftReviewMore`, so it is visible
+  without opening More on a phone (unlike `#driftReviewHint`'s one-shot
+  messages, which a suggestion review has always used exactly as before): a
+  refused toggle's reason when there is one, otherwise the standing "N from
+  `<drift label>`" for whatever in the current proposal already belongs to
+  another drift (`driftGroup.js`'s `summarizeGroupSources`/
+  `describeGroupSources`, reading that OTHER drift's own current full
+  membership, e.g. "2 from CI (4x)") — so Accept is never a surprise — or,
+  below the floor, a nudge toward what to tap next.
+- **Accept**: `acceptGroup()` commits through `src/state/driftEdits.js`'s
+  `acceptDriftGroup` — the same one-history-entry shape `acceptDriftSuggestion`
+  already has (both now share one private core,
+  `acceptDriftMembership(state, memberIds, { lifecycle, allowMove })`), except
+  `allowMove: true`: a member already carrying a driftId is written over
+  rather than refused, and a `normalizeDrifts` pass afterward cleans up
+  whatever the move leaves behind at the OLD drift (a lone leftover drops its
+  label, `src/data/driftId.js`) — the only case that can ever leave another
+  drift undersized, which is why `acceptDriftSuggestion` alone has never
+  needed that pass. Unlike a suggestion's Accept, which moves on to whatever
+  `pendingSuggestions` returns next, accepting a hand-made group LEAVES
+  review (there is no queue to move on to) and selects the new drift whole,
+  through a new `selectDrift` dependency `src/app.js` wires to
+  `plantSelection.selectDrift` — the same "just made it, now it's selected"
+  pattern every other drift-making action there already follows.
+- **Cancel** (the relabelled Skip button) calls the exact same `stop()` a
+  suggestion review's own Stop does: leaves review, writes nothing.
+
+Painting a drift along a stroke (the other making method in nl-o47.6's
+"MAKING" list) is a later bead under nl-o47.6.
 
 ### Species are keyed by id, not by name (nl-3s5.18)
 
