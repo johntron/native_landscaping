@@ -215,10 +215,10 @@ export function createSelectionBar({
   /**
    * The count stepper for a single PLAIN plant (nl-o47.6.9): always reads 1,
    * "-" always disabled (Remove already deletes a lone plant), "+" disabled
-   * only when src/state/driftEdits.js's convertToDrift would itself refuse —
-   * the SAME check ("is there room for a second member?") it runs, computed
-   * here from the one plant rather than duplicating convertToDrift's whole
-   * edit just to read its answer.
+   * only when src/state/driftEdits.js's addDriftMember (its plantId path,
+   * nl-o47.6.12) would itself refuse — the SAME check ("is there room for a
+   * second member?") it runs, computed here from the one plant rather than
+   * duplicating addDriftMember's whole edit just to read its answer.
    */
   function syncSinglePlantCountControls(plantId) {
     if (driftCountValue) driftCountValue.textContent = '1';

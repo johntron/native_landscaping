@@ -216,14 +216,15 @@ export function createPlantLifecyclePanel({ sheet, appState, onCommit }) {
     if (section.hidden) return;
     // The FIRST member's lifecycle, always (nl-o47.6.10's driftLifecycleSummary) —
     // for one plant that IS the plant; for a drift, it is what an edit here
-    // merges onto and what every OTHER member gets unified to.
-    const { lifecycle, uniform } = driftLifecycleSummary(targets);
+    // merges onto. nl-o47.6.12: normalizeDrifts (src/data/driftId.js) unifies
+    // every member's lifecycle on every load and every drift edit, so by the
+    // time this panel can open on a drift its members are already uniform —
+    // there is no mixed-settings case left to show a note for.
+    const { lifecycle } = driftLifecycleSummary(targets);
     if (targets.length > 1) {
       const label = driftLabel(targets);
       scopeNote.hidden = false;
-      scopeNote.textContent = uniform
-        ? `Applies to all ${targets.length} plants in ${label}.`
-        : `These plants had different settings; saving applies these to all ${targets.length} plants in ${label}.`;
+      scopeNote.textContent = `Applies to all ${targets.length} plants in ${label}.`;
     } else {
       scopeNote.hidden = true;
       scopeNote.textContent = '';

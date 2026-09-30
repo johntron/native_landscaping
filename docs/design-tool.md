@@ -648,51 +648,75 @@ with no such column, or an invalid cell, loads with the plant in no drift). New
 ids are minted by `src/state/plantIds.js`'s `buildDriftId`, unique in the yard
 and readable (from a given name, else the species).
 
-The pure geometry and edits a drift needs — members and their centroid, a
-padded outline hull for drawing and point-in-outline hit-testing (and a
+The pure geometry a drift needs — members and their centroid, a padded
+outline hull for drawing and point-in-outline hit-testing (and a
 `driftOutlinePolygon` to actually DRAW that padded hull, ringing each hull
 vertex and re-hulling the samples so the drawn shape agrees with the hit
 region exactly, including along a straight bed edge and for a 1- or 2-member
 drift), spacing (the members' median nearest-neighbour distance), phyllotaxis
-clump layout, where "+" adds a member and which member "−" removes, spread,
-rename, clone, dissolve, remove (delete every planned member, dissolve the
-label on planted ones), and single-linkage suggestion clusters over an
-existing planting — live in `src/state/driftGeometry.js` and
-`src/state/driftEdits.js`, pure and unit-tested like
-`plantEdits.js`/`yardEdits.js`. Every authored constant there (a spacing
-factor, a suggestion-clustering distance, hull padding) is a named export
-commented as our judgement, not a sourced fact. The Add plant sheet's "How
-many?" (nl-o47.6.3, `addDriftFromCatalog`) is the first making method to
-reach `design.html`: a count over 1 places a clump instead of one plant and
-mints its `driftId`, then selects every member it just placed — which is
-exactly the ids `selectPlants` needs to enter whole-drift mode, below.
+clump layout, where "+" adds a member and which member "−" removes, and
+single-linkage suggestion clusters over an existing planting — lives in
+`src/state/driftGeometry.js`, pure and unit-tested like
+`plantEdits.js`/`yardEdits.js`. `src/state/driftEdits.js` holds the EDITS
+(add/remove a member, spread, clone, remove the whole drift, the suggestion
+review's own accept) in the same style: each does a plain edit to
+`state.plants`, then (nl-o47.6.12) calls `src/data/driftId.js`'s
+`normalizeDrifts` on the whole list rather than carrying its own
+invariant-preservation logic — see below. Every authored constant in either
+file (a spacing factor, a suggestion-clustering distance, hull padding) is a
+named export commented as our judgement, not a sourced fact. The Add plant
+sheet's "How many?" (nl-o47.6.3, `addDriftFromCatalog`) is the first making
+method to reach `design.html`: a count over 1 places a clump instead of one
+plant and mints its `driftId`, then selects every member it just placed —
+which is exactly the ids `selectPlants` needs to enter whole-drift mode,
+below.
 
-**A drift always has >= 2 members** (nl-o47.6.9, the owner's REVISED design,
-2026-09-28): the count stepper on the action bar (below) shows for a single
-plain plant too, reading 1 with "−" disabled (Remove already deletes a lone
-plant); "+" there converts it into a drift of 2 in one edit —
-`driftEdits.js`'s `convertToDrift` mints a driftId from the species, places
-the second member at the plant's own default spacing (`driftGeometry.js`'s
+**A drift always has >= 2 members, one species, and one lifecycle**
+(nl-o47.6.9/.10, the owner's REVISED design, 2026-09-28; nl-o47.6.12
+collapses all three onto one function). `normalizeDrifts(plants)`
+(`src/data/driftId.js`) is the one place every rule is enforced, for a whole
+plants list at once: for each driftId, the FIRST member sharing it (by
+`plants`' own array order) is the anchor — a member whose `speciesId` does
+not match leaves the drift (drops the label; every OTHER field, including
+its own position, is untouched), and if fewer than two members still match,
+the label is dropped from those too; every SURVIVING member's lifecycle
+(`src/data/plantLifecycle.js`) is then unified onto the anchor's. It returns
+the same array reference when nothing needed fixing. It runs on load/import
+— `buildPlantsFromCsv` (a hand-edited or imported CSV) and
+`plantsFromPlacements` (every history load, undo, and redo, through
+`src/history/layoutHistoryController.js`'s own `toPlants`) both call it, so a
+drift an older edit or an import left inconsistent is healed on the very
+next load — and after every `driftEdits.js` edit that can leave a drift
+undersized, mixed-species, or mixed-lifecycle: `addDriftMember`,
+`cloneDriftAwarePlant`, `removeDriftMember`, `removePlantFromDrift`,
+`removeDriftAwarePlant`. In real use a mixed-lifecycle drift can only exist
+from older data or an import, never from an in-app edit (every lifecycle
+edit already enforces uniformity, and load-time normalization runs before
+any interactive edit gets a chance) — see the GATE CLEARED note on
+nl-o47.6.12 for the owner's own review of a specific live drift this
+reasoning was checked against.
+
+The count stepper on the action bar (below) shows for a single plain plant
+too, reading 1 with "−" disabled (Remove already deletes a lone plant); "+"
+there converts it into a drift of 2 in one edit — nl-o47.6.12 folds this
+into `addDriftMember` itself (what used to be a separate `convertToDrift`):
+passing an existing `driftId` grows that drift; passing `{ plantId }` for a
+plant in no drift mints a fresh driftId from the species first, places the
+second member at the plant's own default spacing (`driftGeometry.js`'s
 `nextMemberPosition`, the same 1-member fallback a real drift's own "+"
-already reuses), and copies the plant's lifecycle onto the new member
-(nl-o47.6.10). Every edit that can leave a drift with one member — the count
+already reuses), and lets `normalizeDrifts` unify its lifecycle onto the
+original's. Every edit that can leave a drift with one member — the count
 stepper's "−", "Remove from drift", and a drilled-in member's own Remove
 (`removeDriftAwarePlant`, which every one of `src/app.js`'s three single-
 plant Remove paths — the selection bar's, the detail sheet's, and the plant
 context menu's — goes through instead of `plantEdits.js`'s `removePlantById`
-directly) — drops the label from whatever member survives instead
-(`pruneUndersizedDrift`), so 1 → 2 → 1 hands back the original plant,
-unlabelled, with its original id. The tie-break a fresh 2-member drift's "−"
-has to make (both members sit exactly equidistant from their own centroid —
-the midpoint of a segment) goes to the MOST RECENTLY ADDED member (later in
-`state.plants`), not the smaller id, which is why 1 → 2 → 1 always returns
-the ORIGINAL plant rather than either one arbitrarily. `dropUndersizedDrifts`
-(`src/data/driftId.js`, re-exported from `driftEdits.js`) is the same rule
-for a whole plant list at once: `buildPlantsFromCsv` (a hand-edited or
-imported CSV) and `plantsFromPlacements` (every history load, undo, and
-redo) both call it, so a 1-member drift left over from before this rule
-existed never survives a reload with its "−" enabled and ready to delete the
-last plant.
+directly) — drops the label from whatever member survives instead, so 1 → 2
+→ 1 hands back the original plant, unlabelled, with its original id. The
+tie-break a fresh 2-member drift's "−" has to make (both members sit exactly
+equidistant from their own centroid — the midpoint of a segment) goes to the
+MOST RECENTLY ADDED member (later in `state.plants`), not the smaller id,
+which is why 1 → 2 → 1 always returns the ORIGINAL plant rather than either
+one arbitrarily.
 
 **One planting status per drift** (nl-o47.6.10, strict — replaces the
 original design's "each keeps its own lifecycle"): status (planned/planted),
@@ -727,16 +751,20 @@ enforced entirely by the EDITS, not by a different read path:
   `setTargetedPlant` — opening it from an ALREADY-active whole-drift
   selection must not drill that selection into the one representative
   member it happens to open at. The panel shows "Applies to all N plants in
-  `<drift label>`", or, when a drift's members happen to disagree (older
-  data, an import), the FIRST member's values with a note that the next edit
-  unifies them (`driftLifecycleSummary`'s own `uniform` flag).
-- `addDriftMember` ("+") and `convertToDrift` (the 1 → 2 conversion above)
-  both copy the drift's/plant's own lifecycle onto the new member, so a
-  drift's very first "+" already agrees with the rest. `cloneDriftAwarePlant`
-  wraps `plantEdits.js`'s `clonePlantById` the same way `removeDriftAwarePlant`
-  wraps `removePlantById`: a clone that stays in a drift (`clonePlantById`
-  already carries `driftId` through) copies the source member's lifecycle
-  instead of `clonePlantById`'s own "always planned, no source" default,
+  `<drift label>`" — nl-o47.6.12 deleted the separate mixed-settings note
+  (`driftLifecycleSummary`'s own `uniform` flag still exists, but
+  `normalizeDrifts` below now unifies every member's lifecycle on every load
+  and every drift edit, so the panel can never actually observe a
+  disagreement by the time it opens).
+- `addDriftMember`'s two paths (growing a real drift, or minting one from a
+  lone plant — nl-o47.6.12 folded the latter in from what used to be a
+  separate `convertToDrift`, above) both let `normalizeDrifts` unify the new
+  member's lifecycle onto the drift's, so a drift's very first "+" already
+  agrees with the rest. `cloneDriftAwarePlant` wraps `plantEdits.js`'s
+  `clonePlantById` the same way `removeDriftAwarePlant` wraps
+  `removePlantById`: a clone that stays in a drift (`clonePlantById` already
+  carries `driftId` through) has its lifecycle unified by `normalizeDrifts`
+  too, instead of `clonePlantById`'s own "always planned, no source" default,
   since a clone would otherwise add a planned member to an already-planted
   drift. `src/app.js`'s three Clone paths (the selection bar's, the detail
   sheet's, and the plant context menu's) all go through it.
@@ -745,26 +773,49 @@ enforced entirely by the EDITS, not by a different read path:
 
 #### Selecting, isolating, and the drift action bar (nl-o47.6.2)
 
-Selection (nl-o47.2's Set of plant ids) gains a **drift context**, two more
-`appState` fields owned by the same `src/ui/plantSelection.js`:
-`selectedDriftId` (`''` for none) and `driftDrilledIn`. A drift id alone
-cannot say whether the selection IS the whole drift or has been narrowed to
-one of its members — a 1-member drift makes the two indistinguishable by ids
-alone — so both fields are needed; see `src/state/driftSelection.js` for the
-pure decisions (`driftForExactSelection`, `inferDriftContext`,
-`pruneDriftContext`) and their own reasoning. `selectPlants(ids)` — the one
-entry point every caller already used (right-click, the detail sheet, the Add
-plant sheet's `onPick`, nl-o47.6.3's "add N of a species") — infers the
-context from the ids themselves: handing it exactly one drift's current full
-membership enters that drift, whole; narrowing an ALREADY-active drift
-context down to one of its own members drills into it (so Details/Clone/the
-detail sheet do not drop isolation the instant they touch the selection); a
-cold single-plant selection invents no drift context. `drillIntoDriftMember`
-and `selectDrift` are the two lower-level entry points the drag controllers
-and the action bar call directly. `pruneSelection` (run everywhere
-`refreshSpeciesTable` already runs) re-syncs whole mode to the drift's
-CURRENT membership rather than a stale id snapshot, so a "+"/"-" elsewhere —
-or an undo/redo of one — keeps showing every member and the right count.
+Selection (nl-o47.2's Set of plant ids) gains a **drift context** — since
+nl-o47.6.12, `src/ui/plantSelection.js` holds it as a private discriminated
+union, `{ driftId }` (a whole drift; membership is always read live from
+`appState.plants`, never stored) or `{ ids: Set }` (plain plant ids), rather
+than a stored Set plus two extra `appState` flags. "Drilled into one member"
+is DERIVED, not stored: `getDriftContext()` reports it whenever the
+selection is exactly one plant AND that plant carries a `driftId` — safe
+because a drift always has >= 2 members (nl-o47.6.9), so a 1-id `{ ids }`
+selection can never also be some drift's exact whole membership, the
+ambiguity a separate `driftDrilledIn` flag used to exist for. One
+consequence is a **named behaviour change** (nl-o47.6.12): a cold
+long-press/Details/right-click on a drift member now opens it drilled in
+immediately, where the old design needed an already-active context to narrow
+from. `src/state/driftSelection.js`'s `driftForExactSelection` is the one
+pure decision left there — whether a set of ids names some drift's current
+full membership exactly — which is what lets `selectPlants(ids)` — the one
+entry point every caller already used (right-click, the detail sheet, the
+Add plant sheet's `onPick`, nl-o47.6.3's "add N of a species") — store the
+compact `{ driftId }` form instead of the ids themselves. `selectDrift` is
+the lower-level entry point the drag controllers and the action bar call
+directly to enter a drift whole. `pruneSelection` (run everywhere
+`refreshSpeciesTable` already runs) is now simply "does the drift still
+exist": if so, re-selecting it re-derives its current ids for free, so a
+"+"/"-" elsewhere — or an undo/redo of one — keeps showing every member and
+the right count with no separate re-sync step; if the drift is gone
+(dissolved, or undone out from under the selection), the fallback reads the
+STALE cached ids (`appState.selectedPlantIds`, as of before the change,
+which `plantSelection.js` still keeps as a derived cache — see below)
+pruned against the current plants, and re-checks whether THEY now name some
+other drift exactly.
+
+`appState.selectedPlantIds` stays a real, stored field — every other reader
+(`src/render/topView.js`/`elevationViews.js` via `app.js`'s `render()`
+options, `src/ui/selectionBar.js`, `src/export/exportActions.js`) still just
+reads it directly, unaffected by any of this — but `plantSelection.js` now
+owns it purely as a CACHE it refreshes on every change (`getSelection()`
+keeps returning it). What is gone is `appState.selectedDriftId`/
+`driftDrilledIn`: every direct reader of those two now calls
+`plantSelection.getDriftContext()` instead (`src/app.js`'s six drift-action
+handlers and its `render()`; `selectionBar.js`'s `sync()`, which gained a
+`getDriftContext` dependency for it) — which is also why the drag
+controllers barely changed: they already went through `getDriftContext()`/
+`getSelection()`, never the two `appState` fields by name.
 
 Tap/click resolution (`src/interaction/dragController.js`, decided by the
 pure `src/interaction/driftHitTest.js`): a tap/click on a member of a drift,
@@ -801,9 +852,11 @@ from `driftOutlinePolygon` and smoothed with `buildSmoothPath` so it reads as
 an organic zone rather than a faceted polygon. Members get the ordinary
 selection ring, in both views, exactly as any selected plant does. None of it
 — outline, dimming, or the drift context itself — may reach an export:
-`src/export/exportActions.js` blanks `selectedDriftId`/`driftDrilledIn`
-around every capture and snapshots/restores them around it, the same
-treatment `selectedPlantIds` already got.
+`src/export/exportActions.js` blanks the selection for every capture and
+snapshots/restores it around one, through `plantSelection.js`'s own
+`getRawSelection()`/`setRawSelection()` (nl-o47.6.12 — render-free by
+design, since `runExport` already drives its own render around the whole
+capture).
 
 **The action bar** (`src/ui/selectionBar.js`) has three modes, none of them a
 separate element — the module just shows/hides pieces of the one bar. A
@@ -819,7 +872,7 @@ drift's label in whole-drift mode. Whole-drift mode also shows a count
 disabling itself with the reason `driftGeometry.js` already computes when
 nothing can be added/removed — nl-o47.6.9 gives a single plain plant this
 same stepper too, reading 1 with "−" disabled, its "+" going through
-`convertToDrift` instead, above), Tighter/Looser spread (`spreadDrift`, a
+`addDriftMember`'s plantId path instead, above), Tighter/Looser spread (`spreadDrift`, a
 factor per press that is a named judgement constant, `DRIFT_SPREAD_STEP` in
 `src/app.js`), Planting (the drift-wide lifecycle editor, nl-o47.6.10,
 above), Clone drift (selects the new one), and Remove drift (deletes every
@@ -873,8 +926,8 @@ picked, the drift stops existing, or the mode changes). `topView.js` and
 `highlightedSpeciesKey`: when set it REPLACES the species highlight rather
 than adding to it, or highlighting one drift would ring every member of the
 whole species. `src/export/exportActions.js` gives it the same
-blank-for-capture/snapshot/restore treatment `selectedDriftId` already gets,
-since — unlike the transient hover ids there — it is sticky.
+blank-for-capture/snapshot/restore treatment the selection itself already
+gets, since — unlike the transient hover ids there — it is sticky.
 
 With labels on, a drift is labelled **once**, at its centroid
 (`driftCentroid`), as `driftLabel(members)` (nl-o47.6.11, `src/render/labels.js`:
@@ -891,11 +944,11 @@ the plan's edge — the plan's `<svg>` itself never clips
 (`overflow: visible`, styles.css) but its parent panel does
 (`overflow: hidden`), and `captureViewToPng`'s export crops to this exact
 viewBox. While a drift is selected/isolated in Edit mode
-(`appState.selectedDriftId`), its own members draw their individual labels
-again instead of the one grouped label, so a person editing it can tell
-members apart — since `selectedDriftId` is always blanked to `''` around an
-export capture, every drift gets the single grouped label in every exported
-PNG regardless of what was selected on screen. A plant in no drift keeps its
+(`plantSelection.getDriftContext().selectedDriftId`), its own members draw
+their individual labels again instead of the one grouped label, so a person
+editing it can tell members apart — since the selection is always blanked
+around an export capture, every drift gets the single grouped label in every
+exported PNG regardless of what was selected on screen. A plant in no drift keeps its
 label exactly as before, in every view.
 
 The shopping list and exports are unchanged by any of this: they count
@@ -1144,13 +1197,14 @@ Top view uses the yard coordinate system (origin at SW corner, y increasing nort
   photos), and Features (draw the yard model).
 - **The Edit-mode selection (nl-o47.2): a SET of plant ids** (`appState.selectedPlantIds`),
   owned by `src/ui/plantSelection.js` (`selectPlants`, `clearSelection`, `getSelection`,
-  `pruneSelection`, and since nl-o47.6.2 `drillIntoDriftMember`/`selectDrift`/
-  `getDriftContext`). A drift's several members select as one Set, the multi-select case the
-  Set model was built for; see "Drifts" above for the drift context two more `appState` fields
-  carry alongside it. The Add plant sheet's "How many?" (nl-o47.6.3) is the caller that puts
+  `pruneSelection`, `selectDrift`, `getDriftContext`, and since nl-o47.6.12
+  `getRawSelection`/`setRawSelection`). A drift's several members select as one Set, the
+  multi-select case the Set model was built for; see "Drifts" above for the drift context —
+  internally a discriminated union, not the Set itself — this module derives alongside it.
+  The Add plant sheet's "How many?" (nl-o47.6.3) is the caller that puts
   more than one id in it: count 1 still goes through `setTargetedPlant` below like every other
   single add, but count > 1 calls `selectPlants` directly with every new member — exactly the
-  ids `inferDriftContext` reads as "enter this drift, whole." Pruned everywhere the species
+  ids that let `selectPlants` store the compact whole-drift form. Pruned everywhere the species
   table already refreshes (add, clone, remove, undo/redo, load: `src/app.js`'s
   `refreshSpeciesTable` wrapper), so a plant that stops existing cannot linger in the
   selection; cleared on every real mode change, and for free on a project switch (the whole
@@ -1194,8 +1248,8 @@ Top view uses the yard coordinate system (origin at SW corner, y increasing nort
   (selects the clone), Remove (the ensuing prune clears the selection), Done, and four nudge
   arrows labelled by compass point in yard feet (`src/state/nudgeSelection.js`,
   `NUDGE_STEP_FT` = 0.5 ft, a judgement call, clamped as a group like a drag) — this is the bar
-  a plain plant or a drilled-into drift member gets; a whole drift's own controls (rename,
-  count, spread, clone/remove drift) are described under "Drifts" above. Arrow keys nudge
+  a plain plant or a drilled-into drift member gets; a whole drift's own controls (count,
+  spread, clone/remove drift) are described under "Drifts" above. Arrow keys nudge
   on desktop too, while a selection exists and focus is not in a form field. Every nudge
   commits immediately as its own history entry rather than coalescing a burst into one: a
   delayed commit racing an Undo pressed in the same window could record the just-undone
@@ -1324,7 +1378,7 @@ more pieces that only exist while it is open:
   handlers); `design.html`'s markup now splits into `.selection-bar__primary` (the plain-text
   label, a More toggle, and Done — the only things that reliably fit one row at 393px once a
   single plant's own count reads there too, nl-o47.6.9) and `.selection-bar__more` (everything
-  else: the drift's rename field, Details/Clone/Remove, nudges, the drift count stepper, spread,
+  else: Details/Clone/Remove, nudges, the drift count stepper, spread,
   clone/remove drift, the drilled-in Remove-from-drift/Back-to-drift pair), shown as a popover
   anchored above the bar.
   `selectionBar.js` opens/closes it on its own button and closes it whenever the bar's context
@@ -1468,14 +1522,15 @@ hit-testing, drags, and drift outlines all stay correct under it with no changes
   single-plant clamp to a set of points sharing one delta). Powers a drift's group drag/nudge
   too, unchanged: both already move "whatever the selection currently is."
 - `src/state/selection.js` – pure: pruning a selection Set against the current plant list, and
-  Set equality. `src/ui/plantSelection.js` is the stateful wrapper (owns
-  `appState.selectedPlantIds`, and since nl-o47.6.2 `selectedDriftId`/`driftDrilledIn`) that
+  Set equality. `src/ui/plantSelection.js` is the stateful wrapper (owns the discriminated
+  union — a whole drift by id, or a plain ids Set — nl-o47.6.12, and derives
+  `appState.selectedPlantIds` as a cache and `getDriftContext()` fresh from it) that
   `src/app.js` and `dragController.js` actually call.
-- `src/state/driftSelection.js` – pure (nl-o47.6.2): the selection's drift-context state
-  machine — `driftForExactSelection`, `inferDriftContext` (what `selectPlants(ids)` should set
-  the context to), `pruneDriftContext` (what survives a prune) — behind `plantSelection.js`.
+- `src/state/driftSelection.js` – pure (nl-o47.6.2, trimmed by nl-o47.6.12): just
+  `driftForExactSelection`, the one decision behind `plantSelection.js`'s `selectPlants(ids)` —
+  whether `ids` names some drift's current full membership exactly.
 - `src/ui/selectionBar.js` – the selection action bar: Details, Clone, Remove, Done, and the
-  compass nudge arrows, shared by every selection; the drift-specific controls (rename, count,
+  compass nudge arrows, shared by every selection; the drift-specific controls (count,
   spread, clone/remove drift, drilled-in's extra two buttons) are described under "Drifts"
   above. `src/state/nudgeSelection.js` is the pure move-by-one-step-and-clamp behind the
   arrows and the desktop keyboard bonus. Since nl-o47.4 it also owns the "More" popover's
@@ -1486,13 +1541,15 @@ hit-testing, drags, and drift outlines all stay correct under it with no changes
 - `src/history/layoutHistoryController.js` – the page's side of it: undo/redo buttons, the save-status line, `commit()` / `commitSetup()` / `commitFeatures()` (record, persist through one queue, check the server's cursor), and restoring a revision's setup and features on undo/redo.
 - `src/state/plantEdits.js` – add, clone, and remove a plant; `src/state/yardEdits.js` – scale and
   shift features, patch a view. Pure, and unit-tested directly.
-- `src/data/driftId.js` – a drift id's slug shape (`isValidDriftId`) and the slug builder
-  (`slugifyDriftLabel`) `src/state/plantIds.js`'s `buildDriftId` mints one from; a drift's
-  own display label is `driftLabel` (`src/render/labels.js`, nl-o47.6.11), not the id.
+- `src/data/driftId.js` – a drift id's slug shape (`isValidDriftId`), the slug builder
+  (`slugifyDriftLabel`) `src/state/plantIds.js`'s `buildDriftId` mints one from, and
+  `normalizeDrifts` (nl-o47.6.12: the one place every drift-shape rule — >= 2 members, one
+  species, one lifecycle — is enforced, for a whole plants list at once). A drift's own display
+  label is `driftLabel` (`src/render/labels.js`, nl-o47.6.11), not the id.
   `src/state/driftGeometry.js` and `src/state/driftEdits.js` – a drift's derived geometry
   (members, centroid, outline hull, the actual padded polygon to draw it, spacing, phyllotaxis
   clump layout, suggestion clusters) and its edits (add/remove a member, spread, clone,
-  dissolve, remove the whole drift, and `addDriftFromCatalog` — place N of one species as a
+  remove the whole drift, and `addDriftFromCatalog` — place N of one species as a
   fresh drift, nl-o47.6.3), pure like `plantEdits.js` (see "Drifts" above).
 - `src/ui/speciesHighlight.js` – the table ↔ drawing link: highlighted species, targeted and
   hovered plant, and `refresh()` (rebuild the table, re-grade the ecology check). Its
