@@ -81,6 +81,10 @@ export function createExportActions({
     appState.selectedDriftId = '';
     appState.driftDrilledIn = false;
     appState.highlightedDriftId = '';
+    // The drift-suggestion review's own outline/dimming (nl-o47.6.5) is the
+    // same kind of apparatus as the drift context above and gets the same
+    // blank-and-restore treatment, not just a one-way clear.
+    appState.suggestedDriftMemberIds = null;
     appState.month = EXPORT_MONTH;
     if (monthSlider) monthSlider.value = String(EXPORT_MONTH);
     if (monthReadout) monthReadout.textContent = MONTH_NAMES[EXPORT_MONTH - 1] || '';
@@ -198,6 +202,8 @@ function snapshotViewState({ monthSlider, monthReadout, state }) {
     selectedPlantIds: new Set(state.selectedPlantIds),
     selectedDriftId: state.selectedDriftId || '',
     driftDrilledIn: Boolean(state.driftDrilledIn),
+    // Copied, not aliased, for the same reason selectedPlantIds is above.
+    suggestedDriftMemberIds: state.suggestedDriftMemberIds ? new Set(state.suggestedDriftMemberIds) : null,
     monthSliderValue: monthSlider ? monthSlider.value : null,
     monthReadoutText: monthReadout ? monthReadout.textContent : null,
   };
@@ -214,6 +220,7 @@ function restoreViewState(snapshot, { monthSlider, monthReadout, state, onRestor
   state.selectedPlantIds = new Set(snapshot.selectedPlantIds);
   state.selectedDriftId = snapshot.selectedDriftId;
   state.driftDrilledIn = snapshot.driftDrilledIn;
+  state.suggestedDriftMemberIds = snapshot.suggestedDriftMemberIds ? new Set(snapshot.suggestedDriftMemberIds) : null;
   if (monthSlider && snapshot.monthSliderValue !== null) {
     monthSlider.value = snapshot.monthSliderValue;
   }

@@ -31,6 +31,7 @@ import { loadYardSite } from './data/yardSite.js';
 import { configureViews } from './render/viewConfig.js';
 import { createPlantDragController, createElevationDragController } from './interaction/dragController.js';
 import { createPhoneEditor } from './interaction/phoneEditor.js';
+import { createDriftReviewMode } from './interaction/driftReviewMode.js';
 import { clampHiddenLayerCount } from './state/layers.js';
 import { workingExtentFt } from './render/setupOverlay.js';
 import { resolveYardBounds } from './render/yardBounds.js';
@@ -133,6 +134,14 @@ const appState = {
   // src/state/driftSelection.js for the two fields' own reasoning.
   selectedDriftId: '',
   driftDrilledIn: false,
+  // The drift-suggestion review's adjusted membership (nl-o47.6.5, src/
+  // interaction/driftReviewMode.js): null when no review is open, else the
+  // Set<string> of plant ids the plan outlines (a dashed violet hull,
+  // apparatus for a PROPOSAL — never a real drift) and dims around, exactly
+  // the way selectedDriftId isolates a real one. Owned entirely by
+  // driftReviewMode.js; blanked around an export capture like every other
+  // piece of editing apparatus (src/export/exportActions.js).
+  suggestedDriftMemberIds: null,
   maximizedViewId: '',
   // The Setup-mode ruler: {viewId, from, to} in that view's viewBox pixels,
   // standing from the end of the drag until a length is applied or it is
@@ -231,6 +240,21 @@ async function init() {
   const selectionDriftMemberGroup = document.getElementById('selectionDriftMemberGroup');
   const selectionRemoveFromDriftBtn = document.getElementById('selectionRemoveFromDriftBtn');
   const selectionBackToDriftBtn = document.getElementById('selectionBackToDriftBtn');
+
+  // The drift-suggestion review bar (nl-o47.6.5, src/interaction/driftReviewMode.js).
+  const driftReviewBarEl = document.getElementById('driftReviewBar');
+  const driftReviewLabelEl = document.getElementById('driftReviewLabel');
+  const driftReviewAcceptBtn = document.getElementById('driftReviewAcceptBtn');
+  const driftReviewSkipBtn = document.getElementById('driftReviewSkipBtn');
+  const driftReviewStopBtn = document.getElementById('driftReviewStopBtn');
+  const driftReviewMoreBtn = document.getElementById('driftReviewMoreBtn');
+  const driftReviewMoreEl = document.getElementById('driftReviewMore');
+  const driftReviewHintEl = document.getElementById('driftReviewHint');
+  const driftReviewLifecycleEl = document.getElementById('driftReviewLifecycle');
+  const driftReviewLifecycleSummaryEl = document.getElementById('driftReviewLifecycleSummary');
+  const driftReviewLifecycleOptionsEl = document.getElementById('driftReviewLifecycleOptions');
+  const driftReviewUndoBtn = document.getElementById('driftReviewUndoBtn');
+  const driftReviewRedoBtn = document.getElementById('driftReviewRedoBtn');
 
   // The phone editor (nl-o47.4): full-screen Edit mode on a phone-width
   // screen. See src/interaction/phoneEditor.js for what each piece is.
@@ -402,12 +426,20 @@ async function init() {
   initMonthSlider(monthSlider, monthReadout, appState.month);
 
   let render = () => {};
+  // Assigned near the phone editor, below — see that comment for why every
+  // reference to it up here is safe despite the forward declaration (the
+  // same pattern this file already uses for `render` itself and `applyMode`).
+  let driftReview = null;
   const layoutHistory = createLayoutHistoryController({
     appState,
     undoButton,
     redoButton,
-    undoMirror: selectionUndoBtn,
-    redoMirror: selectionRedoBtn,
+    // nl-o47.6.5: the drift-review bar's own Undo/Redo mirror the real
+    // buttons too, alongside the phone editor's existing pair — see
+    // src/history/layoutHistoryController.js's own comment on why this takes
+    // a list now.
+    undoMirror: [selectionUndoBtn, driftReviewUndoBtn],
+    redoMirror: [selectionRedoBtn, driftReviewRedoBtn],
     historyStatus,
     render: () => render(),
     refreshSpeciesTable: () => refreshSpeciesTable(),
@@ -444,18 +476,52 @@ async function init() {
     dragControllers.forEach((controller) => controller?.setSelectionActive?.(active));
   }
 
+  // nl-o47.6.5: while a drift-suggestion review is open, nothing may add to
+  // the ORDINARY plant selection — the review bar and #selectionBar share one
+  // fixed-bottom slot, and that only stays true because reviewing keeps
+  // appState.selectedPlantIds empty throughout (design.html's own comment).
+  // Every caller that could otherwise select something on a stray click
+  // during review — the drag controllers below, and the species table's own
+  // drift chips just here — routes through these guards instead of
+  // plantSelection's methods directly.
+  const isDriftReviewActive = () => Boolean(driftReview?.isActive());
+  const selectPlantsGuarded = (plantId) => {
+    if (isDriftReviewActive()) return;
+    plantSelection.selectPlants([plantId]);
+  };
+  const selectDriftGuarded = (driftId) => {
+    if (isDriftReviewActive()) return;
+    plantSelection.selectDrift(driftId);
+  };
+  const drillIntoDriftMemberGuarded = (plantId, driftId) => {
+    if (isDriftReviewActive()) return;
+    plantSelection.drillIntoDriftMember(plantId, driftId);
+  };
+  const clearSelectionGuarded = () => {
+    if (isDriftReviewActive()) return;
+    plantSelection.clearSelection();
+  };
+
   const speciesHighlight = createSpeciesHighlight({
     appState,
     speciesTableContainer: document.getElementById('speciesTable'),
     ecologyContainer: document.getElementById('ecologyCheck'),
     render: () => render(),
-    onSelectPlant: (plantId) => plantSelection.selectPlants([plantId]),
+    onSelectPlant: selectPlantsGuarded,
     // The species table's per-drift entries (nl-o47.6.7): in Edit mode a
     // click selects the drift (the same plantSelection.selectDrift the drag
     // controllers use, nl-o47.6.2); speciesHighlight.js decides which mode
     // applies and calls this only for Edit — View mode highlights instead,
     // entirely inside speciesHighlight.js's own state.
-    onSelectDrift: (driftId) => plantSelection.selectDrift(driftId),
+    onSelectDrift: selectDriftGuarded,
+    // The "N possible drifts — Review" banner (nl-o47.6.5), at the top of the
+    // species list: Edit mode only, never on the read-only example yard, and
+    // hidden while a review is already open (driftReview itself hides the
+    // banner the instant start() runs, but this guard also covers every
+    // OTHER refreshSpeciesTable call while one is active).
+    getSuggestionCount: () =>
+      appState.mode === 'edit' && !appState.readOnly && !isDriftReviewActive() ? driftReview?.pendingCount() ?? 0 : 0,
+    onReviewSuggestions: () => driftReview?.start(),
   });
   // Prune the selection everywhere refreshSpeciesTable already runs (add,
   // clone, remove, undo/redo, the initial load): exactly the events that can
@@ -541,17 +607,43 @@ async function init() {
         onHoverPlant: setHoveredPlant,
         onChangeCommit: () => commitLayoutChange('Moved plant'),
         getSelection: () => plantSelection.getSelection(),
-        onSelectPlant: (plantId) => plantSelection.selectPlants([plantId]),
-        onClearSelection: () => plantSelection.clearSelection(),
+        onSelectPlant: selectPlantsGuarded,
+        onClearSelection: clearSelectionGuarded,
         getDriftContext: () => plantSelection.getDriftContext(),
-        onSelectDrift: (driftId) => plantSelection.selectDrift(driftId),
-        onDrillIntoDriftMember: (plantId, driftId) => plantSelection.drillIntoDriftMember(plantId, driftId),
+        onSelectDrift: selectDriftGuarded,
+        onDrillIntoDriftMember: drillIntoDriftMemberGuarded,
+        // nl-o47.6.5: only the PLAN controller reads these (createElevationDragController
+        // ignores extra props it does not destructure) — a tap/click while
+        // reviewing bypasses selection, isolation, and dragging entirely, in
+        // favor of toggling the nearest hit in/out of the suggestion. The
+        // elevation controllers are locked outright for the review's
+        // duration instead (src/app.js's lockNonPlanControllers), since
+        // review restricts its own taps to the plan.
+        isReviewActive: isDriftReviewActive,
+        onReviewTap: (plantId) => driftReview?.handleTap(plantId),
       };
       return view.type === 'plan'
         ? createPlantDragController(shared)
         : createElevationDragController(shared);
     });
   let dragControllers = buildDragControllers();
+
+  /**
+   * Locks every non-plan (elevation) drag controller for the drift-
+   * suggestion review's duration (nl-o47.6.5) — review restricts its own
+   * taps to the plan, whose outline is plan-only too (topView.js). Safe to
+   * call with `locked: false` unconditionally: a controller only actually
+   * unlocks when Edit mode is still current, so a Stop racing a mode change
+   * away from Edit cannot wrongly re-unlock one Edit itself has already
+   * locked.
+   * @param {boolean} locked
+   */
+  const lockNonPlanControllers = (locked) => {
+    dragControllers.forEach((controller, index) => {
+      if (viewPanels[index]?.view.type === 'plan') return;
+      controller?.setLocked?.(locked || appState.mode !== 'edit');
+    });
+  };
 
   // One per panel, but only the selected view's is ever unlocked: two panels
   // accepting a camera drag at once would be two answers to "which view is
@@ -920,6 +1012,43 @@ async function init() {
     setMaximizedView,
     applyMode: (mode) => applyMode(mode),
     getSelectionSize: () => plantSelection.getSelection().size,
+    isReviewActive: () => isDriftReviewActive(),
+  });
+
+  /** The desktop counterpart of phoneEditor's own focusOnPlants (nl-o47.6.5):
+   * scroll the plan panel into view when a reviewed suggestion needs it. */
+  const scrollPlanIntoView = () => {
+    const planView = appState.project?.views?.find((view) => view.type === 'plan');
+    const entry = planView ? viewPanels.find((candidate) => candidate.view.id === planView.id) : null;
+    entry?.panel?.scrollIntoView({ block: 'center', inline: 'center' });
+  };
+
+  driftReview = createDriftReviewMode({
+    elements: {
+      bar: driftReviewBarEl,
+      label: driftReviewLabelEl,
+      acceptBtn: driftReviewAcceptBtn,
+      skipBtn: driftReviewSkipBtn,
+      stopBtn: driftReviewStopBtn,
+      moreBtn: driftReviewMoreBtn,
+      moreGroup: driftReviewMoreEl,
+      hintEl: driftReviewHintEl,
+      lifecycleGroup: driftReviewLifecycleEl,
+      lifecycleSummaryEl: driftReviewLifecycleSummaryEl,
+      lifecycleOptionsEl: driftReviewLifecycleOptionsEl,
+      undoBtn: driftReviewUndoBtn,
+      redoBtn: driftReviewRedoBtn,
+      undoRealBtn: undoButton,
+      redoRealBtn: redoButton,
+    },
+    appState,
+    render: () => render(),
+    refreshSpeciesTable: () => refreshSpeciesTable(),
+    commitLayoutChange,
+    clearSelection: () => plantSelection.clearSelection(),
+    lockNonPlanControllers,
+    phoneEditor,
+    scrollPlanIntoView,
   });
 
   // Arrow keys nudge on desktop while a selection exists and focus is not in
@@ -1014,7 +1143,11 @@ async function init() {
           const label = added[0].commonName || added[0].botanicalName || speciesId;
           commitLayoutChange(`Added drift of ${added.length} ${label}`);
           setTargetedPlant(''); // clear any stale single-plant highlight
-          plantSelection.selectPlants(added.map((plant) => plant.id));
+          // nl-o47.6.5: adding is still reachable on desktop mid-review (its
+          // button is not review-locked), but the new clump must not populate
+          // the ORDINARY selection while reviewing — see selectPlantsGuarded's
+          // own comment on why the two never coexist.
+          if (!isDriftReviewActive()) plantSelection.selectPlants(added.map((plant) => plant.id));
         } else {
           commitLayoutChange('Added plant');
           // Target the new plant the way a click on it would (speciesHighlight);
@@ -1136,6 +1269,16 @@ async function init() {
     if (changingMode) {
       plantSelection.clearSelection();
       speciesHighlight.clearHighlightedDrift();
+      // A review only ever makes sense in Edit mode (nl-o47.6.5); leaving it
+      // for any real reason ends one in progress. lockNonPlanControllers(false)
+      // inside stop() is safe even here: it re-checks appState.mode (already
+      // settled to `next` above), so it cannot wrongly re-unlock an elevation
+      // controller this same mode change has already locked.
+      driftReview?.stop();
+      // The "N possible drifts" banner is Edit-mode-only and depends on
+      // isDriftReviewActive(); neither is re-read on its own, so a mode
+      // change needs its own refresh to show or hide it.
+      refreshSpeciesTable();
     }
     syncSelectionTouchAction();
     setupMode.sync();
@@ -1319,6 +1462,9 @@ async function init() {
       // (applyMode clears the whole selection, drift context included, on
       // every real mode change) — nothing extra to gate here.
       selectedDriftId: appState.selectedDriftId,
+      // The drift-suggestion review's outline/dimming (nl-o47.6.5) — null
+      // outside a review, owned entirely by src/interaction/driftReviewMode.js.
+      suggestedMemberIds: appState.suggestedDriftMemberIds,
       features: appState.features,
     });
     selectionBar.sync();
@@ -1376,6 +1522,7 @@ async function init() {
     if (plantMenu.contains(event.target)) return;
     if (detailSheet && !detailSheet.hidden && detailSheet.contains(event.target)) return;
     if (selectionBar.contains(event.target)) return;
+    if (driftReview?.contains(event.target)) return;
     const target = event.target;
     const group = target instanceof Element ? target.closest('[data-plant-id]') : null;
     if (group) {
