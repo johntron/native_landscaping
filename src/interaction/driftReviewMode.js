@@ -26,9 +26,26 @@
  * own comment on why reviewing keeps the plant selection empty throughout,
  * which is what keeps both of those hidden without this module having to
  * know about either directly.
+ *
+ * nl-o47.6.4 adds a SECOND, "group" mode to this same module rather than
+ * building a parallel one: `startGroup(plantId)` (the selection bar's "Make
+ * drift", on a single plant not already in a drift) opens the exact same bar,
+ * outline, dimming, and tap-to-toggle a suggestion review does — every guard
+ * keyed off `isActive()`/`handleTap()` (src/app.js's isDriftReviewActive,
+ * every drag controller's isReviewActive/onReviewTap, phoneEditor's own idle-
+ * bar guard) keeps working with no changes, because they all go through this
+ * one instance. `mode` ('suggestion' | 'group') is the only new piece of
+ * state: a group proposal has no algorithmic baseline or position in a queue
+ * (no suggestionKey, no "· N of M"), starts at ONE member instead of
+ * suggestClusters' own floor, and — the one place its own pure toggle
+ * (src/state/driftGroup.js's toggleGroupMember) differs from a suggestion's
+ * (toggleSuggestionMember) — a tap may pull in a plant that already belongs
+ * to another real drift, which src/state/driftEdits.js's acceptDriftGroup
+ * then moves rather than refuses.
  */
-import { acceptDriftSuggestion } from '../state/driftEdits.js';
+import { acceptDriftGroup, acceptDriftSuggestion } from '../state/driftEdits.js';
 import { MIN_SUGGESTION_CLUSTER_SIZE } from '../state/driftGeometry.js';
+import { describeGroupSources, seedGroupProposal, summarizeGroupSources, toggleGroupMember } from '../state/driftGroup.js';
 import {
   describeLifecycleChoice,
   describeSuggestion,
@@ -60,6 +77,9 @@ import {
  * @param {{ isActive: () => boolean, closePlants: () => void, switchToPlan: () => void, focusOnPlants: (plants: Array) => void }} deps.phoneEditor
  * @param {() => void} deps.scrollPlanIntoView  the desktop counterpart of
  *   phoneEditor's focusOnPlants
+ * @param {(driftId: string) => void} deps.selectDrift  plantSelection.selectDrift
+ *   — nl-o47.6.4's group Accept selects the new drift whole once review is
+ *   out of the way, same as every other drift-making action in src/app.js
  */
 export function createDriftReviewMode({
   elements,
@@ -71,6 +91,7 @@ export function createDriftReviewMode({
   lockNonPlanControllers,
   phoneEditor,
   scrollPlanIntoView,
+  selectDrift,
 }) {
   const {
     bar,
@@ -81,6 +102,7 @@ export function createDriftReviewMode({
     moreBtn,
     moreGroup,
     hintEl,
+    movingHintEl,
     lifecycleGroup,
     lifecycleSummaryEl,
     lifecycleOptionsEl,
@@ -91,10 +113,19 @@ export function createDriftReviewMode({
   } = elements;
 
   let active = false;
+  /** 'suggestion' (nl-o47.6.5) or 'group' (nl-o47.6.4, a hand-made proposal). */
+  let mode = 'suggestion';
+  /** group mode only: the proposal's fixed species (src/state/driftGroup.js's seedGroupProposal). */
+  let groupSpeciesId = '';
   let skippedKeys = new Set();
   let startingTotal = 0;
   let baseKey = '';
-  /** null = "the suggestion's own algorithmic members, unmodified"; a Set once a tap has adjusted it. */
+  /**
+   * Suggestion mode: null = "the suggestion's own algorithmic members,
+   * unmodified"; a Set once a tap has adjusted it. Group mode: ALWAYS a Set —
+   * a hand-made proposal has no algorithmic baseline to fall back to, so this
+   * IS its membership, from the seed onward.
+   */
   let adjustedMemberIds = null;
   /** Index into summarizeSuggestionLifecycle(members).groups, or null (undecided/moot). */
   let lifecycleChoiceIndex = null;
@@ -121,7 +152,10 @@ export function createDriftReviewMode({
     if (redoRealBtn && !redoRealBtn.disabled) redoRealBtn.click();
   });
   acceptBtn?.addEventListener('click', () => accept());
-  skipBtn?.addEventListener('click', () => skip());
+  // Suggestion mode: Skip, moving to the next one. Group mode: the SAME
+  // button, relabelled "Cancel" (renderGroup), means "leave without writing"
+  // — exactly stop()'s own meaning.
+  skipBtn?.addEventListener('click', () => (mode === 'group' ? stop() : skip()));
   stopBtn?.addEventListener('click', () => stop());
 
   /** The current suggestion, freshly derived — never a stored queue entry. */
@@ -129,8 +163,15 @@ export function createDriftReviewMode({
     return pendingSuggestions(appState.plants, skippedKeys)[0] || null;
   }
 
-  /** `suggestion`'s membership as the person has (maybe) adjusted it, as live plant objects. */
+  /** `suggestion`'s membership as the person has (maybe) adjusted it, as live
+   * plant objects — or, in group mode (`suggestion` is unused there),
+   * `adjustedMemberIds` IS the proposal's whole membership. */
   function effectiveMembers(suggestion) {
+    if (mode === 'group') {
+      if (!adjustedMemberIds) return [];
+      const byId = new Map(appState.plants.map((plant) => [String(plant.id), plant]));
+      return [...adjustedMemberIds].map((id) => byId.get(id)).filter(Boolean);
+    }
     if (!suggestion) return [];
     if (!adjustedMemberIds) return suggestion.members;
     const byId = new Map(appState.plants.map((plant) => [String(plant.id), plant]));
@@ -177,9 +218,21 @@ export function createDriftReviewMode({
     hintEl.hidden = !message;
   }
 
+  /** Group mode's own status line (#driftReviewMovingHint, design.html) — a
+   * direct child of the bar rather than tucked inside #driftReviewMore, so it
+   * is visible without opening More on a phone (unlike #driftReviewHint's
+   * one-shot messages above, which a suggestion review has always used
+   * exactly as before). setGroupHint, below, is what decides its text. */
+  function setMovingHint(message) {
+    if (!movingHintEl) return;
+    movingHintEl.textContent = message || '';
+    movingHintEl.hidden = !message;
+  }
+
   function hideBar() {
     if (bar) bar.hidden = true;
     closeMore();
+    setMovingHint('');
   }
 
   function renderLifecycleChoice(members) {
@@ -212,7 +265,10 @@ export function createDriftReviewMode({
   }
 
   function renderReviewing(suggestion, members) {
-    if (bar) bar.hidden = false;
+    if (bar) {
+      bar.hidden = false;
+      bar.setAttribute('aria-label', 'Reviewing suggested drifts');
+    }
     if (label) {
       // The drift label leads — the essential part, species and count both —
       // with the position last, so a narrow bar's own ellipsis
@@ -222,7 +278,10 @@ export function createDriftReviewMode({
       label.textContent = `${describeSuggestion(members, suggestion.speciesId)} · ${positionInSession()} of ${startingTotal}`;
     }
     if (acceptBtn) acceptBtn.hidden = false;
-    if (skipBtn) skipBtn.hidden = false;
+    if (skipBtn) {
+      skipBtn.hidden = false;
+      skipBtn.textContent = 'Skip'; // group mode (renderGroup) relabels this "Cancel"
+    }
 
     const { needsChoice } = renderLifecycleChoice(members);
     const tooFew = members.length < MIN_SUGGESTION_CLUSTER_SIZE;
@@ -245,15 +304,81 @@ export function createDriftReviewMode({
     if (lifecycleGroup) lifecycleGroup.hidden = true;
   }
 
+  /**
+   * Group mode's own bar (nl-o47.6.4): the label with no "· N of M" (there is
+   * no queue), Accept and Cancel (the relabelled skipBtn) together on the
+   * primary row — reusing renderLifecycleChoice unchanged, so the same choice
+   * a suggestion needs when members disagree works here too.
+   */
+  function renderGroup(members) {
+    if (bar) {
+      bar.hidden = false;
+      bar.setAttribute('aria-label', 'Building a drift');
+    }
+    if (label) label.textContent = describeSuggestion(members, groupSpeciesId);
+    if (acceptBtn) acceptBtn.hidden = false;
+    if (skipBtn) {
+      skipBtn.hidden = false;
+      skipBtn.textContent = 'Cancel';
+    }
+
+    const { needsChoice } = renderLifecycleChoice(members);
+    const tooFew = members.length < MIN_SUGGESTION_CLUSTER_SIZE;
+    const canAccept = !tooFew && !needsChoice;
+    if (acceptBtn) {
+      acceptBtn.disabled = !canAccept;
+      acceptBtn.title = tooFew
+        ? `A drift needs at least ${MIN_SUGGESTION_CLUSTER_SIZE} plants.`
+        : needsChoice
+          ? "Choose the planting status these plants share, or adjust the members."
+          : '';
+    }
+  }
+
+  /**
+   * Group mode's standing status line (#driftReviewMovingHint): a one-shot
+   * refusal/no-op message (a different-species tap, a refused Accept) leads
+   * when there is one; otherwise "N from <drift>" for whatever is about to
+   * move out of another real drift (src/state/driftGroup.js's
+   * summarizeGroupSources/describeGroupSources), so Accept is never a
+   * surprise; otherwise, below the floor, a nudge toward what to tap next.
+   */
+  function setGroupHint(members, oneShotMessage) {
+    if (oneShotMessage) {
+      setMovingHint(oneShotMessage);
+      return;
+    }
+    const moving = describeGroupSources(summarizeGroupSources(members, appState.plants));
+    if (moving) {
+      setMovingHint(moving);
+      return;
+    }
+    if (members.length < MIN_SUGGESTION_CLUSTER_SIZE) {
+      const name = members[0]?.commonName || members[0]?.botanicalName || 'this species';
+      setMovingHint(`Tap another ${name} plant to add it to the drift.`);
+      return;
+    }
+    setMovingHint('');
+  }
+
   /** Re-derive everything from appState.plants and redraw the bar/outline. */
   function sync() {
     if (!active) {
       hideBar();
       return;
     }
+    if (mode === 'group') {
+      syncGroup();
+      return;
+    }
+    syncSuggestion();
+  }
+
+  function syncSuggestion() {
     const suggestion = currentSuggestion();
     const message = pendingMessage;
     pendingMessage = '';
+    setMovingHint(''); // group mode's own status line; never shown here
 
     if (!suggestion) {
       baseKey = '';
@@ -284,6 +409,25 @@ export function createDriftReviewMode({
     render();
   }
 
+  function syncGroup() {
+    const message = pendingMessage;
+    pendingMessage = '';
+    setHint(''); // the suggestion review's own one-shot line; never shown here
+
+    const members = effectiveMembers(null);
+    if (!members.length) {
+      // The seed (or every member since) vanished out from under the
+      // proposal — undone, removed elsewhere. Nothing left to build.
+      stop();
+      return;
+    }
+    adjustedMemberIds = new Set(members.map((member) => String(member.id)));
+    appState.suggestedDriftMemberIds = adjustedMemberIds;
+    renderGroup(members);
+    setGroupHint(members, message);
+    render();
+  }
+
   /** Edit mode, at least one suggestion, and no review already open — the
    * banner's own guard, checked again here defensively. */
   function start() {
@@ -291,6 +435,8 @@ export function createDriftReviewMode({
     const pending = pendingSuggestions(appState.plants, new Set());
     if (!pending.length) return;
     active = true;
+    mode = 'suggestion';
+    groupSpeciesId = '';
     skippedKeys = new Set();
     startingTotal = pending.length;
     baseKey = '';
@@ -305,9 +451,37 @@ export function createDriftReviewMode({
     sync();
   }
 
+  /**
+   * nl-o47.6.4: enter GROUP mode on `plantId` (the selection bar's "Make
+   * drift" — a single plant not already in a drift). Everything else about
+   * entering review is identical to start() above: clear the ordinary
+   * selection (the two never coexist), lock the elevation controllers, land
+   * on the plan.
+   * @param {string} plantId
+   */
+  function startGroup(plantId) {
+    if (active) return;
+    const plant = appState.plants.find((candidate) => String(candidate.id) === String(plantId));
+    const seed = seedGroupProposal(plant);
+    if (!seed) return;
+    active = true;
+    mode = 'group';
+    groupSpeciesId = seed.speciesId;
+    adjustedMemberIds = new Set(seed.members.map((member) => String(member.id)));
+    lifecycleChoiceIndex = null;
+    pendingMessage = '';
+    clearSelection();
+    lockNonPlanControllers(true);
+    phoneEditor?.closePlants?.();
+    phoneEditor?.switchToPlan?.();
+    sync();
+  }
+
   function stop() {
     if (!active) return;
     active = false;
+    mode = 'suggestion';
+    groupSpeciesId = '';
     skippedKeys = new Set();
     baseKey = '';
     adjustedMemberIds = null;
@@ -321,7 +495,7 @@ export function createDriftReviewMode({
   }
 
   function skip() {
-    if (!active) return;
+    if (!active || mode !== 'suggestion') return;
     const suggestion = currentSuggestion();
     if (!suggestion) return;
     skippedKeys.add(suggestionKey(suggestion));
@@ -333,6 +507,10 @@ export function createDriftReviewMode({
 
   function accept() {
     if (!active) return;
+    if (mode === 'group') {
+      acceptGroup();
+      return;
+    }
     const suggestion = currentSuggestion();
     if (!suggestion) return;
     const members = effectiveMembers(suggestion);
@@ -364,17 +542,74 @@ export function createDriftReviewMode({
   }
 
   /**
+   * nl-o47.6.4: Accept a hand-made proposal. Unlike a suggestion's Accept,
+   * this LEAVES review (there is no queue to move on to) and selects the new
+   * drift whole — the same "just made it, now it's selected" pattern every
+   * other drift-making action in src/app.js already follows (addDriftMember's
+   * plantId path, addDriftFromCatalog, acceptDriftSuggestion's OWN first
+   * accept does not select, but that one stays mid-review on purpose).
+   */
+  function acceptGroup() {
+    const members = effectiveMembers(null);
+    if (members.length < MIN_SUGGESTION_CLUSTER_SIZE) return; // the bar's own disabled state already guards this
+    const { uniform, groups } = summarizeSuggestionLifecycle(members);
+    let lifecycle;
+    if (!uniform) {
+      if (lifecycleChoiceIndex === null) return; // ditto
+      lifecycle = groups[lifecycleChoiceIndex]?.lifecycle;
+      if (!lifecycle) return;
+    }
+    const memberIds = members.map((member) => member.id);
+    const { driftId, reason } = acceptDriftGroup(appState, memberIds, lifecycle ? { lifecycle } : undefined);
+    if (!driftId) {
+      pendingMessage = reason || '';
+      sync();
+      return;
+    }
+    const description = `Made a drift: ${describeSuggestion(members, groupSpeciesId)}`;
+    stop(); // leaves review: clears mode/group state, hides the bar, unlocks controllers, renders
+    selectDrift?.(driftId);
+    commitLayoutChange(description);
+  }
+
+  /**
    * A tap on the plan while reviewing (src/interaction/dragController.js's
    * own review bypass calls this with the nearest hit, or '' for a miss):
-   * toggle it in/out of the current suggestion's adjusted membership.
+   * toggle it in/out of the current suggestion's adjusted membership. Group
+   * mode (nl-o47.6.4) dispatches to handleGroupTap below — same entry point,
+   * same bypass of selection/isolation/dragging, so "shift-click toggles
+   * membership" needs no separate code: dragController's review branch never
+   * looks at modifier keys, a plain click already does this.
    * @param {string} plantId
    */
   function handleTap(plantId) {
     if (!active || !plantId) return;
+    if (mode === 'group') {
+      handleGroupTap(plantId);
+      return;
+    }
     const suggestion = currentSuggestion();
     if (!suggestion) return;
     const members = effectiveMembers(suggestion);
     const { members: next, reason } = toggleSuggestionMember(members, plantId, appState.plants);
+    if (next === members) {
+      if (reason) {
+        pendingMessage = reason;
+        sync();
+      }
+      return;
+    }
+    adjustedMemberIds = new Set(next.map((member) => String(member.id)));
+    sync();
+  }
+
+  /** nl-o47.6.4: a tap while building a hand-made proposal — toggleGroupMember
+   * (src/state/driftGroup.js) is the one place this differs from a
+   * suggestion's own toggle: a same-species plant already in ANOTHER drift is
+   * allowed in (it will move), not refused. */
+  function handleGroupTap(plantId) {
+    const members = effectiveMembers(null);
+    const { members: next, reason } = toggleGroupMember(groupSpeciesId, members, plantId, appState.plants);
     if (next === members) {
       if (reason) {
         pendingMessage = reason;
@@ -402,6 +637,7 @@ export function createDriftReviewMode({
   return {
     isActive: () => active,
     start,
+    startGroup,
     stop,
     skip,
     accept,

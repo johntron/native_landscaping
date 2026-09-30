@@ -207,6 +207,7 @@ async function init() {
   const selectionDetailsBtn = document.getElementById('selectionDetailsBtn');
   const selectionCloneBtn = document.getElementById('selectionCloneBtn');
   const selectionRemoveBtn = document.getElementById('selectionRemoveBtn');
+  const selectionMakeDriftBtn = document.getElementById('selectionMakeDriftBtn'); // nl-o47.6.4
   const selectionDoneBtn = document.getElementById('selectionDoneBtn');
   const selectionBarMoreBtn = document.getElementById('selectionBarMoreBtn'); // nl-o47.4
   const selectionBarMore = document.getElementById('selectionBarMore'); // nl-o47.4
@@ -240,6 +241,7 @@ async function init() {
   const driftReviewMoreBtn = document.getElementById('driftReviewMoreBtn');
   const driftReviewMoreEl = document.getElementById('driftReviewMore');
   const driftReviewHintEl = document.getElementById('driftReviewHint');
+  const driftReviewMovingHintEl = document.getElementById('driftReviewMovingHint'); // nl-o47.6.4
   const driftReviewLifecycleEl = document.getElementById('driftReviewLifecycle');
   const driftReviewLifecycleSummaryEl = document.getElementById('driftReviewLifecycleSummary');
   const driftReviewLifecycleOptionsEl = document.getElementById('driftReviewLifecycleOptions');
@@ -816,6 +818,7 @@ async function init() {
       detailsBtn: selectionDetailsBtn,
       cloneBtn: selectionCloneBtn,
       removeBtn: selectionRemoveBtn,
+      makeDriftBtn: selectionMakeDriftBtn,
       doneBtn: selectionDoneBtn,
       moreBtn: selectionBarMoreBtn,
       moreGroup: selectionBarMore,
@@ -962,6 +965,13 @@ async function init() {
       const driftId = plantSelection.getDriftContext().selectedDriftId;
       if (driftId) openDriftPlantingSheet(driftId);
     },
+    // nl-o47.6.4: only ever shown for a single plant not already in a drift
+    // (selectionBar.js's own plainSingleMode) — opens driftReview's group
+    // mode, seeded with just this one plant.
+    onMakeDrift: () => {
+      const id = soleSelectedPlantId();
+      if (id) driftReview?.startGroup(id);
+    },
   });
 
   // The phone editor (nl-o47.4). applyMode is referenced before its own
@@ -1020,6 +1030,7 @@ async function init() {
       moreBtn: driftReviewMoreBtn,
       moreGroup: driftReviewMoreEl,
       hintEl: driftReviewHintEl,
+      movingHintEl: driftReviewMovingHintEl,
       lifecycleGroup: driftReviewLifecycleEl,
       lifecycleSummaryEl: driftReviewLifecycleSummaryEl,
       lifecycleOptionsEl: driftReviewLifecycleOptionsEl,
@@ -1036,6 +1047,9 @@ async function init() {
     lockNonPlanControllers,
     phoneEditor,
     scrollPlanIntoView,
+    // nl-o47.6.4: group mode's Accept selects the new drift whole once review
+    // is out of the way, same as every other drift-making action here.
+    selectDrift: (driftId) => plantSelection.selectDrift(driftId),
   });
 
   // Arrow keys nudge on desktop while a selection exists and focus is not in

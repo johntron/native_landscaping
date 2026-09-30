@@ -414,6 +414,16 @@
           <button type="button" class="button pill-button" id="selectionDetailsBtn">Details</button>
           <button type="button" class="button pill-button" id="selectionCloneBtn">Clone</button>
           <button type="button" class="button pill-button pill-button--danger" id="selectionRemoveBtn">Remove</button>
+          <!--
+            nl-o47.6.4 (drift-making method 2, "group selected plants"):
+            shown ONLY for a single plant selected that is NOT already in a
+            drift (src/ui/selectionBar.js's own plainSingleMode) — a drilled-
+            into member already has its own growth path, the count stepper's
+            "+". Opens the SAME review UI a suggestion opens
+            (src/interaction/driftReviewMode.js's group mode), seeded with
+            just this one plant.
+          -->
+          <button type="button" class="button pill-button" id="selectionMakeDriftBtn">Make drift</button>
         </div>
         <div class="selection-bar__nudges" role="group" aria-label="Nudge the selection">
           <button type="button" class="selection-bar__nudge" id="selectionNudgeN" aria-label="Nudge north">N</button>
@@ -461,12 +471,25 @@
       while reviewing); Skip, Stop, Undo, Redo, the toggle hint, and the
       lifecycle choice (shown only when a suggestion's members disagree, nl-
       o47.6.10) live in More, exactly like a drift's own rename/count/spread do.
+
+      nl-o47.6.4 reuses this SAME bar/module for a HAND-MADE proposal (the
+      selection bar's "Make drift"): driftReviewMode.js's own "group" mode
+      relabels #driftReviewSkipBtn "Cancel" (same slot, same one-shot leave-
+      without-writing meaning Stop already has) and drops the label's own
+      "· N of M" position suffix, since there is no queue of proposals to be
+      "N of" — see that module for what else differs. #driftReviewMovingHint,
+      below, is a SECOND status line, a direct child of this bar rather than
+      tucked inside #driftReviewMore, so "N from <drift>" (a proposal member
+      about to move out of another real drift) and a same-species-tap hint
+      are visible without opening More on a phone — unlike #driftReviewHint's
+      one-shot messages, which stay exactly where they always have.
     -->
     <div class="selection-bar" id="driftReviewBar" hidden role="toolbar" aria-label="Reviewing suggested drifts">
       <div class="selection-bar__primary">
         <span class="selection-bar__name" id="driftReviewLabel"></span>
         <div class="selection-bar__actions">
-          <!-- Skip beside Accept: a review is mostly one or the other, per suggestion. -->
+          <!-- Skip beside Accept: a review is mostly one or the other, per
+               suggestion. nl-o47.6.4's group mode relabels this "Cancel". -->
           <button type="button" class="button pill-button" id="driftReviewSkipBtn">Skip</button>
           <button type="button" class="button pill-button" id="driftReviewAcceptBtn">Accept</button>
           <button
@@ -481,6 +504,7 @@
           </button>
         </div>
       </div>
+      <p class="selection-bar__status" id="driftReviewMovingHint" role="status" hidden></p>
       <div class="selection-bar__more" id="driftReviewMore">
         <p class="selection-bar__status" id="driftReviewHint" role="status" hidden></p>
         <div class="drift-review__lifecycle" id="driftReviewLifecycle" hidden>

@@ -10,7 +10,10 @@
  * src/ui/plantSelection.js's own derived getter — nl-o47.6.12 dropped the
  * appState.selectedDriftId/driftDrilledIn fields this used to read directly):
  *  - plain (no drift): the plant's name (or "N plants"), Details, Clone,
- *    Remove, Done, the four nudges — exactly nl-o47.2.
+ *    Remove, Done, the four nudges — exactly nl-o47.2. A single plant (not
+ *    "N plants") also gets "Make drift" (nl-o47.6.4): opens
+ *    src/interaction/driftReviewMode.js's group mode, the SAME review UI a
+ *    suggestion opens, seeded with just this one plant.
  *  - whole drift selected: driftLabel's species-initials-plus-count text
  *    (src/render/labels.js, nl-o47.6.11 — a drift has no name of its own to
  *    edit, so there is no rename field); count -/N/+; spread tighter/looser;
@@ -73,6 +76,7 @@ export function createSelectionBar({
   onRemoveFromDrift,
   onBackToDrift,
   onDriftPlanting,
+  onMakeDrift,
 }) {
   const {
     bar,
@@ -80,6 +84,7 @@ export function createSelectionBar({
     detailsBtn,
     cloneBtn,
     removeBtn,
+    makeDriftBtn,
     doneBtn,
     moreBtn,
     moreGroup,
@@ -170,6 +175,10 @@ export function createSelectionBar({
     if (detailsBtn) detailsBtn.hidden = wholeDriftMode;
     if (cloneBtn) cloneBtn.hidden = wholeDriftMode;
     if (removeBtn) removeBtn.hidden = wholeDriftMode;
+    // nl-o47.6.4: only for a single plant that is NOT already in a drift — a
+    // drilled-in member already has its own way to grow its drift (the count
+    // stepper's "+"), and a whole drift is already one.
+    if (makeDriftBtn) makeDriftBtn.hidden = !plainSingleMode;
     if (!wholeDriftMode && name) {
       const ids = [...selection];
       if (ids.length === 1) {
@@ -241,6 +250,7 @@ export function createSelectionBar({
   detailsBtn?.addEventListener('click', () => onDetails?.());
   cloneBtn?.addEventListener('click', () => onClone?.());
   removeBtn?.addEventListener('click', () => onRemove?.());
+  makeDriftBtn?.addEventListener('click', () => onMakeDrift?.());
   doneBtn?.addEventListener('click', () => onDone?.());
   nudgeN?.addEventListener('click', () => onNudge?.('N'));
   nudgeE?.addEventListener('click', () => onNudge?.('E'));

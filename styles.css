@@ -2511,7 +2511,8 @@ select {
   }
   #selectionDetailsBtn,
   #selectionCloneBtn,
-  #selectionRemoveBtn {
+  #selectionRemoveBtn,
+  #selectionMakeDriftBtn {
     order: 3;
   }
   .selection-bar__drift-actions > * {
