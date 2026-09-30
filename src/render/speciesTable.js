@@ -20,9 +20,24 @@ import { driftMemberCountLabel } from '../data/driftId.js';
 const FIRST_EXTRA_COLUMN_INDEX = 4;
 
 export function renderSpeciesTable(container, plants, hostGenera, handlers = {}) {
-  const { onHoverStart, onHoverEnd, onDriftClick, highlightedDriftId = '' } = handlers;
+  const {
+    onHoverStart,
+    onHoverEnd,
+    onDriftClick,
+    highlightedDriftId = '',
+    suggestionCount = 0,
+    onReviewSuggestions,
+  } = handlers;
   if (!container) return;
   container.innerHTML = '';
+  // "Suggest drifts" (nl-o47.6.5): at the top of the list, the one place a
+  // person already meets their plants — the caller (src/ui/speciesHighlight.js)
+  // has already zeroed suggestionCount outside Edit mode, on the read-only
+  // example yard, and while a review is already open, so this needs no mode
+  // check of its own.
+  if (suggestionCount > 0) {
+    container.appendChild(buildSuggestDriftsBanner(suggestionCount, onReviewSuggestions));
+  }
   if (!plants?.length) return;
 
   const speciesMap = new Map();
@@ -232,6 +247,30 @@ function buildDriftCell({ label, plants, speciesKey, speciesLabel, highlightedDr
   }
   td.appendChild(list);
   return td;
+}
+
+/**
+ * "N possible drifts — Review" (nl-o47.6.5): the entry point into the
+ * suggestion review, at the top of the species list — on a phone this same
+ * element sits inside the Plants sheet (src/interaction/phoneEditor.js hosts
+ * the whole #speciesTable, banner included), on desktop it is simply the
+ * table's first child.
+ * @param {number} count
+ * @param {() => void} [onClick]
+ */
+function buildSuggestDriftsBanner(count, onClick) {
+  const banner = document.createElement('div');
+  banner.className = 'species-table__suggest-drifts';
+  const text = document.createElement('span');
+  text.textContent = `${count} possible drift${count === 1 ? '' : 's'}`;
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.id = 'suggestDriftsBtn';
+  button.className = 'button pill-button';
+  button.textContent = 'Review';
+  button.addEventListener('click', () => onClick?.());
+  banner.append(text, button);
+  return banner;
 }
 
 function formatFeet(value) {

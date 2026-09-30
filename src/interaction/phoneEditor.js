@@ -28,6 +28,14 @@
 import { MONTH_NAMES } from '../constants.js';
 import { clampMonthValue } from '../ui/controls.js';
 import { createCanvasGesture } from './canvasGesture.js';
+import { createViewTransform } from '../render/viewTransform.js';
+
+// nl-o47.6.5: margin held clear around a reviewed suggestion's own bounding
+// box when framing it (focusOnPlants below) — a judgement call, generous
+// enough that the suggestion's outline (itself padded past the members'
+// discs, src/state/driftGeometry.js's HULL_PADDING_FT) is not left touching
+// the clip edge.
+const SUGGESTION_FOCUS_PADDING_PX = 32;
 
 // The same breakpoint the rest of the phone layout already uses
 // (styles.css's `@media (max-width: 960px)`), so the editor and the CSS it
@@ -45,6 +53,14 @@ const PHONE_QUERY = '(max-width: 960px)';
  * @param {(viewId: string) => void} deps.setMaximizedView  always sets (never toggles) — src/app.js
  * @param {(mode: string) => void} deps.applyMode
  * @param {() => number} deps.getSelectionSize
+ * @param {() => boolean} [deps.isReviewActive]  the drift-suggestion review
+ *   (nl-o47.6.5, src/interaction/driftReviewMode.js): while it is open, the
+ *   idle bar must stay hidden too — it and the review bar share the exact
+ *   same fixed-bottom slot #selectionBar's own idle/selection split already
+ *   guarantees is never doubled, and the review bar is a THIRD occupant of
+ *   it, keyed off this rather than off selection size (review keeps the
+ *   plant selection empty throughout, which is exactly when the idle bar
+ *   would otherwise show).
  */
 export function createPhoneEditor({
   elements,
@@ -54,6 +70,7 @@ export function createPhoneEditor({
   setMaximizedView,
   applyMode,
   getSelectionSize,
+  isReviewActive = () => false,
 }) {
   const {
     tabsEl,
@@ -262,7 +279,7 @@ export function createPhoneEditor({
    */
   function syncBar() {
     if (!idleBarEl) return;
-    idleBarEl.hidden = !(active && getSelectionSize() === 0);
+    idleBarEl.hidden = !(active && getSelectionSize() === 0 && !isReviewActive());
     syncMonthReadout();
   }
 
@@ -281,6 +298,53 @@ export function createPhoneEditor({
     }
   });
 
+  /** Switch to the plan tab if it is not already showing — a no-op if the
+   * editor is not open or there is no plan view. */
+  function switchToPlan() {
+    if (!active) return;
+    const planView = planFirstViews().find((view) => view.type === 'plan');
+    if (planView) switchToView(planView.id);
+  }
+
+  /**
+   * Pan/zoom the (already-maximized) plan so every one of `plants` is in
+   * view (nl-o47.6.5's own review, one suggestion at a time) — the phone
+   * counterpart of a desktop scrollIntoView. A no-op when the editor is not
+   * open, the plan view is missing, or the panel has not been measured yet
+   * (0x0 bounds — e.g. its very first render, before layout).
+   * @param {Array<{x:number, y:number}>} plants plan-feet points (a
+   *   suggestion's own members; HULL_PADDING_FT-ish slack is unnecessary
+   *   here since SUGGESTION_FOCUS_PADDING_PX already holds screen-px margin)
+   */
+  function focusOnPlants(plants) {
+    if (!active) return;
+    const planView = planFirstViews().find((view) => view.type === 'plan');
+    if (!planView) return;
+    if (appState.maximizedViewId !== planView.id) switchToView(planView.id);
+    const points = (plants || []).filter((p) => Number.isFinite(p?.x) && Number.isFinite(p?.y));
+    if (!points.length) return;
+    const transform = createViewTransform(planView);
+    const viewBoxPoints = points.map((p) => transform.planToViewBox(p));
+    const bounds = gesture.getBounds();
+    if (!(bounds.contentWidth > 0) || !(bounds.contentHeight > 0)) return;
+    // "Local" px (canvasZoom.js's own space) is a uniform scale off viewBox
+    // units — no origin subtraction, since a view's viewBox always starts at
+    // (0,0) (src/render/viewConfig.js) and `.view`'s own CSS keeps its box at
+    // the viewBox's aspect ratio (nl-o47.1), so there is no letterbox to
+    // account for at rest.
+    const sx = bounds.contentWidth / transform.viewBox.width;
+    const sy = bounds.contentHeight / transform.viewBox.height;
+    const xs = viewBoxPoints.map((p) => p.x * sx);
+    const ys = viewBoxPoints.map((p) => p.y * sy);
+    const rect = {
+      x: Math.min(...xs),
+      y: Math.min(...ys),
+      width: Math.max(Math.max(...xs) - Math.min(...xs), 1),
+      height: Math.max(Math.max(...ys) - Math.min(...ys), 1),
+    };
+    gesture.focusRect(rect, SUGGESTION_FOCUS_PADDING_PX);
+  }
+
   fitBtn?.addEventListener('click', () => gesture.reset());
   monthPrevBtn?.addEventListener('click', () => moveMonthBy(-1));
   monthNextBtn?.addEventListener('click', () => moveMonthBy(1));
@@ -297,5 +361,5 @@ export function createPhoneEditor({
     }
   }
 
-  return { sync, syncBar, isActive: () => active };
+  return { sync, syncBar, isActive: () => active, closePlants, switchToPlan, focusOnPlants };
 }

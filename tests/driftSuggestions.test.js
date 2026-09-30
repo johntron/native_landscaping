@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   describeLifecycleChoice,
+  describeSuggestion,
   orderedSuggestions,
   pendingSuggestions,
   summarizeStatusCounts,
@@ -169,6 +170,22 @@ test('summarizeStatusCounts omits a zero side', () => {
   assert.equal(summarizeStatusCounts(allPlanned), '2 planned');
   const allPlanted = [p('a', 'winecup', 0, 0, { status: 'planted' })];
   assert.equal(summarizeStatusCounts(allPlanted), '1 planted');
+});
+
+// --- describeSuggestion (the one place a suggestion's own name is composed) --
+
+test('describeSuggestion reads the common name, then botanical, then falls back to speciesId', () => {
+  assert.equal(
+    describeSuggestion([{ commonName: 'Horseherb', botanicalName: 'Calyptocarpus vialis' }, {}], 'horseherb'),
+    'Horseherb · 2 plants'
+  );
+  assert.equal(describeSuggestion([{ botanicalName: 'Callirhoe involucrata' }], 'winecup'), 'Callirhoe involucrata · 1 plant');
+  assert.equal(describeSuggestion([{}], 'carex'), 'carex · 1 plant');
+});
+
+test('describeSuggestion handles an empty member list', () => {
+  assert.equal(describeSuggestion([], 'winecup'), 'winecup · 0 plants');
+  assert.equal(describeSuggestion(null, ''), ' · 0 plants');
 });
 
 test('describeLifecycleChoice labels a planned and a planted+ecotype group', () => {

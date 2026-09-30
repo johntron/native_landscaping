@@ -463,6 +463,59 @@
       </div>
     </div>
     <!--
+      Reviewing suggested drifts (nl-o47.6.5, src/interaction/driftReviewMode.js):
+      one suggestion at a time, offered from the "N possible drifts — Review"
+      banner at the top of the species list. This bar takes the SAME fixed-
+      bottom slot #selectionBar/#phoneEditorBar already share (the plant
+      selection stays empty throughout review, which is exactly what keeps
+      both of those hidden — see phoneEditor.js's own isReviewActive guard) —
+      never a third bar stacked with either. Reuses .selection-bar's own
+      classes rather than inventing a second phone/desktop split: Accept sits
+      with the label on the primary row (the action reached over and over
+      while reviewing); Skip, Stop, Undo, Redo, the toggle hint, and the
+      lifecycle choice (shown only when a suggestion's members disagree, nl-
+      o47.6.10) live in More, exactly like a drift's own rename/count/spread do.
+    -->
+    <div class="selection-bar" id="driftReviewBar" hidden role="toolbar" aria-label="Reviewing suggested drifts">
+      <div class="selection-bar__primary">
+        <span class="selection-bar__name" id="driftReviewLabel"></span>
+        <div class="selection-bar__actions">
+          <button type="button" class="button pill-button" id="driftReviewAcceptBtn">Accept</button>
+          <button
+            type="button"
+            class="button pill-button selection-bar__more-btn"
+            id="driftReviewMoreBtn"
+            aria-haspopup="true"
+            aria-expanded="false"
+            aria-controls="driftReviewMore"
+          >
+            More
+          </button>
+        </div>
+      </div>
+      <div class="selection-bar__more" id="driftReviewMore">
+        <p class="selection-bar__status" id="driftReviewHint" role="status" hidden></p>
+        <div class="drift-review__lifecycle" id="driftReviewLifecycle" hidden>
+          <p class="drift-review__lifecycle-summary" id="driftReviewLifecycleSummary"></p>
+          <div class="drift-review__lifecycle-options" id="driftReviewLifecycleOptions" role="radiogroup" aria-label="Choose the drift's planting status"></div>
+        </div>
+        <div class="selection-bar__plain-actions">
+          <button
+            type="button"
+            class="selection-bar__nudge selection-bar__undo-btn"
+            id="driftReviewUndoBtn"
+            aria-label="Undo"
+            title="Undo"
+          >
+            ↶
+          </button>
+          <button type="button" class="button pill-button selection-bar__redo-btn" id="driftReviewRedoBtn">Redo</button>
+          <button type="button" class="button pill-button" id="driftReviewSkipBtn">Skip</button>
+          <button type="button" class="button pill-button pill-button--danger" id="driftReviewStopBtn">Stop</button>
+        </div>
+      </div>
+    </div>
+    <!--
       The phone editor (nl-o47.4, src/interaction/phoneEditor.js): Edit mode
       on a phone-width screen (max-width: 960px) becomes a full-screen
       editor rather than a long scrolling page. Entering it auto-maximizes a

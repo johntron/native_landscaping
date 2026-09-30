@@ -73,7 +73,11 @@
   --danger: #9a3f2f;
   --danger-soft: #a8332b;
   --danger-wash: rgba(154, 63, 47, 0.12);
-  /* Taxonomic revision -- its own category, neither good nor bad. */
+  /* Taxonomic revision -- its own category, neither good nor bad. Also used
+     for a drift SUGGESTION under review (nl-o47.6.5, .drift-outline--
+     suggested below): a proposal is the same kind of thing -- provisional,
+     neither the amber life of a confirmed planting nor the ordinary cyan
+     apparatus of one that already exists. */
   --violet: #4a3d66;
   --violet-wash: rgba(74, 61, 102, 0.12);
 
@@ -1157,6 +1161,29 @@ select {
   overflow-x: auto;
 }
 
+/*
+ * "Suggest drifts" (nl-o47.6.5): at the top of the species list, the one
+ * place a person already meets their plants -- Edit mode only, hidden while
+ * there are none to suggest or a review is already open (src/render/
+ * speciesTable.js). Violet, matching the suggestion outline it leads to
+ * (.drift-outline--suggested): this banner is apparatus for a proposal too,
+ * not a fact about the yard.
+ */
+.species-table__suggest-drifts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+  padding: 0.6rem 0.85rem;
+  background-color: var(--violet-wash);
+  border: 1px solid var(--violet);
+  border-radius: 8px;
+  color: var(--ink-deep);
+  font-weight: 600;
+}
+
 .species-table__table,
 .species-table__table * {
   box-sizing: border-box;
@@ -1592,6 +1619,20 @@ select {
   stroke: var(--accent);
   stroke-width: 1.5;
   stroke-dasharray: 6 5;
+}
+
+/*
+ * A drift SUGGESTION under review (nl-o47.6.5, src/render/topView.js's
+ * appendDriftOutline({ suggested: true })): apparatus for a PROPOSAL, not
+ * data -- clearly distinct from a real drift's outline above in both hue
+ * (violet, not cyan/apparatus) and dash cadence (finer, 3 4 rather than
+ * 6 5), so a suggestion drawn mid-review can never be mistaken for a drift
+ * that already exists.
+ */
+.drift-outline--suggested {
+  fill: var(--violet-wash);
+  stroke: var(--violet);
+  stroke-dasharray: 3 4;
 }
 
 /*
@@ -2455,6 +2496,28 @@ select {
   color: var(--surface-raised);
 }
 
+/*
+ * The drift-suggestion review's lifecycle choice (nl-o47.6.5, "one planting
+ * status per drift," nl-o47.6.10): shown only while the current suggestion's
+ * members disagree. Lives inside #driftReviewBar's own .selection-bar__more,
+ * so it gets that popover's sizing/scroll for free; the options themselves
+ * reuse .chip (the same toggle-pick look the Add plant sheet's own filters
+ * use) rather than inventing a third button style, with .is-active marking
+ * whichever the person has picked.
+ */
+.drift-review__lifecycle-summary {
+  margin: 0 0 0.35rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.drift-review__lifecycle-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
 @media (min-width: 961px) {
   /* Above the phone breakpoint, none of the phone-only grouping above
      applies: every child of .selection-bar__primary/.selection-bar__more/
@@ -2630,8 +2693,12 @@ select {
   /* Matches #phoneEditorBar's own min-height (styles.css, further down) and
      the same box-sizing, so a selection starting or ending — which swaps
      which of the two bars is showing — never changes the reserved height
-     the canvas above them is fitted around. */
-  body.is-phone-editor-open #selectionBar {
+     the canvas above them is fitted around. #driftReviewBar (nl-o47.6.5) is
+     the third occupant of this same slot and gets the same treatment, for
+     the same reason: starting or leaving a review must not resize the
+     canvas either. */
+  body.is-phone-editor-open #selectionBar,
+  body.is-phone-editor-open #driftReviewBar {
     min-height: 6.6rem;
     box-sizing: border-box;
   }

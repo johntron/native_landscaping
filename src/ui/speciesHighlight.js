@@ -26,6 +26,11 @@ import { getSpeciesKey } from '../utils/speciesKey.js';
  * @param {(driftId: string) => void} [deps.onSelectDrift]  called by
  *   handleDriftClick while Edit mode is on (nl-o47.6.7) — the species
  *   table's per-drift entries; src/app.js passes plantSelection.selectDrift
+ * @param {() => number} [deps.getSuggestionCount]  the "N possible drifts"
+ *   banner's count (nl-o47.6.5) — src/app.js already zeroes this outside Edit
+ *   mode, on the read-only example yard, and while a review is already open,
+ *   so this module needs no mode check of its own.
+ * @param {() => void} [deps.onReviewSuggestions]  the banner's "Review" click
  */
 export function createSpeciesHighlight({
   appState,
@@ -34,6 +39,8 @@ export function createSpeciesHighlight({
   render,
   onSelectPlant = () => {},
   onSelectDrift = () => {},
+  getSuggestionCount = () => 0,
+  onReviewSuggestions = () => {},
 }) {
   let highlightedRowEl = null;
   let highlightedDriftEl = null;
@@ -183,6 +190,8 @@ export function createSpeciesHighlight({
       onHoverEnd: (_speciesKey, rowEl) => clearHighlightedSpecies(rowEl),
       onDriftClick: handleDriftClick,
       highlightedDriftId: appState.highlightedDriftId,
+      suggestionCount: getSuggestionCount(),
+      onReviewSuggestions,
     });
     // The rebuild above already drew the still-highlighted drift's own
     // button with its `.is-highlighted` class (the highlightedDriftId prop

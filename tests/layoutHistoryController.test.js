@@ -57,6 +57,41 @@ function plantsAt(xs, speciesCsv = PLANTS_CSV) {
   return xs.map((x, i) => createPlantFromSpecies(holly, { id: `h${i}`, x, y: 1 }));
 }
 
+test('undoMirror/redoMirror accept a list (nl-o47.6.5: the review bar is a second mirror alongside the phone editor\'s)', async () => {
+  const calls = [];
+  globalThis.fetch = async (url, opts = {}) => {
+    const body = opts.body ? JSON.parse(opts.body) : null;
+    calls.push({ url, body });
+    return { ok: true, json: async () => ({ entry: { id: 'e' }, cursor: 1 }) };
+  };
+  const appState = { species: parseSpeciesCsv(PLANTS_CSV, DRAWING_CSV), speciesSynonyms: new Map(), project: { id: 'p' }, plants: [] };
+  const fakeButton = () => ({ disabled: false, title: '' });
+  const undoButton = { ...fakeButton(), addEventListener() {} };
+  const redoButton = { ...fakeButton(), addEventListener() {} };
+  const undoMirrorA = fakeButton();
+  const undoMirrorB = fakeButton();
+  const redoMirrorA = fakeButton();
+  const controller = createLayoutHistoryController({
+    appState,
+    undoButton,
+    redoButton,
+    undoMirror: [undoMirrorA, undoMirrorB],
+    redoMirror: redoMirrorA, // a single element still works too
+    historyStatus: null,
+    render() {},
+    refreshSpeciesTable() {},
+  });
+  const entries = [
+    { id: 'e0', description: 'a', plants: plantsAt([1]).map(toPlacement) },
+    { id: 'e1', description: 'b', plants: plantsAt([2]).map(toPlacement) },
+  ];
+  controller.start({ entries, cursor: 0 });
+  await flush();
+  assert.equal(undoMirrorA.disabled, true, 'nothing before entry 0 to undo to');
+  assert.equal(undoMirrorB.disabled, true);
+  assert.equal(redoMirrorA.disabled, false, 'entry 1 is still ahead to redo to');
+});
+
 test('the yard is the entry at the cursor: no request, plants built from the catalog', async () => {
   const { controller, calls } = setup();
   const layout = plantsAt([2]);

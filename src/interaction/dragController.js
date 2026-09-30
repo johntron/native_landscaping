@@ -57,6 +57,20 @@ function snapshotGroupStartFeet(selection, plants) {
  * @param {(driftId: string) => void} [options.onSelectDrift]   select every current member of a drift
  * @param {(plantId: string, driftId: string) => void} [options.onDrillIntoDriftMember]
  *   narrow the selection to one member, keeping the drift context active
+ * @param {() => boolean} [options.isReviewActive]  the drift-suggestion review
+ *   (nl-o47.6.5, src/interaction/driftReviewMode.js): while it is open, a tap
+ *   or click on the plan bypasses selection, isolation, and dragging
+ *   entirely — see resolveTap's and handleMousePointerDown's own early
+ *   branches. Not wired into the ELEVATION controller below at all: review
+ *   restricts its own taps to the plan (the outline it draws is plan-only
+ *   too), and src/app.js locks every elevation controller outright for the
+ *   duration instead.
+ * @param {(plantId: string) => void} [options.onReviewTap]  the nearest
+ *   plant hit under a completed tap/click while reviewing, or '' for a miss;
+ *   toggling membership (same species, not already in a drift) or doing
+ *   nothing (a different species, already drifted, or no hit) is entirely
+ *   this callback's own decision, made through the pure
+ *   src/state/driftSuggestions.js toggleSuggestionMember.
  */
 export function createPlantDragController({
   svg,
@@ -72,6 +86,8 @@ export function createPlantDragController({
   getDriftContext = () => ({ selectedDriftId: '', driftDrilledIn: false }),
   onSelectDrift = () => {},
   onDrillIntoDriftMember = () => {},
+  isReviewActive = () => false,
+  onReviewTap = () => {},
 }) {
   const state = {
     locked: true,
@@ -168,6 +184,14 @@ export function createPlantDragController({
     const ctx = buildPointerContext(svg, event, getTransform());
     if (!ctx) {
       notifyHover('');
+      return;
+    }
+    if (isReviewActive()) {
+      // Reviewing: a click just toggles a candidate in/out (onReviewTap's own
+      // decision) — never selects, isolates, or starts a drag. No pointer
+      // capture either: nothing here is a gesture to track to pointerup.
+      const hits = pickPlantHits(getPlants(), ctx);
+      onReviewTap(hits[0] ? String(hits[0].plant.id) : '');
       return;
     }
     const plants = getPlants();
@@ -416,6 +440,16 @@ export function createPlantDragController({
    * separate candidate space from the plant-id one above.
    */
   function resolveTap(ctx, point) {
+    if (isReviewActive()) {
+      // Reviewing: the nearest hit under the tap toggles (or is silently
+      // ignored) — no isolation, no gap-tap cycling, no cycling through
+      // overlapping candidates on a repeat tap at the same spot (a
+      // simplification this review does not need: every candidate stays
+      // reachable by tapping it directly, wherever it sits).
+      const hits = ctx ? pickPlantHits(getPlants(), ctx) : [];
+      onReviewTap(hits[0] ? String(hits[0].plant.id) : '');
+      return;
+    }
     const plants = getPlants();
     const driftContext = getDriftContext();
     const isolatedMemberIds = driftContext.selectedDriftId ? memberIdSet(plants, driftContext.selectedDriftId) : null;

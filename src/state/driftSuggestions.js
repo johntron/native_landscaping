@@ -150,6 +150,25 @@ export function summarizeStatusCounts(members) {
 }
 
 /**
+ * A suggestion's own display text (nl-o47.6.5): "<species> · <count> plants"
+ * today — the ONE place this composes, so a later bead that changes how a
+ * drift is labelled everywhere (owner decision: a drift's label is becoming
+ * the species' plan abbreviation plus count, e.g. "CV (3x)", replacing a
+ * rename-able name) only has to change this function. Every place the review
+ * shows a suggestion's name — the bar's own label, an Accept's commit
+ * description — reads it from here rather than composing it inline.
+ * @param {Array<object>} members full plant objects, the suggestion's current (possibly adjusted) membership
+ * @param {string} speciesId  suggestion.speciesId — the fallback when `members` is empty
+ * @returns {string}
+ */
+export function describeSuggestion(members, speciesId) {
+  const list = Array.isArray(members) ? members : [];
+  const anchor = list[0];
+  const label = anchor?.commonName || anchor?.botanicalName || speciesId || '';
+  return `${label} · ${list.length} plant${list.length === 1 ? '' : 's'}`;
+}
+
+/**
  * One distinct-lifecycle option's label, for the choice
  * summarizeSuggestionLifecycle's `groups` offers: "Planned (12)", "Planted,
  * 2026-03-01 (5)", "Planted, local ecotype (3)".
