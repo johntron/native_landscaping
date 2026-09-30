@@ -5,6 +5,7 @@ import {
   plantPointerTarget,
   plantPosition,
   plantScreenPosition,
+  readScratchHistory,
   readScratchLayout,
   readScratchLayoutWithDrift,
   tap,
@@ -780,6 +781,53 @@ test.describe('drifts (nl-o47.6.2)', () => {
     rows = await readScratchLayoutWithDrift('touch-drift-convert');
     expect(rows[0].id).toBe('solo');
     expect(rows[0].driftId).toBe('');
+  });
+
+  test('marking a drift planted from its own editor sets status on every member, by touch (nl-o47.6.10)', async ({
+    page,
+  }) => {
+    const project = 'touch-drift-lifecycle';
+    async function driftMembersFromHistory() {
+      const history = await readScratchHistory(project);
+      const entry = history?.entries[history.cursor];
+      return (entry?.plants || []).filter((plant) => plant.driftId === 'winecup-drift');
+    }
+
+    await openScratchProject(page, project);
+    await page.locator('[data-mode="edit"]').click();
+    await tap(page, await driftMemberScreen(page, 'drift-a'));
+    await expect(page.locator('#selectionBarName')).toContainText('4 plants');
+
+    // "Planting" sits behind "More", like every other whole-drift-only control.
+    await page.locator('#selectionBarMoreBtn').click();
+    await page.locator('#selectionDriftPlantingBtn').click();
+
+    const sheet = page.locator('#detailSheet');
+    await expect(sheet).toBeVisible();
+    const section = sheet.locator('.plant-lifecycle');
+    await expect(section.locator('.plant-lifecycle__scope')).toContainText(
+      'Applies to all 4 plants in Winecup drift'
+    );
+
+    await section.locator('[data-lifecycle-status="planted"]').click();
+    await expect
+      .poll(async () => {
+        const members = await driftMembersFromHistory();
+        return members.length === 4 && members.every((m) => m.status === 'planted');
+      }, { timeout: 5000 })
+      .toBe(true);
+
+    // Closing the sheet did not drill the selection into one member — Undo,
+    // reachable straight from the primary row, reverts every member at once.
+    await page.keyboard.press('Escape');
+    await expect(sheet).toBeHidden();
+    await expect(page.locator('#selectionBarName')).toContainText('4 plants');
+    await page.locator('#selectionUndoBtn').click();
+    await expect
+      .poll(async () => (await driftMembersFromHistory()).filter((m) => m.status === 'planted').length, {
+        timeout: 5000,
+      })
+      .toBe(0);
   });
 });
 

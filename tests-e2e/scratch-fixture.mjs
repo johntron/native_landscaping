@@ -86,6 +86,10 @@ export const SCRATCH_PROJECTS = [
   // writes.
   'desktop-drift-convert',
   'touch-drift-convert',
+  // One planting status per drift (nl-o47.6.10): DRIFT_LAYOUT_CSV's own
+  // 4-member winecup drift, writable.
+  'desktop-drift-lifecycle',
+  'touch-drift-lifecycle',
   // The species table's per-drift entries and the plan's single grouped
   // label (nl-o47.6.7): each gets SPECIES_DRIFT_LAYOUT_CSV, below. Read-only
   // (clicking a drift entry selects/highlights but never writes), but the
@@ -156,6 +160,8 @@ const DRIFT_PROJECTS = [
   'desktop-drift-rename',
   'desktop-drift-rename-refuse',
   'touch-editor-zoom-drift',
+  'desktop-drift-lifecycle',
+  'touch-drift-lifecycle',
 ];
 
 /**

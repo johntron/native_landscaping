@@ -449,6 +449,10 @@
         <div class="selection-bar__drift-actions" id="selectionDriftGroup" hidden>
           <button type="button" class="button pill-button" id="selectionSpreadTighterBtn">Tighter</button>
           <button type="button" class="button pill-button" id="selectionSpreadLooserBtn">Looser</button>
+          <!-- nl-o47.6.10: opens the drift-wide status/date/source/ecotype editor
+               (src/interaction/plantLifecyclePanel.js, drift-scoped) in #detailSheet,
+               without touching the selection (src/ui/detailSheet.js's `drift` option). -->
+          <button type="button" class="button pill-button" id="selectionDriftPlantingBtn">Planting</button>
           <button type="button" class="button pill-button" id="selectionCloneDriftBtn">Clone drift</button>
           <button type="button" class="button pill-button pill-button--danger" id="selectionRemoveDriftBtn">Remove drift</button>
         </div>

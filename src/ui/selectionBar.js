@@ -12,8 +12,10 @@
  *    Remove, Done, the four nudges — exactly nl-o47.2.
  *  - whole drift selected: the driftId humanized + its member count, with an
  *    inline rename field (never window.prompt/alert/confirm); count -/N/+;
- *    spread tighter/looser; Clone drift; Remove drift; Done; nudges (which
- *    already move the whole selection, unchanged).
+ *    spread tighter/looser; Planting (the drift-wide status/date/source/
+ *    ecotype editor, nl-o47.6.10 — opens #detailSheet without touching the
+ *    selection, src/app.js's openDriftPlantingSheet); Clone drift; Remove
+ *    drift; Done; nudges (which already move the whole selection, unchanged).
  *  - drilled into one member: the SAME plain single-plant controls (Details/
  *    Clone/Remove act on that one plant) plus "Remove from drift" and "Back
  *    to drift".
@@ -70,6 +72,7 @@ export function createSelectionBar({
   onRemoveDrift,
   onRemoveFromDrift,
   onBackToDrift,
+  onDriftPlanting,
 }) {
   const {
     bar,
@@ -99,6 +102,7 @@ export function createSelectionBar({
     driftGroup,
     spreadTighterBtn,
     spreadLooserBtn,
+    driftPlantingBtn,
     cloneDriftBtn,
     removeDriftBtn,
     driftMemberGroup,
@@ -274,6 +278,7 @@ export function createSelectionBar({
   driftCountIncBtn?.addEventListener('click', () => onCountChange?.(1));
   spreadTighterBtn?.addEventListener('click', () => onSpread?.('tighter'));
   spreadLooserBtn?.addEventListener('click', () => onSpread?.('looser'));
+  driftPlantingBtn?.addEventListener('click', () => onDriftPlanting?.());
   cloneDriftBtn?.addEventListener('click', () => onCloneDrift?.());
   removeDriftBtn?.addEventListener('click', () => onRemoveDrift?.());
   removeFromDriftBtn?.addEventListener('click', () => onRemoveFromDrift?.());

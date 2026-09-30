@@ -2061,6 +2061,20 @@ select {
   color: var(--ink-muted);
 }
 
+/* The drift-wide scope note (nl-o47.6.10): "Applies to all N plants in
+   <drift>", or the "these plants had different settings" variant. Only
+   shown when the panel's current targets ARE a drift (2+ plants). */
+.plant-lifecycle__scope {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent-deep);
+}
+
+.plant-lifecycle__scope[hidden] {
+  display: none;
+}
+
 .plant-lifecycle__status {
   display: flex;
   gap: 0.4rem;

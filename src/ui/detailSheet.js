@@ -17,8 +17,9 @@ import { getGenus } from '../utils/speciesKey.js';
  * @param {object} deps.appState          read for plants, month, project, and the ecology indexes
  * @param {(plantId: string) => void} deps.setTargetedPlant
  * @param {{ open: (plantId: string) => void }} [deps.lifecyclePanel]  the status/date/source
- *   section (src/interaction/plantLifecyclePanel.js), shown for the opened plant
- * @returns {{ open: (plantId: string) => void, close: () => void }}
+ *   section (src/interaction/plantLifecyclePanel.js), shown for the opened plant — auto-scoped to
+ *   the plant's whole drift when it has a driftId (nl-o47.6.10)
+ * @returns {{ open: (plantId: string, options?: { drift?: boolean }) => void, close: () => void }}
  */
 export function createDetailSheet({ elements, appState, setTargetedPlant, lifecyclePanel }) {
   const {
@@ -38,7 +39,7 @@ export function createDetailSheet({ elements, appState, setTargetedPlant, lifecy
     setTargetedPlant('');
   };
 
-  const openDetailSheet = (plantId) => {
+  const openDetailSheet = (plantId, { drift = false } = {}) => {
     if (!detailSheet) return;
     const plant = appState.plants.find((p) => String(p.id) === String(plantId));
     if (!plant) return;
@@ -73,7 +74,14 @@ export function createDetailSheet({ elements, appState, setTargetedPlant, lifecy
     detailSheet.dataset.plantId = plantId;
     detailSheet.hidden = false;
     lifecyclePanel?.open(plantId);
-    setTargetedPlant(plantId);
+    // nl-o47.6.10: opened from the drift's OWN selection bar ("Planting" in
+    // More, whole-drift mode) rather than by drilling into or clicking one
+    // plant — setTargetedPlant would select just this one representative
+    // member in Edit mode (inferDriftContext drills the ALREADY-active whole
+    // drift into it), throwing away the whole-drift selection the person
+    // still has. A drilled-in member's own Details still targets it, since
+    // that IS the selection already.
+    if (!drift) setTargetedPlant(plantId);
   };
 
   /**

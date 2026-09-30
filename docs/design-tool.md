@@ -694,6 +694,55 @@ redo) both call it, so a 1-member drift left over from before this rule
 existed never survives a reload with its "−" enabled and ready to delete the
 last plant.
 
+**One planting status per drift** (nl-o47.6.10, strict — replaces the
+original design's "each keeps its own lifecycle"): status (planned/planted),
+planted date, source and local ecotype (`src/data/plantLifecycle.js`) are
+shared by every member. Storage stays per placement — each member carries
+the same fields, and the shopping list, the HOA packet, and
+`buildLayoutCsv`/`plantsFromPlacements` read them exactly as they always
+have, grouped by species and never by driftId (confirmed by inspection: none
+of `src/sourcing/shoppingList.js`, `src/export/hoaPacket.js`, or
+`src/data/layoutExporter.js` reads or branches on `driftId`) — the rule is
+enforced entirely by the EDITS, not by a different read path:
+
+- `setDriftLifecycle` (`driftEdits.js`) is the drift-wide counterpart of
+  `plantEdits.js`'s `setPlantLifecycle`: `fields` merges over the drift's
+  current shared lifecycle (`driftGeometry.js`'s `driftLifecycleSummary` —
+  the FIRST member's values), checked once with `validateLifecycle`, and
+  writes every member in one call, so the caller's commit is one history
+  entry regardless of drift size. A refused edit, or applying values every
+  member already has, changes nothing.
+- The drift-wide **editor** reuses `src/interaction/plantLifecyclePanel.js`'s
+  own controls rather than a second copy: `open(plantId)` resolves its
+  TARGETS from `plantId`'s own driftId at that moment — a plant in no drift
+  targets just itself (`setPlantLifecycle`); a drift member targets every
+  CURRENT member of that drift (`setDriftLifecycle`), read fresh on every
+  sync so an undo/redo is reflected immediately. This is how a drilled-in
+  member's own Details already edits the whole drift, unchanged. It also
+  reaches the whole drift with none drilled in, from the selection bar's
+  "Planting" entry in More (`selectionDriftPlantingBtn`): `src/app.js`'s
+  `openDriftPlantingSheet` opens `#detailSheet` at any one member (they are
+  all the same species) with `{ drift: true }`, which
+  `src/ui/detailSheet.js`'s `openDetailSheet` uses to skip
+  `setTargetedPlant` — opening it from an ALREADY-active whole-drift
+  selection must not drill that selection into the one representative
+  member it happens to open at. The panel shows "Applies to all N plants in
+  `<drift label>`", or, when a drift's members happen to disagree (older
+  data, an import), the FIRST member's values with a note that the next edit
+  unifies them (`driftLifecycleSummary`'s own `uniform` flag).
+- `addDriftMember` ("+") and `convertToDrift` (the 1 → 2 conversion above)
+  both copy the drift's/plant's own lifecycle onto the new member, so a
+  drift's very first "+" already agrees with the rest. `cloneDriftAwarePlant`
+  wraps `plantEdits.js`'s `clonePlantById` the same way `removeDriftAwarePlant`
+  wraps `removePlantById`: a clone that stays in a drift (`clonePlantById`
+  already carries `driftId` through) copies the source member's lifecycle
+  instead of `clonePlantById`'s own "always planned, no source" default,
+  since a clone would otherwise add a planned member to an already-planted
+  drift. `src/app.js`'s three Clone paths (the selection bar's, the detail
+  sheet's, and the plant context menu's) all go through it.
+  `addDriftFromCatalog`'s own members need no such copy: every one is
+  freshly planted from the catalog, so they start uniformly planned already.
+
 #### Selecting, isolating, and the drift action bar (nl-o47.6.2)
 
 Selection (nl-o47.2's Set of plant ids) gains a **drift context**, two more
@@ -774,13 +823,16 @@ through `convertToDrift` instead, above), Tighter/Looser spread
 (`spreadDrift`, a factor per press that is a named judgement constant,
 `DRIFT_SPREAD_STEP` in `src/app.js`), an inline rename text field (never
 `window.prompt`, refusing an empty name or one that collides with another
-drift — `renameDrift`'s own refusal, shown inline), Clone drift (selects the
+drift — `renameDrift`'s own refusal, shown inline), Planting (the drift-wide
+lifecycle editor, nl-o47.6.10, above), Clone drift (selects the
 new one), and Remove drift (deletes every planned member and dissolves the
 label on planted ones, its own label saying the two counts before it acts,
 since there is no `window.confirm` either). Drilled-into-one-member mode
 keeps the ordinary single-plant bar (Details/Clone/Remove act on that one
 plant; `clonePlantById` already carries `driftId` through like any other
-field, so cloning a member keeps the clone in the drift) and adds "Remove
+field, so cloning a member keeps the clone in the drift and
+`cloneDriftAwarePlant` copies its lifecycle too, nl-o47.6.10; Remove goes
+through `removeDriftAwarePlant`, nl-o47.6.9) and adds "Remove
 from drift" (`removePlantFromDrift`) and "Back to drift". Nudges and Done are
 shared by every mode, unchanged. Every edit commits through
 `layoutHistory.commit` only once something actually changed —

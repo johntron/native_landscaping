@@ -46,11 +46,11 @@ import { createPlantSelection } from './ui/plantSelection.js';
 import { createSelectionBar } from './ui/selectionBar.js';
 import { nudgeSelection } from './state/nudgeSelection.js';
 import { patchView } from './state/yardEdits.js';
-import { clonePlantById } from './state/plantEdits.js';
 import {
   addDriftFromCatalog,
   addDriftMember,
   cloneDrift,
+  cloneDriftAwarePlant,
   convertToDrift,
   removeDrift,
   removeDriftAwarePlant,
@@ -59,6 +59,7 @@ import {
   renameDrift,
   spreadDrift,
 } from './state/driftEdits.js';
+import { driftMembers } from './state/driftGeometry.js';
 import { createAddPlantSheet } from './ui/addPlantSheet.js';
 import { createPlantMenu } from './interaction/plantMenu.js';
 import { createPlantLifecyclePanel } from './interaction/plantLifecyclePanel.js';
@@ -224,6 +225,7 @@ async function init() {
   const selectionDriftGroup = document.getElementById('selectionDriftGroup');
   const selectionSpreadTighterBtn = document.getElementById('selectionSpreadTighterBtn');
   const selectionSpreadLooserBtn = document.getElementById('selectionSpreadLooserBtn');
+  const selectionDriftPlantingBtn = document.getElementById('selectionDriftPlantingBtn');
   const selectionCloneDriftBtn = document.getElementById('selectionCloneDriftBtn');
   const selectionRemoveDriftBtn = document.getElementById('selectionRemoveDriftBtn');
   const selectionDriftMemberGroup = document.getElementById('selectionDriftMemberGroup');
@@ -682,7 +684,10 @@ async function init() {
 
   const plantMenu = createPlantMenu({
     onClone: (plantId) => {
-      const clone = clonePlantById(appState, plantId);
+      // cloneDriftAwarePlant: clonePlantById's own rules (a clone starts
+      // planned, no source), except a clone that stays in a drift copies
+      // that drift's lifecycle instead (nl-o47.6.10).
+      const clone = cloneDriftAwarePlant(appState, plantId);
       if (clone) {
         plantMenu.hide();
         setTargetedPlant('');
@@ -743,6 +748,7 @@ async function init() {
       driftGroup: selectionDriftGroup,
       spreadTighterBtn: selectionSpreadTighterBtn,
       spreadLooserBtn: selectionSpreadLooserBtn,
+      driftPlantingBtn: selectionDriftPlantingBtn,
       cloneDriftBtn: selectionCloneDriftBtn,
       removeDriftBtn: selectionRemoveDriftBtn,
       driftMemberGroup: selectionDriftMemberGroup,
@@ -757,11 +763,13 @@ async function init() {
     onClone: () => {
       const id = soleSelectedPlantId();
       if (!id) return;
-      // clonePlantById copies every field but the lifecycle ones, driftId
-      // included — a drilled-in member's clone stays in its drift (nl-o47.6's
-      // own design), and plantSelection infers that from the clone's own
-      // driftId the same way any selectPlants call would.
-      const clone = clonePlantById(appState, id);
+      // cloneDriftAwarePlant: clonePlantById copies every field but the
+      // lifecycle ones, driftId included — a drilled-in member's clone stays
+      // in its drift (nl-o47.6's own design), and plantSelection infers that
+      // from the clone's own driftId the same way any selectPlants call
+      // would — except that the clone copies the drift's own shared
+      // lifecycle instead of always starting planned (nl-o47.6.10).
+      const clone = cloneDriftAwarePlant(appState, id);
       if (!clone) return;
       render();
       refreshSpeciesTable();
@@ -870,6 +878,10 @@ async function init() {
     onBackToDrift: () => {
       const driftId = appState.selectedDriftId;
       if (driftId) plantSelection.selectDrift(driftId); // a selection change, not an edit: no commit
+    },
+    onDriftPlanting: () => {
+      const driftId = appState.selectedDriftId;
+      if (driftId) openDriftPlantingSheet(driftId);
     },
   });
 
@@ -1017,7 +1029,9 @@ async function init() {
   }
 
   // Status, planting date and source (nl-3s5.22): each edit is one planting
-  // revision through the same commit as a drag.
+  // revision through the same commit as a drag. Auto-scopes to a whole drift
+  // when the opened plant has a driftId (nl-o47.6.10) — see the panel's own
+  // module comment.
   const lifecyclePanel = createPlantLifecyclePanel({
     sheet: detailSheet,
     appState,
@@ -1045,7 +1059,9 @@ async function init() {
   if (detailSheetCloneBtn) {
     detailSheetCloneBtn.addEventListener('click', () => {
       const plantId = detailSheet?.dataset.plantId;
-      const clone = clonePlantById(appState, plantId);
+      // cloneDriftAwarePlant (nl-o47.6.10): copies the drift's own lifecycle
+      // when the cloned plant stays in one.
+      const clone = cloneDriftAwarePlant(appState, plantId);
       if (clone) {
         closeDetailSheet();
         render();
@@ -1059,6 +1075,21 @@ async function init() {
     detailSheetRemoveBtn.addEventListener('click', () => {
       removePlant(detailSheet?.dataset.plantId);
     });
+  }
+
+  /**
+   * The drift-wide planting editor (nl-o47.6.10), reachable from the whole-
+   * drift selection bar's "Planting" entry (in More): opens #detailSheet at
+   * one of the drift's own members (any one — they are all the same
+   * species), but with `{ drift: true }` so it never touches the selection
+   * (see src/ui/detailSheet.js's own comment). lifecyclePanel auto-scopes to
+   * the whole drift from that member's driftId the same way a drilled-in
+   * member's own Details already does.
+   */
+  function openDriftPlantingSheet(driftId) {
+    const members = driftMembers(appState.plants, driftId);
+    if (!members.length) return;
+    openDetailSheet(members[0].id, { drift: true });
   }
 
   /**

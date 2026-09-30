@@ -5,9 +5,25 @@
  *
  * It builds its own markup and puts it before the sheet's Clone/Remove row,
  * so design.html needs no change. Every edit goes through setPlantLifecycle
- * (src/state/plantEdits.js), which refuses what validateLifecycle refuses,
- * and then through `onCommit`, the app's ordinary layout save: each change
- * is one revision in the yard's history, and Undo takes it back.
+ * (src/state/plantEdits.js) for a plant in no drift, and then through
+ * `onCommit`, the app's ordinary layout save: each change is one revision in
+ * the yard's history, and Undo takes it back.
+ *
+ * nl-o47.6.10: "one planting status per drift" is strict — a drift's members
+ * share status/date/source/ecotype, never edited separately — so this panel
+ * TARGETS A SET of plants, not always just one. `open(plantId)` resolves the
+ * targets from `plantId`'s OWN driftId at the moment it is opened: a plant in
+ * no drift targets just itself; a drift member (drilled into from the
+ * selection bar, or the drift's own "Planting" entry in More, which opens
+ * with any one of its members as the anchor — see src/ui/detailSheet.js's
+ * `drift` option) targets every CURRENT member of that drift, read fresh on
+ * every sync() rather than cached, so an undo/redo or another edit is
+ * reflected immediately. Every edit then goes through setDriftLifecycle
+ * (src/state/driftEdits.js) instead, writing every member as one history
+ * entry, and the panel says so ("Applies to all N plants in <drift label>").
+ * A drift whose members happen to differ (older data, an import) shows the
+ * FIRST member's values with a note; the next edit unifies them
+ * (driftLifecycleSummary, src/state/driftGeometry.js).
  *
  * The source is free text first. Rows of sourcing/nurseries.csv and
  * sourcing/plant-sales.csv are offered as suggestions while typing, and one is
@@ -30,6 +46,9 @@ import {
   suggestSources,
 } from '../data/plantLifecycle.js';
 import { setPlantLifecycle } from '../state/plantEdits.js';
+import { setDriftLifecycle } from '../state/driftEdits.js';
+import { driftLifecycleSummary, driftMembers } from '../state/driftGeometry.js';
+import { humanizeDriftId } from '../data/driftId.js';
 
 /**
  * Parsed sourcing/ tables, loaded once, on first need. A failed load leaves
@@ -55,8 +74,10 @@ function loadSourcingTables() {
 
 /**
  * @param {object} deps
- * @param {HTMLElement|null} deps.sheet               the #detailSheet element
- * @param {{ plants: object[] }} deps.appState         read and replaced through setPlantLifecycle
+ * @param {HTMLElement|null} deps.sheet               the #detailSheet element (or another sheet
+ *   built the same way — any element with a `.detail-sheet__panel` descendant)
+ * @param {{ plants: object[] }} deps.appState         read and replaced through
+ *   setPlantLifecycle/setDriftLifecycle
  * @param {(description: string) => void} deps.onCommit  re-render and record one layout revision
  * @returns {{ open: (plantId: string) => void, refresh: () => void, setReadOnly: (readOnly: boolean) => void }}
  */
@@ -74,6 +95,9 @@ export function createPlantLifecyclePanel({ sheet, appState, onCommit }) {
     'Planned plants are drawn with a dashed outline, planted ones with a solid outline. ' +
       'A local-ecotype plant has a second ring inside its outline in the plan.'
   );
+  // nl-o47.6.10: only shown when the targets ARE a drift (2+ plants) — see sync().
+  const scopeNote = el('p', 'plant-lifecycle__scope');
+  scopeNote.setAttribute('role', 'status');
 
   const statusRow = el('div', 'plant-lifecycle__status');
   statusRow.setAttribute('role', 'group');
@@ -120,7 +144,7 @@ export function createPlantLifecyclePanel({ sheet, appState, onCommit }) {
   const message = el('p', 'plant-lifecycle__message');
   message.setAttribute('role', 'status');
 
-  section.append(heading, key, statusRow, dateField, sourceField, linked, suggestions, ecotypeField, message);
+  section.append(heading, key, scopeNote, statusRow, dateField, sourceField, linked, suggestions, ecotypeField, message);
   const actions = panel.querySelector('.detail-sheet__actions');
   panel.insertBefore(section, actions || null);
 
@@ -133,17 +157,48 @@ export function createPlantLifecyclePanel({ sheet, appState, onCommit }) {
   // appState.readOnly) shows none of these controls: its writes answer 403.
   const isReadOnly = () => readOnly || Boolean(appState.readOnly);
 
-  const currentPlant = () => appState.plants.find((plant) => String(plant.id) === String(plantId));
+  /**
+   * The plant(s) this panel edits, read fresh every time (never cached): a
+   * plant in no drift targets just itself; a drift member targets every
+   * CURRENT member of its drift (nl-o47.6.10) — driftMembers on the anchor's
+   * OWN driftId, so an undo/redo that shrinks/grows the drift, or drops the
+   * label entirely (nl-o47.6.9's >= 2 rule), is reflected on the next sync().
+   */
+  const currentTargets = () => {
+    const anchor = appState.plants.find((plant) => String(plant.id) === String(plantId));
+    if (!anchor) return [];
+    if (!anchor.driftId) return [anchor];
+    const members = driftMembers(appState.plants, anchor.driftId);
+    return members.length ? members : [anchor];
+  };
 
   const showMessage = (text) => {
     message.textContent = text || '';
     message.hidden = !text;
   };
 
-  /** Apply `fields`; on a refusal, say why and put the inputs back. */
+  /** Apply `fields` to every current target; on a refusal, say why and put the inputs back. */
   const apply = (fields, description) => {
     if (isReadOnly() || !plantId) return;
-    const { plant, problems } = setPlantLifecycle(appState, plantId, fields);
+    const targets = currentTargets();
+    if (!targets.length) return;
+    if (targets.length > 1) {
+      // Every caller's description names "plant" ("Marked plant planted");
+      // this one history entry touches every member, so "drift" reads truer
+      // in the undo history — the on-screen note above already says how many.
+      const driftDescription = description.replace('plant', 'drift');
+      const { members, problems } = setDriftLifecycle(appState, targets[0].driftId, fields);
+      if (problems.length) {
+        showMessage(problems.join(' '));
+        sync();
+        return;
+      }
+      showMessage('');
+      if (members.length) onCommit(driftDescription);
+      sync();
+      return;
+    }
+    const { plant, problems } = setPlantLifecycle(appState, targets[0].id, fields);
     if (problems.length) {
       showMessage(problems.join(' '));
       sync();
@@ -154,12 +209,26 @@ export function createPlantLifecyclePanel({ sheet, appState, onCommit }) {
     sync();
   };
 
-  /** Put every control in line with the plant as it now is. */
+  /** Put every control in line with the target(s) as they now are. */
   const sync = () => {
-    const plant = currentPlant();
-    section.hidden = !plant || isReadOnly();
+    const targets = currentTargets();
+    section.hidden = !targets.length || isReadOnly();
     if (section.hidden) return;
-    const { status, plantedOn, source, localEcotype } = lifecycleOf(plant);
+    // The FIRST member's lifecycle, always (nl-o47.6.10's driftLifecycleSummary) —
+    // for one plant that IS the plant; for a drift, it is what an edit here
+    // merges onto and what every OTHER member gets unified to.
+    const { lifecycle, uniform } = driftLifecycleSummary(targets);
+    if (targets.length > 1) {
+      const label = humanizeDriftId(targets[0].driftId);
+      scopeNote.hidden = false;
+      scopeNote.textContent = uniform
+        ? `Applies to all ${targets.length} plants in ${label}.`
+        : `These plants had different settings; saving applies these to all ${targets.length} plants in ${label}.`;
+    } else {
+      scopeNote.hidden = true;
+      scopeNote.textContent = '';
+    }
+    const { status, plantedOn, source, localEcotype } = lifecycle;
     section.dataset.status = status;
     ecotypeInput.checked = localEcotype;
     statusButtons.forEach((button) => {
@@ -201,9 +270,9 @@ export function createPlantLifecyclePanel({ sheet, appState, onCommit }) {
 
   const renderSuggestions = () => {
     suggestions.replaceChildren();
-    const plant = currentPlant();
+    const targets = currentTargets();
     const text = sourceInput.value;
-    const ref = plant ? lifecycleOf(plant).source?.ref : null;
+    const ref = targets.length ? driftLifecycleSummary(targets).lifecycle.source?.ref : null;
     const offered = isReadOnly() ? [] : suggestSources(text, tables).filter((s) => !sameRef(s.ref, ref));
     suggestions.hidden = !offered.length;
     offered.forEach((suggestion) => {
@@ -243,8 +312,8 @@ export function createPlantLifecyclePanel({ sheet, appState, onCommit }) {
 
   sourceInput.addEventListener('input', renderSuggestions);
   sourceInput.addEventListener('change', () => {
-    const plant = currentPlant();
-    const ref = plant ? lifecycleOf(plant).source?.ref : null;
+    const targets = currentTargets();
+    const ref = targets.length ? driftLifecycleSummary(targets).lifecycle.source?.ref : null;
     const name = sourceInput.value;
     apply({ source: name.trim() ? { name, ref } : null }, name.trim() ? 'Set plant source' : 'Cleared plant source');
   });
@@ -258,8 +327,8 @@ export function createPlantLifecyclePanel({ sheet, appState, onCommit }) {
   });
 
   unlinkButton.addEventListener('click', () => {
-    const plant = currentPlant();
-    const source = plant ? lifecycleOf(plant).source : null;
+    const targets = currentTargets();
+    const source = targets.length ? driftLifecycleSummary(targets).lifecycle.source : null;
     if (!source) return;
     apply({ source: { name: source.name } }, 'Unlinked plant source');
   });
