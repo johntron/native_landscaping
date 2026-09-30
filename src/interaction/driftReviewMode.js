@@ -214,12 +214,12 @@ export function createDriftReviewMode({
   function renderReviewing(suggestion, members) {
     if (bar) bar.hidden = false;
     if (label) {
-      // Species and count lead — the essential part — with the position
-      // last, so a narrow bar's own ellipsis (.selection-bar__name)
-      // truncates the least essential piece first if it has to truncate at
-      // all (a 393px screenshot found "Suggestion 1 of 2 · Winecup · 4…"
-      // losing the plant count when position led instead).
-      label.textContent = `${describeSuggestion(members, suggestion.speciesId)} — suggestion ${positionInSession()} of ${startingTotal}`;
+      // The drift label leads — the essential part, species and count both —
+      // with the position last, so a narrow bar's own ellipsis
+      // (.selection-bar__name) truncates the least essential piece first if
+      // it has to truncate at all (a 393px screenshot found "Suggestion 1 of
+      // 2 · Winecup · 4…" losing the plant count when position led instead).
+      label.textContent = `${describeSuggestion(members, suggestion.speciesId)} · ${positionInSession()} of ${startingTotal}`;
     }
     if (acceptBtn) acceptBtn.hidden = false;
     if (skipBtn) skipBtn.hidden = false;

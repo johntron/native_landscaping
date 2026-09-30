@@ -6,7 +6,7 @@ import { clearSvg, createSvgElement } from './svgUtils.js';
 import { buildFeatureGroup } from './featureViews.js';
 import { buildFlowerCenters } from './inflorescenceStrategies.js';
 import { pointInPolygon, nearestFeature } from './geometry.js';
-import { buildDriftPlanLabel, buildPlantLabel, clampLabelPosition } from './labels.js';
+import { buildPlantLabel, clampLabelPosition, driftLabel } from './labels.js';
 import { buildFruitCenters } from './fruitPlacement.js';
 import { buildSmoothPath } from './pathUtils.js';
 import { ECOTYPE_RING_RATIO, isLocalEcotype, outlineStatusAttributes, plantStatus } from './plantStatus.js';
@@ -254,19 +254,19 @@ export function renderTopView(svg, plantStates, view, options = {}) {
 }
 
 /**
- * A drift's single on-plan label (nl-o47.6.7): humanizeDriftId(driftId) plus
- * its member count ("Winecup ×17"), centred at driftCentroid and sized off
- * the same member-radius math a plant's own label uses. Clamped inside the
- * view's own viewBox (clampLabelPosition) so a drift sitting near the plan's
- * edge does not draw text past it — the plan's `<svg>` itself never clips
- * (`.view svg { overflow: visible }`), but its parent panel does
- * (`overflow: hidden`, styles.css), and `captureViewToPng`'s export crops to
- * this exact viewBox.
+ * A drift's single on-plan label (nl-o47.6.7, nl-o47.6.11): driftLabel(drift's
+ * members) — the species' plan initials plus its count ("CV (3x)"), centred
+ * at driftCentroid and sized off the same member-radius math a plant's own
+ * label uses. Clamped inside the view's own viewBox (clampLabelPosition) so a
+ * drift sitting near the plan's edge does not draw text past it — the plan's
+ * `<svg>` itself never clips (`.view svg { overflow: visible }`), but its
+ * parent panel does (`overflow: hidden`, styles.css), and
+ * `captureViewToPng`'s export crops to this exact viewBox.
  */
 function appendDriftLabel(svg, drift, transform, dimmed) {
   const centroid = driftCentroid(drift.members);
   if (!centroid) return;
-  const label = buildDriftPlanLabel(drift.driftId, drift.members.length);
+  const label = driftLabel(drift.members);
   if (!label) return;
   const radiusFt = drift.members.reduce((max, m) => Math.max(max, memberRadiusFt(m)), 0);
   const fontSize = Math.max(transform.toPx(radiusFt) * 0.6, 16);

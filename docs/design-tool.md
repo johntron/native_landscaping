@@ -807,51 +807,43 @@ treatment `selectedPlantIds` already got.
 
 **The action bar** (`src/ui/selectionBar.js`) has three modes, none of them a
 separate element — the module just shows/hides pieces of the one bar. A
-drift's **label** is its driftId humanized (`src/data/driftId.js`
-`humanizeDriftId`: hyphens to spaces, first letter capitalised) plus its
-member count (`driftMemberCountLabel`) — no separate "named" flag
-distinguishes a species-minted id ("winecup-2") from a person's own rename
-("front-edge"); both read the same way once humanized. The bar's own
-`selectionBarName` span shows this text — as plain, ellipsized text — in
-EVERY mode now (nl-o47.6.9's review): a plain plant's name or "N plants" as
-before, or the drift's label + count in whole-drift mode. Whole-drift mode
-also shows a count `-`/N/`+` stepper (`addDriftMember`/`removeDriftMember`,
-each button disabling itself with the reason `driftGeometry.js` already
-computes when nothing can be added/removed — nl-o47.6.9 gives a single plain
-plant this same stepper too, reading 1 with "−" disabled, its "+" going
-through `convertToDrift` instead, above), Tighter/Looser spread
-(`spreadDrift`, a factor per press that is a named judgement constant,
-`DRIFT_SPREAD_STEP` in `src/app.js`), an inline rename text field (never
-`window.prompt`, refusing an empty name or one that collides with another
-drift — `renameDrift`'s own refusal, shown inline), Planting (the drift-wide
-lifecycle editor, nl-o47.6.10, above), Clone drift (selects the
-new one), and Remove drift (deletes every planned member and dissolves the
-label on planted ones, its own label saying the two counts before it acts,
-since there is no `window.confirm` either). Drilled-into-one-member mode
-keeps the ordinary single-plant bar (Details/Clone/Remove act on that one
-plant; `clonePlantById` already carries `driftId` through like any other
-field, so cloning a member keeps the clone in the drift and
-`cloneDriftAwarePlant` copies its lifecycle too, nl-o47.6.10; Remove goes
-through `removeDriftAwarePlant`, nl-o47.6.9) and adds "Remove
-from drift" (`removePlantFromDrift`) and "Back to drift". Nudges and Done are
-shared by every mode, unchanged. Every edit commits through
-`layoutHistory.commit` only once something actually changed —
-`spreadDrift`/`renameDrift` return success-shaped results on a no-op
-(nl-o47.6.1's own hand-off note), so `src/app.js`'s handlers check a rename
-actually changed the id, and compare member positions before/after a spread,
-before committing.
+drift has no name of its own to show or edit (nl-o47.6.11, owner decision
+2026-09-29): its **label** is `driftLabel(members)` (`src/render/labels.js`)
+— the species' plan initials (`buildPlantLabel` of its first member) plus its
+member count, e.g. "CV (3x)", the ONE helper every drift label anywhere in
+the app is built from (see "Drifts" above). The bar's own `selectionBarName`
+span shows this text — as plain, ellipsized text — in EVERY mode now
+(nl-o47.6.9's review): a plain plant's name or "N plants" as before, or the
+drift's label in whole-drift mode. Whole-drift mode also shows a count
+`-`/N/`+` stepper (`addDriftMember`/`removeDriftMember`, each button
+disabling itself with the reason `driftGeometry.js` already computes when
+nothing can be added/removed — nl-o47.6.9 gives a single plain plant this
+same stepper too, reading 1 with "−" disabled, its "+" going through
+`convertToDrift` instead, above), Tighter/Looser spread (`spreadDrift`, a
+factor per press that is a named judgement constant, `DRIFT_SPREAD_STEP` in
+`src/app.js`), Planting (the drift-wide lifecycle editor, nl-o47.6.10,
+above), Clone drift (selects the new one), and Remove drift (deletes every
+planned member and dissolves the label on planted ones, its own label saying
+the two counts before it acts, since there is no `window.confirm` either).
+Drilled-into-one-member mode keeps the ordinary single-plant bar
+(Details/Clone/Remove act on that one plant; `clonePlantById` already
+carries `driftId` through like any other field, so cloning a member keeps
+the clone in the drift and `cloneDriftAwarePlant` copies its lifecycle too,
+nl-o47.6.10; Remove goes through `removeDriftAwarePlant`, nl-o47.6.9) and
+adds "Remove from drift" (`removePlantFromDrift`) and "Back to drift".
+Nudges and Done are shared by every mode, unchanged. Every edit commits
+through `layoutHistory.commit` only once something actually changed —
+`spreadDrift` returns a success-shaped result on a no-op (nl-o47.6.1's own
+hand-off note), so `src/app.js`'s handler compares member positions
+before/after a spread before committing.
 
 On a phone (nl-o47.4's `.selection-bar__primary`/`.selection-bar__more`
-split, below), the rename field and its count label no longer fit the
-primary row once a plain plant's own count reads there too ("Winecup d…" was
-the nl-o47.6.2 review's own screenshot finding) — they live in the "More"
-popover instead, alongside the count stepper, spread, and the rest; the
-primary row keeps only the plain-text label, Undo, the More toggle, and
-Done. Desktop is unaffected: `.selection-bar__more`'s `display: contents`
-still puts the rename field back inline in the same spot, and
-`styles.css`'s `[data-drift-whole="true"] .selection-bar__name { display:
-none }` hides the redundant plain-text label there instead, so the two are
-never shown at once on either width.
+split, below), the drift-only controls (the count stepper, spread,
+Planting/Clone drift/Remove drift, the drilled-in extras) no longer fit the
+primary row once a plain plant's own count reads there too — they live in
+the "More" popover instead; the primary row keeps only the plain-text label,
+Undo, the More toggle, and Done. Desktop is unaffected: `.selection-bar__more`'s
+`display: contents` puts them back inline in the same flat row.
 
 **The species table and the plan/export label** (nl-o47.6.7). The species
 table (`src/render/speciesTable.js`, driven from `src/ui/speciesHighlight.js`)
@@ -859,14 +851,16 @@ gains a "Drifts" column, kept with the always-visible Label/Botanical
 name/Common name columns rather than behind the row's own Details toggle —
 it is a tap target, not reference data. Empty for a species with none; for
 one that has drifts it shows a summary line ("Winecup — 2 drifts, 17
-plants") plus one button per drift (`driftMemberCountLabel`,
-`src/data/driftId.js`: "Winecup · 12 plants", the same text the action bar
-above already assembles inline) and an "N single" count for whatever is
-left. `groupSpeciesDrifts` (`src/render/speciesTable.js`, pure, exported for
-its own unit tests) splits a species' plants into its drifts and its
-singles, keyed by `getSpeciesKey` — the same lower-cased key the table
-already groups ROWS by, never `driftsOfSpecies`' raw, case-sensitive
-`speciesId` comparison. A drift button's click (`handleDriftClick`,
+plants") plus one button per drift (`driftLabel`, nl-o47.6.11: "CV (12x)",
+the same text the action bar above already shows) and an "N single" count
+for whatever is left. `groupSpeciesDrifts` (`src/render/speciesTable.js`,
+pure, exported for its own unit tests) splits a species' plants into its
+drifts and its singles, keyed by `getSpeciesKey` — the same lower-cased key
+the table already groups ROWS by, never `driftsOfSpecies`' raw, case-sensitive
+`speciesId` comparison — and orders the drifts west to east, then south to
+north by each one's own centroid (nl-o47.6.11: position on the plan, since
+two drifts of one species read identically once there is no name left to
+order them by). A drift button's click (`handleDriftClick`,
 `src/ui/speciesHighlight.js`) branches on `appState.mode` exactly like
 `setTargetedPlant` already does, but exclusively rather than additively:
 Edit mode calls `plantSelection.selectDrift` (wired from `src/app.js`, the
@@ -883,9 +877,9 @@ blank-for-capture/snapshot/restore treatment `selectedDriftId` already gets,
 since — unlike the transient hover ids there — it is sticky.
 
 With labels on, a drift is labelled **once**, at its centroid
-(`driftCentroid`), as `<humanized driftId> ×N` (`buildDriftPlanLabel`,
-`src/render/labels.js`: "Winecup ×17") instead of labelling every member —
-in the plan (`topView.js`; an elevation still labels every member, since it
+(`driftCentroid`), as `driftLabel(members)` (nl-o47.6.11, `src/render/labels.js`:
+"CV (17x)", the species' plan initials plus its count) instead of labelling
+every member — in the plan (`topView.js`; an elevation still labels every member, since it
 has no single drift-wide anchor the way a centroid gives the plan one) and
 so in the plan bundle and HOA packet exports, which capture that same
 renderer. The label sits directly on the `<svg>`, never inside a plant's own
@@ -911,9 +905,12 @@ The ecology check's rule 9 (`src/analysis/rules/drifts.js`, id `drifts`) is
 titled **Massing**: it grades whether same-species plants read as one mass by
 measuring spacing (`plant.width`/`x`/`y`), never the label, so a declared
 drift planted too loosely does not count as a mass there. Its result names
-such a drift ("Front edge is spread too thin to read as one mass") so the plan
-and the check cannot silently disagree (nl-o47.6.8, the owner's choice over
-counting declared drifts).
+such a drift by its common name plus `driftLabel` ("Horseherb CV (3x) is
+spread too thin to read as one mass" — the common name leads here, unlike
+the plan/action bar's bare `driftLabel`, since this text stands alone with no
+drawing next to it to give "CV (3x)" its context) so the plan and the check
+cannot silently disagree (nl-o47.6.8, the owner's choice over counting
+declared drifts).
 
 **Suggesting drifts from an existing yard** (nl-o47.6.5, making method 3): for
 a yard planted before drifts existed — masses built by cloning, like the seed
@@ -958,12 +955,12 @@ skips each one.
 - **The bar** shares the exact same fixed-bottom slot `#selectionBar`/
   `#phoneEditorBar`'s idle bar already alternate over (`#driftReviewBar`,
   reusing `.selection-bar`'s own classes rather than a second phone/desktop
-  split): "Horseherb · 17 plants — suggestion 2 of 5" (the species/count part
-  comes from `driftSuggestions.js`'s `describeSuggestion`, the ONE place a
-  suggestion's name is composed — see the naming note below; it leads, with
-  the position last, so a narrow bar's own ellipsis truncates the least
-  essential part first if it has to truncate at all), Accept and a More
-  toggle on the primary row, Skip/Stop/Undo/Redo/the lifecycle choice in
+  split): "CV (17x) · 2 of 5" (the drift-label part comes from
+  `driftSuggestions.js`'s `describeSuggestion`, the ONE place a suggestion's
+  name is composed — see the naming note below; it leads, with the position
+  last, so a narrow bar's own ellipsis truncates the least essential part
+  first if it has to truncate at all), Accept and a More toggle on the
+  primary row, Skip/Stop/Undo/Redo/the lifecycle choice in
   More. Reviewing keeps the ordinary plant selection empty throughout (a set
   of guarded entry points in `src/app.js` — `selectPlantsGuarded` and
   friends — refuse to populate it while a review is open), which is what
@@ -1002,15 +999,11 @@ skips each one.
   step and leaves the exact same cluster to reappear on review's very next
   recompute (above) — never a suggestion built on stale plants. Finishing the
   list says so and leaves review.
-- **Naming, and what is NOT here yet**: a suggestion is described purely by
-  species and count (`describeSuggestion`) — there is no rename step, because
-  drift naming itself is being reworked (owner decision): a drift's on-plan
-  label is moving from a rename-able name to the species' plan abbreviation
-  plus count (e.g. "CV (3x)"), which a later bead applies everywhere,
-  `humanizeDriftId`/`driftMemberCountLabel`/`slugifyDriftLabel` included. This
-  bead adds no rename UI and no new use of those three functions; when the
-  later bead lands, `describeSuggestion` is the one place that needs to
-  change for the review to pick up the new scheme.
+- **Naming**: a suggestion is described by `describeSuggestion`, the one
+  place a suggestion's own name is composed — since a suggestion is a
+  proposed drift, it reads exactly like a real one, `driftLabel(members)`
+  (nl-o47.6.11: "CV (3x)"). There is no rename step: a drift has no name of
+  its own to give one.
 
 Group-selected and painted drifts (the other two making methods in
 nl-o47.6's "MAKING" list) are later beads under nl-o47.6.
@@ -1493,11 +1486,12 @@ hit-testing, drags, and drift outlines all stay correct under it with no changes
 - `src/history/layoutHistoryController.js` – the page's side of it: undo/redo buttons, the save-status line, `commit()` / `commitSetup()` / `commitFeatures()` (record, persist through one queue, check the server's cursor), and restoring a revision's setup and features on undo/redo.
 - `src/state/plantEdits.js` – add, clone, and remove a plant; `src/state/yardEdits.js` – scale and
   shift features, patch a view. Pure, and unit-tested directly.
-- `src/data/driftId.js` – a drift id's slug shape (`isValidDriftId`) and its display label
-  (`humanizeDriftId`, nl-o47.6.2); `src/state/plantIds.js`'s `buildDriftId` mints one.
+- `src/data/driftId.js` – a drift id's slug shape (`isValidDriftId`) and the slug builder
+  (`slugifyDriftLabel`) `src/state/plantIds.js`'s `buildDriftId` mints one from; a drift's
+  own display label is `driftLabel` (`src/render/labels.js`, nl-o47.6.11), not the id.
   `src/state/driftGeometry.js` and `src/state/driftEdits.js` – a drift's derived geometry
   (members, centroid, outline hull, the actual padded polygon to draw it, spacing, phyllotaxis
-  clump layout, suggestion clusters) and its edits (add/remove a member, spread, rename, clone,
+  clump layout, suggestion clusters) and its edits (add/remove a member, spread, clone,
   dissolve, remove the whole drift, and `addDriftFromCatalog` — place N of one species as a
   fresh drift, nl-o47.6.3), pure like `plantEdits.js` (see "Drifts" above).
 - `src/ui/speciesHighlight.js` – the table ↔ drawing link: highlighted species, targeted and

@@ -57,7 +57,6 @@ import {
   removeDriftAwarePlant,
   removeDriftMember,
   removePlantFromDrift,
-  renameDrift,
   spreadDrift,
 } from './state/driftEdits.js';
 import { driftMembers } from './state/driftGeometry.js';
@@ -223,10 +222,6 @@ async function init() {
   const selectionNudgeS = document.getElementById('selectionNudgeS');
   const selectionNudgeW = document.getElementById('selectionNudgeW');
   // nl-o47.6.2: the drift variants of the selection bar.
-  const selectionDriftNameGroup = document.getElementById('selectionDriftNameGroup');
-  const selectionDriftNameInput = document.getElementById('selectionDriftNameInput');
-  const selectionDriftCountLabel = document.getElementById('selectionDriftCountLabel');
-  const selectionDriftNameStatus = document.getElementById('selectionDriftNameStatus');
   const selectionDriftCountGroup = document.getElementById('selectionDriftCountGroup');
   const selectionDriftCountDecBtn = document.getElementById('selectionDriftCountDecBtn');
   const selectionDriftCountValue = document.getElementById('selectionDriftCountValue');
@@ -833,10 +828,6 @@ async function init() {
       nudgeE: selectionNudgeE,
       nudgeS: selectionNudgeS,
       nudgeW: selectionNudgeW,
-      driftNameGroup: selectionDriftNameGroup,
-      driftNameInput: selectionDriftNameInput,
-      driftCountLabel: selectionDriftCountLabel,
-      driftNameStatus: selectionDriftNameStatus,
       driftCountGroup: selectionDriftCountGroup,
       driftCountDecBtn: selectionDriftCountDecBtn,
       driftCountValue: selectionDriftCountValue,
@@ -880,16 +871,6 @@ async function init() {
     },
     onDone: () => plantSelection.clearSelection(),
     onNudge: handleNudge,
-    onRename: (driftId, label) => {
-      const result = renameDrift(appState, driftId, label);
-      // A refused name, or a no-op rename to the name it already has, edits
-      // nothing (renameDrift's own contract) — nothing to render or commit.
-      if (result.reason || result.driftId === driftId) return result;
-      render();
-      refreshSpeciesTable(); // its pruneSelection resyncs selectedDriftId to the new id (src/state/driftSelection.js)
-      commitLayoutChange('Renamed drift');
-      return result;
-    },
     onCountChange: (delta) => {
       const driftId = appState.selectedDriftId;
       if (driftId) {

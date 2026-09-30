@@ -2270,12 +2270,8 @@ select {
   min-width: 0;
 }
 
-.selection-bar__name,
-.selection-bar__drift-name {
-  min-width: 0; /* lets the label/rename field shrink+ellipsize instead of forcing the row wide */
-}
-
 .selection-bar__name {
+  min-width: 0; /* lets the label shrink+ellipsize instead of forcing the row wide */
   font-weight: 600;
   font-size: 0.9rem;
   color: var(--ink);
@@ -2348,68 +2344,14 @@ select {
   flex-shrink: 0;
 }
 
-/*
- * A whole drift's rename field + count label (nl-o47.6.2). Lives inside
- * .selection-bar__more (nl-o47.6.9's review: it no longer fit the primary
- * row once that row also has to show a plain-text label for a single plant's
- * own count stepper) — a phone shows it only once "More" is opened; desktop's
- * `display: contents` on .selection-bar__more puts it back inline, in the
- * same spot .selection-bar__name sits (which desktop hides instead, in this
- * one mode — see the `[data-drift-whole]` rule further down). The input IS
- * the rename field: no separate edit affordance, no window.prompt.
- */
-.selection-bar__drift-name {
-  display: flex;
-  align-items: baseline;
-  gap: 0.4rem;
-  margin-right: auto;
-  min-width: 0;
-}
-
-/* `display: flex` above otherwise beats the UA stylesheet's own `[hidden] {
-   display: none }` rule (equal specificity, later source order), so toggling
-   `hidden` on this element would stop actually hiding it — the bug this once
-   shipped with: a drilled-into member's bar still showed the whole-drift
-   name group underneath it. Same fix below for .selection-bar__count and
-   .selection-bar__drift-actions, the other two elements this module toggles. */
-.selection-bar__drift-name[hidden] {
-  display: none;
-}
-
-.selection-bar__rename {
-  font: inherit;
-  font-weight: 600;
-  font-size: 0.9rem;
-  color: var(--ink);
-  background: var(--surface-card);
-  border: 1px solid var(--rule-strong);
-  border-radius: 6px;
-  padding: 0.3rem 0.5rem;
-  min-height: 36px;
-  width: 9rem;
-  max-width: 40vw;
-}
-
-.selection-bar__rename:focus-visible {
-  outline: none;
-  border-color: var(--accent);
-}
-
-.selection-bar__count-label {
-  font-size: 0.82rem;
-  color: var(--ink-muted);
-  white-space: nowrap;
-}
-
-/* A refused rename (empty or colliding name) — visible, not just a dropped
-   keystroke, since there is no window.alert to fall back on. Sits right next
-   to the rename field inside .selection-bar__more (nl-o47.6.9's review: it
-   used to be a bare sibling of .selection-bar's own primary/more, which on a
-   phone would show it in the always-visible bar while the field it refers to
-   sat hidden behind the "More" popover). No flex-basis/order needed for that
-   phone layout — .selection-bar__more's own `flex-direction: column` and
-   `align-items: stretch` (its default) already give a block-level <p> the
-   full row to itself; the desktop media query below still orders it last. */
+/* A one-off status/hint line — visible, not just a dropped interaction,
+   since there is no window.alert to fall back on. Shared by the drift-
+   suggestion review bar's own hint (#driftReviewHint, the only user since
+   nl-o47.6.11 dropped the drift rename field this was first built for). No
+   flex-basis/order needed for the phone popover layout —
+   .selection-bar__more's own `flex-direction: column` and `align-items:
+   stretch` (its default) already give a block-level <p> the full row to
+   itself; the desktop media query below still orders it last. */
 .selection-bar__status {
   margin: 0;
   font-size: 0.8rem;
@@ -2533,11 +2475,11 @@ select {
      itself again (display: contents skips the wrapper's own box, keeping
      its children in the DOM for CSS/JS but not in the render tree), so the
      bar is one flat, wrapping row exactly as before nl-o47.4. `order`
-     restores the original sequence -- name/rename, nudges, the drift count
-     stepper, Details/Clone/Remove, the drift-specific actions (or the
-     drilled-in extras), Done, then the rename-refusal message last -- since
-     flattening three levels instead of one can no longer rely on DOM order
-     alone to reproduce it. */
+     restores the original sequence -- the plain-text name, nudges, the drift
+     count stepper, Details/Clone/Remove, the drift-specific actions (or the
+     drilled-in extras), Done, then a status line last -- since flattening
+     three levels instead of one can no longer rely on DOM order alone to
+     reproduce it. */
   .selection-bar__primary,
   .selection-bar__actions,
   .selection-bar__drift-actions,
@@ -2580,17 +2522,6 @@ select {
   }
   .selection-bar__status {
     order: 6;
-  }
-  /* nl-o47.6.9: .selection-bar__name is shown in every mode now (a phone
-     needs it, ellipsized, once the rename field moved out of the primary
-     row), but on desktop the rename field is already right there, inline
-     (the `display: contents` above puts it back in the same flat row) --
-     showing both at once would read as a duplicate of the same text.
-     src/ui/selectionBar.js sets this attribute on the bar itself, not on
-     .selection-bar__name directly, since it needs to keep working whichever
-     element ends up carrying the plain-text label. */
-  .selection-bar[data-drift-whole='true'] .selection-bar__name {
-    display: none;
   }
 }
 
@@ -2709,16 +2640,6 @@ select {
   body.is-phone-editor-open #driftReviewBar {
     min-height: 6.6rem;
     box-sizing: border-box;
-  }
-
-  /* The primary row now carries Undo alongside More and Done (nl-o47.4), so
-     a whole drift's rename field needs to give up some of the room the
-     desktop rule's 40vw cap allows it -- at 393px that cap alone (157px)
-     plus the count label and the three action buttons no longer fits one
-     row. Desktop is untouched (this rule is phone-only). */
-  .selection-bar__rename {
-    width: 6rem;
-    max-width: 22vw;
   }
 
   .view-meta {

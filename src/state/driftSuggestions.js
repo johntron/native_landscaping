@@ -16,6 +16,7 @@
  * read, with no special "was this my own undo" detection needed anywhere.
  */
 import { lifecycleOf } from '../data/plantLifecycle.js';
+import { driftLabel } from '../render/labels.js';
 import { MIN_SUGGESTION_CLUSTER_SIZE, suggestClusters } from './driftGeometry.js';
 
 /**
@@ -150,22 +151,20 @@ export function summarizeStatusCounts(members) {
 }
 
 /**
- * A suggestion's own display text (nl-o47.6.5): "<species> · <count> plants"
- * today — the ONE place this composes, so a later bead that changes how a
- * drift is labelled everywhere (owner decision: a drift's label is becoming
- * the species' plan abbreviation plus count, e.g. "CV (3x)", replacing a
- * rename-able name) only has to change this function. Every place the review
- * shows a suggestion's name — the bar's own label, an Accept's commit
- * description — reads it from here rather than composing it inline.
+ * A suggestion's own display text (nl-o47.6.5): a suggestion is a proposed
+ * drift, so it reads exactly like a real one — driftLabel's species initials
+ * plus count, e.g. "CV (3x)" (nl-o47.6.11, src/render/labels.js) — this is
+ * the ONE place a suggestion's name is composed. Every place the review shows
+ * a suggestion's name — the bar's own label, an Accept's commit description —
+ * reads it from here rather than composing it inline. `speciesId` is a
+ * fallback only, for the degenerate case driftLabel itself cannot label (an
+ * empty membership, or members with no usable name at all).
  * @param {Array<object>} members full plant objects, the suggestion's current (possibly adjusted) membership
- * @param {string} speciesId  suggestion.speciesId — the fallback when `members` is empty
+ * @param {string} speciesId  suggestion.speciesId
  * @returns {string}
  */
 export function describeSuggestion(members, speciesId) {
-  const list = Array.isArray(members) ? members : [];
-  const anchor = list[0];
-  const label = anchor?.commonName || anchor?.botanicalName || speciesId || '';
-  return `${label} · ${list.length} plant${list.length === 1 ? '' : 's'}`;
+  return driftLabel(members) || speciesId || '';
 }
 
 /**

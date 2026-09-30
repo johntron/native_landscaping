@@ -1,6 +1,6 @@
 import { STATUSES } from '../ecology.js';
 import { getSpeciesKey } from '../../utils/speciesKey.js';
-import { humanizeDriftId } from '../../data/driftId.js';
+import { driftLabel } from '../../render/labels.js';
 
 /**
  * Rule 9 — plants read as a MASS, to the eye and to a foraging insect, only
@@ -83,7 +83,7 @@ export default {
     ];
     looseDrifts.forEach((drift) => {
       findings.push(
-        `${drift.label} (${drift.members.length} plants) is spread too thin to read as one mass: its largest clump is ${drift.largestClump}.`
+        `${drift.label} is spread too thin to read as one mass: its largest clump is ${drift.largestClump}.`
       );
     });
     if (singles.length > 1) {
@@ -113,7 +113,11 @@ export default {
 
 /**
  * The drifts a person declared (plants sharing a driftId, nl-o47.6), in the
- * order each first appears, labelled the way the plan labels them.
+ * order each first appears, labelled the way the plan labels them (nl-o47.6.11:
+ * the species' common name plus driftLabel's plan initials and count, e.g.
+ * "Horseherb CV (3x)" — the common name leads here, unlike the plan/selection-
+ * bar's bare driftLabel, since this text stands alone in a check finding with
+ * no drawing next to it to give "CV (3x)" its context).
  * @returns {Array<{ driftId: string, label: string, members: object[] }>}
  */
 function declaredDrifts(plants) {
@@ -125,7 +129,10 @@ function declaredDrifts(plants) {
   });
   return [...byId.entries()]
     .filter(([, members]) => members.length > 1)
-    .map(([driftId, members]) => ({ driftId, label: humanizeDriftId(driftId), members }));
+    .map(([driftId, members]) => {
+      const commonName = members[0]?.commonName || members[0]?.botanicalName || '';
+      return { driftId, label: `${commonName} ${driftLabel(members)}`.trim(), members };
+    });
 }
 
 /** Union-find over one species' individuals, clustered by the 1.5x-radius rule above. */

@@ -1,6 +1,6 @@
 /**
- * Edits to a drift (nl-o47.6): grow it, shrink it, spread it, rename it,
- * clone it, or take it apart. Each takes the app state, replaces
+ * Edits to a drift (nl-o47.6): grow it, shrink it, spread it, clone it, or
+ * take it apart. Each takes the app state, replaces
  * `state.plants` with a new array (never mutates it), and returns what
  * changed, in plantEdits.js's own style — this file is deliberately separate
  * from plantEdits.js (which another change is editing concurrently) rather
@@ -26,7 +26,7 @@
 import { resolveYardBounds } from '../render/yardBounds.js';
 import { createPlantFromSpecies } from '../data/plantParser.js';
 import { LIFECYCLE_KEYS, lifecycleOf, validateLifecycle, withLifecycle } from '../data/plantLifecycle.js';
-import { dropUndersizedDrifts, slugifyDriftLabel } from '../data/driftId.js';
+import { dropUndersizedDrifts } from '../data/driftId.js';
 import { addPlantFromCatalog, clonePlantById, removePlantById } from './plantEdits.js';
 
 // Re-exported so a caller that mints/edits/prunes a drift can reach the
@@ -291,29 +291,6 @@ export function spreadDrift(state, driftId, factor) {
   });
   const updated = state.plants.filter((plant) => byId.has(plant.id));
   return { members: updated, appliedFactor, reason: null };
-}
-
-/**
- * Rename a drift: rewrite `driftId` on every one of its members to a slug of
- * `label` (src/data/driftId.js slugifyDriftLabel, which always yields a valid
- * one — a label with no usable characters slugs to 'drift'). Refuses a name
- * that collides with a DIFFERENT existing drift; renaming a drift to the name
- * it already has is a no-op, not a collision.
- * @param {{ plants: object[] }} state
- * @param {string} driftId
- * @param {string} label
- * @returns {{ driftId: string|null, reason: string|null }}
- */
-export function renameDrift(state, driftId, label) {
-  const members = driftMembers(state.plants, driftId);
-  if (!members.length) return { driftId: null, reason: 'no such drift' };
-  const nextId = slugifyDriftLabel(label);
-  if (nextId === driftId) return { driftId, reason: null };
-  if (existingDriftIds(state.plants).includes(nextId)) {
-    return { driftId: null, reason: `"${nextId}" is already the name of another drift` };
-  }
-  state.plants = state.plants.map((plant) => (plant.driftId === driftId ? { ...plant, driftId: nextId } : plant));
-  return { driftId: nextId, reason: null };
 }
 
 /**

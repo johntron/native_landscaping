@@ -245,7 +245,7 @@ test('with labels on, a drift is labelled once at its centroid instead of on eve
   const driftLabels = svg.querySelectorAll('text').filter((t) => t.getAttribute('data-drift-label'));
   assert.equal(driftLabels.length, 1, 'exactly one grouped label for the drift');
   assert.equal(driftLabels[0].getAttribute('data-drift-label'), 'front-edge');
-  assert.equal(driftLabels[0].textContent, 'Front edge ×2');
+  assert.equal(driftLabels[0].textContent, 'CI (2x)');
   assert.equal(driftLabels[0].getAttribute('pointer-events'), 'none');
   assert.equal(driftLabels[0].parentNode, svg, 'the drift label sits directly on the svg, not inside a plant group');
 

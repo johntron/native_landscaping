@@ -10,21 +10,20 @@
  * src/ui/plantSelection.js):
  *  - plain (no drift): the plant's name (or "N plants"), Details, Clone,
  *    Remove, Done, the four nudges — exactly nl-o47.2.
- *  - whole drift selected: the driftId humanized + its member count, with an
- *    inline rename field (never window.prompt/alert/confirm); count -/N/+;
- *    spread tighter/looser; Planting (the drift-wide status/date/source/
- *    ecotype editor, nl-o47.6.10 — opens #detailSheet without touching the
- *    selection, src/app.js's openDriftPlantingSheet); Clone drift; Remove
- *    drift; Done; nudges (which already move the whole selection, unchanged).
+ *  - whole drift selected: driftLabel's species-initials-plus-count text
+ *    (src/render/labels.js, nl-o47.6.11 — a drift has no name of its own to
+ *    edit, so there is no rename field); count -/N/+; spread tighter/looser;
+ *    Planting (the drift-wide status/date/source/ecotype editor, nl-o47.6.10
+ *    — opens #detailSheet without touching the selection, src/app.js's
+ *    openDriftPlantingSheet); Clone drift; Remove drift; Done; nudges (which
+ *    already move the whole selection, unchanged).
  *  - drilled into one member: the SAME plain single-plant controls (Details/
  *    Clone/Remove act on that one plant) plus "Remove from drift" and "Back
  *    to drift".
  *
  * DOM lookups stay in src/app.js, which passes every element in; every
  * action here is a callback into app.js, which owns the actual edit + commit
- * (this module never calls driftEdits.js/layoutHistory itself). The
- * exception is validating a typed drift name (empty, or a collision reported
- * back by onRename) — purely about what this INPUT accepts, not the edit.
+ * (this module never calls driftEdits.js/layoutHistory itself).
  *
  * nl-o47.4 adds one more purely-local bit of state: whether the "More"
  * popover (nudges, the drift count stepper, spread, clone/remove drift, the
@@ -53,7 +52,7 @@
  * early and left the mirror stuck disabled.
  */
 import { driftMembers, driftSpacing, memberToRemove, nextMemberPosition } from '../state/driftGeometry.js';
-import { driftMemberCountLabel, humanizeDriftId } from '../data/driftId.js';
+import { driftLabel } from '../render/labels.js';
 import { lifecycleOf } from '../data/plantLifecycle.js';
 import { resolveYardBounds } from '../render/yardBounds.js';
 
@@ -65,7 +64,6 @@ export function createSelectionBar({
   onRemove,
   onDone,
   onNudge,
-  onRename,
   onCountChange,
   onSpread,
   onCloneDrift,
@@ -91,10 +89,6 @@ export function createSelectionBar({
     nudgeE,
     nudgeS,
     nudgeW,
-    driftNameGroup,
-    driftNameInput,
-    driftCountLabel,
-    driftNameStatus,
     driftCountGroup,
     driftCountDecBtn,
     driftCountValue,
@@ -109,12 +103,6 @@ export function createSelectionBar({
     removeFromDriftBtn,
     backToDriftBtn,
   } = elements;
-
-  const setStatus = (message) => {
-    if (!driftNameStatus) return;
-    driftNameStatus.textContent = message || '';
-    driftNameStatus.hidden = !message;
-  };
 
   const closeMore = () => {
     if (!moreGroup) return;
@@ -154,7 +142,6 @@ export function createSelectionBar({
     if (!visible) {
       closeMore();
       lastBarKey = '';
-      bar.dataset.driftWhole = '';
       return;
     }
 
@@ -170,12 +157,6 @@ export function createSelectionBar({
     // that plant already belongs to a real drift with its own count, so this
     // is deliberately narrower than "selection.size === 1 && !wholeDriftMode".
     const plainSingleMode = !wholeDriftMode && !drilledInMode && Boolean(solePlant) && !solePlant.driftId;
-
-    // styles.css hides .selection-bar__name on desktop in this one mode,
-    // where the rename field (flattened back inline there) already shows the
-    // same information; a phone shows both because the field lives in the
-    // "More" popover there instead.
-    bar.dataset.driftWhole = wholeDriftMode ? 'true' : '';
 
     const barKey = `${driftId}|${drilledIn}`;
     if (barKey !== lastBarKey) closeMore();
@@ -198,11 +179,9 @@ export function createSelectionBar({
       }
     }
 
-    if (driftNameGroup) driftNameGroup.hidden = !wholeDriftMode;
     if (driftCountGroup) driftCountGroup.hidden = !wholeDriftMode && !plainSingleMode;
     if (driftGroup) driftGroup.hidden = !wholeDriftMode;
     if (driftMemberGroup) driftMemberGroup.hidden = !drilledInMode;
-    if (!wholeDriftMode) setStatus('');
 
     if (wholeDriftMode) syncDriftControls(driftId);
     else if (plainSingleMode) syncSinglePlantCountControls(soleId);
@@ -210,16 +189,9 @@ export function createSelectionBar({
 
   function syncDriftControls(driftId) {
     const members = driftMembers(appState.plants, driftId);
-    const label = humanizeDriftId(driftId);
     const count = members.length;
 
-    if (name) name.textContent = driftMemberCountLabel(driftId, count);
-    if (driftNameInput && document.activeElement !== driftNameInput) {
-      driftNameInput.value = label;
-    }
-    if (driftCountLabel) {
-      driftCountLabel.textContent = `· ${count} plant${count === 1 ? '' : 's'}`;
-    }
+    if (name) name.textContent = driftLabel(members);
     if (driftCountValue) driftCountValue.textContent = String(count);
 
     if (driftCountDecBtn) {
@@ -283,30 +255,6 @@ export function createSelectionBar({
   removeDriftBtn?.addEventListener('click', () => onRemoveDrift?.());
   removeFromDriftBtn?.addEventListener('click', () => onRemoveFromDrift?.());
   backToDriftBtn?.addEventListener('click', () => onBackToDrift?.());
-
-  driftNameInput?.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      driftNameInput.blur();
-    } else if (event.key === 'Escape') {
-      event.preventDefault();
-      driftNameInput.value = humanizeDriftId(appState.selectedDriftId);
-      setStatus('');
-      driftNameInput.blur();
-    }
-  });
-  driftNameInput?.addEventListener('blur', () => {
-    // The selection may have moved on (a mode change, Done) between focus
-    // and blur; only a live whole-drift selection can still be renamed.
-    if (!appState.selectedDriftId || appState.driftDrilledIn) return;
-    const value = driftNameInput.value.trim();
-    if (!value) {
-      setStatus('Give the drift a name.');
-      return;
-    }
-    const result = onRename?.(appState.selectedDriftId, value);
-    setStatus(result?.reason || '');
-  });
 
   return {
     sync,

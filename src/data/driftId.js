@@ -49,10 +49,12 @@ export function isValidDriftId(value) {
  * A label as a driftId slug: lower-cased, non-alphanumeric runs collapsed to
  * one hyphen, leading/trailing hyphens trimmed, cut to DRIFT_ID_MAX_LENGTH.
  * Never empty: a label with no usable characters slugs to 'drift'. The
- * result always satisfies isValidDriftId. Shared by
- * src/state/plantIds.js's buildDriftId (which walks past a collision by
- * adding a numeric suffix) and src/state/driftEdits.js's renameDrift (which
- * refuses one instead).
+ * result always satisfies isValidDriftId. Used by src/state/plantIds.js's
+ * buildDriftId (which walks past a collision by adding a numeric suffix) to
+ * mint an id from a species name — the id itself is invisible once minted
+ * (nl-o47.6.11: a drift's on-screen label is driftLabel,
+ * src/render/labels.js, not this slug humanized), so only its shape still
+ * matters, not its wording.
  * @param {string} label
  * @returns {string}
  */
@@ -64,41 +66,6 @@ export function slugifyDriftLabel(label) {
       .replace(/^-+|-+$/g, '')
       .slice(0, DRIFT_ID_MAX_LENGTH) || 'drift'
   );
-}
-
-/**
- * A drift's display label, when it has not been given one of its own
- * (nl-o47.6.2, orchestrator decision 2026-09-27): there is no separate
- * "named" flag distinguishing a species-minted id ("winecup-2") from a
- * person's own rename ("front-edge") — both are plain slugs, so the label is
- * always just the CURRENT driftId humanized, hyphens to spaces and the first
- * letter capitalised, with nothing else. "winecup-2" reads "Winecup 2";
- * "front-edge" reads "Front edge". The caller appends the member count
- * (src/ui/selectionBar.js); this only ever humanizes the id itself.
- * @param {string} driftId
- * @returns {string}
- */
-export function humanizeDriftId(driftId) {
-  const text = String(driftId || '').replace(/-/g, ' ');
-  return text ? text.charAt(0).toUpperCase() + text.slice(1) : '';
-}
-
-/**
- * A drift's full display label, humanizeDriftId(driftId) plus its member
- * count spelled out — "Winecup · 17 plants" — the same text
- * src/ui/selectionBar.js's action bar already assembles inline for the
- * whole-drift mode (its own driftNameInput/driftCountLabel pair) and the
- * species table's per-drift entries (nl-o47.6.7) share verbatim, so the two
- * read identically wherever a person sees a drift named.
- * @param {string} driftId
- * @param {number} count
- * @returns {string} '' for an unhumanizable id
- */
-export function driftMemberCountLabel(driftId, count) {
-  const label = humanizeDriftId(driftId);
-  if (!label) return '';
-  const n = Number(count) || 0;
-  return `${label} · ${n} plant${n === 1 ? '' : 's'}`;
 }
 
 /**

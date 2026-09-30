@@ -347,11 +347,13 @@
       member mode keeps the plain Details/Clone/Remove and adds
       selectionDriftMemberGroup (Remove from drift, Back to drift).
       selectionBarName itself is now shown in EVERY mode (nl-o47.6.9's review):
-      the species name, "N plants", or the drift's own humanized label + count
-      (driftMemberCountLabel), as plain ellipsized text — the drift's count
+      the species name, "N plants", or the drift's own label (nl-o47.6.11,
+      src/render/labels.js's driftLabel: the species' plan initials plus its
+      count, e.g. "CV (3x)" — a drift has no name of its own to edit, so there
+      is no rename field), as plain ellipsized text — the drift's count
       stepper also appears for a single plant, reading 1 with "-" disabled
       (Remove already deletes a lone plant; "+" makes it a drift of 2,
-      src/state/driftEdits.js's convertToDrift). Nudges and Done are shared by
+      src/state/driftEdits.js's addDriftMember). Nudges and Done are shared by
       every mode.
 
       nl-o47.4 restructures the markup (never the logic) for the phone
@@ -361,18 +363,13 @@
       more than that once a drift's own count is counted, see the nl-o47.4
       bead's own screenshots) and .selection-bar__more, everything else
       (Details/Clone/Remove, Redo, nudges, the drift count stepper, spread,
-      the drift's rename field (nl-o47.6.9's review: it no longer fits the
-      primary row once shown for a single plant too), clone/remove drift, the
-      drilled-in extras), as a popover the More button shows/hides — never a
-      third thing stacked under the primary row, so the bar stays at most the
-      one row plus that on-demand popover (the nl-o47.6.2 review's "at most
-      two rows"). On desktop styles.css makes .selection-bar__more
-      `display: contents` and hides the More button outright, so nothing
-      there changes: every control still shows inline in one row, in its
-      original order, as it always has — INCLUDING the rename field, which
-      moving it into the DOM under .selection-bar__more does not hide there
-      (styles.css also hides the plain-text label there instead, in whole-
-      drift mode, so the two are never both shown at once).
+      clone/remove drift, the drilled-in extras), as a popover the More button
+      shows/hides — never a third thing stacked under the primary row, so the
+      bar stays at most the one row plus that on-demand popover (the
+      nl-o47.6.2 review's "at most two rows"). On desktop styles.css makes
+      .selection-bar__more `display: contents` and hides the More button
+      outright, so nothing there changes: every control still shows inline in
+      one row, in its original order, as it always has.
 
       Undo/Redo here (#selectionUndoBtn/#selectionRedoBtn) are NOT the real
       #undoLayoutBtn/#redoLayoutBtn the toolbar and the editor's idle bar use
@@ -412,17 +409,6 @@
         </div>
       </div>
       <div class="selection-bar__more" id="selectionBarMore">
-        <div class="selection-bar__drift-name" id="selectionDriftNameGroup" hidden>
-          <input
-            type="text"
-            class="selection-bar__rename"
-            id="selectionDriftNameInput"
-            aria-label="Drift name"
-            autocomplete="off"
-          />
-          <span class="selection-bar__count-label" id="selectionDriftCountLabel"></span>
-        </div>
-        <p class="selection-bar__status" id="selectionDriftNameStatus" role="status" hidden></p>
         <button type="button" class="button pill-button selection-bar__redo-btn" id="selectionRedoBtn">Redo</button>
         <div class="selection-bar__plain-actions">
           <button type="button" class="button pill-button" id="selectionDetailsBtn">Details</button>

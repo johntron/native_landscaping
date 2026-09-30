@@ -1,5 +1,3 @@
-import { humanizeDriftId } from '../data/driftId.js';
-
 function pickSourceName(plant) {
   return (
     plant?.botanicalName ||
@@ -26,28 +24,33 @@ export function buildPlantLabel(plant) {
 }
 
 /**
- * A drift's single on-plan label (nl-o47.6.7): its driftId humanized plus
- * its member count, e.g. "Winecup ×17" for a drift minted "winecup" with 17
- * members. This replaces every member's own buildPlantLabel while the plan
- * shows the drift as one group — src/render/topView.js, and so the plan
- * bundle and HOA packet exports that capture the same renderer
- * (src/export/exportActions.js) — while it draws individual member labels
- * again for whichever drift is selected/isolated in Edit mode. See
- * docs/design-tool.md "Drifts". `count` is passed rather than re-derived so
- * a caller already holding the member list (driftMembers/allDrifts) does not
- * recompute it.
- * @param {string} driftId
- * @param {number} count
- * @returns {string} '' for an unhumanizable id or a non-positive count
+ * A drift's ONE label, wherever a drift is named (nl-o47.6.11, owner decision
+ * 2026-09-29): the species' plan initials (buildPlantLabel of its first
+ * member) plus its member count, e.g. "CV (3x)" for three horseherb. A drift
+ * has no name of its own to show or edit — there is nothing left to rename —
+ * so this single helper is the ONE place a drift's label is composed: the
+ * plan's centroid label (src/render/topView.js, and so the plan bundle and
+ * HOA packet exports that capture the same renderer,
+ * src/export/exportActions.js), the species list's per-drift chips
+ * (src/render/speciesTable.js), the selection bar's whole-drift text
+ * (src/ui/selectionBar.js), the suggestion review bar (a suggestion is a
+ * proposed drift, src/state/driftSuggestions.js describeSuggestion), and the
+ * Planting sheet's drift-wide scope note
+ * (src/interaction/plantLifecyclePanel.js). Two drifts of one species with
+ * the same count get identical labels — the species list resolves that by
+ * grouping under the species (src/render/speciesTable.js).
+ * @param {Array<object>} members full plant objects, the drift's current membership
+ * @returns {string} '' for an empty list
  */
-export function buildDriftPlanLabel(driftId, count) {
-  const label = humanizeDriftId(driftId);
-  const n = Number(count);
-  if (!label || !Number.isFinite(n) || n <= 0) return '';
-  return `${label} ×${n}`;
+export function driftLabel(members) {
+  const list = Array.isArray(members) ? members : [];
+  if (!list.length) return '';
+  const label = buildPlantLabel(list[0]);
+  if (!label) return '';
+  return `${label} (${list.length}x)`;
 }
 
-/** buildDriftPlanLabel's/clampLabelPosition's guess at an average glyph's
+/** driftLabel's/clampLabelPosition's guess at an average glyph's
  * width, in units of its own font size — a Helvetica-ish average character
  * width, and a judgement call, not a metric: the renderer has no access to
  * the DOM's actual glyph widths (an exported PNG is captured from this same
@@ -60,8 +63,8 @@ const AVG_CHAR_WIDTH_EM = 0.62;
  * Keep a centred SVG text label (`text-anchor="middle"`,
  * `dominant-baseline="middle"`) fully inside `viewBox`, nudging its anchor
  * point inward from whichever edges it would otherwise overhang. Written for
- * a drift's single on-plan label (nl-o47.6.7), whose text ("Winecup ×17") is
- * far wider than a member's own two-letter buildPlantLabel and can overhang
+ * a drift's single on-plan label (nl-o47.6.7), whose text ("CV (17x)") is
+ * wider than a member's own two-letter buildPlantLabel and can overhang
  * the plan's own edge when a drift's centroid sits near one — the plan's SVG
  * itself never clips (`.view svg { overflow: visible }`, styles.css), but
  * its parent panel does (`overflow: hidden`), so text drawn past the

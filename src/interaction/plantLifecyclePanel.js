@@ -48,7 +48,7 @@ import {
 import { setPlantLifecycle } from '../state/plantEdits.js';
 import { setDriftLifecycle } from '../state/driftEdits.js';
 import { driftLifecycleSummary, driftMembers } from '../state/driftGeometry.js';
-import { humanizeDriftId } from '../data/driftId.js';
+import { driftLabel } from '../render/labels.js';
 
 /**
  * Parsed sourcing/ tables, loaded once, on first need. A failed load leaves
@@ -219,7 +219,7 @@ export function createPlantLifecyclePanel({ sheet, appState, onCommit }) {
     // merges onto and what every OTHER member gets unified to.
     const { lifecycle, uniform } = driftLifecycleSummary(targets);
     if (targets.length > 1) {
-      const label = humanizeDriftId(targets[0].driftId);
+      const label = driftLabel(targets);
       scopeNote.hidden = false;
       scopeNote.textContent = uniform
         ? `Applies to all ${targets.length} plants in ${label}.`

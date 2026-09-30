@@ -1,19 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildDriftPlanLabel, clampLabelPosition } from '../src/render/labels.js';
+import { clampLabelPosition, driftLabel } from '../src/render/labels.js';
 
-test('buildDriftPlanLabel humanizes the driftId and appends its count (nl-o47.6.7)', () => {
-  assert.equal(buildDriftPlanLabel('winecup', 17), 'Winecup ×17');
-  assert.equal(buildDriftPlanLabel('winecup-2', 9), 'Winecup 2 ×9');
-  assert.equal(buildDriftPlanLabel('front-edge', 1), 'Front edge ×1');
+test('driftLabel builds the first member\'s initials plus the member count (nl-o47.6.11)', () => {
+  assert.equal(driftLabel([{ botanicalName: 'Callirhoe involucrata' }, {}, {}]), 'CI (3x)');
+  assert.equal(driftLabel([{ botanicalName: 'Calyptocarpus vialis' }]), 'CV (1x)');
+  // The FIRST member's own name wins even if a later member differs — every
+  // member of a drift shares one species, so this only matters in a
+  // pathological/legacy mix, and the first member's is picked deterministically.
+  assert.equal(
+    driftLabel([{ botanicalName: 'Callirhoe involucrata' }, { botanicalName: 'Calyptocarpus vialis' }]),
+    'CI (2x)'
+  );
 });
 
-test('buildDriftPlanLabel returns empty for an unhumanizable id or a non-positive count', () => {
-  assert.equal(buildDriftPlanLabel('', 5), '');
-  assert.equal(buildDriftPlanLabel(null, 5), '');
-  assert.equal(buildDriftPlanLabel('winecup', 0), '');
-  assert.equal(buildDriftPlanLabel('winecup', -3), '');
-  assert.equal(buildDriftPlanLabel('winecup', NaN), '');
+test('driftLabel returns empty for an empty list, or a first member with no usable name', () => {
+  assert.equal(driftLabel([]), '');
+  assert.equal(driftLabel(null), '');
+  assert.equal(driftLabel([{}]), '');
 });
 
 test('clampLabelPosition leaves a centred label alone when it already fits', () => {

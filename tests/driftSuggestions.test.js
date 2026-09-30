@@ -174,18 +174,18 @@ test('summarizeStatusCounts omits a zero side', () => {
 
 // --- describeSuggestion (the one place a suggestion's own name is composed) --
 
-test('describeSuggestion reads the common name, then botanical, then falls back to speciesId', () => {
+test('describeSuggestion reads like a real drift\'s own label (nl-o47.6.11): species initials plus count', () => {
   assert.equal(
     describeSuggestion([{ commonName: 'Horseherb', botanicalName: 'Calyptocarpus vialis' }, {}], 'horseherb'),
-    'Horseherb · 2 plants'
+    'CV (2x)'
   );
-  assert.equal(describeSuggestion([{ botanicalName: 'Callirhoe involucrata' }], 'winecup'), 'Callirhoe involucrata · 1 plant');
-  assert.equal(describeSuggestion([{}], 'carex'), 'carex · 1 plant');
+  assert.equal(describeSuggestion([{ botanicalName: 'Callirhoe involucrata' }], 'winecup'), 'CI (1x)');
 });
 
-test('describeSuggestion handles an empty member list', () => {
-  assert.equal(describeSuggestion([], 'winecup'), 'winecup · 0 plants');
-  assert.equal(describeSuggestion(null, ''), ' · 0 plants');
+test('describeSuggestion falls back to speciesId when driftLabel itself cannot label the members', () => {
+  assert.equal(describeSuggestion([{}], 'carex'), 'carex');
+  assert.equal(describeSuggestion([], 'winecup'), 'winecup');
+  assert.equal(describeSuggestion(null, ''), '');
 });
 
 test('describeLifecycleChoice labels a planned and a planted+ecotype group', () => {

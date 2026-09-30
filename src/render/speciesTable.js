@@ -3,12 +3,12 @@
  * yard, with a Details toggle for the columns hidden on a phone. The caller
  * passes the container, keeping DOM lookups in src/app.js.
  */
-import { buildPlantLabel } from './labels.js';
+import { buildPlantLabel, driftLabel } from './labels.js';
 import { formatSoil } from './tooltip.js';
 import { formatMonthRange } from '../state/seasonalState.js';
 import { ecologicalFitNotes } from '../analysis/hostGenera.js';
 import { getGenus, getSpeciesKey } from '../utils/speciesKey.js';
-import { driftMemberCountLabel } from '../data/driftId.js';
+import { driftCentroid } from '../state/driftGeometry.js';
 
 // The columns before this one (Label, Botanical name, Common name, Drifts)
 // stay visible on a phone; everything from here on hides behind the row's
@@ -179,15 +179,21 @@ export function renderSpeciesTable(container, plants, hostGenera, handlers = {})
  * getSpeciesKey groups table ROWS by — never a raw speciesId, which
  * src/state/driftGeometry.js's own driftsOfSpecies compares case-sensitively
  * and this table does not.
+ *
+ * `drifts` is ordered west to east, then south to north (nl-o47.6.11) by each
+ * drift's own centroid — position on the plan, not first appearance in
+ * `plants` (a drift's members need not sit together in the array) — since two
+ * drifts of one species read identically once their labels are just species
+ * initials plus a count (driftLabel), and there is no name left to order them
+ * by.
  * @param {Array<object>} plants every plant in the yard (the table's own list)
  * @param {string} speciesKey
- * @returns {{ drifts: Array<{driftId: string, count: number}>, singleCount: number, totalCount: number }}
- *   `drifts` in the order each driftId first appears among this species' plants
+ * @returns {{ drifts: Array<{driftId: string, members: object[]}>, singleCount: number, totalCount: number }}
  */
 export function groupSpeciesDrifts(plants, speciesKey) {
   const ofSpecies = (plants || []).filter((plant) => getSpeciesKey(plant) === speciesKey);
   const order = [];
-  const countsById = new Map();
+  const membersById = new Map();
   let singleCount = 0;
   ofSpecies.forEach((plant) => {
     const driftId = plant?.driftId;
@@ -195,25 +201,31 @@ export function groupSpeciesDrifts(plants, speciesKey) {
       singleCount += 1;
       return;
     }
-    if (!countsById.has(driftId)) {
-      countsById.set(driftId, 0);
+    if (!membersById.has(driftId)) {
+      membersById.set(driftId, []);
       order.push(driftId);
     }
-    countsById.set(driftId, countsById.get(driftId) + 1);
+    membersById.get(driftId).push(plant);
   });
-  const drifts = order.map((driftId) => ({ driftId, count: countsById.get(driftId) }));
+  const drifts = order
+    .map((driftId) => ({ driftId, members: membersById.get(driftId) }))
+    .sort((a, b) => {
+      const ca = driftCentroid(a.members);
+      const cb = driftCentroid(b.members);
+      return ca.x - cb.x || ca.y - cb.y;
+    });
   return { drifts, singleCount, totalCount: ofSpecies.length };
 }
 
 /**
  * The Drifts column's cell (nl-o47.6.7): empty for a species with no drifts
  * ("keep the table's existing behaviour for species rows" — nothing new to
- * show), else a short summary line plus one button per drift
- * (driftMemberCountLabel's "Winecup · 12 plants") and an "N single" count for
- * whatever is left. A drift's button click routes through `onDriftClick`,
- * which src/ui/speciesHighlight.js resolves against the current mode
- * (Edit selects it, View highlights it) — this module knows nothing about
- * modes or selection, only DOM.
+ * show), else a short summary line plus one button per drift (driftLabel's
+ * "CV (12x)", nl-o47.6.11) and an "N single" count for whatever is left. A
+ * drift's button click routes through `onDriftClick`, which
+ * src/ui/speciesHighlight.js resolves against the current mode (Edit selects
+ * it, View highlights it) — this module knows nothing about modes or
+ * selection, only DOM.
  */
 function buildDriftCell({ label, plants, speciesKey, speciesLabel, highlightedDriftId, onDriftClick }) {
   const td = document.createElement('td');
@@ -229,12 +241,12 @@ function buildDriftCell({ label, plants, speciesKey, speciesLabel, highlightedDr
 
   const list = document.createElement('div');
   list.className = 'species-table__drift-list';
-  drifts.forEach(({ driftId, count }) => {
+  drifts.forEach(({ driftId, members }) => {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'species-table__drift-chip';
     btn.dataset.driftId = driftId;
-    btn.textContent = driftMemberCountLabel(driftId, count);
+    btn.textContent = driftLabel(members);
     if (driftId === highlightedDriftId) btn.classList.add('is-highlighted');
     btn.addEventListener('click', () => onDriftClick?.(driftId, btn));
     list.appendChild(btn);

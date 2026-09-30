@@ -16,7 +16,6 @@ import {
   removeDriftAwarePlant,
   removeDriftMember,
   removePlantFromDrift,
-  renameDrift,
   setDriftLifecycle,
   spreadDrift,
 } from '../src/state/driftEdits.js';
@@ -165,40 +164,6 @@ test('spreadDrift clamps the applied factor to the yard, and reports "no such dr
   assert.ok(appliedFactor < 5);
   state.plants.forEach((p) => assert.ok(p.x >= 0 && p.x <= 40));
   assert.deepStrictEqual(spreadDrift(makeState(baseDrift()), 'nope', 2), { members: [], appliedFactor: 1, reason: 'no such drift' });
-});
-
-// --- renameDrift ------------------------------------------------------------------
-
-test('renameDrift rewrites driftId on every member, and only those members', () => {
-  const plants = deepFreeze(baseDrift());
-  const state = makeState(plants);
-  const { driftId, reason } = renameDrift(state, 'winecup-strip', 'Front Bed Winecups');
-  assert.equal(reason, null);
-  assert.equal(driftId, 'front-bed-winecups');
-  const renamed = state.plants.filter((p) => p.driftId === 'front-bed-winecups');
-  assert.equal(renamed.length, 3);
-  assert.equal(state.plants.find((p) => p.id === 'hh-1').driftId, undefined);
-});
-
-test('renameDrift refuses a name that collides with a different drift, and no-ops onto its own current name', () => {
-  const plants = [
-    plant(winecup, 'a', 0, 0, { driftId: 'north-bed' }),
-    plant(winecup, 'b', 2, 0, { driftId: 'north-bed' }),
-    plant(horseherb, 'c', 20, 20, { driftId: 'south-bed' }),
-  ];
-  const state = makeState(plants);
-  const collision = renameDrift(state, 'north-bed', 'South Bed');
-  assert.equal(collision.driftId, null);
-  assert.match(collision.reason, /already the name/);
-  assert.equal(state.plants.find((p) => p.id === 'a').driftId, 'north-bed', 'refused, so nothing changed');
-
-  const noop = renameDrift(state, 'north-bed', 'North Bed');
-  assert.equal(noop.driftId, 'north-bed');
-  assert.equal(noop.reason, null);
-});
-
-test('renameDrift on an unknown driftId', () => {
-  assert.deepStrictEqual(renameDrift(makeState(baseDrift()), 'nope', 'Anything'), { driftId: null, reason: 'no such drift' });
 });
 
 // --- cloneDrift ---------------------------------------------------------------------

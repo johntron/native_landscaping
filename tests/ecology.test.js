@@ -775,8 +775,14 @@ test('drifts: a declared drift spread too thin to read as one mass is named, and
   const tight = placeSpaced(widthSpecies('Bbb bbb', 2), 2, 0.5, 100);
   const result = run([...loose, ...tight], { species: [entry] })['drifts'];
   assert.equal(result.status, STATUSES.GAP, 'the label does not make a loose drift a mass');
-  assert.match(result.summary, /Front edge is spread too thin to read as one mass\./);
-  assert.ok(result.findings.some((f) => /^Front edge \(4 plants\) is spread too thin to read as one mass: its largest clump is 1\./.test(f)));
+  // nl-o47.6.11: named by common name plus driftLabel (species initials plus
+  // count), never by the driftId itself — 'front-edge' does not appear.
+  assert.match(result.summary, /Aaa aaa AA \(4x\) is spread too thin to read as one mass\./);
+  assert.ok(
+    result.findings.some((f) =>
+      /^Aaa aaa AA \(4x\) is spread too thin to read as one mass: its largest clump is 1\./.test(f)
+    )
+  );
 });
 
 test('drifts: a declared drift that reads as one mass is not called out', () => {
@@ -793,7 +799,9 @@ test('drifts: several loose declared drifts are counted in the summary', () => {
   const b = placeSpaced(widthSpecies('Bbb bbb', 2), 3, 6, 100).map((plant) => ({ ...plant, driftId: 'second' }));
   const c = placeSpaced(widthSpecies('Ccc ccc', 2), 3, 6, 200).map((plant) => ({ ...plant, driftId: 'third' }));
   const result = run([...a, ...b, ...c], { species: [] })['drifts'];
-  assert.match(result.summary, /First is spread too thin to read as one mass, and so are 2 other drifts\./);
+  // nl-o47.6.11: named by species, not the (now cosmetic) driftId — 'first'/
+  // 'second'/'third' no longer appear anywhere in the message.
+  assert.match(result.summary, /Aaa aaa AA \(3x\) is spread too thin to read as one mass, and so are 2 other drifts\./);
 });
 
 /** Two plants of given species/width, `distance` ft apart on the x axis. */

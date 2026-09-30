@@ -7,14 +7,14 @@ export { DRIFT_ID_MAX_LENGTH, isValidDriftId };
 
 /**
  * Build an id for a drift that cannot collide with one already in the yard:
- * a readable slug of `label` (the name the person gave it, or else the
- * species' common or botanical name — the caller decides which), walking past
- * collisions the way buildNewPlantId does. Unlike a plant id, a drift id may
- * need to shrink to make room for a numeric suffix, since DRIFT_ID_MAX_LENGTH
- * is enforced. src/state/driftEdits.js's renameDrift uses the same
- * slugifyDriftLabel but refuses a collision instead of walking past it.
+ * a readable slug of `label` (the species' common or botanical name — the
+ * caller decides which), walking past collisions the way buildNewPlantId
+ * does. Unlike a plant id, a drift id may need to shrink to make room for a
+ * numeric suffix, since DRIFT_ID_MAX_LENGTH is enforced. The id is invisible
+ * once minted (nl-o47.6.11: a drift's on-screen label is `driftLabel`,
+ * src/render/labels.js, not this slug), so only its shape still matters.
  * @param {Iterable<string>} existingDriftIds every driftId already used in the yard
- * @param {string} label the name, or species label, to derive the slug from
+ * @param {string} label the species label to derive the slug from
  * @returns {string}
  */
 export function buildDriftId(existingDriftIds, label) {
