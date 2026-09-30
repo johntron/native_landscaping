@@ -424,14 +424,13 @@ export function removeDrift(state, driftId) {
 }
 
 /**
- * Accept a suggested drift (nl-o47.6.5, "suggest drifts from an existing
- * yard"): mint one driftId (buildDriftId, the same rule addDriftFromCatalog
- * and addDriftMember's plantId path already use) and write it onto exactly
- * `memberIds` — the REVIEWED, possibly person-adjusted membership, not
- * necessarily
- * suggestClusters' own raw cluster — as ONE state.plants replacement, so a
- * caller's single commit is one history entry regardless of whether a
- * lifecycle was also unified in the same call.
+ * The shared core of acceptDriftSuggestion (nl-o47.6.5) and acceptDriftGroup
+ * (nl-o47.6.4, below): mint one driftId (buildDriftId, the same rule
+ * addDriftFromCatalog and addDriftMember's plantId path already use) and
+ * write it onto exactly `memberIds` — the REVIEWED, possibly person-adjusted
+ * membership — as ONE state.plants replacement, so a caller's single commit
+ * is one history entry regardless of whether a lifecycle was also unified in
+ * the same call.
  *
  * "One planting status per drift" (nl-o47.6.10) is enforced here, not left to
  * the caller: if the members disagree and no `lifecycle` choice is given, the
@@ -442,12 +441,22 @@ export function removeDrift(state, driftId) {
  * (validateLifecycle catches a future-dated plantedOn an old import can
  * carry) rolls the driftId assignment back too, rather than leaving a fresh
  * drift with no valid shared lifecycle.
+ *
+ * The two callers differ in exactly one thing, `allowMove`: a suggestion
+ * (src/state/driftSuggestions.js's suggestClusters) never proposes a member
+ * that already carries a driftId, so acceptDriftSuggestion keeps refusing one
+ * defensively; a hand-made group (src/state/driftGroup.js's
+ * toggleGroupMember) explicitly INVITES tapping one in, so acceptDriftGroup
+ * allows it and runs normalizeDrifts afterward to clean up whatever moving a
+ * member leaves behind at its OLD drift (a lone leftover drops its label,
+ * src/data/driftId.js) — the only case that can ever leave another drift
+ * undersized, so acceptDriftSuggestion has never needed that pass.
  * @param {{ plants: object[], species: object[] }} state
  * @param {Iterable<string>} memberIds
- * @param {{ lifecycle?: { status?: string, plantedOn?: string, source?: object|null, localEcotype?: boolean } }} [options]
+ * @param {{ lifecycle?: { status?: string, plantedOn?: string, source?: object|null, localEcotype?: boolean }, allowMove?: boolean }} [options]
  * @returns {{ driftId: string|null, members: object[], reason: string|null }}
  */
-export function acceptDriftSuggestion(state, memberIds, { lifecycle } = {}) {
+function acceptDriftMembership(state, memberIds, { lifecycle, allowMove = false } = {}) {
   const ids = new Set(Array.from(memberIds ?? [], String));
   if (ids.size < MIN_SUGGESTION_CLUSTER_SIZE) {
     return { driftId: null, members: [], reason: `a drift needs at least ${MIN_SUGGESTION_CLUSTER_SIZE} plants` };
@@ -456,7 +465,7 @@ export function acceptDriftSuggestion(state, memberIds, { lifecycle } = {}) {
   if (members.length !== ids.size) {
     return { driftId: null, members: [], reason: 'some of these plants no longer exist' };
   }
-  if (members.some((plant) => plant.driftId)) {
+  if (!allowMove && members.some((plant) => plant.driftId)) {
     return { driftId: null, members: [], reason: 'a plant here is already in a drift' };
   }
   const speciesId = members[0].speciesId;
@@ -473,7 +482,9 @@ export function acceptDriftSuggestion(state, memberIds, { lifecycle } = {}) {
     existingDriftIds(state.plants),
     speciesEntry?.commonName || speciesEntry?.botanicalName || speciesId
   );
-  state.plants = state.plants.map((plant) => (ids.has(String(plant.id)) ? { ...plant, driftId } : plant));
+  let plants = state.plants.map((plant) => (ids.has(String(plant.id)) ? { ...plant, driftId } : plant));
+  if (allowMove) plants = normalizeDrifts(plants); // cleans up any OLD drift a moved member left behind
+  state.plants = plants;
   if (lifecycle) {
     const { problems } = setDriftLifecycle(state, driftId, lifecycle);
     if (problems.length) {
@@ -482,6 +493,38 @@ export function acceptDriftSuggestion(state, memberIds, { lifecycle } = {}) {
     }
   }
   return { driftId, members: driftMembers(state.plants, driftId), reason: null };
+}
+
+/**
+ * Accept a suggested drift (nl-o47.6.5, "suggest drifts from an existing
+ * yard") — see acceptDriftMembership above for the shared shape. A suggested
+ * member never already carries a driftId (suggestClusters excludes one), so
+ * this keeps refusing one defensively rather than moving it.
+ * @param {{ plants: object[], species: object[] }} state
+ * @param {Iterable<string>} memberIds
+ * @param {{ lifecycle?: { status?: string, plantedOn?: string, source?: object|null, localEcotype?: boolean } }} [options]
+ * @returns {{ driftId: string|null, members: object[], reason: string|null }}
+ */
+export function acceptDriftSuggestion(state, memberIds, options = {}) {
+  return acceptDriftMembership(state, memberIds, options);
+}
+
+/**
+ * Accept a HAND-MADE drift proposal (nl-o47.6.4, "group selected plants"):
+ * the exact same one-history-entry shape as acceptDriftSuggestion, except a
+ * member MAY already belong to another real drift — it moves into the new
+ * one instead of being refused, and the drift it moved OUT of is cleaned up
+ * in the same call (acceptDriftMembership's `allowMove`, above). The bar that
+ * built `memberIds` (src/interaction/driftReviewMode.js's group mode) already
+ * said how many were about to move, from src/state/driftGroup.js's
+ * summarizeGroupSources, so this is never a surprise.
+ * @param {{ plants: object[], species: object[] }} state
+ * @param {Iterable<string>} memberIds
+ * @param {{ lifecycle?: { status?: string, plantedOn?: string, source?: object|null, localEcotype?: boolean } }} [options]
+ * @returns {{ driftId: string|null, members: object[], reason: string|null }}
+ */
+export function acceptDriftGroup(state, memberIds, options = {}) {
+  return acceptDriftMembership(state, memberIds, { ...options, allowMove: true });
 }
 
 /**
