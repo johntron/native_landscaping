@@ -36,6 +36,7 @@ export function createDetailSheet({ elements, appState, setTargetedPlant, lifecy
     if (!detailSheet || detailSheet.hidden) return;
     detailSheet.hidden = true;
     delete detailSheet.dataset.plantId;
+    delete detailSheet.dataset.scope;
     setTargetedPlant('');
   };
 
@@ -54,11 +55,18 @@ export function createDetailSheet({ elements, appState, setTargetedPlant, lifecy
         detailSheetTitle.textContent = plant.commonName || 'Plant details';
       }
     }
+    // Opened for a whole drift, the sheet stands for every member: one
+    // member's position would read as the drift's, and its Clone/Remove row
+    // (hidden by [data-scope="drift"] in styles.css) would act on a plant
+    // the person never picked.
+    if (drift) detailSheet.dataset.scope = 'drift';
+    else delete detailSheet.dataset.scope;
     if (detailSheetLines) {
       detailSheetLines.innerHTML = '';
       buildTooltipLines(plant, state)
         .filter(Boolean)
         .filter((line) => line !== plant.botanicalName)
+        .filter((line) => !(drift && line.startsWith('Position:')))
         .forEach((line) => {
           const li = document.createElement('li');
           li.textContent = line;

@@ -41,6 +41,11 @@ test('marking a drift planted from its own editor sets status on every member in
   const section = sheet.locator('.plant-lifecycle');
   await expect(section).toBeVisible();
   await expect(section.locator('.plant-lifecycle__scope')).toContainText('Applies to all 4 plants in Winecup drift');
+  // Opened for the whole drift, the sheet shows no one member's position and
+  // no Clone/Remove row, which would act on a member nobody picked.
+  await expect(sheet.locator('#detailSheetLines')).not.toContainText('Position:');
+  await expect(sheet.locator('#detailSheetRemoveBtn')).toBeHidden();
+  await expect(sheet.locator('#detailSheetCloneBtn')).toBeHidden();
 
   await section.locator('[data-lifecycle-status="planted"]').click();
   await expect
@@ -84,6 +89,9 @@ test('marking a drift planted from its own editor sets status on every member in
   await page.locator('#selectionDetailsBtn').click();
   await expect(sheet).toBeVisible();
   await expect(section.locator('.plant-lifecycle__scope')).toContainText('Applies to all 5 plants in Winecup drift');
+  // A drilled-in member is one plant again: its position and Clone/Remove are back.
+  await expect(sheet.locator('#detailSheetLines')).toContainText('Position:');
+  await expect(sheet.locator('#detailSheetRemoveBtn')).toBeVisible();
 
   await section.locator('input[name="localEcotype"]').click();
   await expect

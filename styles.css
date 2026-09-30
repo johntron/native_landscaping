@@ -1746,6 +1746,13 @@ select {
   justify-content: flex-end;
 }
 
+/* Opened for a whole drift (src/ui/detailSheet.js), Clone and Remove would act
+   on one member the person never picked. The drift's own bar has Clone drift
+   and Remove drift. */
+.detail-sheet[data-scope="drift"] .detail-sheet__actions {
+  display: none;
+}
+
 /*
  * The Add plant sheet (nl-o47.3): the same bottom-sheet / centred-dialog
  * pattern as .detail-sheet above (fixed overlay, backdrop, 640px breakpoint —
