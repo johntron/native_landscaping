@@ -117,6 +117,10 @@ export function createDriftReviewMode({
   let mode = 'suggestion';
   /** group mode only: the proposal's fixed species (src/state/driftGroup.js's seedGroupProposal). */
   let groupSpeciesId = '';
+  /** group mode only: whether the LAST sync() needed a lifecycle choice —
+   * tracked so syncGroup can open More itself the moment this turns true on
+   * a phone (below), rather than only once, not every re-render. */
+  let groupNeededChoice = false;
   let skippedKeys = new Set();
   let startingTotal = 0;
   let baseKey = '';
@@ -136,6 +140,14 @@ export function createDriftReviewMode({
     if (!moreGroup) return;
     moreGroup.classList.remove('is-open');
     moreBtn?.setAttribute('aria-expanded', 'false');
+  };
+  /** Group mode only (syncGroup, below): open More itself the moment a
+   * mixed lifecycle first needs a choice on a phone, where the chooser lives
+   * behind it and there is no other way to reach it without guessing. */
+  const openMore = () => {
+    if (!moreGroup) return;
+    moreGroup.classList.add('is-open');
+    moreBtn?.setAttribute('aria-expanded', 'true');
   };
   moreBtn?.addEventListener('click', () => {
     if (!moreGroup) return;
@@ -333,32 +345,45 @@ export function createDriftReviewMode({
           ? "Choose the planting status these plants share, or adjust the members."
           : '';
     }
+    return { needsChoice, tooFew };
   }
 
   /**
-   * Group mode's standing status line (#driftReviewMovingHint): a one-shot
-   * refusal/no-op message (a different-species tap, a refused Accept) leads
-   * when there is one; otherwise "N from <drift>" for whatever is about to
-   * move out of another real drift (src/state/driftGroup.js's
-   * summarizeGroupSources/describeGroupSources), so Accept is never a
-   * surprise; otherwise, below the floor, a nudge toward what to tap next.
+   * Group mode's standing status line (#driftReviewMovingHint) — visible
+   * without opening More on a phone, unlike `acceptBtn.title` above (touch
+   * never shows a title) and unlike the lifecycle chooser itself (genuinely
+   * behind More there; see the `needsChoice` handling in syncGroup, which
+   * opens it the moment this turns true). Priority: a one-shot refusal/no-op
+   * message (a different-species tap, a refused Accept) leads when there is
+   * one; otherwise "N from <drift>" for whatever is about to move out of
+   * another real drift (src/state/driftGroup.js's summarizeGroupSources/
+   * describeGroupSources) — so that is never hidden either, even while a
+   * choice is ALSO needed — with a prompt appended/shown for whichever of
+   * "below the floor" or "needs a choice" applies; neither can be true at
+   * once (the floor is 2, a choice needs 2+ members to disagree over).
    */
-  function setGroupHint(members, oneShotMessage) {
+  function setGroupHint(members, oneShotMessage, needsChoice) {
     if (oneShotMessage) {
       setMovingHint(oneShotMessage);
       return;
     }
     const moving = describeGroupSources(summarizeGroupSources(members, appState.plants));
-    if (moving) {
-      setMovingHint(moving);
-      return;
-    }
     if (members.length < MIN_SUGGESTION_CLUSTER_SIZE) {
       const name = members[0]?.commonName || members[0]?.botanicalName || 'this species';
-      setMovingHint(`Tap another ${name} plant to add it to the drift.`);
+      const nudge = `Tap another ${name} plant to add it to the drift.`;
+      setMovingHint(moving ? `${moving}. ${nudge}` : nudge);
       return;
     }
-    setMovingHint('');
+    if (needsChoice) {
+      // Desktop already shows the chooser inline (no More to speak of); only
+      // a phone needs telling where to find it.
+      const prompt = phoneEditor?.isActive?.()
+        ? 'Choose a planting status in More before Accept.'
+        : 'Choose a planting status before Accept.';
+      setMovingHint(moving ? `${moving}. ${prompt}` : prompt);
+      return;
+    }
+    setMovingHint(moving);
   }
 
   /** Re-derive everything from appState.plants and redraw the bar/outline. */
@@ -423,8 +448,14 @@ export function createDriftReviewMode({
     }
     adjustedMemberIds = new Set(members.map((member) => String(member.id)));
     appState.suggestedDriftMemberIds = adjustedMemberIds;
-    renderGroup(members);
-    setGroupHint(members, message);
+    const { needsChoice } = renderGroup(members);
+    // The chooser itself lives behind More (renderLifecycleChoice, shared
+    // with a suggestion's own bar) — open it the moment a choice is FIRST
+    // needed, on a phone, where there is no other way to reach it without
+    // guessing; never re-open it if the person has since closed it again.
+    if (needsChoice && !groupNeededChoice && phoneEditor?.isActive?.()) openMore();
+    groupNeededChoice = needsChoice;
+    setGroupHint(members, message, needsChoice);
     render();
   }
 
@@ -467,6 +498,7 @@ export function createDriftReviewMode({
     active = true;
     mode = 'group';
     groupSpeciesId = seed.speciesId;
+    groupNeededChoice = false;
     adjustedMemberIds = new Set(seed.members.map((member) => String(member.id)));
     lifecycleChoiceIndex = null;
     pendingMessage = '';
@@ -482,6 +514,7 @@ export function createDriftReviewMode({
     active = false;
     mode = 'suggestion';
     groupSpeciesId = '';
+    groupNeededChoice = false;
     skippedKeys = new Set();
     baseKey = '';
     adjustedMemberIds = null;

@@ -146,11 +146,14 @@ test('including a member of another 2-plant drift moves it (the leftover loses i
   const a = await plantScreenPosition(page, 'topSvg', 'mv-a');
   await page.mouse.click(a.x, a.y);
   await expect(label).toHaveText('CI (3x)');
-  await expect(page.locator('#driftReviewMovingHint')).toHaveText('1 from CI (2x)');
-
   // Mixed lifecycles (mv-seed/mv-third planned, mv-a planted): Accept is
   // refused until a shared status is chosen — the SAME lifecycle-choice UI a
-  // suggestion review uses, already inline on desktop with no More click.
+  // suggestion review uses, already inline on desktop (no "in More" in the
+  // prompt here — unlike touch.spec.js's own version of this test, nothing
+  // needs opening).
+  await expect(page.locator('#driftReviewMovingHint')).toHaveText(
+    '1 from CI (2x). Choose a planting status before Accept.'
+  );
   await expect(acceptBtn).toBeDisabled();
   await expect(page.locator('#driftReviewLifecycleSummary')).toContainText('2 planned');
   await expect(page.locator('#driftReviewLifecycleSummary')).toContainText('1 planted');

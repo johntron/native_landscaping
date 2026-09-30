@@ -288,8 +288,8 @@ const DRIFT_GROUP_PROJECTS = ['desktop-drift-group', 'touch-drift-group'];
  * another drift moves" (mv-b, left alone, drops mv-existing's label once it
  * is down to one member) AND "mixed lifecycles require a choice" (mv-seed/
  * mv-third are planned, mv-a is planted) in the same flow. planted_on is a
- * PAST date (today is well past 2026-09-30 in this suite's fixtures) —
- * validateLifecycle refuses a future one.
+ * date in the PAST (validateLifecycle refuses a future one) — the same
+ * 2026-03-01 DRIFT_SUGGEST_MIXED_LAYOUT_CSV, above, already uses.
  */
 const DRIFT_GROUP_MOVE_LAYOUT_CSV = [
   'id,species_id,x_ft,y_ft,drift_id,status,planted_on',

@@ -994,8 +994,15 @@ test.describe('grouping selected plants into a drift, by touch (nl-o47.6.4)', ()
     await expect(page.locator('#selectionBarName')).toHaveText('CI (3x)');
   });
 
-  test('a tap pulling in a member of another drift says how many are moving, by touch', async ({ page }) => {
+  test('a tap pulling in a member of another drift says how many are moving, opens the lifecycle choice itself, and Accept writes the chosen status on every member with the leftover losing its label, by touch', async ({
+    page,
+  }) => {
     const project = 'touch-drift-group-move';
+    const driftIdOf = async (plantId) => {
+      const rows = await readScratchLayoutWithDrift(project);
+      return rows.find((row) => row.id === plantId)?.driftId || '';
+    };
+
     await openScratchProject(page, project);
     await page.locator('[data-mode="edit"]').click();
     await page.locator('.views[data-maximized="plan"]').waitFor();
@@ -1014,12 +1021,39 @@ test.describe('grouping selected plants into a drift, by touch (nl-o47.6.4)', ()
 
     // mv-a already belongs to 'mv-existing' (2 planted members): tapping it
     // in is allowed — it will move — and the bar says so, visible without
-    // opening "More" (unlike a suggestion review's own one-shot hint).
+    // opening "More" (unlike a suggestion review's own one-shot hint). Its
+    // status disagrees with mv-seed/mv-third's, so Accept needs a choice —
+    // driftReviewMode.js opens More itself the moment that becomes true on a
+    // phone, since the chooser lives behind it and touch never shows a title.
     const a = await plantScreenPosition(page, 'topSvg', 'mv-a');
     await tap(page, a);
     await expect(label).toHaveText('CI (3x)');
-    await expect(page.locator('#driftReviewMovingHint')).toHaveText('1 from CI (2x)');
+    await expect(page.locator('#driftReviewMovingHint')).toHaveText(
+      '1 from CI (2x). Choose a planting status in More before Accept.'
+    );
+    await expect(page.locator('#driftReviewMore')).toHaveClass(/is-open/);
+    await expect(page.locator('#driftReviewAcceptBtn')).toBeDisabled();
     await page.screenshot({ path: `${SHOT_DIR}/03-moving-from-another-drift.png` });
+
+    await page.locator('#driftReviewLifecycleOptions .chip', { hasText: 'Planned' }).tap();
+    await expect(page.locator('#driftReviewAcceptBtn')).toBeEnabled();
+
+    const historyBefore = await readScratchHistory(project);
+    await page.locator('#driftReviewAcceptBtn').tap();
+
+    await expect
+      .poll(async () => {
+        const rows = await readScratchLayoutWithDrift(project);
+        const driftId = rows.find((row) => row.id === 'mv-seed')?.driftId;
+        return driftId && rows.filter((row) => row.driftId === driftId).map((row) => row.id).sort().join(',');
+      })
+      .toBe('mv-a,mv-seed,mv-third');
+    // mv-b, left alone in mv-existing, drops the label — a drift always has >= 2 members.
+    expect(await driftIdOf('mv-b')).toBe('');
+    const historyAfter = await readScratchHistory(project);
+    expect(historyAfter.entries.length - historyBefore.entries.length).toBe(1);
+    await expect(page.locator('#driftReviewBar')).toBeHidden();
+    await expect(page.locator('#selectionBarName')).toHaveText('CI (3x)');
   });
 });
 
