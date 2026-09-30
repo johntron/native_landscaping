@@ -101,6 +101,14 @@ export const SCRATCH_PROJECTS = [
   'desktop-drift-suggest',
   'touch-drift-suggest',
   'desktop-drift-suggest-mixed',
+  // Group selected plants into a drift by hand (nl-o47.6.4): DRIFT_GROUP_LAYOUT_CSV
+  // (one lone plant, two more same-species undrifted, one different species)
+  // and DRIFT_GROUP_MOVE_LAYOUT_CSV (a member of an existing 2-plant drift a
+  // tap can pull in, with a mixed lifecycle), below.
+  'desktop-drift-group',
+  'touch-drift-group',
+  'desktop-drift-group-move',
+  'touch-drift-group-move',
   'background-upload',
   'placed-photo',
   'features-save',
@@ -252,6 +260,47 @@ const DRIFT_SUGGEST_MIXED_LAYOUT_CSV = [
 
 /** Every scratch project seeded with DRIFT_SUGGEST_MIXED_LAYOUT_CSV. */
 const DRIFT_SUGGEST_MIXED_PROJECTS = ['desktop-drift-suggest-mixed'];
+
+/**
+ * Group selected plants into a drift by hand (nl-o47.6.4, making method 2):
+ * one lone winecup ("Make drift" is only ever offered for a single plant not
+ * already in a drift), two more same-species undrifted plants a tap can pull
+ * in, and one horseherb well clear of them all for "a different-species tap
+ * does nothing." Positions well apart (same spirit as DRIFT_SUGGEST_LAYOUT_CSV,
+ * above) so a tap/click aimed at one plant cannot also land near another's.
+ */
+const DRIFT_GROUP_LAYOUT_CSV = [
+  'id,species_id,x_ft,y_ft',
+  'mk-seed,winecup,4,4',
+  'mk-2,winecup,10,4',
+  'mk-3,winecup,4,10',
+  'mk-other,horseherb,10,10',
+].join('\n');
+
+/** Every scratch project seeded with DRIFT_GROUP_LAYOUT_CSV. */
+const DRIFT_GROUP_PROJECTS = ['desktop-drift-group', 'touch-drift-group'];
+
+/**
+ * Group selected plants, including a member of another real drift (nl-o47.6.4):
+ * mv-seed/mv-third are two undrifted, PLANNED winecup a hand-made proposal
+ * starts from; mv-a/mv-b are an existing 2-member drift ('mv-existing'), both
+ * PLANTED — so tapping mv-a into the proposal both exercises "a member of
+ * another drift moves" (mv-b, left alone, drops mv-existing's label once it
+ * is down to one member) AND "mixed lifecycles require a choice" (mv-seed/
+ * mv-third are planned, mv-a is planted) in the same flow. planted_on is a
+ * PAST date (today is well past 2026-09-30 in this suite's fixtures) —
+ * validateLifecycle refuses a future one.
+ */
+const DRIFT_GROUP_MOVE_LAYOUT_CSV = [
+  'id,species_id,x_ft,y_ft,drift_id,status,planted_on',
+  'mv-seed,winecup,4,4,,,',
+  'mv-third,winecup,10,4,,,',
+  'mv-a,winecup,4,10,mv-existing,planted,2026-03-01',
+  'mv-b,winecup,10,10,mv-existing,planted,2026-03-01',
+].join('\n');
+
+/** Every scratch project seeded with DRIFT_GROUP_MOVE_LAYOUT_CSV. */
+const DRIFT_GROUP_MOVE_PROJECTS = ['desktop-drift-group-move', 'touch-drift-group-move'];
 
 const PLACED_PHOTO = {
   id: 'placed-photo',
@@ -488,6 +537,17 @@ export function buildScratchPublicDir() {
     writeFileSync(
       path.join(SCRATCH_DIR, 'projects', id, 'planting_layout.csv'),
       `${DRIFT_SUGGEST_MIXED_LAYOUT_CSV}\n`
+    );
+  });
+
+  DRIFT_GROUP_PROJECTS.forEach((id) => {
+    writeFileSync(path.join(SCRATCH_DIR, 'projects', id, 'planting_layout.csv'), `${DRIFT_GROUP_LAYOUT_CSV}\n`);
+  });
+
+  DRIFT_GROUP_MOVE_PROJECTS.forEach((id) => {
+    writeFileSync(
+      path.join(SCRATCH_DIR, 'projects', id, 'planting_layout.csv'),
+      `${DRIFT_GROUP_MOVE_LAYOUT_CSV}\n`
     );
   });
 

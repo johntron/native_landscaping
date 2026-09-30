@@ -928,6 +928,101 @@ test.describe('suggesting drifts, by touch (nl-o47.6.5)', () => {
   });
 });
 
+test.describe('grouping selected plants into a drift, by touch (nl-o47.6.4)', () => {
+  // Seeded by tests-e2e/scratch-fixture.mjs's DRIFT_GROUP_LAYOUT_CSV (one
+  // lone winecup, two more same-species undrifted, one horseherb) and
+  // DRIFT_GROUP_MOVE_LAYOUT_CSV (a member of an existing 2-plant drift, mixed
+  // lifecycle). Desktop coverage (tests-e2e/driftGroup.spec.js) is thorough;
+  // this proves the same flow works end to end through real touch, and
+  // captures the screenshots nl-o47.6.4 asks for at this phone width.
+  const SHOT_DIR =
+    '/tmp/claude-1000/-home-johntron-Development-native-landscaping/0ef350c8-f430-4836-9260-c20352a755ea/scratchpad/drift-group';
+
+  test('a single plant\'s "Make drift", toggling two more same-species plants in, Accept writing one shared drift_id in one undo step with the whole drift selected', async ({
+    page,
+  }) => {
+    const project = 'touch-drift-group';
+    const driftIdOf = async (plantId) => {
+      const rows = await readScratchLayoutWithDrift(project);
+      return rows.find((row) => row.id === plantId)?.driftId || '';
+    };
+
+    await openScratchProject(page, project);
+    await page.locator('[data-mode="edit"]').click();
+    await page.locator('.views[data-maximized="plan"]').waitFor();
+
+    const seed = await plantScreenPosition(page, 'topSvg', 'mk-seed');
+    await tap(page, seed);
+    await expect(page.locator('#selectionBar')).toBeVisible();
+
+    // "Make drift" sits behind "More" on a phone, alongside Details/Clone/Remove.
+    await page.locator('#selectionBarMoreBtn').click();
+    const makeDriftBtn = page.locator('#selectionMakeDriftBtn');
+    await expect(makeDriftBtn).toBeVisible();
+    await page.screenshot({ path: `${SHOT_DIR}/01-make-drift-entry.png` });
+    await makeDriftBtn.click();
+
+    const bar = page.locator('#driftReviewBar');
+    const label = page.locator('#driftReviewLabel');
+    await expect(bar).toBeVisible();
+    // No "· N of M" (there is no queue, unlike a suggestion's own label).
+    await expect(label).toHaveText('CI (1x)');
+    await expect(page.locator('#selectionBar')).toBeHidden();
+
+    const mk2 = await plantScreenPosition(page, 'topSvg', 'mk-2');
+    await tap(page, mk2);
+    const mk3 = await plantScreenPosition(page, 'topSvg', 'mk-3');
+    await tap(page, mk3);
+    await expect(label).toHaveText('CI (3x)');
+    await page.screenshot({ path: `${SHOT_DIR}/02-proposal-three-members.png` });
+
+    const historyBefore = await readScratchHistory(project);
+    await page.locator('#driftReviewAcceptBtn').tap();
+    await expect
+      .poll(async () => {
+        const rows = await readScratchLayoutWithDrift(project);
+        const driftId = rows.find((row) => row.id === 'mk-seed')?.driftId;
+        return driftId && rows.filter((row) => row.driftId === driftId).map((row) => row.id).sort().join(',');
+      })
+      .toBe('mk-2,mk-3,mk-seed');
+    expect(await driftIdOf('mk-other')).toBe('');
+    const historyAfter = await readScratchHistory(project);
+    expect(historyAfter.entries.length - historyBefore.entries.length).toBe(1);
+
+    // Accept leaves review and selects the new drift whole.
+    await expect(bar).toBeHidden();
+    await expect(page.locator('#selectionBarName')).toHaveText('CI (3x)');
+  });
+
+  test('a tap pulling in a member of another drift says how many are moving, by touch', async ({ page }) => {
+    const project = 'touch-drift-group-move';
+    await openScratchProject(page, project);
+    await page.locator('[data-mode="edit"]').click();
+    await page.locator('.views[data-maximized="plan"]').waitFor();
+
+    const seed = await plantScreenPosition(page, 'topSvg', 'mv-seed');
+    await tap(page, seed);
+    await page.locator('#selectionBarMoreBtn').click();
+    await page.locator('#selectionMakeDriftBtn').click();
+
+    const label = page.locator('#driftReviewLabel');
+    await expect(label).toHaveText('CI (1x)');
+
+    const third = await plantScreenPosition(page, 'topSvg', 'mv-third');
+    await tap(page, third);
+    await expect(label).toHaveText('CI (2x)');
+
+    // mv-a already belongs to 'mv-existing' (2 planted members): tapping it
+    // in is allowed — it will move — and the bar says so, visible without
+    // opening "More" (unlike a suggestion review's own one-shot hint).
+    const a = await plantScreenPosition(page, 'topSvg', 'mv-a');
+    await tap(page, a);
+    await expect(label).toHaveText('CI (3x)');
+    await expect(page.locator('#driftReviewMovingHint')).toHaveText('1 from CI (2x)');
+    await page.screenshot({ path: `${SHOT_DIR}/03-moving-from-another-drift.png` });
+  });
+});
+
 test.describe('the phone editor (nl-o47.4)', () => {
   /** The maximized panel's own `.view` element's inline transform — what
    * canvasGesture.js writes on every pinch/pan frame. */
