@@ -897,6 +897,15 @@ test.describe('suggesting drifts, by touch (nl-o47.6.5)', () => {
     await expect(label).toContainText('suggestion 1 of 2');
     await expect(label).toContainText('Winecup');
     await expect(label).toContainText('4 plant');
+    // Skip and Accept are the two answers to every suggestion: both sit on
+    // the primary row beside More, on one line, without opening More.
+    const rowTops = await Promise.all(
+      ['#driftReviewSkipBtn', '#driftReviewAcceptBtn', '#driftReviewMoreBtn'].map(async (id) => {
+        await expect(page.locator(id)).toBeVisible();
+        return Math.round((await page.locator(id).boundingBox()).y);
+      })
+    );
+    expect(Math.max(...rowTops) - Math.min(...rowTops), 'Skip, Accept and More share one row').toBeLessThan(4);
 
     await expect(page.locator('#topSvg path[data-suggestion-outline="true"]')).toBeVisible();
     await expect(page.locator('#topSvg g[data-plant-id="sug-hb1"]')).toHaveAttribute('data-dimmed', 'true');
