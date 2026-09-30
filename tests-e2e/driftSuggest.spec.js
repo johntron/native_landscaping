@@ -142,11 +142,16 @@ test('a suggestion whose members disagree in lifecycle requires a choice before 
   await expect(acceptBtn).toBeDisabled();
   await expect(page.locator('#driftReviewLifecycle')).toBeVisible();
   await expect(page.locator('#driftReviewLifecycleSummary')).toContainText('2 planned, 1 planted');
+  // Visible without opening More (nl-o47.6.4 shares this line — and the
+  // open-More-on-a-phone behavior — with the group-mode bar): the chooser is
+  // already inline on desktop, so the prompt says so with no "in More".
+  await expect(page.locator('#driftReviewMovingHint')).toHaveText('Choose a planting status before Accept.');
 
   const options = page.locator('#driftReviewLifecycleOptions button');
   await expect(options).toHaveCount(2);
   await options.filter({ hasText: 'Planned' }).click();
   await expect(acceptBtn).toBeEnabled();
+  await expect(page.locator('#driftReviewMovingHint')).toBeHidden();
 
   await acceptBtn.click();
   await expect.poll(async () => driftIdOf(project, 'sug-cb1')).not.toBe('');

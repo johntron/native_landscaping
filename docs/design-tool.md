@@ -1041,7 +1041,15 @@ skips each one.
   a reason until the person picks one of the distinct lifecycles found
   (`summarizeStatusCounts`'s compact "12 planned, 5 planted" line, plus one
   chip per option via `describeLifecycleChoice`) or adjusts the membership so
-  they agree — Accept never silently picks one.
+  they agree — Accept never silently picks one. `acceptBtn.title` explains the
+  refusal, but that is a hover tooltip, invisible on touch — `driftReviewMode.js`
+  shares the fix nl-o47.6.4 built for its own group mode (below): the moment a
+  choice is first needed on a phone, it opens `#driftReviewMore` itself (the
+  chooser lives there) and shows the SAME visible `#driftReviewMovingHint` line
+  group mode uses ("Choose a planting status in More before Accept.", or
+  without "in More" on desktop, where the chooser is already inline) — one
+  `needsChoice`/`lastNeededChoice`/`openMore`/`choicePrompt` set of functions,
+  not two copies.
 - **Accept**: `src/state/driftEdits.js`'s `acceptDriftSuggestion` mints one
   driftId (`buildDriftId`, from the species — exactly the same minting every
   other making method uses; the id format itself is unchanged) and writes it
@@ -1102,16 +1110,19 @@ guard, the document click-away guard) keeps working unchanged. `mode`
   this mode (same slot, same "leave without writing" meaning `stop()` already
   has) together on the primary row — "More" still holds Undo/Redo/Stop and
   the lifecycle choice when members disagree, unchanged from a suggestion's
-  own bar. A second status line, `#driftReviewMovingHint`, is a DIRECT CHILD
-  of the bar rather than tucked inside `#driftReviewMore`, so it is visible
-  without opening More on a phone (unlike `#driftReviewHint`'s one-shot
-  messages, which a suggestion review has always used exactly as before): a
+  own bar (which now shares this mode's own "open More on a phone" fix for
+  that case — see the Lifecycle bullet above). A second status line,
+  `#driftReviewMovingHint`, is a DIRECT CHILD of the bar rather than tucked
+  inside `#driftReviewMore`, so it is visible without opening More on a phone
+  (unlike `#driftReviewHint`'s one-shot messages, which a suggestion review
+  has always used exactly as before for a refused toggle, unchanged): a
   refused toggle's reason when there is one, otherwise the standing "N from
   `<drift label>`" for whatever in the current proposal already belongs to
   another drift (`driftGroup.js`'s `summarizeGroupSources`/
   `describeGroupSources`, reading that OTHER drift's own current full
-  membership, e.g. "2 from CI (4x)") — so Accept is never a surprise — or,
-  below the floor, a nudge toward what to tap next.
+  membership, e.g. "2 from CI (4x)") — so Accept is never a surprise — with
+  the SAME `choicePrompt()` a suggestion's own bar now shows appended when a
+  choice is also needed, or, below the floor, a nudge toward what to tap next.
 - **Accept**: `acceptGroup()` commits through `src/state/driftEdits.js`'s
   `acceptDriftGroup` — the same one-history-entry shape `acceptDriftSuggestion`
   already has (both now share one private core,

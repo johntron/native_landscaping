@@ -101,6 +101,7 @@ export const SCRATCH_PROJECTS = [
   'desktop-drift-suggest',
   'touch-drift-suggest',
   'desktop-drift-suggest-mixed',
+  'touch-drift-suggest-mixed',
   // Group selected plants into a drift by hand (nl-o47.6.4): DRIFT_GROUP_LAYOUT_CSV
   // (one lone plant, two more same-species undrifted, one different species)
   // and DRIFT_GROUP_MOVE_LAYOUT_CSV (a member of an existing 2-plant drift a
@@ -259,7 +260,7 @@ const DRIFT_SUGGEST_MIXED_LAYOUT_CSV = [
 ].join('\n');
 
 /** Every scratch project seeded with DRIFT_SUGGEST_MIXED_LAYOUT_CSV. */
-const DRIFT_SUGGEST_MIXED_PROJECTS = ['desktop-drift-suggest-mixed'];
+const DRIFT_SUGGEST_MIXED_PROJECTS = ['desktop-drift-suggest-mixed', 'touch-drift-suggest-mixed'];
 
 /**
  * Group selected plants into a drift by hand (nl-o47.6.4, making method 2):

@@ -926,6 +926,59 @@ test.describe('suggesting drifts, by touch (nl-o47.6.5)', () => {
     await expect(bar).toBeHidden();
     await expect(page.locator('#phoneEditorBar')).toBeVisible(); // the idle bar returns
   });
+
+  test('a suggestion whose members disagree in lifecycle opens the chooser itself, with the SAME visible hint group mode uses, by touch (nl-o47.6.4 sharing code with nl-o47.6.5)', async ({
+    page,
+  }) => {
+    // Seeded by tests-e2e/scratch-fixture.mjs's DRIFT_SUGGEST_MIXED_LAYOUT_CSV:
+    // one 3-member carex blanda mass whose members disagree in status, its own
+    // project so no Skip is needed to reach it. Before nl-o47.6.4's phone fix,
+    // the only explanation for a disabled Accept was acceptBtn.title, which
+    // touch never shows — driftReviewMode.js's needsChoice handling (shared
+    // between suggestion and group mode) now opens #driftReviewMore itself
+    // and shows the same visible #driftReviewMovingHint line group mode uses.
+    const project = 'touch-drift-suggest-mixed';
+    const driftIdOf = async (plantId) => {
+      const rows = await readScratchLayoutWithDrift(project);
+      return rows.find((row) => row.id === plantId)?.driftId || '';
+    };
+
+    await openScratchProject(page, project);
+    await page.locator('[data-mode="edit"]').click();
+    await page.locator('.views[data-maximized="plan"]').waitFor();
+
+    await page.locator('#phoneEditorPlantsBtn').click();
+    await page.locator('#suggestDriftsBtn').tap();
+
+    const bar = page.locator('#driftReviewBar');
+    const label = page.locator('#driftReviewLabel');
+    const acceptBtn = page.locator('#driftReviewAcceptBtn');
+    await expect(bar).toBeVisible();
+    await expect(label).toHaveText('CB (3x) · 1 of 1');
+    await expect(acceptBtn).toBeDisabled();
+
+    // Visible without tapping More, and More is already open — neither needs
+    // acceptBtn's own title (touch never shows it).
+    await expect(page.locator('#driftReviewMovingHint')).toHaveText(
+      'Choose a planting status in More before Accept.'
+    );
+    await expect(page.locator('#driftReviewMore')).toHaveClass(/is-open/);
+    await expect(page.locator('#driftReviewLifecycleSummary')).toContainText('2 planned, 1 planted');
+
+    await page.locator('#driftReviewLifecycleOptions .chip', { hasText: 'Planned' }).tap();
+    await expect(acceptBtn).toBeEnabled();
+    await expect(page.locator('#driftReviewMovingHint')).toBeHidden();
+
+    await acceptBtn.tap();
+    await expect.poll(async () => driftIdOf('sug-cb1')).not.toBe('');
+    const driftId = await driftIdOf('sug-cb1');
+    expect(await driftIdOf('sug-cb2')).toBe(driftId);
+    expect(await driftIdOf('sug-cb3')).toBe(driftId);
+    // Unlike group mode's Accept, a suggestion's own Accept stays IN review
+    // (moving on to whatever is next) — this project has only the one mass,
+    // so review says it is finished rather than leaving on its own.
+    await expect(label).toContainText('Reviewed every suggested drift');
+  });
 });
 
 test.describe('grouping selected plants into a drift, by touch (nl-o47.6.4)', () => {
