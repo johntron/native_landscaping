@@ -97,6 +97,13 @@ export const SCRATCH_PROJECTS = [
   // through openScratchProject like every other drift fixture here.
   'desktop-drift-species',
   'touch-drift-species',
+  // Suggest drifts from an existing yard (nl-o47.6.5): DRIFT_SUGGEST_LAYOUT_CSV
+  // (two undrifted same-species masses, writable) and
+  // DRIFT_SUGGEST_MIXED_LAYOUT_CSV (one mass whose members disagree in
+  // lifecycle, its own project so that test needs no Skip to reach it).
+  'desktop-drift-suggest',
+  'touch-drift-suggest',
+  'desktop-drift-suggest-mixed',
   'background-upload',
   'placed-photo',
   'features-save',
@@ -203,6 +210,54 @@ const SPECIES_DRIFT_LAYOUT_CSV = [
 
 /** Every scratch project seeded with SPECIES_DRIFT_LAYOUT_CSV instead of backyard's own planting. */
 const SPECIES_DRIFT_PROJECTS = ['desktop-drift-species', 'touch-drift-species'];
+
+/**
+ * Two undrifted masses for "suggest drifts from an existing yard"
+ * (nl-o47.6.5): winecup's 4 members sit within SUGGEST_K (1.25) x its own
+ * width (3 ft) = 3.75 ft of each other, so suggestClusters proposes them as
+ * one cluster — the largest of the two, reviewed first (largest-first).
+ * horseherb's 3 do the same, at the same spacing (also 3 ft wide), well clear
+ * of winecup's square (14+ ft away) so neither cluster's own candidates ever
+ * brush the other's. `sug-wa-loner` is a fifth winecup plant, in no drift,
+ * but 6-8 ft from every corner of winecup's own square — outside its
+ * clustering distance, so suggestClusters leaves it out, but it is still a
+ * same-species, undrifted candidate a manual tap can add to the suggestion
+ * (nl-o47.6.5's "Adjust"). Kept at the same y as the square's own row (not
+ * pushed toward the panel's far edge) so it renders well clear of the
+ * toolbar/scale controls above the plan panel on a desktop layout.
+ */
+const DRIFT_SUGGEST_LAYOUT_CSV = [
+  'id,species_id,x_ft,y_ft',
+  'sug-wa1,winecup,4,4',
+  'sug-wa2,winecup,6,4',
+  'sug-wa3,winecup,4,6',
+  'sug-wa4,winecup,6,6',
+  'sug-wa-loner,winecup,12,4',
+  'sug-hb1,horseherb,20,4',
+  'sug-hb2,horseherb,22,4',
+  'sug-hb3,horseherb,20,6',
+].join('\n');
+
+/** Every scratch project seeded with DRIFT_SUGGEST_LAYOUT_CSV. */
+const DRIFT_SUGGEST_PROJECTS = ['desktop-drift-suggest', 'touch-drift-suggest'];
+
+/**
+ * One mass whose members DISAGREE in lifecycle (nl-o47.6.5's own review of
+ * "one planting status per drift," nl-o47.6.10): carex blanda, width 1.5 ft,
+ * so SUGGEST_K x width = 1.875 ft comfortably covers this 1 ft square while
+ * still clustering the three as one suggestion. Its own project, with
+ * nothing else to suggest, so the "requires a choice" test needs no Skip to
+ * reach it.
+ */
+const DRIFT_SUGGEST_MIXED_LAYOUT_CSV = [
+  'id,species_id,x_ft,y_ft,status,planted_on',
+  'sug-cb1,carex-blanda,4,4,,',
+  'sug-cb2,carex-blanda,5,4,planted,2026-03-01',
+  'sug-cb3,carex-blanda,4,5,,',
+].join('\n');
+
+/** Every scratch project seeded with DRIFT_SUGGEST_MIXED_LAYOUT_CSV. */
+const DRIFT_SUGGEST_MIXED_PROJECTS = ['desktop-drift-suggest-mixed'];
 
 const PLACED_PHOTO = {
   id: 'placed-photo',
@@ -429,6 +484,17 @@ export function buildScratchPublicDir() {
 
   SPECIES_DRIFT_PROJECTS.forEach((id) => {
     writeFileSync(path.join(SCRATCH_DIR, 'projects', id, 'planting_layout.csv'), `${SPECIES_DRIFT_LAYOUT_CSV}\n`);
+  });
+
+  DRIFT_SUGGEST_PROJECTS.forEach((id) => {
+    writeFileSync(path.join(SCRATCH_DIR, 'projects', id, 'planting_layout.csv'), `${DRIFT_SUGGEST_LAYOUT_CSV}\n`);
+  });
+
+  DRIFT_SUGGEST_MIXED_PROJECTS.forEach((id) => {
+    writeFileSync(
+      path.join(SCRATCH_DIR, 'projects', id, 'planting_layout.csv'),
+      `${DRIFT_SUGGEST_MIXED_LAYOUT_CSV}\n`
+    );
   });
 
   // Written after the copy so it replaces the backyard project.json cpSync laid down.

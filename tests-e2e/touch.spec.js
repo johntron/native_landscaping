@@ -861,6 +861,98 @@ test.describe('species table drift entries, by touch (nl-o47.6.7)', () => {
   });
 });
 
+test.describe('suggesting drifts, by touch (nl-o47.6.5)', () => {
+  // Seeded by tests-e2e/scratch-fixture.mjs's DRIFT_SUGGEST_LAYOUT_CSV: a
+  // 4-member winecup mass (plus a lone winecup well outside its own
+  // clustering distance) and a 3-member horseherb mass, both undrifted. The
+  // desktop coverage (tests-e2e/driftSuggest.spec.js) is thorough; this
+  // proves the same flow works end to end through real touch — the bar's own
+  // Undo/Redo and its "More" popover, since the real #undoLayoutBtn sits in
+  // the idle bar, hidden while a review is open.
+  const driftIdOf = async (projectId, plantId) => {
+    const rows = await readScratchLayoutWithDrift(projectId);
+    return rows.find((row) => row.id === plantId)?.driftId || '';
+  };
+
+  test('the banner in the Plants sheet, reviewing on the plan, adjusting by tap, Accept in one undo step, the mirrored Undo, Skip, and Stop', async ({
+    page,
+  }) => {
+    const project = 'touch-drift-suggest';
+    await openScratchProject(page, project);
+    await page.locator('[data-mode="edit"]').click();
+    await page.locator('.views[data-maximized="plan"]').waitFor();
+
+    await page.locator('#phoneEditorPlantsBtn').click();
+    await expect(page.locator('#plantsSheet')).toBeVisible();
+    await expect(page.locator('.species-table__suggest-drifts')).toContainText('2 possible drifts');
+    const banner = page.locator('#suggestDriftsBtn');
+
+    const bar = page.locator('#driftReviewBar');
+    const label = page.locator('#driftReviewLabel');
+    await banner.tap();
+    // Opening review closes the Plants sheet — the canvas underneath, where
+    // the suggestion's own outline shows, is what the person sees next.
+    await expect(page.locator('#plantsSheet')).toBeHidden();
+    await expect(bar).toBeVisible();
+    await expect(label).toContainText('suggestion 1 of 2');
+    await expect(label).toContainText('Winecup');
+    await expect(label).toContainText('4 plant');
+
+    await expect(page.locator('#topSvg path[data-suggestion-outline="true"]')).toBeVisible();
+    await expect(page.locator('#topSvg g[data-plant-id="sug-hb1"]')).toHaveAttribute('data-dimmed', 'true');
+
+    // Adjust: a tap on an existing member toggles it out — the nearest hit
+    // under the tap, bypassing selection/isolation/dragging entirely
+    // (src/interaction/dragController.js's review branch).
+    const wa4 = await plantScreenPosition(page, 'topSvg', 'sug-wa4');
+    await tap(page, wa4);
+    await expect(label).toContainText('3 plant');
+
+    const historyBefore = await readScratchHistory(project);
+    await page.locator('#driftReviewAcceptBtn').tap();
+    await expect
+      .poll(async () => {
+        const rows = await readScratchLayoutWithDrift(project);
+        const driftId = rows.find((row) => row.id === 'sug-wa1')?.driftId;
+        return driftId && rows.filter((row) => row.driftId === driftId).map((row) => row.id).sort().join(',');
+      })
+      .toBe('sug-wa1,sug-wa2,sug-wa3');
+    expect(await driftIdOf(project, 'sug-wa4')).toBe('');
+    const historyAfter = await readScratchHistory(project);
+    expect(historyAfter.entries.length - historyBefore.entries.length).toBe(1);
+    await expect(label).toContainText('suggestion 2 of 2');
+    await expect(label).toContainText('Horseherb');
+
+    // The real Undo sits in the idle bar, hidden while reviewing; the review
+    // bar's own mirror lives in "More".
+    await expect(page.locator('#undoLayoutBtn')).toBeHidden();
+    await page.locator('#driftReviewMoreBtn').tap();
+    await expect(page.locator('#driftReviewMore')).toHaveClass(/is-open/);
+    await page.locator('#driftReviewUndoBtn').tap();
+    await expect.poll(async () => driftIdOf(project, 'sug-wa1')).toBe('');
+    // Recomputed cleanly: the very same winecup mass is current again.
+    await expect(label).toContainText('suggestion 1 of 2');
+    await expect(label).toContainText('Winecup');
+
+    // Skip writes nothing and moves on ("More" closed itself on the Undo's
+    // own recompute — a genuinely different suggestion — so it needs reopening).
+    await page.locator('#driftReviewMoreBtn').tap();
+    await page.locator('#driftReviewSkipBtn').tap();
+    await expect(label).toContainText('Horseherb');
+    expect(await driftIdOf(project, 'sug-wa1')).toBe('');
+
+    await page.locator('#driftReviewAcceptBtn').tap();
+    await expect.poll(async () => driftIdOf(project, 'sug-hb1')).not.toBe('');
+
+    // Finishing the list says so and leaves review via Stop.
+    await expect(label).toContainText('Reviewed every suggested drift');
+    await page.locator('#driftReviewMoreBtn').tap();
+    await page.locator('#driftReviewStopBtn').tap();
+    await expect(bar).toBeHidden();
+    await expect(page.locator('#phoneEditorBar')).toBeVisible(); // the idle bar returns
+  });
+});
+
 test.describe('the phone editor (nl-o47.4)', () => {
   /** The maximized panel's own `.view` element's inline transform — what
    * canvasGesture.js writes on every pinch/pan frame. */

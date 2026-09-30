@@ -526,9 +526,13 @@ async function init() {
   // Prune the selection everywhere refreshSpeciesTable already runs (add,
   // clone, remove, undo/redo, the initial load): exactly the events that can
   // change which plants exist, and so which ids the selection may still name.
+  // A drift-suggestion review (nl-o47.6.5) re-derives itself from the same
+  // events — Undo/Redo included — so it never shows a suggestion built on
+  // stale plants; driftReview.refresh() is a no-op while inactive.
   const refreshSpeciesTable = () => {
     speciesHighlight.refresh();
     plantSelection.pruneSelection();
+    driftReview?.refresh();
   };
   const setTargetedPlant = (plantId) => speciesHighlight.setTargetedPlant(plantId);
   const setHoveredPlant = (plantId) => speciesHighlight.setHoveredPlant(plantId);

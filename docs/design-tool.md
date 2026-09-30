@@ -915,8 +915,105 @@ such a drift ("Front edge is spread too thin to read as one mass") so the plan
 and the check cannot silently disagree (nl-o47.6.8, the owner's choice over
 counting declared drifts).
 
-Group-selected, suggested, and painted drifts (the other three making
-methods in nl-o47.6's "MAKING" list) are later beads under nl-o47.6.
+**Suggesting drifts from an existing yard** (nl-o47.6.5, making method 3): for
+a yard planted before drifts existed — masses built by cloning, like the seed
+backyard's ~19 horseherb, 17 winecup, and 16 Carex blanda interwoven along one
+strip — `src/state/driftGeometry.js`'s `suggestClusters` (single-linkage,
+`SUGGEST_K` times the species' width, at least `MIN_SUGGESTION_CLUSTER_SIZE`
+members) proposes each mass as a drift, and the person accepts, adjusts, or
+skips each one.
+
+- **Entry point**: "N possible drifts — Review" at the top of the species
+  list (`#speciesTable`'s own first child, built by
+  `src/render/speciesTable.js`'s `buildSuggestDriftsBanner`) — Edit mode only,
+  never on the read-only example yard, and hidden the instant a review is
+  already open. The phone editor hosts the same `#speciesTable` in its Plants
+  sheet, so the banner shows there too; opening review closes that sheet.
+- **Review, one at a time**: `src/state/driftSuggestions.js`'s
+  `pendingSuggestions` orders `suggestClusters`' own clusters largest first
+  and drops whatever has been Skipped this session (by `suggestionKey`, a
+  species+members identity) — there is deliberately no stored queue-plus-
+  index; the CURRENT suggestion is always `pendingSuggestions(...)[0]`,
+  recomputed fresh from `appState.plants` every time
+  (`src/interaction/driftReviewMode.js`'s `sync()`). That is what makes Undo/
+  Redo and an edit made elsewhere mid-review resolve for free: Accept mints a
+  driftId (below), so an accepted cluster's members simply drop out of
+  `suggestClusters`' own candidate pool on the very next read, and an undone
+  Accept drops that driftId, so the exact same cluster reappears.
+- **Drawing**: the plan outlines the suggestion's own (possibly adjusted)
+  membership with a dashed **violet** hull — `.drift-outline--suggested`
+  (styles.css), deliberately a different token AND a finer dash cadence than
+  a real drift's cyan `.drift-outline`, so a proposal can never be mistaken
+  for one that already exists — and dims everything else, the same
+  `[data-dimmed]` isolation a selected real drift already gets
+  (`suggestedMemberIds`, threaded through `renderViews`/`topView.js`/
+  `elevationViews.js` alongside `selectedDriftId`). In the phone editor the
+  canvas pans/zooms so the whole suggestion is in view
+  (`phoneEditor.js`'s `focusOnPlants`, built on `canvasZoom.js`'s new
+  `fitRectState` — the rect-framing counterpart of the point-anchored
+  `zoomAbout`/`pinchUpdate` the pinch gesture already had); on desktop the
+  plan panel scrolls into view instead. Review switches the phone editor to
+  its plan tab and restricts itself to the plan throughout — an elevation has
+  no y-depth to draw the hull against anyway.
+- **The bar** shares the exact same fixed-bottom slot `#selectionBar`/
+  `#phoneEditorBar`'s idle bar already alternate over (`#driftReviewBar`,
+  reusing `.selection-bar`'s own classes rather than a second phone/desktop
+  split): "Horseherb · 17 plants — suggestion 2 of 5" (the species/count part
+  comes from `driftSuggestions.js`'s `describeSuggestion`, the ONE place a
+  suggestion's name is composed — see the naming note below; it leads, with
+  the position last, so a narrow bar's own ellipsis truncates the least
+  essential part first if it has to truncate at all), Accept and a More
+  toggle on the primary row, Skip/Stop/Undo/Redo/the lifecycle choice in
+  More. Reviewing keeps the ordinary plant selection empty throughout (a set
+  of guarded entry points in `src/app.js` — `selectPlantsGuarded` and
+  friends — refuse to populate it while a review is open), which is what
+  keeps `#selectionBar` and the phone editor's idle bar out of the way
+  without either of them knowing a review exists.
+- **Adjust**: while reviewing, a tap on a same-species plant not already in
+  another drift toggles it in or out of the suggestion
+  (`driftSuggestions.js`'s `toggleSuggestionMember`); a different-species tap,
+  or one on a plant already in some other drift, does nothing. A suggestion
+  may never drop below `MIN_SUGGESTION_CLUSTER_SIZE` members — the bar
+  refuses the toggle with a reason instead. `src/interaction/dragController.js`'s
+  plan controller (mouse and touch alike) grows an `isReviewActive`/
+  `onReviewTap` early branch for this: the nearest hit under a tap/click
+  toggles, bypassing selection, drift isolation, and dragging entirely. Every
+  elevation controller is locked outright for the review's duration instead
+  (`src/app.js`'s `lockNonPlanControllers`), since review never reads taps
+  there.
+- **Lifecycle** (the "one planting status per drift" rule, nl-o47.6.10):
+  `driftSuggestions.js`'s `summarizeSuggestionLifecycle` groups the
+  suggestion's members by their current status/date/source/ecotype. If they
+  agree, Accept needs nothing extra. If they disagree, Accept is refused with
+  a reason until the person picks one of the distinct lifecycles found
+  (`summarizeStatusCounts`'s compact "12 planned, 5 planted" line, plus one
+  chip per option via `describeLifecycleChoice`) or adjusts the membership so
+  they agree — Accept never silently picks one.
+- **Accept**: `src/state/driftEdits.js`'s `acceptDriftSuggestion` mints one
+  driftId (`buildDriftId`, from the species — exactly the same minting every
+  other making method uses; the id format itself is unchanged) and writes it
+  onto exactly the reviewed membership, applying a chosen lifecycle in the
+  same call when one was needed, as ONE `state.plants` replacement — so the
+  caller's single `commitLayoutChange` is one history entry regardless. A
+  refused lifecycle (a future-dated `plantedOn` an old import can carry)
+  rolls the driftId assignment back too, rather than leaving a fresh drift
+  with no valid shared lifecycle. Accepting moves on to whatever
+  `pendingSuggestions` now returns first; **Undo** reverts an Accept in one
+  step and leaves the exact same cluster to reappear on review's very next
+  recompute (above) — never a suggestion built on stale plants. Finishing the
+  list says so and leaves review.
+- **Naming, and what is NOT here yet**: a suggestion is described purely by
+  species and count (`describeSuggestion`) — there is no rename step, because
+  drift naming itself is being reworked (owner decision): a drift's on-plan
+  label is moving from a rename-able name to the species' plan abbreviation
+  plus count (e.g. "CV (3x)"), which a later bead applies everywhere,
+  `humanizeDriftId`/`driftMemberCountLabel`/`slugifyDriftLabel` included. This
+  bead adds no rename UI and no new use of those three functions; when the
+  later bead lands, `describeSuggestion` is the one place that needs to
+  change for the review to pick up the new scheme.
+
+Group-selected and painted drifts (the other two making methods in
+nl-o47.6's "MAKING" list) are later beads under nl-o47.6.
 
 ### Species are keyed by id, not by name (nl-3s5.18)
 
