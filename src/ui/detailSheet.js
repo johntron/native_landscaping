@@ -85,8 +85,9 @@ export function createDetailSheet({ elements, appState, setTargetedPlant, lifecy
     // nl-o47.6.10: opened from the drift's OWN selection bar ("Planting" in
     // More, whole-drift mode) rather than by drilling into or clicking one
     // plant — setTargetedPlant would select just this one representative
-    // member in Edit mode (inferDriftContext drills the ALREADY-active whole
-    // drift into it), throwing away the whole-drift selection the person
+    // member in Edit mode, which (nl-o47.6.12: drilled-in is derived from
+    // "exactly one selected plant with a driftId") would immediately read as
+    // drilling into it, throwing away the whole-drift selection the person
     // still has. A drilled-in member's own Details still targets it, since
     // that IS the selection already.
     if (!drift) setTargetedPlant(plantId);

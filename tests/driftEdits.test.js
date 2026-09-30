@@ -7,11 +7,7 @@ import {
   addDriftMember,
   cloneDrift,
   cloneDriftAwarePlant,
-  convertToDrift,
-  dissolveDrift,
-  dropUndersizedDrifts,
   MAX_DRIFT_COUNT,
-  pruneUndersizedDrift,
   removeDrift,
   removeDriftAwarePlant,
   removeDriftMember,
@@ -104,7 +100,11 @@ test('addDriftMember keeps the new member inside the declared yard', () => {
 });
 
 test('addDriftMember refuses a driftId with no members, or one whose species left the catalog', () => {
-  assert.deepStrictEqual(addDriftMember(makeState(baseDrift()), 'no-such-drift'), { plant: null, reason: 'no such drift' });
+  assert.deepStrictEqual(addDriftMember(makeState(baseDrift()), 'no-such-drift'), {
+    plant: null,
+    driftId: null,
+    reason: 'no such drift',
+  });
   // A raw placement (not built by createPlantFromSpecies, which would always
   // resolve speciesId from the real catalog row) naming a species that is no
   // longer in it.
@@ -242,29 +242,6 @@ test('removePlantFromDrift is a no-op for a plant already in no drift, and repor
   assert.equal(reason, null);
   assert.equal(unchanged.driftId, undefined);
   assert.deepStrictEqual(removePlantFromDrift(makeState(baseDrift()), 'nope'), { plant: null, reason: 'no such plant' });
-});
-
-// --- dissolveDrift ------------------------------------------------------------------
-
-test('dissolveDrift removes driftId from every member, leaving positions and everything else exactly as they were', () => {
-  const plants = deepFreeze(baseDrift());
-  const state = makeState(plants);
-  const before = plants.filter((p) => p.driftId === 'winecup-strip');
-  const { members, reason } = dissolveDrift(state, 'winecup-strip');
-  assert.equal(reason, null);
-  assert.equal(members.length, 3);
-  members.forEach((m) => assert.equal(m.driftId, undefined));
-  // Positions unchanged.
-  before.forEach((original) => {
-    const now = state.plants.find((p) => p.id === original.id);
-    assert.equal(now.x, original.x);
-    assert.equal(now.y, original.y);
-  });
-  assert.equal(state.plants.find((p) => p.id === 'hh-1').driftId, undefined);
-});
-
-test('dissolveDrift on an unknown driftId', () => {
-  assert.deepStrictEqual(dissolveDrift(makeState(baseDrift()), 'nope'), { members: [], reason: 'no such drift' });
 });
 
 // --- addDriftFromCatalog (nl-o47.6.3, the Add plant sheet's "How many?") ------------
@@ -407,27 +384,26 @@ test('removeDrift on an unknown driftId', () => {
   });
 });
 
-// --- convertToDrift ("+" on a single plant, nl-o47.6.9) ------------------------
+// --- addDriftMember's plantId path ("+" on a single plant, nl-o47.6.9; folded
+// in from what used to be a separate convertToDrift, nl-o47.6.12) ------------
 
-test('convertToDrift turns a lone plant into a drift of 2: a fresh driftId on both, the new member at the default spacing, its own lifecycle copied', () => {
+test('addDriftMember({ plantId }) turns a lone plant into a drift of 2: a fresh driftId on both, the new member at the default spacing, its own lifecycle copied', () => {
   const plants = deepFreeze([
     plant(winecup, 'solo', 10, 10, { status: 'planted', plantedOn: '2026-03-01', localEcotype: true }),
     plant(horseherb, 'hh-1', 30, 30),
   ]);
   const state = makeState(plants);
-  const { driftId, members, reason } = convertToDrift(state, 'solo');
+  const { plant: second, driftId, reason } = addDriftMember(state, { plantId: 'solo' });
   assert.equal(reason, null);
   assert.ok(driftId, 'a driftId was minted');
-  assert.equal(members.length, 2);
   assert.equal(state.plants.length, 3);
   assert.notEqual(state.plants, plants, 'a new array, not the frozen input');
 
   const original = state.plants.find((p) => p.id === 'solo');
-  const second = state.plants.find((p) => p.id !== 'solo' && p.id !== 'hh-1');
   assert.equal(original.driftId, driftId);
   assert.equal(second.driftId, driftId);
   assert.equal(second.speciesId, 'winecup');
-  // nl-o47.6.10: the plant's own lifecycle is copied to the new member.
+  // nl-o47.6.10: the plant's own lifecycle is unified onto the new member.
   assert.equal(second.status, 'planted');
   assert.equal(second.plantedOn, '2026-03-01');
   assert.equal(second.localEcotype, true);
@@ -435,15 +411,15 @@ test('convertToDrift turns a lone plant into a drift of 2: a fresh driftId on bo
   assert.equal(state.plants.find((p) => p.id === 'hh-1').driftId, undefined);
 });
 
-test('convertToDrift refuses a plant already in a drift, an unknown plant, or a species no longer in the catalog', () => {
-  assert.deepStrictEqual(convertToDrift(makeState(baseDrift()), 'nope'), {
+test('addDriftMember({ plantId }) refuses a plant already in a drift, an unknown plant, or a species no longer in the catalog', () => {
+  assert.deepStrictEqual(addDriftMember(makeState(baseDrift()), { plantId: 'nope' }), {
+    plant: null,
     driftId: null,
-    members: [],
     reason: 'no such plant',
   });
-  assert.equal(convertToDrift(makeState(baseDrift()), 'wc-1').reason, 'already in a drift');
+  assert.equal(addDriftMember(makeState(baseDrift()), { plantId: 'wc-1' }).reason, 'already in a drift');
   const orphan = [{ id: 'a', speciesId: 'extinct-species', x: 5, y: 5, width: 2 }];
-  const result = convertToDrift(makeState(orphan), 'a');
+  const result = addDriftMember(makeState(orphan), { plantId: 'a' });
   assert.equal(result.driftId, null);
   assert.match(result.reason, /no longer in the catalog/);
 });
@@ -451,7 +427,7 @@ test('convertToDrift refuses a plant already in a drift, an unknown plant, or a 
 test('1 -> 2 -> 1 returns the original plant, with its original id and no driftId', () => {
   const plants = [plant(winecup, 'solo', 10, 10)];
   const state = makeState(plants);
-  const { driftId } = convertToDrift(state, 'solo');
+  const { driftId } = addDriftMember(state, { plantId: 'solo' });
   assert.equal(state.plants.length, 2);
 
   const { plant: removed, reason } = removeDriftMember(state, driftId);
@@ -514,21 +490,10 @@ test('removeDriftAwarePlant leaves a 3+-member drift\'s driftId alone, and behav
   assert.equal(removeDriftAwarePlant(state2, 'nope'), false);
 });
 
-test('pruneUndersizedDrift is a no-op for a drift with 2+ members or none at all', () => {
-  const plants = deepFreeze(baseDrift());
-  assert.equal(pruneUndersizedDrift(plants, 'winecup-strip'), plants);
-  assert.equal(pruneUndersizedDrift(plants, 'no-such-drift'), plants);
-  assert.equal(pruneUndersizedDrift(plants, ''), plants);
-});
-
-// dropUndersizedDrifts itself lives in, and is fully tested in, src/data/driftId.js
-// (tests/driftId.test.js) — re-exported here only so a caller that mints/edits
-// a drift can reach both rules through this one module (see the re-export's
-// own comment above).
-test('dropUndersizedDrifts is reachable through driftEdits.js\'s own re-export', () => {
-  const plants = [plant(winecup, 'lone', 1, 1, { driftId: 'orphan' }), plant(horseherb, 'hh', 20, 20)];
-  assert.equal(dropUndersizedDrifts(plants).find((p) => p.id === 'lone').driftId, undefined);
-});
+// nl-o47.6.12: pruneUndersizedDrift and dropUndersizedDrifts are both gone,
+// collapsed onto src/data/driftId.js's normalizeDrifts (fully tested in
+// tests/driftId.test.js) — every edit above that could leave a drift
+// undersized calls it directly, on the whole list, instead.
 
 // --- one planting status per drift (nl-o47.6.10) --------------------------------
 

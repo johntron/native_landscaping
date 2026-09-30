@@ -23,6 +23,10 @@ const EXPORT_MONTH = 6; // June
 /**
  * @param {object} deps
  * @param {object} deps.appState                 src/app.js's appState (mutated, then restored)
+ * @param {object} deps.plantSelection           src/ui/plantSelection.js's instance — its
+ *   getRawSelection/setRawSelection are how the selection (nl-o47.6.12: a
+ *   discriminated union, not itself an appState field) is blanked for the
+ *   capture and restored after
  * @param {() => object} deps.getProject
  * @param {() => Array<{ view: object, svg: SVGSVGElement }>} deps.getViewPanels
  * @param {() => string} deps.getSpeciesCsv      the loaded plants.csv text; '' until it loads
@@ -35,6 +39,7 @@ const EXPORT_MONTH = 6; // June
  */
 export function createExportActions({
   appState,
+  plantSelection,
   getProject,
   getViewPanels,
   getSpeciesCsv,
@@ -64,6 +69,7 @@ export function createExportActions({
       monthSlider,
       monthReadout,
       state: appState,
+      plantSelection,
     });
     toggleButtonBusy(button, true, busyText);
     applyHiddenLayers(0, { shouldRender: false });
@@ -76,10 +82,12 @@ export function createExportActions({
     // of apparatus and gets the same treatment; so does the View-mode drift
     // highlight (nl-o47.6.7) — it is sticky (a click, not a hover), so unlike
     // the transient hover/target ids above it needs the same blank-and-
-    // restore treatment selectedDriftId gets, not just a one-way clear.
-    appState.selectedPlantIds = new Set();
-    appState.selectedDriftId = '';
-    appState.driftDrilledIn = false;
+    // restore treatment the selection gets, not just a one-way clear.
+    // nl-o47.6.12: the selection is plantSelection's own union, not two
+    // appState fields any more — setRawSelection installs the blank union
+    // (and its own derived appState.selectedPlantIds) with no render of its
+    // own, since this function's render() call just below covers it.
+    plantSelection.setRawSelection({ driftId: '', ids: new Set() });
     appState.highlightedDriftId = '';
     // The drift-suggestion review's own outline/dimming (nl-o47.6.5) is the
     // same kind of apparatus as the drift context above and gets the same
@@ -126,6 +134,7 @@ export function createExportActions({
         monthSlider,
         monthReadout,
         state: appState,
+        plantSelection,
         onRestore: () => {
           syncLayerButtons(appState.hiddenLayerCount);
           render();
@@ -188,7 +197,7 @@ function backgroundForCapture(project, view) {
   };
 }
 
-function snapshotViewState({ monthSlider, monthReadout, state }) {
+function snapshotViewState({ monthSlider, monthReadout, state, plantSelection }) {
   return {
     month: state.month,
     hiddenLayerCount: state.hiddenLayerCount,
@@ -196,20 +205,20 @@ function snapshotViewState({ monthSlider, monthReadout, state }) {
     highlightedDriftId: state.highlightedDriftId || '',
     targetedPlantId: state.targetedPlantId,
     hoveredPlantId: state.hoveredPlantId,
-    // Copied, not aliased: runExport blanks appState.selectedPlantIds to a
-    // NEW Set for the capture, and restoring must not hand back that same
-    // (now-cleared) instance.
-    selectedPlantIds: new Set(state.selectedPlantIds),
-    selectedDriftId: state.selectedDriftId || '',
-    driftDrilledIn: Boolean(state.driftDrilledIn),
-    // Copied, not aliased, for the same reason selectedPlantIds is above.
+    // nl-o47.6.12: the selection itself (plantSelection's own union) is
+    // snapshotted through getRawSelection, which already copies rather than
+    // aliases (see its own comment) — the same "restoring must not hand back
+    // a now-cleared instance" reasoning selectedPlantIds used to need here
+    // directly.
+    selection: plantSelection.getRawSelection(),
+    // Copied, not aliased, for the same reason.
     suggestedDriftMemberIds: state.suggestedDriftMemberIds ? new Set(state.suggestedDriftMemberIds) : null,
     monthSliderValue: monthSlider ? monthSlider.value : null,
     monthReadoutText: monthReadout ? monthReadout.textContent : null,
   };
 }
 
-function restoreViewState(snapshot, { monthSlider, monthReadout, state, onRestore }) {
+function restoreViewState(snapshot, { monthSlider, monthReadout, state, plantSelection, onRestore }) {
   if (!snapshot) return;
   state.month = snapshot.month;
   state.hiddenLayerCount = snapshot.hiddenLayerCount;
@@ -217,9 +226,7 @@ function restoreViewState(snapshot, { monthSlider, monthReadout, state, onRestor
   state.highlightedDriftId = snapshot.highlightedDriftId;
   state.targetedPlantId = snapshot.targetedPlantId;
   state.hoveredPlantId = snapshot.hoveredPlantId;
-  state.selectedPlantIds = new Set(snapshot.selectedPlantIds);
-  state.selectedDriftId = snapshot.selectedDriftId;
-  state.driftDrilledIn = snapshot.driftDrilledIn;
+  plantSelection.setRawSelection(snapshot.selection);
   state.suggestedDriftMemberIds = snapshot.suggestedDriftMemberIds ? new Set(snapshot.suggestedDriftMemberIds) : null;
   if (monthSlider && snapshot.monthSliderValue !== null) {
     monthSlider.value = snapshot.monthSliderValue;

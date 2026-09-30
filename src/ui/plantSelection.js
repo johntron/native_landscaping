@@ -4,14 +4,34 @@
  * all read and write. One module owns appState.selectedPlantIds so nothing
  * else has to keep a second copy in sync.
  *
- * nl-o47.6.2 adds the selection's DRIFT CONTEXT alongside it:
- * appState.selectedDriftId ('' when none) and appState.driftDrilledIn — see
- * src/state/driftSelection.js's own comment for why both fields are needed
- * (a drift id alone cannot tell "the whole drift is selected" from "one of
- * its members is" when the drift happens to have exactly one member). This
- * module is still the one owner of all three fields; the decisions
- * themselves (driftForExactSelection, inferDriftContext, pruneDriftContext)
- * are pure and live there so they can be tested with no appState at all.
+ * nl-o47.6.12: internally the selection is a DISCRIMINATED UNION —
+ * `{ driftId, ids: null }` (a whole drift, its membership always read live
+ * from appState.plants, never stored) or `{ driftId: '', ids: Set }` (plain
+ * plant ids) — rather than a Set plus two extra context flags. "Drilled into
+ * one member" is DERIVED, not stored: exactly one selected plant, and that
+ * plant carries a driftId (getDriftContext, below). A drift always has >= 2
+ * members (nl-o47.6.9), so a 1-id `{ ids }` selection can never also be some
+ * drift's exact whole membership — the ambiguity a separate driftDrilledIn
+ * flag existed for cannot arise any more. One consequence is a NAMED
+ * behaviour change (nl-o47.6.12): a cold long-press/Details/right-click on a
+ * drift member now opens it drilled in immediately, where the old design's
+ * `inferDriftContext` needed an already-active context to narrow from.
+ *
+ * appState.selectedPlantIds stays a real, stored field — every other module
+ * (topView.js/elevationViews.js via app.js's render() options,
+ * src/ui/selectionBar.js, src/export/exportActions.js) still just reads it
+ * directly, unaffected by any of this — but it is now a CACHE this module
+ * refreshes on every change (getSelection() keeps returning it). What is
+ * deleted is appState.selectedDriftId/driftDrilledIn: every direct reader of
+ * those two now calls getDriftContext() instead (a derived getter, computed
+ * fresh from the union and the current appState.plants), which is why the
+ * drag controllers barely change — they already went through
+ * getDriftContext()/getSelection(), never the two appState fields by name.
+ *
+ * src/state/driftSelection.js's driftForExactSelection is the one pure
+ * decision left there: whether a set of ids names some drift's current full
+ * membership exactly, which is what lets selectPlants(ids) store the compact
+ * `{ driftId }` form instead of the ids themselves.
  *
  * Reconciled with speciesHighlight's "targeted plant" the other direction:
  * setTargetedPlant (src/ui/speciesHighlight.js) selects whatever it targets
@@ -21,104 +41,135 @@
  * call).
  */
 import { pruneSelectionIds, selectionsEqual, toSelectionSet } from '../state/selection.js';
-import { currentDriftMemberIds, inferDriftContext, pruneDriftContext } from '../state/driftSelection.js';
-
-const NO_DRIFT_CONTEXT = Object.freeze({ selectedDriftId: '', driftDrilledIn: false });
+import { driftForExactSelection } from '../state/driftSelection.js';
+import { driftMembers } from '../state/driftGeometry.js';
 
 /**
  * @param {object} deps
- * @param {object} deps.appState        holds `selectedPlantIds` (a Set<string>),
- *   `selectedDriftId` and `driftDrilledIn`
+ * @param {object} deps.appState        holds `plants` and `selectedPlantIds`
+ *   (a Set<string>, the derived cache this module writes)
  * @param {() => void} deps.render
  * @param {(selection: Set<string>) => void} [deps.onSelectionChange]  fired
  *   right after appState.selectedPlantIds changes, before render() — used to
  *   sync the drag controllers' touch-action class (is-selection-active)
  */
 export function createPlantSelection({ appState, render, onSelectionChange = () => {} }) {
-  // Normalized on both sides so a fresh appState with neither field set yet
-  // (every test fixture, and the page before appState.js's own defaults run)
-  // reads as "no drift context" rather than as a change from `undefined`.
-  const driftContextChanged = (next) =>
-    next.selectedDriftId !== (appState.selectedDriftId || '') ||
-    next.driftDrilledIn !== Boolean(appState.driftDrilledIn);
+  /** { driftId: string, ids: Set<string>|null } — exactly one is meaningful. */
+  let selection = { driftId: '', ids: new Set() };
 
-  const setSelection = (nextIds, driftContext = NO_DRIFT_CONTEXT) => {
-    if (selectionsEqual(nextIds, appState.selectedPlantIds) && !driftContextChanged(driftContext)) return;
-    appState.selectedPlantIds = nextIds;
-    appState.selectedDriftId = driftContext.selectedDriftId;
-    appState.driftDrilledIn = driftContext.driftDrilledIn;
+  /** The Set getSelection()/appState.selectedPlantIds should read for `sel`. */
+  const idsFor = (sel) =>
+    sel.driftId ? new Set(driftMembers(appState.plants, sel.driftId).map((m) => String(m.id))) : sel.ids;
+
+  /** Install `next` and its derived cache, with no render/onSelectionChange —
+   * for a caller that drives those itself (pruneSelection's own setSelection
+   * calls below already do; getRawSelection/setRawSelection's caller,
+   * src/export/exportActions.js, always re-renders on its own too). */
+  const applySelection = (next) => {
+    selection = next;
+    appState.selectedPlantIds = idsFor(next);
+  };
+
+  const setSelection = (next) => {
+    const nextIds = idsFor(next);
+    if (next.driftId === selection.driftId && selectionsEqual(nextIds, appState.selectedPlantIds)) return;
+    applySelection(next);
     onSelectionChange(appState.selectedPlantIds);
     render();
   };
 
   /**
    * Replace the selection with exactly these ids (a single id is the common
-   * case for a plain plant). The drift context is INFERRED from the ids
-   * themselves plus whatever context was active before this call — see
-   * src/state/driftSelection.js's inferDriftContext for the exact rule. This
-   * is deliberately the ONE entry point every caller uses (right-click, the
-   * detail sheet, the Add plant sheet's onPick, nl-o47.6.3's "add N of a
-   * species"): none of them has to know a drift exists, and handing this
-   * exactly one drift's member ids is how a caller enters whole-drift mode.
+   * case for a plain plant). Handing this exactly one drift's CURRENT member
+   * ids enters that drift, whole — this is deliberately the ONE entry point
+   * every caller uses (right-click, the detail sheet, the Add plant sheet's
+   * onPick, nl-o47.6.3's "add N of a species"): none of them has to know a
+   * drift exists.
    */
   const selectPlants = (ids) => {
     const nextIds = toSelectionSet(ids);
-    setSelection(nextIds, inferDriftContext(nextIds, appState.plants, appState.selectedDriftId));
-  };
-
-  /**
-   * Drill into one member of `driftId`, keeping the drift context active
-   * (driftDrilledIn: true) — the touch/mouse controllers call this directly
-   * (src/interaction/dragController.js) rather than going through
-   * selectPlants, because THEY already know which drift is involved and
-   * inferDriftContext's "narrowing an already-active context" rule would
-   * otherwise require the drift to already be active, which is not yet true
-   * on, e.g., a mouse click that drills straight in.
-   */
-  const drillIntoDriftMember = (plantId, driftId) => {
-    setSelection(toSelectionSet([plantId]), { selectedDriftId: driftId, driftDrilledIn: true });
+    const wholeMatch = driftForExactSelection(nextIds, appState.plants);
+    setSelection(wholeMatch ? { driftId: wholeMatch, ids: null } : { driftId: '', ids: nextIds });
   };
 
   /** Select every current member of `driftId` — whole-drift mode. */
-  const selectDrift = (driftId) => selectPlants(currentDriftMemberIds(driftId, appState.plants));
+  const selectDrift = (driftId) => setSelection({ driftId, ids: null });
 
-  const clearSelection = () => setSelection(new Set(), NO_DRIFT_CONTEXT);
+  const clearSelection = () => setSelection({ driftId: '', ids: new Set() });
 
   const getSelection = () => appState.selectedPlantIds;
 
-  /** `{ selectedDriftId, driftDrilledIn }` — see src/state/driftSelection.js. */
-  const getDriftContext = () => ({
-    selectedDriftId: appState.selectedDriftId || '',
-    driftDrilledIn: Boolean(appState.driftDrilledIn),
-  });
+  /**
+   * `{ selectedDriftId, driftDrilledIn }`, derived fresh every call: a whole
+   * drift is `{ selectedDriftId: driftId, driftDrilledIn: false }`; a plain
+   * selection of exactly one plant that carries a driftId is
+   * `{ selectedDriftId: thatDriftId, driftDrilledIn: true }` (the named
+   * behaviour change above); anything else is no drift context.
+   */
+  const getDriftContext = () => {
+    if (selection.driftId) return { selectedDriftId: selection.driftId, driftDrilledIn: false };
+    if (selection.ids && selection.ids.size === 1) {
+      const [id] = selection.ids;
+      const plant = appState.plants.find((candidate) => String(candidate.id) === id);
+      if (plant?.driftId) return { selectedDriftId: plant.driftId, driftDrilledIn: true };
+    }
+    return { selectedDriftId: '', driftDrilledIn: false };
+  };
 
   /**
-   * Drop ids no plant carries any more, and re-derive the drift context to
-   * match (src/state/driftSelection.js's pruneDriftContext). Called from the
-   * same places refreshSpeciesTable already runs (src/app.js): add, clone,
-   * remove, undo/redo, and the initial load — exactly the events that can
-   * change which plants (and drift memberships) exist. Whole mode resyncs its
-   * ids to the drift's CURRENT membership rather than the stale pruned
-   * snapshot, so a "+"/"-" elsewhere (or an undo/redo of one) keeps showing
-   * every member and the right count.
+   * Drop ids no plant carries any more, and re-sync a whole-drift selection
+   * to its drift's CURRENT membership. Called from the same places
+   * refreshSpeciesTable already runs (src/app.js): add, clone, remove,
+   * undo/redo, and the initial load — exactly the events that can change
+   * which plants (and drift memberships) exist.
+   *
+   * Pruning a drift selection is simply "does the drift still exist"
+   * (nl-o47.6.12): re-selecting it (setSelection, below) re-derives its
+   * current ids for free and is a no-op render-wise unless membership
+   * actually changed. If the drift is gone (dissolved, or undone out from
+   * under this selection), the fallback reads the STALE cached ids
+   * (appState.selectedPlantIds, as of before this change) pruned against the
+   * current plants — the same "whatever the surviving ids still say about
+   * themselves" the old pruneDriftContext read off a stored snapshot, now
+   * read off the cache instead — and re-checks whether THEY now name some
+   * other drift exactly.
    */
   const pruneSelection = () => {
-    const prunedIds = pruneSelectionIds(appState.selectedPlantIds, appState.plants);
-    const context = pruneDriftContext(getDriftContext(), prunedIds, appState.plants);
-    const nextIds =
-      context.selectedDriftId && !context.driftDrilledIn
-        ? toSelectionSet(currentDriftMemberIds(context.selectedDriftId, appState.plants))
-        : prunedIds;
-    setSelection(nextIds, context);
+    if (selection.driftId) {
+      if (driftMembers(appState.plants, selection.driftId).length >= 2) {
+        setSelection({ driftId: selection.driftId, ids: null });
+        return;
+      }
+      const prunedIds = pruneSelectionIds(appState.selectedPlantIds, appState.plants);
+      const reDrift = driftForExactSelection(prunedIds, appState.plants);
+      setSelection(reDrift ? { driftId: reDrift, ids: null } : { driftId: '', ids: prunedIds });
+      return;
+    }
+    setSelection({ driftId: '', ids: pruneSelectionIds(selection.ids, appState.plants) });
   };
 
   return {
     selectPlants,
-    drillIntoDriftMember,
     selectDrift,
     clearSelection,
     getSelection,
     getDriftContext,
     pruneSelection,
+    /**
+     * A snapshot of the raw internal union, for a caller that must blank the
+     * selection and restore EXACTLY what was there afterward
+     * (src/export/exportActions.js's capture) without firing
+     * onSelectionChange or a render — the caller drives both itself, the
+     * same way it already drives appState.selectedPlantIds's own
+     * blank-and-restore around a capture.
+     * @returns {{ driftId: string, ids: Set<string>|null }}
+     */
+    getRawSelection: () => ({ driftId: selection.driftId, ids: selection.ids ? new Set(selection.ids) : null }),
+    /** The inverse of getRawSelection: installs `raw` and refreshes the
+     * derived cache, with no render/onSelectionChange (see getRawSelection). */
+    setRawSelection: (raw) =>
+      applySelection(
+        raw?.driftId ? { driftId: raw.driftId, ids: null } : { driftId: '', ids: new Set(raw?.ids || []) }
+      ),
   };
 }

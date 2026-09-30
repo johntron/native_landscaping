@@ -8,35 +8,32 @@
  *
  * A drift is a label, not a stored shape (src/state/driftGeometry.js), so
  * every edit here reads the plan straight from the members it finds by
- * driftId and writes back only their `x`, `y`, or `driftId` — the geometry
- * itself is never stored anywhere these functions have to keep in sync.
+ * driftId and writes back only their `x`, `y`, `driftId`, or lifecycle
+ * fields — the geometry itself is never stored anywhere these functions have
+ * to keep in sync.
  *
  * A plant is clamped to the declared yard, never to a view's own rectangle
  * (docs/design-tool.md "Yard bounds"; src/render/yardBounds.js), so every
  * edit that can move or place a plant reads bounds from `resolveYardBounds`,
  * not from a view's origin/extent the way clonePlantById does.
  *
- * A DRIFT ALWAYS HAS AT LEAST 2 MEMBERS (nl-o47.6's REVISED design,
- * 2026-09-28; nl-o47.6.9): pruneUndersizedDrift/dropUndersizedDrifts below are
- * the one place that rule is enforced, called from every edit here that can
- * leave a drift with fewer than two members (removeDriftMember,
- * removePlantFromDrift, removeDriftAwarePlant) so a UI handler never has to
- * remember to.
+ * A DRIFT ALWAYS HAS AT LEAST TWO MEMBERS, ONE SPECIES, AND ONE LIFECYCLE
+ * (nl-o47.6's REVISED design, 2026-09-28, nl-o47.6.9/.10; nl-o47.6.12
+ * collapses the three onto one enforcement point): every edit below that can
+ * leave a drift undersized, mixed-species, or mixed-lifecycle — growing a
+ * lone plant or an existing drift (addDriftMember), cloning a member
+ * (cloneDriftAwarePlant), or shrinking one (removeDriftMember,
+ * removePlantFromDrift, removeDriftAwarePlant) — does the plain edit (add or
+ * remove a plant, set or drop a driftId field) and then calls
+ * src/data/driftId.js's `normalizeDrifts` on the whole list, rather than each
+ * carrying its own bespoke pruning/copying logic. A UI handler never has to
+ * remember any of this itself.
  */
 import { resolveYardBounds } from '../render/yardBounds.js';
 import { createPlantFromSpecies } from '../data/plantParser.js';
 import { LIFECYCLE_KEYS, lifecycleOf, validateLifecycle, withLifecycle } from '../data/plantLifecycle.js';
-import { dropUndersizedDrifts } from '../data/driftId.js';
+import { normalizeDrifts } from '../data/driftId.js';
 import { addPlantFromCatalog, clonePlantById, removePlantById } from './plantEdits.js';
-
-// Re-exported so a caller that mints/edits/prunes a drift can reach the
-// whole-list version of the ">= 2 members" rule through "the drift edits
-// module" (this file), the same way src/state/plantIds.js re-exports
-// isValidDriftId — dropUndersizedDrifts itself lives in src/data/driftId.js,
-// not here, so src/data/ modules (plantParser.js's buildPlantsFromCsv and
-// plantsFromPlacements) can also reach it without reaching into src/state/
-// (see driftId.js's own module comment on that layering rule).
-export { dropUndersizedDrifts };
 import { buildCloneId, buildDriftId, buildNewPlantId } from './plantIds.js';
 import {
   allDrifts,
@@ -68,29 +65,6 @@ export const MAX_DRIFT_COUNT = 50;
  */
 function existingDriftIds(plants) {
   return allDrifts(plants).map((drift) => drift.driftId);
-}
-
-/**
- * Drop the driftId label from `driftId`'s own members if fewer than two of
- * them remain (nl-o47.6.9's ">= 2 members, always" rule) — a no-op when the
- * drift still has 2+ members, or none at all. dropUndersizedDrifts (imported
- * from src/data/driftId.js, re-exported below) is the whole-list version of
- * this same rule, for a caller that builds a fresh plant list rather than
- * editing one drift at a time.
- * @param {Array<object>} plants
- * @param {string} driftId
- * @returns {Array<object>}
- */
-export function pruneUndersizedDrift(plants, driftId) {
-  if (!driftId) return plants;
-  const members = driftMembers(plants, driftId);
-  if (members.length !== 1) return plants;
-  return plants.map((plant) => {
-    if (plant.driftId !== driftId) return plant;
-    const next = { ...plant };
-    delete next.driftId;
-    return next;
-  });
 }
 
 /**
@@ -162,74 +136,56 @@ export function addDriftFromCatalog(state, speciesId, count, { at } = {}) {
 }
 
 /**
- * "+" on a SINGLE plant (nl-o47.6.9, the REVISED design's "count converts"):
- * turn it into a drift of 2, seamlessly, in one edit. Mints a driftId from
- * the species (buildDriftId, same as addDriftFromCatalog), places the second
- * member at the plant's own default spacing — driftGeometry.js's
- * nextMemberPosition, given just this one plant as its "members" array, is
- * exactly the 1-member fallback (the four cardinal directions) addDriftMember
- * already reuses for a real 1-member drift, so this is not a second
- * implementation of "where does the next member go" — and copies the
- * plant's own lifecycle onto it (nl-o47.6.10: a drift's members share one
- * planting status, so the very first member it ever gets already agrees).
- * `plantSelection.selectDrift(driftId)` (src/app.js) is what then makes the
- * new drift the selection, whole; this function only edits `state.plants`.
- * @param {{ plants: object[], species: object[], project: object }} state
- * @param {string} plantId
- * @returns {{ driftId: string|null, members: object[], reason: string|null }}
- */
-export function convertToDrift(state, plantId) {
-  const index = state.plants.findIndex((plant) => String(plant.id) === String(plantId));
-  if (index < 0) return { driftId: null, members: [], reason: 'no such plant' };
-  const original = state.plants[index];
-  if (original.driftId) return { driftId: null, members: [], reason: 'already in a drift' };
-  const speciesEntry = (state.species || []).find((entry) => entry.speciesId === original.speciesId);
-  if (!speciesEntry) return { driftId: null, members: [], reason: 'the plant\'s species is no longer in the catalog' };
-
-  const bounds = resolveYardBounds(state.project);
-  const spacing = driftSpacing([original], original.width);
-  const { position, reason } = nextMemberPosition([original], spacing, bounds);
-  if (!position) return { driftId: null, members: [], reason };
-
-  const driftId = buildDriftId(
-    existingDriftIds(state.plants),
-    speciesEntry.commonName || speciesEntry.botanicalName || original.speciesId
-  );
-  const second = withLifecycle(
-    createPlantFromSpecies(speciesEntry, {
-      id: buildNewPlantId(state.plants, speciesEntry.botanicalName || speciesEntry.speciesId),
-      x: position.x,
-      y: position.y,
-      driftId,
-    }),
-    lifecycleOf(original)
-  );
-  const plants = [...state.plants];
-  plants[index] = { ...original, driftId };
-  plants.push(second);
-  state.plants = plants;
-  return { driftId, members: [plants[index], second], reason: null };
-}
-
-/**
  * "+": add one member to a drift, on its edge in the biggest angular gap, at
- * the drift's own spacing (src/state/driftGeometry.js nextMemberPosition).
- * The new plant is built the same way Add-from-catalog builds one
+ * the drift's own spacing (src/state/driftGeometry.js nextMemberPosition) —
+ * OR, given a `plantId` for a plant in no drift yet, mint a fresh drift of 2
+ * from it (nl-o47.6.9's "count converts": the count stepper reads 1 with "+"
+ * on a single plain plant too, going through this same path; nl-o47.6.12
+ * folds what used to be a separate convertToDrift into this one "grow"
+ * function, since both are just "place one more member of this species,
+ * minting a driftId first if there isn't one yet"). Pass a string (an
+ * existing `driftId`) for the first case or `{ plantId }` for the second —
+ * never both.
+ *
+ * The new member is built the same way Add-from-catalog builds one
  * (createPlantFromSpecies, so it gets every species attribute and a computed
- * layer), carries the drift's id, and copies the drift's own shared
- * lifecycle onto it (nl-o47.6.10: "one planting status per drift" — the FIRST
- * member's values, via driftLifecycleSummary, so a drift whose members
- * happen to differ still gets a coherent value to copy rather than picking
- * one at random; its next lifecycle edit unifies every member anyway).
+ * layer). Its position comes from nextMemberPosition given the CURRENT
+ * members (or, converting a lone plant, that one plant as a 1-member array —
+ * driftGeometry.js's own 1-member fallback, the four cardinal directions, so
+ * this is not a second implementation of "where does the next member go").
+ * The plain edit — add the new member, and for a fresh drift relabel the
+ * original plant too — is followed by one normalizeDrifts call (nl-o47.6.12),
+ * which unifies the new member's lifecycle onto the drift's shared one (the
+ * FIRST member's, by array order — the original plant, for a fresh drift, or
+ * whichever existing member is earliest, for a real one) rather than this
+ * function copying it directly: a drift's very first "+" already agrees with
+ * the rest, and a mixed-lifecycle drift (older data, an import) is healed by
+ * its next "+" too, not just by a load.
  * @param {{ plants: object[], species: object[], project: object }} state
- * @param {string} driftId
- * @returns {{ plant: object|null, reason: string|null }}
+ * @param {string|{ driftId?: string, plantId?: string }} target
+ * @returns {{ plant: object|null, driftId: string|null, reason: string|null }}
+ *   `plant` is the new member; `driftId` is the drift it (now) belongs to —
+ *   freshly minted when `target` was a plantId
  */
-export function addDriftMember(state, driftId) {
-  const members = driftMembers(state.plants, driftId);
-  if (!members.length) return { plant: null, reason: 'no such drift' };
+export function addDriftMember(state, target) {
+  const driftId = typeof target === 'string' ? target : target?.driftId || null;
+  const plantId = typeof target === 'string' ? null : target?.plantId || null;
+
+  let members;
+  let convertedFrom = null; // the lone plant, when minting a fresh drift
+  if (driftId) {
+    members = driftMembers(state.plants, driftId);
+    if (!members.length) return { plant: null, driftId: null, reason: 'no such drift' };
+  } else {
+    const original = state.plants.find((plant) => String(plant.id) === String(plantId));
+    if (!original) return { plant: null, driftId: null, reason: 'no such plant' };
+    if (original.driftId) return { plant: null, driftId: null, reason: 'already in a drift' };
+    members = [original];
+    convertedFrom = original;
+  }
+
   const speciesEntry = (state.species || []).find((entry) => entry.speciesId === members[0].speciesId);
-  if (!speciesEntry) return { plant: null, reason: 'the drift\'s species is no longer in the catalog' };
+  if (!speciesEntry) return { plant: null, driftId: null, reason: 'the drift\'s species is no longer in the catalog' };
 
   const bounds = resolveYardBounds(state.project);
   // Every member already carries its own `.width` from createPlantFromSpecies
@@ -237,17 +193,29 @@ export function addDriftMember(state, driftId) {
   // it from a member rather than the species row, which can be blank.
   const spacing = driftSpacing(members, members[0].width);
   const { position, reason } = nextMemberPosition(members, spacing, bounds);
-  if (!position) return { plant: null, reason };
+  if (!position) return { plant: null, driftId: null, reason };
 
-  const base = createPlantFromSpecies(speciesEntry, {
+  const resolvedDriftId =
+    driftId ||
+    buildDriftId(
+      existingDriftIds(state.plants),
+      speciesEntry.commonName || speciesEntry.botanicalName || members[0].speciesId
+    );
+
+  const newMember = createPlantFromSpecies(speciesEntry, {
     id: buildNewPlantId(state.plants, speciesEntry.botanicalName || speciesEntry.speciesId),
     x: position.x,
     y: position.y,
-    driftId,
+    driftId: resolvedDriftId,
   });
-  const plant = withLifecycle(base, driftLifecycleSummary(members).lifecycle);
-  state.plants = [...state.plants, plant];
-  return { plant, reason: null };
+
+  let plants = state.plants;
+  if (convertedFrom) {
+    plants = plants.map((plant) => (plant === convertedFrom ? { ...plant, driftId: resolvedDriftId } : plant));
+  }
+  state.plants = normalizeDrifts([...plants, newMember]);
+  const settledMember = state.plants.find((plant) => plant.id === newMember.id) ?? newMember;
+  return { plant: settledMember, driftId: resolvedDriftId, reason: null };
 }
 
 /**
@@ -265,8 +233,7 @@ export function removeDriftMember(state, driftId) {
   if (!members.length) return { plant: null, reason: 'no such drift' };
   const { member, reason } = memberToRemove(members);
   if (!member) return { plant: null, reason };
-  const remaining = state.plants.filter((plant) => plant.id !== member.id);
-  state.plants = pruneUndersizedDrift(remaining, driftId);
+  state.plants = normalizeDrifts(state.plants.filter((plant) => plant.id !== member.id));
   return { plant: member, reason: null };
 }
 
@@ -359,14 +326,16 @@ export function cloneDrift(state, driftId) {
  * Clone ONE plant — plantEdits.js's own clonePlantById, which starts every
  * clone planned with no source, since a clone is not in the ground and came
  * from nowhere — except that a clone which STAYS in a drift (clonePlantById
- * already carries driftId through like any other field) copies the source
- * member's own lifecycle instead (nl-o47.6.10: "one planting status per
- * drift" holds from the moment a member exists, not only once an explicit
- * lifecycle edit reaches it). Cloning a plant in no drift, or cloning a whole
- * drift (cloneDrift, above, which already starts every copy uniformly
- * planned), is unaffected. The drilled-in selection bar's Clone, the detail
- * sheet's Clone, and the plant context menu's Clone all go through this
- * rather than clonePlantById directly.
+ * already carries driftId through like any other field) has its lifecycle
+ * unified onto the drift's shared one instead (nl-o47.6.10: "one planting
+ * status per drift" holds from the moment a member exists, not only once an
+ * explicit lifecycle edit reaches it): the plain clone, then one
+ * normalizeDrifts call (nl-o47.6.12), the same "plain edit, then normalize"
+ * every other drift-aware edit here uses. Cloning a plant in no drift, or
+ * cloning a whole drift (cloneDrift, above, which already starts every copy
+ * uniformly planned), is unaffected. The drilled-in selection bar's Clone,
+ * the detail sheet's Clone, and the plant context menu's Clone all go
+ * through this rather than clonePlantById directly.
  * @param {{ plants: object[], project: object }} state
  * @param {string} plantId
  * @returns {object|null} the clone, or null if plantId does not resolve
@@ -375,9 +344,8 @@ export function cloneDriftAwarePlant(state, plantId) {
   const source = state.plants.find((plant) => String(plant.id) === String(plantId));
   const clone = clonePlantById(state, plantId);
   if (!clone || !source?.driftId) return clone;
-  const withCopiedLifecycle = withLifecycle(clone, lifecycleOf(source));
-  state.plants = state.plants.map((plant) => (plant.id === clone.id ? withCopiedLifecycle : plant));
-  return withCopiedLifecycle;
+  state.plants = normalizeDrifts(state.plants);
+  return state.plants.find((plant) => plant.id === clone.id) ?? clone;
 }
 
 /**
@@ -396,12 +364,11 @@ export function removePlantFromDrift(state, plantId) {
   if (index < 0) return { plant: null, reason: 'no such plant' };
   const current = state.plants[index];
   if (!current.driftId) return { plant: current, reason: null };
-  const driftId = current.driftId;
+  const plants = [...state.plants];
   const next = { ...current };
   delete next.driftId;
-  const plants = [...state.plants];
   plants[index] = next;
-  state.plants = pruneUndersizedDrift(plants, driftId);
+  state.plants = normalizeDrifts(plants);
   return { plant: state.plants[index], reason: null };
 }
 
@@ -423,37 +390,17 @@ export function removePlantFromDrift(state, plantId) {
 export function removeDriftAwarePlant(state, plantId) {
   const target = state.plants.find((plant) => String(plant.id) === String(plantId));
   if (!target) return false;
-  const driftId = target.driftId || '';
+  const wasInDrift = Boolean(target.driftId);
   if (!removePlantById(state, plantId)) return false;
-  if (driftId) state.plants = pruneUndersizedDrift(state.plants, driftId);
+  if (wasInDrift) state.plants = normalizeDrifts(state.plants);
   return true;
-}
-
-/**
- * Dissolve a drift: every member stays exactly where it is, just no longer
- * labelled with a driftId. The inverse of nothing — there is no "make a
- * drift" edit here (nl-o47.6.3/.4/.6 build that), only what takes one apart.
- * @param {{ plants: object[] }} state
- * @param {string} driftId
- * @returns {{ members: object[], reason: string|null }}
- */
-export function dissolveDrift(state, driftId) {
-  const members = driftMembers(state.plants, driftId);
-  if (!members.length) return { members: [], reason: 'no such drift' };
-  state.plants = state.plants.map((plant) => {
-    if (plant.driftId !== driftId) return plant;
-    const next = { ...plant };
-    delete next.driftId;
-    return next;
-  });
-  return { members: state.plants.filter((plant) => members.some((m) => m.id === plant.id)), reason: null };
 }
 
 /**
  * Remove a whole drift (nl-o47.6.2's action bar "Remove drift"): a PLANTED
  * member is never deleted automatically (the same rule "-"/memberToRemove
- * follows) — it just loses the driftId label, exactly like dissolveDrift, and
- * stays in the yard as a single plant. A PLANNED member is deleted outright,
+ * follows) — it just loses the driftId label and stays in the yard as a
+ * single plant. A PLANNED member is deleted outright,
  * the same as removePlantById would do to it one at a time. The two counts
  * are returned so the action bar can say what it is about to do before it
  * acts (its own confirmation, never window.confirm).
@@ -477,29 +424,11 @@ export function removeDrift(state, driftId) {
 }
 
 /**
- * Set a WHOLE DRIFT's lifecycle in one edit (nl-o47.6.10: "one planting
- * status per drift" — status, planted date, source, and local ecotype are
- * shared by every member, never edited separately). The exact counterpart of
- * src/state/plantEdits.js's setPlantLifecycle for one plant: `fields` is
- * merged over the drift's CURRENT shared lifecycle — its first member's
- * values (driftGeometry.js's driftLifecycleSummary; a drift whose members
- * happen to differ, from older data or an import, shows and merges onto the
- * first member's values, and this edit is exactly what unifies every member
- * onto the result) — checked once with validateLifecycle, and a refused edit
- * changes nothing, same as for one plant.
- * @param {{ plants: object[] }} state
- * @param {string} driftId
- * @param {{ status?: string, plantedOn?: string, source?: object|null, localEcotype?: boolean }} fields
- * @param {{ today?: string }} [options] passed to validateLifecycle
- * @returns {{ members: object[], problems: string[] }} every member with the
- *   new lifecycle applied, or [] with the problems (empty when the drift is
- *   gone or nothing actually changed)
- */
-/**
  * Accept a suggested drift (nl-o47.6.5, "suggest drifts from an existing
  * yard"): mint one driftId (buildDriftId, the same rule addDriftFromCatalog
- * and convertToDrift already use) and write it onto exactly `memberIds` — the
- * REVIEWED, possibly person-adjusted membership, not necessarily
+ * and addDriftMember's plantId path already use) and write it onto exactly
+ * `memberIds` — the REVIEWED, possibly person-adjusted membership, not
+ * necessarily
  * suggestClusters' own raw cluster — as ONE state.plants replacement, so a
  * caller's single commit is one history entry regardless of whether a
  * lifecycle was also unified in the same call.
@@ -555,6 +484,25 @@ export function acceptDriftSuggestion(state, memberIds, { lifecycle } = {}) {
   return { driftId, members: driftMembers(state.plants, driftId), reason: null };
 }
 
+/**
+ * Set a WHOLE DRIFT's lifecycle in one edit (nl-o47.6.10: "one planting
+ * status per drift" — status, planted date, source, and local ecotype are
+ * shared by every member, never edited separately). The exact counterpart of
+ * src/state/plantEdits.js's setPlantLifecycle for one plant: `fields` is
+ * merged over the drift's CURRENT shared lifecycle — its first member's
+ * values (driftGeometry.js's driftLifecycleSummary; a drift whose members
+ * happen to differ, from older data or an import, shows and merges onto the
+ * first member's values, and this edit is exactly what unifies every member
+ * onto the result) — checked once with validateLifecycle, and a refused edit
+ * changes nothing, same as for one plant.
+ * @param {{ plants: object[] }} state
+ * @param {string} driftId
+ * @param {{ status?: string, plantedOn?: string, source?: object|null, localEcotype?: boolean }} fields
+ * @param {{ today?: string }} [options] passed to validateLifecycle
+ * @returns {{ members: object[], problems: string[] }} every member with the
+ *   new lifecycle applied, or [] with the problems (empty when the drift is
+ *   gone or nothing actually changed)
+ */
 export function setDriftLifecycle(state, driftId, fields, options) {
   const members = driftMembers(state.plants, driftId);
   if (!members.length) return { members: [], problems: [] };

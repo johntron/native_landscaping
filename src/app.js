@@ -52,7 +52,6 @@ import {
   addDriftMember,
   cloneDrift,
   cloneDriftAwarePlant,
-  convertToDrift,
   removeDrift,
   removeDriftAwarePlant,
   removeDriftMember,
@@ -123,21 +122,17 @@ const appState = {
   targetedPlantId: '',
   hoveredPlantId: '',
   // The Edit-mode selection (nl-o47.2): a SET of plant ids, owned by
-  // src/ui/plantSelection.js. Only single selection has UI today; the Set
-  // model is ready for a drift's several plants (nl-o47.6).
+  // src/ui/plantSelection.js, which also derives the drift context from it
+  // (nl-o47.6.2/nl-o47.6.12: a whole drift, or one plant drilled into from
+  // one — see src/ui/plantSelection.js's own comment; there is no
+  // appState.selectedDriftId/driftDrilledIn any more, since both are derived
+  // fresh by plantSelection.getDriftContext() rather than stored).
   selectedPlantIds: new Set(),
-  // The selection's drift context (nl-o47.6.2), also owned by
-  // src/ui/plantSelection.js: '' when the selection names no drift; set (with
-  // driftDrilledIn false) when it IS a whole drift's members; set (drilledIn
-  // true) when it has been narrowed to one of that drift's own members. See
-  // src/state/driftSelection.js for the two fields' own reasoning.
-  selectedDriftId: '',
-  driftDrilledIn: false,
   // The drift-suggestion review's adjusted membership (nl-o47.6.5, src/
   // interaction/driftReviewMode.js): null when no review is open, else the
   // Set<string> of plant ids the plan outlines (a dashed violet hull,
   // apparatus for a PROPOSAL — never a real drift) and dims around, exactly
-  // the way selectedDriftId isolates a real one. Owned entirely by
+  // the way a real whole-drift selection isolates one. Owned entirely by
   // driftReviewMode.js; blanked around an export capture like every other
   // piece of editing apparatus (src/export/exportActions.js).
   suggestedDriftMemberIds: null,
@@ -488,9 +483,12 @@ async function init() {
     if (isDriftReviewActive()) return;
     plantSelection.selectDrift(driftId);
   };
-  const drillIntoDriftMemberGuarded = (plantId, driftId) => {
+  // nl-o47.6.12: drilling in is derived, not a separate entry point any more
+  // — selecting just this one plant is enough; if it carries a driftId,
+  // plantSelection.getDriftContext() reports it drilled in on its own.
+  const drillIntoDriftMemberGuarded = (plantId) => {
     if (isDriftReviewActive()) return;
-    plantSelection.drillIntoDriftMember(plantId, driftId);
+    plantSelection.selectPlants([plantId]);
   };
   const clearSelectionGuarded = () => {
     if (isDriftReviewActive()) return;
@@ -534,6 +532,7 @@ async function init() {
 
   const exportActions = createExportActions({
     appState,
+    plantSelection,
     getProject: () => project,
     getViewPanels: () => viewPanels,
     getSpeciesCsv: () => loadedSpeciesCsv,
@@ -843,6 +842,7 @@ async function init() {
       backToDriftBtn: selectionBackToDriftBtn,
     },
     appState,
+    getDriftContext: () => plantSelection.getDriftContext(),
     onDetails: () => {
       const id = soleSelectedPlantId();
       if (id) openDetailSheet(id);
@@ -872,10 +872,10 @@ async function init() {
     onDone: () => plantSelection.clearSelection(),
     onNudge: handleNudge,
     onCountChange: (delta) => {
-      const driftId = appState.selectedDriftId;
+      const driftId = plantSelection.getDriftContext().selectedDriftId;
       if (driftId) {
         const { plant, reason } =
-          delta > 0 ? addDriftMember(appState, driftId) : removeDriftMember(appState, driftId);
+          delta > 0 ? addDriftMember(appState, { driftId }) : removeDriftMember(appState, driftId);
         if (!plant) return; // the bar's own disabled state already guards this; stay defensive
         render();
         refreshSpeciesTable(); // if that was the drift's 2nd-to-last member, pruneSelection lands on the plain survivor (nl-o47.6.9)
@@ -889,16 +889,18 @@ async function init() {
       if (delta <= 0) return;
       const id = soleSelectedPlantId();
       if (!id) return;
-      const result = convertToDrift(appState, id);
+      // nl-o47.6.12: addDriftMember's plantId path mints the drift (folded
+      // in from what used to be a separate convertToDrift).
+      const result = addDriftMember(appState, { plantId: id });
       if (!result.driftId) return; // refused (already in a drift, no room, species gone) — the bar's own disabled state already guards the common case
       render();
       refreshSpeciesTable();
       plantSelection.selectDrift(result.driftId); // whole-drift mode, both new members
-      const label = result.members[0]?.commonName || result.members[0]?.botanicalName || '';
+      const label = result.plant?.commonName || result.plant?.botanicalName || '';
       commitLayoutChange(`Made a drift of 2${label ? ` ${label}` : ''}`);
     },
     onSpread: (direction) => {
-      const driftId = appState.selectedDriftId;
+      const driftId = plantSelection.getDriftContext().selectedDriftId;
       if (!driftId) return;
       const factor = direction === 'looser' ? 1 / DRIFT_SPREAD_STEP : DRIFT_SPREAD_STEP;
       // spreadDrift returns success-shaped results even on a no-op (already
@@ -917,7 +919,7 @@ async function init() {
       commitLayoutChange(direction === 'looser' ? 'Spread drift looser' : 'Spread drift tighter');
     },
     onCloneDrift: () => {
-      const driftId = appState.selectedDriftId;
+      const driftId = plantSelection.getDriftContext().selectedDriftId;
       if (!driftId) return;
       const result = cloneDrift(appState, driftId);
       if (!result.driftId) return;
@@ -927,7 +929,7 @@ async function init() {
       commitLayoutChange('Cloned drift');
     },
     onRemoveDrift: () => {
-      const driftId = appState.selectedDriftId;
+      const driftId = plantSelection.getDriftContext().selectedDriftId;
       if (!driftId) return;
       const { removedCount, dissolvedCount, reason } = removeDrift(appState, driftId);
       if (reason || (!removedCount && !dissolvedCount)) return;
@@ -953,11 +955,11 @@ async function init() {
       commitLayoutChange('Removed plant from drift');
     },
     onBackToDrift: () => {
-      const driftId = appState.selectedDriftId;
+      const driftId = plantSelection.getDriftContext().selectedDriftId;
       if (driftId) plantSelection.selectDrift(driftId); // a selection change, not an edit: no commit
     },
     onDriftPlanting: () => {
-      const driftId = appState.selectedDriftId;
+      const driftId = plantSelection.getDriftContext().selectedDriftId;
       if (driftId) openDriftPlantingSheet(driftId);
     },
   });
@@ -1443,10 +1445,12 @@ async function init() {
       targetedPlantId: appState.mode === 'edit' ? '' : appState.targetedPlantId,
       hoveredPlantId: appState.hoveredPlantId,
       selectedPlantIds: appState.selectedPlantIds,
-      // Like selectedPlantIds above, this is already '' outside Edit mode
-      // (applyMode clears the whole selection, drift context included, on
-      // every real mode change) — nothing extra to gate here.
-      selectedDriftId: appState.selectedDriftId,
+      // Derived fresh from the selection (nl-o47.6.12: there is no stored
+      // appState.selectedDriftId any more). Like selectedPlantIds above,
+      // this is already '' outside Edit mode (applyMode clears the whole
+      // selection, drift context included, on every real mode change) —
+      // nothing extra to gate here.
+      selectedDriftId: plantSelection.getDriftContext().selectedDriftId,
       // The drift-suggestion review's outline/dimming (nl-o47.6.5) — null
       // outside a review, owned entirely by src/interaction/driftReviewMode.js.
       suggestedMemberIds: appState.suggestedDriftMemberIds,

@@ -18,6 +18,8 @@
  *
  * Pure: no DOM, no fetch.
  */
+import { lifecycleOf, withLifecycle } from './plantLifecycle.js';
+
 const DRIFT_ID_PATTERN = /^[a-z0-9][a-z0-9_-]*$/;
 
 /**
@@ -69,36 +71,88 @@ export function slugifyDriftLabel(label) {
 }
 
 /**
- * Drop the driftId label from EVERY drift in `plants` that has fewer than two
- * members (nl-o47.6.9's "a drift always has >= 2 members" rule, enforced for
- * a whole plants list at once rather than one drift at a time): a CSV import
- * (src/data/plantParser.js's buildPlantsFromCsv, for hand-edited or legacy
- * planting_layout.csv files) and plants rebuilt from saved history
- * (plantsFromPlacements — undo/redo and every page load) both call this, so
- * an undersized drift a still-earlier bead's edits left behind never survives
- * a reload with its "-" enabled and ready to delete the last plant.
- * src/state/driftEdits.js re-exports this for its own callers, and its own
- * pruneUndersizedDrift is the same rule for one drift at a time. Lives here,
- * in src/data/, rather than beside pruneUndersizedDrift in src/state/, so
+ * Enforce every rule a drift's own members must satisfy, for a whole plants
+ * list at once (nl-o47.6.12): at least two members, one species (a member
+ * whose speciesId does not match the FIRST member sharing that driftId, by
+ * `plants`' own array order, leaves the drift — it keeps its position and
+ * every other field, just no longer this driftId), and one lifecycle (every
+ * surviving member's status/plantedOn/source/localEcotype is unified onto
+ * the first member's, src/data/plantLifecycle.js's lifecycleOf/withLifecycle
+ * — nl-o47.6.10's "one planting status per drift" invariant, which every
+ * interactive edit already keeps, so this only ever has visible work to do on
+ * older data or an import; see the GATE CLEARED note on nl-o47.6.12 for the
+ * owner's own review of this consequence). The two checks interact in one
+ * pass: a member the species check drops cannot also anchor or receive a
+ * lifecycle unification, and dropping it can itself take a drift below two
+ * members, which drops the label from whoever is left too.
+ *
+ * The one place every drift-shape rule lives, replacing dropUndersizedDrifts
+ * and driftEdits.js's own pruneUndersizedDrift: every edit in
+ * src/state/driftEdits.js that can leave a drift undersized, mixed-species,
+ * or mixed-lifecycle does a plain edit and then calls this on the whole list,
+ * and so does every load — src/data/plantParser.js's buildPlantsFromCsv (a
+ * hand-edited or legacy planting_layout.csv) and plantsFromPlacements (every
+ * undo/redo and page load, through src/history/layoutHistoryController.js's
+ * own toPlants). Lives here, in src/data/, rather than in src/state/, so
  * plantParser.js can reach it without reaching into src/state/ (see this
- * file's own module comment on that layering rule). Every drift with 2+
- * members is untouched.
+ * file's own module comment on that layering rule) — plantLifecycle.js is
+ * already part of the same src/data/ closure the server loads through
+ * placements.js, so this adds nothing new to it.
+ *
+ * Returns the SAME array reference when nothing needed fixing (every drift
+ * already has 2+ members, one species, and one lifecycle), so a caller that
+ * short-circuits on an unchanged reference (dirty-checking, memoization)
+ * still can.
  * @param {Array<object>} plants
  * @returns {Array<object>}
  */
-export function dropUndersizedDrifts(plants) {
+export function normalizeDrifts(plants) {
   if (!Array.isArray(plants)) return plants;
-  const counts = new Map();
-  plants.forEach((plant) => {
+
+  const membersById = new Map(); // driftId -> [{ plant, index }], in `plants`' own order
+  plants.forEach((plant, index) => {
     if (!plant?.driftId) return;
-    counts.set(plant.driftId, (counts.get(plant.driftId) || 0) + 1);
+    const list = membersById.get(plant.driftId) || [];
+    list.push({ plant, index });
+    membersById.set(plant.driftId, list);
   });
-  const undersized = new Set([...counts.entries()].filter(([, count]) => count < 2).map(([id]) => id));
-  if (!undersized.size) return plants;
-  return plants.map((plant) => {
-    if (!plant?.driftId || !undersized.has(plant.driftId)) return plant;
-    const next = { ...plant };
-    delete next.driftId;
-    return next;
+
+  const dropLabelAt = new Set(); // index -> drop this member's driftId
+  const unifyLifecycleAt = new Map(); // index -> the lifecycle fields to apply
+
+  membersById.forEach((entries) => {
+    // The first member (by array order, not driftId-membership order) is the
+    // anchor for BOTH checks below: it always matches its own species
+    // trivially, so it is always one of `matching`.
+    const speciesId = entries[0].plant.speciesId;
+    const matching = entries.filter((entry) => entry.plant.speciesId === speciesId);
+    entries.forEach((entry) => {
+      if (!matching.includes(entry)) dropLabelAt.add(entry.index);
+    });
+    if (matching.length < 2) {
+      matching.forEach((entry) => dropLabelAt.add(entry.index));
+      return;
+    }
+    const targetLifecycle = lifecycleOf(matching[0].plant);
+    const targetKey = JSON.stringify(targetLifecycle);
+    matching.forEach((entry) => {
+      if (JSON.stringify(lifecycleOf(entry.plant)) !== targetKey) {
+        unifyLifecycleAt.set(entry.index, targetLifecycle);
+      }
+    });
+  });
+
+  if (!dropLabelAt.size && !unifyLifecycleAt.size) return plants;
+
+  return plants.map((plant, index) => {
+    if (dropLabelAt.has(index)) {
+      const next = { ...plant };
+      delete next.driftId;
+      return next;
+    }
+    if (unifyLifecycleAt.has(index)) {
+      return withLifecycle(plant, unifyLifecycleAt.get(index));
+    }
+    return plant;
   });
 }

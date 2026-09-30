@@ -6,8 +6,9 @@
  *
  * Three modes, none of them a separate element — src/app.js's render() calls
  * sync() and this module alone decides what shows (nl-o47.6.2 adds the last
- * two, keyed off appState.selectedDriftId/driftDrilledIn,
- * src/ui/plantSelection.js):
+ * two, keyed off `getDriftContext()`, a dependency wired to
+ * src/ui/plantSelection.js's own derived getter — nl-o47.6.12 dropped the
+ * appState.selectedDriftId/driftDrilledIn fields this used to read directly):
  *  - plain (no drift): the plant's name (or "N plants"), Details, Clone,
  *    Remove, Done, the four nudges — exactly nl-o47.2.
  *  - whole drift selected: driftLabel's species-initials-plus-count text
@@ -59,6 +60,7 @@ import { resolveYardBounds } from '../render/yardBounds.js';
 export function createSelectionBar({
   elements,
   appState,
+  getDriftContext,
   onDetails,
   onClone,
   onRemove,
@@ -145,8 +147,7 @@ export function createSelectionBar({
       return;
     }
 
-    const driftId = appState.selectedDriftId || '';
-    const drilledIn = Boolean(appState.driftDrilledIn);
+    const { selectedDriftId: driftId, driftDrilledIn: drilledIn } = getDriftContext();
     const wholeDriftMode = Boolean(driftId) && !drilledIn;
     const drilledInMode = Boolean(driftId) && drilledIn;
     const soleId = selection.size === 1 ? [...selection][0] : '';

@@ -4,7 +4,7 @@ import { buildSpeciesIndex, normalizeBotanicalName, resolveSpeciesRef } from './
 import { placementExtras } from './placements.js';
 import { lifecycleFromCsvRow } from './plantLifecycle.js';
 import { SITE_VOCABULARY } from './projectConfig.js';
-import { dropUndersizedDrifts, isValidDriftId } from './driftId.js';
+import { isValidDriftId, normalizeDrifts } from './driftId.js';
 
 const DEFAULT_LEAF_COLOR = '#6b8e23';
 
@@ -363,9 +363,10 @@ export function buildPlantsFromCsv(speciesCsvText, layoutCsvText, { synonyms, dr
     });
   });
   // A hand-edited or legacy planting_layout.csv can give a drift_id to only
-  // one row: a drift always has >= 2 members (nl-o47.6.9), so a lone one
-  // loads as a plain single plant instead.
-  return dropUndersizedDrifts(plants);
+  // one row, to rows of different species, or to rows whose lifecycle
+  // disagrees: normalizeDrifts (nl-o47.6.12) enforces the drift shape a
+  // hand-edited file cannot be trusted to keep on its own.
+  return normalizeDrifts(plants);
 }
 
 /**
@@ -387,12 +388,13 @@ export function buildPlantsFromCsv(speciesCsvText, layoutCsvText, { synonyms, dr
  * placement whose species has left plants.csv has none (see the report on
  * nl-3s5.19).
  *
- * Also drops a driftId shared by fewer than 2 plants (dropUndersizedDrifts,
- * src/data/driftId.js): a drift always has >= 2 members (nl-o47.6.9), and
- * this is the one place every history entry (every undo/redo, and every page
- * load) passes through, so a 1-member drift an older edit left behind — a
- * path this rule predates, or a saved yard imported from files — never shows
- * up with "-" enabled and ready to delete the last plant.
+ * Also enforces every drift's shape (normalizeDrifts, src/data/driftId.js,
+ * nl-o47.6.12: at least two members, one species, one lifecycle) — this is
+ * the one place every history entry (every undo/redo, and every page load)
+ * passes through, so a drift an older edit or an import left inconsistent —
+ * undersized, mixed-species, or mixed-lifecycle — is healed on the very next
+ * load rather than shown broken (or, for the undersized case, with "-"
+ * enabled and ready to delete the last plant).
  *
  * @param {Array<object>} placements placements (or legacy plant snapshots)
  * @param {Array<object>} species fresh rows from parseSpeciesCsv
@@ -410,7 +412,7 @@ export function plantsFromPlacements(placements, species, { synonyms } = {}) {
     if (!resolved) return placement;
     return createPlantFromSpecies(resolved.entry, placement);
   });
-  return dropUndersizedDrifts(plants);
+  return normalizeDrifts(plants);
 }
 
 /**
