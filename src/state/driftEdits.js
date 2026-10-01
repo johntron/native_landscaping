@@ -35,6 +35,7 @@ import { LIFECYCLE_KEYS, lifecycleOf, validateLifecycle, withLifecycle } from '.
 import { normalizeDrifts } from '../data/driftId.js';
 import { addPlantFromCatalog, clonePlantById, removePlantById } from './plantEdits.js';
 import { buildCloneId, buildDriftId, buildNewPlantId } from './plantIds.js';
+import { dropPositionsOutsideYard, resampleStroke } from './driftPaint.js';
 import {
   allDrifts,
   clampGroup,
@@ -54,7 +55,8 @@ import {
  * "How many?" ceiling in the Add plant sheet (nl-o47.6.3): OUR JUDGEMENT, not
  * a technical limit. The sheet is a search-and-tap picker, not a bulk-planting
  * tool — someone wanting more than this is better served planting in a few
- * batches, or (later) painting a drift along a stroke (nl-o47.6.6).
+ * batches, or painting a drift along a stroke instead (nl-o47.6.6,
+ * src/state/driftPaint.js's own, larger MAX_PAINT_COUNT).
  */
 export const MAX_DRIFT_COUNT = 50;
 
@@ -563,4 +565,83 @@ export function setDriftLifecycle(state, driftId, fields, options) {
 
   state.plants = state.plants.map((plant) => (memberIds.has(plant.id) ? withLifecycle(plant, merged) : plant));
   return { members: state.plants.filter((plant) => memberIds.has(plant.id)), problems: [] };
+}
+
+/**
+ * Paint a drift along a traced stroke (nl-o47.6.6, nl-o47.6's making method
+ * 4): `strokePoints` is a polyline in yard feet, typically raw pointer
+ * samples from src/interaction/paintController.js, in drawing order. Plants
+ * drop along it at spacing = the species' width x SPACING_FACTOR (the same
+ * fallback addDriftFromCatalog uses, read off a throwaway probe plant rather
+ * than duplicating src/data/plantParser.js's own width-estimation), starting
+ * at the stroke's own first point (src/state/driftPaint.js's resampleStroke),
+ * with any point that lands outside the declared yard dropped rather than
+ * piled on the fence (dropPositionsOutsideYard — a per-point rule, unlike
+ * every other drift-making path's group clamp; see that function's own
+ * comment for why).
+ *
+ * Every surviving position becomes a plant, planned, built the same way
+ * addDriftMember builds one (createPlantFromSpecies, a fresh id from
+ * buildNewPlantId each time), ALL sharing one new driftId minted up front —
+ * even when only one position survives — and normalizeDrifts is what then
+ * drops that label if fewer than two plants actually made it (a stroke that
+ * yields one plant leaves a single plant, same invariant every other drift
+ * edit here maintains, nl-o47.6.12), rather than this function special-
+ * casing the single-plant count itself. One call is one state.plants
+ * replacement, so the caller's single commit is one history entry regardless
+ * of how many plants a stroke produced.
+ * @param {{ plants: object[], species: object[], project: object }} state
+ * @param {string} speciesId plants.csv's `id` for the species being painted
+ * @param {Array<{x:number,y:number}>} strokePoints
+ * @returns {{ plants: object[], driftId: string|null, reason: string|null, capped: boolean }}
+ *   `plants` is every plant this stroke actually placed (empty when nothing
+ *   was placed); `driftId` is the drift they ended up in, or null for a
+ *   single surviving plant (normalizeDrifts dropped the label) or when
+ *   nothing was placed; `reason` explains an empty result when there is one
+ *   to give (an unknown species, or a stroke that traced entirely outside the
+ *   yard) — null, not a reason, for a stroke too short to register as a
+ *   stroke at all, which is simply "nothing happened," not a failure.
+ */
+export function paintDrift(state, speciesId, strokePoints) {
+  const key = String(speciesId || '');
+  if (!key) return { plants: [], driftId: null, reason: 'no species chosen', capped: false };
+  const speciesEntry = (state.species || []).find((entry) => entry.speciesId === key);
+  if (!speciesEntry) return { plants: [], driftId: null, reason: 'species not in the catalog', capped: false };
+
+  // A throwaway probe, exactly like addDriftFromCatalog's own: the only thing
+  // read from it is the species' resolved width (its plants.csv width_ft, or
+  // createPlantFromSpecies' own estimate when that is blank), never placed.
+  const probe = createPlantFromSpecies(speciesEntry, { id: 'probe', x: 0, y: 0 });
+  const spacing = (Number(probe.width) || DEFAULT_MEMBER_RADIUS_FT * 2) * SPACING_FACTOR;
+
+  const bounds = resolveYardBounds(state.project);
+  const { positions: resampled, capped } = resampleStroke(strokePoints, spacing);
+  const positions = dropPositionsOutsideYard(resampled, bounds);
+
+  if (!positions.length) {
+    // resampled.length > 0 means the stroke genuinely moved but landed
+    // entirely off the property; resampled.length === 0 means it never moved
+    // enough to be a stroke at all (a tap), which is not a failure to report.
+    return { plants: [], driftId: null, reason: resampled.length ? 'that trace fell outside the yard' : null, capped };
+  }
+
+  const driftId = buildDriftId(
+    existingDriftIds(state.plants),
+    speciesEntry.commonName || speciesEntry.botanicalName || key
+  );
+  let plants = state.plants;
+  const created = positions.map((position) => {
+    const member = createPlantFromSpecies(speciesEntry, {
+      id: buildNewPlantId(plants, speciesEntry.botanicalName || speciesEntry.speciesId),
+      x: position.x,
+      y: position.y,
+      driftId,
+    });
+    plants = [...plants, member];
+    return member;
+  });
+  state.plants = normalizeDrifts(plants);
+  const settled = created.map((member) => state.plants.find((plant) => plant.id === member.id) ?? member);
+  const finalDriftId = settled.find((plant) => plant.driftId)?.driftId ?? null;
+  return { plants: settled, driftId: finalDriftId, reason: null, capped };
 }

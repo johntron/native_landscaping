@@ -9,6 +9,7 @@ import {
   cloneDrift,
   cloneDriftAwarePlant,
   MAX_DRIFT_COUNT,
+  paintDrift,
   removeDrift,
   removeDriftAwarePlant,
   removeDriftMember,
@@ -813,4 +814,106 @@ test('setDriftLifecycle on an unknown driftId', () => {
     members: [],
     problems: [],
   });
+});
+
+// --- paintDrift (nl-o47.6.6, "paint a drift along a stroke") ------------------
+
+// winecup's width_ft is 3, so its resolved spacing is 3 * SPACING_FACTOR (0.5) = 1.5 ft.
+const WINECUP_SPACING = 3 * SPACING_FACTOR;
+
+test('paintDrift places plants along the stroke at the species spacing, sharing one new driftId', () => {
+  const state = makeState([]);
+  const stroke = [{ x: 5, y: 5 }, { x: 5 + WINECUP_SPACING * 4, y: 5 }]; // 4 spacings long
+  const { plants: created, driftId, reason, capped } = paintDrift(state, 'winecup', stroke);
+  assert.equal(reason, null);
+  assert.equal(capped, false);
+  assert.equal(created.length, 5); // start plus 4 more spacings along
+  assert.ok(driftId);
+  created.forEach((p) => {
+    assert.equal(p.speciesId, 'winecup');
+    assert.equal(p.driftId, driftId);
+    assert.equal(p.status ?? undefined, undefined, 'every painted plant starts planned');
+  });
+  assert.equal(created[0].x, 5);
+  assert.equal(created[0].y, 5);
+  assert.equal(state.plants.length, 5);
+});
+
+test('paintDrift mints a driftId distinct from one already in the yard', () => {
+  const existing = baseDrift(); // already has a winecup drift named 'winecup-strip'
+  const state = { plants: existing, species, project: YARD };
+  const stroke = [{ x: 0, y: 0 }, { x: WINECUP_SPACING * 3, y: 0 }];
+  const { driftId } = paintDrift(state, 'winecup', stroke);
+  assert.ok(driftId);
+  assert.notEqual(driftId, 'winecup-strip');
+});
+
+test('paintDrift drops resampled points outside the declared yard rather than piling them on the fence', () => {
+  const state = makeState([]);
+  // Starts well inside the 40x40 yard and runs east, off the property.
+  const stroke = [{ x: 38, y: 20 }, { x: 38 + WINECUP_SPACING * 6, y: 20 }];
+  const { plants: created } = paintDrift(state, 'winecup', stroke);
+  created.forEach((p) => {
+    assert.ok(p.x >= 0 && p.x <= 40, `x=${p.x} should stay inside the yard`);
+  });
+  // At least the starting point (inside the yard) survives, and strictly
+  // fewer than the un-clamped resample would have produced.
+  assert.ok(created.length >= 1 && created.length < 7);
+});
+
+test('paintDrift reports a reason when the whole stroke falls outside the yard, without planting anything', () => {
+  const state = makeState([]);
+  const stroke = [{ x: 100, y: 100 }, { x: 110, y: 100 }];
+  const result = paintDrift(state, 'winecup', stroke);
+  assert.deepStrictEqual(result.plants, []);
+  assert.equal(result.driftId, null);
+  assert.match(result.reason, /outside the yard/);
+  assert.equal(state.plants.length, 0, 'nothing was placed');
+});
+
+test('paintDrift places nothing, with no reason, for a stroke that never moved (a tap)', () => {
+  const state = makeState([]);
+  const stroke = [{ x: 5, y: 5 }, { x: 5, y: 5 }];
+  const result = paintDrift(state, 'winecup', stroke);
+  assert.deepStrictEqual(result.plants, []);
+  assert.equal(result.driftId, null);
+  assert.equal(result.reason, null);
+  assert.equal(state.plants.length, 0);
+});
+
+test('paintDrift that yields exactly one plant leaves a single plant, no driftId (normalizeDrifts)', () => {
+  const state = makeState([]);
+  const stroke = [{ x: 5, y: 5 }, { x: 5.1, y: 5 }]; // far short of one spacing
+  const { plants: created, driftId } = paintDrift(state, 'winecup', stroke);
+  assert.equal(created.length, 1);
+  assert.equal(driftId, null);
+  assert.equal(created[0].driftId, undefined);
+  assert.equal(state.plants.length, 1);
+  assert.equal(state.plants[0].driftId, undefined);
+});
+
+test('paintDrift caps a very long stroke and reports it', () => {
+  const state = makeState([]);
+  const stroke = [{ x: 0, y: 0 }, { x: 10000, y: 0 }];
+  const { plants: created, capped } = paintDrift(state, 'winecup', stroke);
+  assert.equal(capped, true);
+  assert.ok(created.length <= 300);
+});
+
+test('paintDrift refuses an unknown species, placing nothing', () => {
+  const state = makeState([]);
+  const stroke = [{ x: 0, y: 0 }, { x: 10, y: 0 }];
+  const result = paintDrift(state, 'no-such-species', stroke);
+  assert.deepStrictEqual(result.plants, []);
+  assert.equal(result.driftId, null);
+  assert.match(result.reason, /catalog/);
+});
+
+test('paintDrift does not mutate the input plants array', () => {
+  const plants = deepFreeze(baseDrift());
+  const state = makeState(plants);
+  const stroke = [{ x: 0, y: 0 }, { x: WINECUP_SPACING * 2, y: 0 }];
+  paintDrift(state, 'horseherb', stroke);
+  assert.notEqual(state.plants, plants);
+  assert.equal(plants.length, 4, 'the input array itself is untouched');
 });
