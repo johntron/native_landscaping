@@ -123,6 +123,14 @@ export const SCRATCH_PROJECTS = [
   'plant-lifecycle',
   'location-set',
   'habitat-nearby', // seeded with fake per-yard anchors by habitatNearby.spec.js (nl-3s5.31)
+  // "Paint a drift along a stroke" (nl-o47.6.6): each gets backyard's own
+  // default planting, both for its yard size (29.63 x 22.22 ft — plenty of
+  // room for a several-foot stroke) and so a test can assert its EXISTING
+  // plants never move.
+  'paint-mouse',
+  'touch-paint',
+  'touch-paint-cancel', // a second finger mid-stroke: nothing is ever written
+  'touch-paint-zoom', // a stroke after a pinch-zoom
 ];
 
 /**

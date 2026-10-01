@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { parseCsv } from '../src/data/csvLoader.js';
 import {
   openScratchProject,
   pinchGesture,
@@ -8,6 +9,7 @@ import {
   readScratchHistory,
   readScratchLayout,
   readScratchLayoutWithDrift,
+  SCRATCH_BASE,
   tap,
   touchGesture,
 } from './helpers.js';
@@ -1352,5 +1354,198 @@ test.describe('the phone editor (nl-o47.4)', () => {
         { timeout: 5000 }
       )
       .toBeCloseTo(savedBefore.x, 3);
+  });
+});
+
+test.describe('painting a drift along a stroke by touch (nl-o47.6.6)', () => {
+  /** Winecup (plants.csv): width_ft 3, so its resolved spacing is
+   * 3 * SPACING_FACTOR (0.5, src/state/driftGeometry.js) = 1.5 ft. */
+  const SPACING_FT = 1.5;
+
+  /** The maximized plan's own on-screen center — see the phone-editor
+   * describe block's own identical helper, local to each block by this
+   * file's own convention. */
+  async function viewCenter(page) {
+    return page.evaluate(() => {
+      const rect = document.querySelector('.view-panel.is-maximized .view').getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    });
+  }
+
+  /** Screen px per plan foot, measured EMPIRICALLY from two already-placed
+   * plants' own feet (the saved layout) and their current on-screen centres
+   * (data-cx/data-cy mapped through svg.getScreenCTM()) — correct under any
+   * zoom or CSS transform (nl-o47.1/nl-o47.4), unlike deriving it from
+   * `--page-px-per-ft` alone, which is the page's REST scale and a different
+   * number from the SVG's own internal viewBox-units-per-foot. The plan is
+   * never rotated or mirrored (unlike an elevation), so one scalar applies
+   * along both axes. */
+  async function screenPxPerFoot(page, svgId, projectId) {
+    const rows = await readScratchLayoutRows(projectId);
+    let a = rows[0];
+    let b = rows[0];
+    rows.forEach((row) => {
+      if (Number(row.x_ft) < Number(a.x_ft)) a = row;
+      if (Number(row.x_ft) > Number(b.x_ft)) b = row;
+    });
+    const feetDist = Math.hypot(Number(b.x_ft) - Number(a.x_ft), Number(b.y_ft) - Number(a.y_ft));
+    const [screenA, screenB] = await page.evaluate(
+      ({ svgId, idA, idB }) => {
+        const svg = document.getElementById(svgId);
+        const screenOf = (id) => {
+          const g = svg.querySelector(`g[data-plant-id="${CSS.escape(id)}"]`);
+          const point = new DOMPoint(Number(g.getAttribute('data-cx')), Number(g.getAttribute('data-cy')));
+          const screen = point.matrixTransform(svg.getScreenCTM());
+          return { x: screen.x, y: screen.y };
+        };
+        return [screenOf(idA), screenOf(idB)];
+      },
+      { svgId, idA: a.id, idB: b.id }
+    );
+    const screenDist = Math.hypot(screenB.x - screenA.x, screenB.y - screenA.y);
+    return screenDist / feetDist;
+  }
+
+  /** The scratch yard's saved layout as full CSV rows (id, species_id,
+   * drift_id, …) — readScratchLayout/readScratchLayoutWithDrift each drop a
+   * column this needs the other of. */
+  async function readScratchLayoutRows(projectId) {
+    const res = await fetch(`${SCRATCH_BASE}/api/layout?project=${encodeURIComponent(projectId)}`);
+    if (!res.ok) throw new Error(`/api/layout for ${projectId} answered ${res.status}`);
+    return parseCsv(await res.text());
+  }
+
+  /** Edit mode, the phone editor on its plan tab, the Add plant sheet's Paint
+   * choice, Winecup tapped — leaves paint mode open, the sheet closed.
+   * @returns {Promise<{speciesId: string, idsBefore: string[]}>} the species
+   *   id painted, and every plant id already on the plan before any stroke */
+  async function enterPaintMode(page, projectId) {
+    await openScratchProject(page, projectId);
+    const idsBefore = await page
+      .locator('#topSvg g[data-plant-id]')
+      .evaluateAll((els) => els.map((el) => el.dataset.plantId));
+    await page.locator('[data-mode="edit"]').click();
+    await page.locator('.views[data-maximized="plan"]').waitFor();
+    await page.locator('#addPlantBtn').click();
+    await expect(page.locator('#addPlantSheet')).toBeVisible();
+    await page.locator('#addPlantModePaintBtn').click();
+    await expect(page.locator('#addPlantCountFields')).toBeHidden();
+    await page.locator('#addPlantSearch').fill('Winecup');
+    const row = page.locator('#addPlantList .add-plant-sheet__row').first();
+    const speciesId = await row.getAttribute('data-species-id');
+    await row.locator('.add-plant-sheet__pick').click();
+    await expect(page.locator('#addPlantSheet')).toBeHidden();
+    await expect(page.locator('#paintBar')).toBeVisible();
+    await expect(page.locator('#phoneEditorBar')).toBeHidden(); // a fourth occupant of the same slot
+    return { speciesId, idsBefore };
+  }
+
+  test('a one-finger stroke places plants sharing one driftId; Done returns the idle bar and selects the drift', async ({
+    page,
+  }) => {
+    const { speciesId, idsBefore } = await enterPaintMode(page, 'touch-paint');
+    const before = idsBefore.length;
+
+    const N = 5;
+    // Comfortably past (N-1) spacings and short of N (resampleStroke: floor(
+    // lengthFt / spacingFt) + 1 plants, start included).
+    const strokeFt = (N - 1 + 0.4) * SPACING_FT;
+    const center = await viewCenter(page);
+    const scale = await screenPxPerFoot(page, 'topSvg', 'touch-paint');
+    const dxPx = strokeFt * scale;
+
+    await touchGesture(page, { x: center.x, y: center.y, dx: dxPx, dy: 0, steps: 10 });
+
+    await expect(page.locator('#topSvg g[data-plant-id]')).toHaveCount(before + N);
+    const idsAfter = await page
+      .locator('#topSvg g[data-plant-id]')
+      .evaluateAll((els) => els.map((el) => el.dataset.plantId));
+    const newIds = idsAfter.filter((id) => !idsBefore.includes(id));
+    expect(newIds.length).toBe(N);
+
+    const layout = await readScratchLayoutRows('touch-paint');
+    const newRows = layout.filter((row) => newIds.includes(row.id));
+    newRows.forEach((row) => expect(row.species_id).toBe(speciesId));
+    const driftIds = new Set(newRows.map((row) => row.drift_id));
+    expect(driftIds.size).toBe(1);
+    expect([...driftIds][0]).toBeTruthy();
+
+    // Done leaves paint mode: the editor's own idle bar returns (nothing else
+    // is selected on entry), but Done itself selects the drift it just made.
+    await page.locator('#paintDoneBtn').click();
+    await expect(page.locator('#paintBar')).toBeHidden();
+    await expect(page.locator('#selectionBar')).toBeVisible();
+    await expect(page.locator('#selectionBarName')).toHaveText(new RegExp(`\\(${N}x\\)`));
+  });
+
+  test('a second finger arriving mid-stroke cancels it cleanly: nothing is placed, the live preview clears, painting continues', async ({
+    page,
+  }) => {
+    await enterPaintMode(page, 'touch-paint-cancel');
+    const before = await page.locator('#topSvg g[data-plant-id]').count();
+    const historyBefore = (await readScratchHistory('touch-paint-cancel'))?.entries.length ?? 0;
+    const center = await viewCenter(page);
+
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: center.x, y: center.y, id: 0 }] });
+    await page.waitForTimeout(32);
+    // Well past the tap threshold: this is a stroke genuinely in progress,
+    // not a still-undecided tap, when the second finger lands.
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{ x: center.x + 40, y: center.y, id: 0 }],
+    });
+    await page.waitForTimeout(32);
+    await expect(page.locator('.paint-preview-dot').first()).toBeVisible();
+
+    // A second finger touches down elsewhere — "two fingers always pinch/pan"
+    // (nl-o47.4) takes over, cancelling the stroke cleanly (nl-o47.6.6).
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [
+        { x: center.x + 40, y: center.y, id: 0 },
+        { x: center.x + 120, y: center.y + 120, id: 1 },
+      ],
+    });
+    await page.waitForTimeout(32);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await cdp.detach();
+
+    await expect(page.locator('.paint-preview-dot')).toHaveCount(0);
+    await expect(page.locator('#topSvg g[data-plant-id]')).toHaveCount(before);
+    expect((await readScratchHistory('touch-paint-cancel'))?.entries.length ?? 0).toBe(historyBefore);
+    // Cancelling one stroke never leaves paint mode — more strokes until Done.
+    await expect(page.locator('#paintBar')).toBeVisible();
+  });
+
+  test('after a pinch-zoom, a stroke still places the right count, mapped through the current screen scale', async ({
+    page,
+  }) => {
+    const { speciesId, idsBefore } = await enterPaintMode(page, 'touch-paint-zoom');
+
+    const center = await viewCenter(page);
+    await pinchGesture(page, { center, startDistance: 100, endDistance: 220 });
+    await expect(page.locator('#paintBar')).toBeVisible(); // the pinch did not disturb painting
+
+    const N = 4;
+    const strokeFt = (N - 1 + 0.4) * SPACING_FT;
+    // Recomputed AFTER the pinch: the current screen scale, not the one
+    // painting started at.
+    const scale = await screenPxPerFoot(page, 'topSvg', 'touch-paint-zoom');
+    const dxPx = strokeFt * scale;
+
+    await touchGesture(page, { x: center.x, y: center.y, dx: dxPx, dy: 0, steps: 10 });
+
+    const idsAfter = await page
+      .locator('#topSvg g[data-plant-id]')
+      .evaluateAll((els) => els.map((el) => el.dataset.plantId));
+    const newIds = idsAfter.filter((id) => !idsBefore.includes(id));
+    expect(newIds.length).toBe(N);
+
+    const layout = await readScratchLayoutRows('touch-paint-zoom');
+    const newRows = layout.filter((row) => newIds.includes(row.id));
+    newRows.forEach((row) => expect(row.species_id).toBe(speciesId));
+    const driftIds = new Set(newRows.map((row) => row.drift_id));
+    expect(driftIds.size).toBe(1);
   });
 });

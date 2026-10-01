@@ -1904,12 +1904,31 @@ select {
   margin-bottom: 0.6rem;
 }
 
-/* "How many?" (nl-o47.6.3): chrome, like the selection bar's nudge buttons
-   below — only the plants it goes on to draw glow. */
+/* "How many?" (nl-o47.6.3), and the Place | Paint toggle ahead of it
+   (nl-o47.6.6): chrome, like the selection bar's nudge buttons below — only
+   the plants it goes on to draw glow. */
 .add-plant-sheet__count {
   display: inline-flex;
   align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.add-plant-sheet__mode {
+  display: inline-flex;
+  align-items: center;
   gap: 0.35rem;
+}
+
+/* The count stepper hides in Paint mode (src/ui/addPlantSheet.js) — it means
+   nothing there — freeing the room the mode toggle needs at narrow widths;
+   `display: contents` keeps its own children in the SAME flex row as the
+   toggle rather than starting a second line of its own. */
+.add-plant-sheet__count-fields {
+  display: contents;
+}
+.add-plant-sheet__count-fields[hidden] {
+  display: none;
 }
 
 .add-plant-sheet__count-label {

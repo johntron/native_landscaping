@@ -32,6 +32,8 @@ import { configureViews } from './render/viewConfig.js';
 import { createPlantDragController, createElevationDragController } from './interaction/dragController.js';
 import { createPhoneEditor } from './interaction/phoneEditor.js';
 import { createDriftReviewMode } from './interaction/driftReviewMode.js';
+import { createPaintController } from './interaction/paintController.js';
+import { createPaintDriftMode } from './interaction/paintDriftMode.js';
 import { clampHiddenLayerCount } from './state/layers.js';
 import { workingExtentFt } from './render/setupOverlay.js';
 import { resolveYardBounds } from './render/yardBounds.js';
@@ -136,6 +138,12 @@ const appState = {
   // driftReviewMode.js; blanked around an export capture like every other
   // piece of editing apparatus (src/export/exportActions.js).
   suggestedDriftMemberIds: null,
+  // "Paint a drift along a stroke"'s live preview (nl-o47.6.6, src/
+  // interaction/paintDriftMode.js): null while no stroke is in progress, else
+  // `{ tracePoints, positions, radiusFt }` in plan feet for src/render/
+  // topView.js's appendPaintPreview to draw. Owned entirely by
+  // paintDriftMode.js; never reaches an export (nothing sets it mid-capture).
+  paintPreview: null,
   maximizedViewId: '',
   // The Setup-mode ruler: {viewId, from, to} in that view's viewBox pixels,
   // standing from the end of the drag until a length is applied or it is
@@ -199,6 +207,9 @@ async function init() {
   const addPlantCount = document.getElementById('addPlantCount');
   const addPlantCountMinus = document.getElementById('addPlantCountMinus');
   const addPlantCountPlus = document.getElementById('addPlantCountPlus');
+  const addPlantCountFields = document.getElementById('addPlantCountFields'); // nl-o47.6.6
+  const addPlantModePlaceBtn = document.getElementById('addPlantModePlaceBtn'); // nl-o47.6.6
+  const addPlantModePaintBtn = document.getElementById('addPlantModePaintBtn'); // nl-o47.6.6
   // Set once the sheet is built in initAddPlantControl(); the Escape handler
   // near the end of init() closes it the same way it closes detailSheet.
   let closeAddPlantSheet = () => {};
@@ -247,6 +258,16 @@ async function init() {
   const driftReviewLifecycleOptionsEl = document.getElementById('driftReviewLifecycleOptions');
   const driftReviewUndoBtn = document.getElementById('driftReviewUndoBtn');
   const driftReviewRedoBtn = document.getElementById('driftReviewRedoBtn');
+
+  // The "paint a drift along a stroke" bar (nl-o47.6.6, src/interaction/paintDriftMode.js).
+  const paintBarEl = document.getElementById('paintBar');
+  const paintBarLabelEl = document.getElementById('paintBarLabel');
+  const paintDoneBtn = document.getElementById('paintDoneBtn');
+  const paintMoreBtn = document.getElementById('paintMoreBtn');
+  const paintMoreEl = document.getElementById('paintMore');
+  const paintHintEl = document.getElementById('paintHint');
+  const paintUndoBtn = document.getElementById('paintUndoBtn');
+  const paintRedoBtn = document.getElementById('paintRedoBtn');
 
   // The phone editor (nl-o47.4): full-screen Edit mode on a phone-width
   // screen. See src/interaction/phoneEditor.js for what each piece is.
@@ -422,16 +443,19 @@ async function init() {
   // reference to it up here is safe despite the forward declaration (the
   // same pattern this file already uses for `render` itself and `applyMode`).
   let driftReview = null;
+  // Assigned near driftReview, below — same forward-declaration pattern
+  // (nl-o47.6.6's "paint a drift along a stroke").
+  let paintMode = null;
   const layoutHistory = createLayoutHistoryController({
     appState,
     undoButton,
     redoButton,
-    // nl-o47.6.5: the drift-review bar's own Undo/Redo mirror the real
-    // buttons too, alongside the phone editor's existing pair — see
-    // src/history/layoutHistoryController.js's own comment on why this takes
-    // a list now.
-    undoMirror: [selectionUndoBtn, driftReviewUndoBtn],
-    redoMirror: [selectionRedoBtn, driftReviewRedoBtn],
+    // nl-o47.6.5/nl-o47.6.6: the drift-review and paint bars' own Undo/Redo
+    // mirror the real buttons too, alongside the phone editor's existing pair
+    // — see src/history/layoutHistoryController.js's own comment on why this
+    // takes a list now.
+    undoMirror: [selectionUndoBtn, driftReviewUndoBtn, paintUndoBtn],
+    redoMirror: [selectionRedoBtn, driftReviewRedoBtn, paintRedoBtn],
     historyStatus,
     render: () => render(),
     refreshSpeciesTable: () => refreshSpeciesTable(),
@@ -475,25 +499,28 @@ async function init() {
   // Every caller that could otherwise select something on a stray click
   // during review — the drag controllers below, and the species table's own
   // drift chips just here — routes through these guards instead of
-  // plantSelection's methods directly.
+  // plantSelection's methods directly. nl-o47.6.6 widens every one of these
+  // the exact same way for painting, which keeps the selection empty for the
+  // exact same reason (#paintBar is a fourth occupant of the same slot).
   const isDriftReviewActive = () => Boolean(driftReview?.isActive());
+  const isPaintActive = () => Boolean(paintMode?.isActive());
   const selectPlantsGuarded = (plantId) => {
-    if (isDriftReviewActive()) return;
+    if (isDriftReviewActive() || isPaintActive()) return;
     plantSelection.selectPlants([plantId]);
   };
   const selectDriftGuarded = (driftId) => {
-    if (isDriftReviewActive()) return;
+    if (isDriftReviewActive() || isPaintActive()) return;
     plantSelection.selectDrift(driftId);
   };
   // nl-o47.6.12: drilling in is derived, not a separate entry point any more
   // — selecting just this one plant is enough; if it carries a driftId,
   // plantSelection.getDriftContext() reports it drilled in on its own.
   const drillIntoDriftMemberGuarded = (plantId) => {
-    if (isDriftReviewActive()) return;
+    if (isDriftReviewActive() || isPaintActive()) return;
     plantSelection.selectPlants([plantId]);
   };
   const clearSelectionGuarded = () => {
-    if (isDriftReviewActive()) return;
+    if (isDriftReviewActive() || isPaintActive()) return;
     plantSelection.clearSelection();
   };
 
@@ -511,12 +538,16 @@ async function init() {
     onSelectDrift: selectDriftGuarded,
     // The "N possible drifts — Review" banner (nl-o47.6.5), at the top of the
     // species list: Edit mode only, never on the read-only example yard, and
-    // hidden while a review is already open (driftReview itself hides the
-    // banner the instant start() runs, but this guard also covers every
-    // OTHER refreshSpeciesTable call while one is active).
+    // hidden while a review OR a paint session is already open (driftReview
+    // itself hides the banner the instant start() runs, but this guard also
+    // covers every OTHER refreshSpeciesTable call while one is active).
     getSuggestionCount: () =>
-      appState.mode === 'edit' && !appState.readOnly && !isDriftReviewActive() ? driftReview?.pendingCount() ?? 0 : 0,
-    onReviewSuggestions: () => driftReview?.start(),
+      appState.mode === 'edit' && !appState.readOnly && !isDriftReviewActive() && !isPaintActive()
+        ? driftReview?.pendingCount() ?? 0
+        : 0,
+    onReviewSuggestions: () => {
+      if (!isPaintActive()) driftReview?.start();
+    },
   });
   // Prune the selection everywhere refreshSpeciesTable already runs (add,
   // clone, remove, undo/redo, the initial load): exactly the events that can
@@ -645,6 +676,22 @@ async function init() {
     });
   };
 
+  /**
+   * Re-applies EVERY dragController's locked state (plan included, unlike
+   * lockNonPlanControllers above) from appState.mode and isPaintActive()
+   * together — the single source of truth both applyMode's own mode-change
+   * sync and paintDriftMode.js's start/stop call, so a same-mode re-apply
+   * elsewhere (Setup's rebuildViews, say) can never silently re-unlock what
+   * an open paint session locked. Painting (nl-o47.6.6) needs the PLAN
+   * controller locked too, unlike a drift review, which still needs it alive
+   * for its own tap-to-toggle — src/interaction/paintController.js is the
+   * only pointer consumer the plan's svg has while a stroke is possible.
+   */
+  const syncDragControllerLocks = () => {
+    const locked = appState.mode !== 'edit' || isPaintActive();
+    dragControllers.forEach((controller) => controller?.setLocked?.(locked));
+  };
+
   // One per panel, but only the selected view's is ever unlocked: two panels
   // accepting a camera drag at once would be two answers to "which view is
   // being set up".
@@ -722,6 +769,25 @@ async function init() {
     );
   let featureControllers = buildFeatureControllers();
 
+  // Only plan panels get one, same reasoning as featureControllers above: a
+  // bed is traced in plan space (nl-o47.6.6). References `paintMode` (the
+  // forward-declared `let` above) inside its callbacks, never called until a
+  // real stroke happens, by which point it is assigned — the same pattern
+  // `render`/`applyMode`/`driftReview` already rely on throughout this file.
+  const buildPaintControllers = () =>
+    viewPanels.map(({ view, svg }) =>
+      view.type !== 'plan'
+        ? null
+        : createPaintController({
+            svg,
+            getTransform: () => createViewTransform(liveView(view.id) || view),
+            onStrokeMove: (points) => paintMode?.handleStrokeMove(points),
+            onStrokeEnd: (points) => paintMode?.handleStrokeEnd(points),
+            onStrokeCancel: () => paintMode?.handleStrokeCancel(),
+          })
+    );
+  let paintControllers = buildPaintControllers();
+
   /**
    * Rebuild the panels from the current project. configureViews reuses the SVG
    * of any view whose id is unchanged, so the old controllers must be torn down
@@ -741,9 +807,11 @@ async function init() {
       dragControllers.forEach((controller) => controller?.destroy?.());
       setupControllers.forEach((controller) => controller?.destroy?.());
       featureControllers.forEach((controller) => controller?.destroy?.());
+      paintControllers.forEach((controller) => controller?.destroy?.());
       dragControllers = buildDragControllers();
       setupControllers = buildSetupControllers();
       featureControllers = buildFeatureControllers();
+      paintControllers = buildPaintControllers();
     }
 
     // The yard may have changed size, and the page scale is derived from it.
@@ -1010,6 +1078,7 @@ async function init() {
     applyMode: (mode) => applyMode(mode),
     getSelectionSize: () => plantSelection.getSelection().size,
     isReviewActive: () => isDriftReviewActive(),
+    isPaintActive: () => isPaintActive(),
   });
 
   /** The desktop counterpart of phoneEditor's own focusOnPlants (nl-o47.6.5):
@@ -1050,6 +1119,32 @@ async function init() {
     // nl-o47.6.4: group mode's Accept selects the new drift whole once review
     // is out of the way, same as every other drift-making action here.
     selectDrift: (driftId) => plantSelection.selectDrift(driftId),
+  });
+
+  paintMode = createPaintDriftMode({
+    elements: {
+      bar: paintBarEl,
+      label: paintBarLabelEl,
+      doneBtn: paintDoneBtn,
+      moreBtn: paintMoreBtn,
+      moreGroup: paintMoreEl,
+      hintEl: paintHintEl,
+      undoBtn: paintUndoBtn,
+      redoBtn: paintRedoBtn,
+      undoRealBtn: undoButton,
+      redoRealBtn: redoButton,
+    },
+    appState,
+    render: () => render(),
+    refreshSpeciesTable: () => refreshSpeciesTable(),
+    commitLayoutChange,
+    clearSelection: () => plantSelection.clearSelection(),
+    selectDrift: (driftId) => plantSelection.selectDrift(driftId),
+    selectPlants: (ids) => plantSelection.selectPlants(ids),
+    isReviewActive: isDriftReviewActive,
+    syncDragLocks: syncDragControllerLocks,
+    getPaintControllers: () => paintControllers,
+    phoneEditor,
   });
 
   // Arrow keys nudge on desktop while a selection exists and focus is not in
@@ -1128,10 +1223,22 @@ async function init() {
         count: addPlantCount,
         countMinus: addPlantCountMinus,
         countPlus: addPlantCountPlus,
+        countFields: addPlantCountFields,
+        modePlaceBtn: addPlantModePlaceBtn,
+        modePaintBtn: addPlantModePaintBtn,
       },
       appState,
       trigger: addPlantButton,
-      onPick: (speciesId, count) => {
+      onPick: (speciesId, count, { paint = false } = {}) => {
+        // Paint (nl-o47.6.6): closes the sheet into paint mode for this
+        // species instead of placing anything itself — count is meaningless
+        // here (the sheet already hid that stepper the instant Paint was
+        // chosen). paintMode.start() re-checks Edit mode and read-only on its
+        // own, same as every guard below.
+        if (paint) {
+          paintMode?.start(speciesId);
+          return;
+        }
         const { at, planEntry } = computeAddPlantAtPoint();
         const { plants: added, driftId } = addDriftFromCatalog(appState, speciesId, count, at ? { at } : undefined);
         if (!added.length) return;
@@ -1144,11 +1251,11 @@ async function init() {
           const label = added[0].commonName || added[0].botanicalName || speciesId;
           commitLayoutChange(`Added drift of ${added.length} ${label}`);
           setTargetedPlant(''); // clear any stale single-plant highlight
-          // nl-o47.6.5: adding is still reachable on desktop mid-review (its
-          // button is not review-locked), but the new clump must not populate
-          // the ORDINARY selection while reviewing — see selectPlantsGuarded's
-          // own comment on why the two never coexist.
-          if (!isDriftReviewActive()) plantSelection.selectPlants(added.map((plant) => plant.id));
+          // nl-o47.6.5/nl-o47.6.6: adding is still reachable on desktop mid-
+          // review or mid-paint (its button is not locked for either), but the
+          // new clump must not populate the ORDINARY selection while either is
+          // open — see selectPlantsGuarded's own comment on why they never coexist.
+          if (!isDriftReviewActive() && !isPaintActive()) plantSelection.selectPlants(added.map((plant) => plant.id));
         } else {
           commitLayoutChange('Added plant');
           // Target the new plant the way a click on it would (speciesHighlight);
@@ -1257,7 +1364,10 @@ async function init() {
     // Three pointer consumers share each SVG, so exactly one mode may unlock
     // one of them. Deciding it in one place is what keeps them from fighting
     // over svg.style.cursor the way two controllers on one element do.
-    dragControllers.forEach((controller) => controller?.setLocked?.(next !== 'edit'));
+    // syncDragControllerLocks also accounts for isPaintActive() (nl-o47.6.6):
+    // a same-mode re-apply here (Setup's rebuildViews, say) must not silently
+    // re-unlock what an open paint session locked.
+    syncDragControllerLocks();
     // The selection means nothing outside Edit mode (nl-o47.2); only clear it
     // on an actual change, not on the same-mode call rebuildViews makes after
     // a Setup edit, which would otherwise drop a selection on every geometry
@@ -1276,9 +1386,14 @@ async function init() {
       // settled to `next` above), so it cannot wrongly re-unlock an elevation
       // controller this same mode change has already locked.
       driftReview?.stop();
+      // Same reasoning, same safety (paintMode.stop()'s own finish() re-checks
+      // appState.mode through syncDragControllerLocks): painting only ever
+      // makes sense in Edit mode either (nl-o47.6.6). A forced stop selects
+      // nothing (see that module's own stop() vs. done()).
+      paintMode?.stop();
       // The "N possible drifts" banner is Edit-mode-only and depends on
-      // isDriftReviewActive(); neither is re-read on its own, so a mode
-      // change needs its own refresh to show or hide it.
+      // isDriftReviewActive()/isPaintActive(); neither is re-read on its own,
+      // so a mode change needs its own refresh to show or hide it.
       refreshSpeciesTable();
     }
     syncSelectionTouchAction();
@@ -1468,6 +1583,9 @@ async function init() {
       // The drift-suggestion review's outline/dimming (nl-o47.6.5) — null
       // outside a review, owned entirely by src/interaction/driftReviewMode.js.
       suggestedMemberIds: appState.suggestedDriftMemberIds,
+      // "Paint a drift along a stroke"'s own live preview (nl-o47.6.6) — null
+      // outside an active stroke, owned entirely by src/interaction/paintDriftMode.js.
+      paintPreview: appState.paintPreview,
       features: appState.features,
     });
     selectionBar.sync();
@@ -1475,6 +1593,7 @@ async function init() {
     // never rebuilds anything — safe to run on every render(), including a
     // bare month-slider tick.
     phoneEditor.syncBar();
+    paintMode?.sync();
     setupMode.sync();
     featuresMode.sync();
     // An undo or redo can change the open plant's status under the sheet.
@@ -1526,6 +1645,7 @@ async function init() {
     if (detailSheet && !detailSheet.hidden && detailSheet.contains(event.target)) return;
     if (selectionBar.contains(event.target)) return;
     if (driftReview?.contains(event.target)) return;
+    if (paintMode?.contains(event.target)) return;
     const target = event.target;
     const group = target instanceof Element ? target.closest('[data-plant-id]') : null;
     if (group) {

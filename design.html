@@ -263,6 +263,14 @@
       keyboard over the list it filters. The "How many?" stepper (nl-o47.6.3)
       sits in the controls row, ahead of the list, so it is reachable before
       tapping a row; count > 1 makes a tap place a drift instead of one plant.
+
+      Place | Paint (nl-o47.6.6): a toggle in the SAME row as "How many?",
+      ahead of it, rather than a second control per row or a separate row of
+      its own — the count means nothing in Paint, so the sheet hides
+      #addPlantCountFields the instant Paint is chosen, freeing exactly the
+      room the toggle needs at 393px. Paint closes the sheet and enters paint
+      mode for the tapped species (src/interaction/paintDriftMode.js)
+      instead of placing anything itself.
     -->
     <div class="add-plant-sheet" id="addPlantSheet" hidden>
       <div class="add-plant-sheet__backdrop" data-add-plant-close></div>
@@ -285,19 +293,25 @@
           autocomplete="off"
         />
         <div class="add-plant-sheet__controls">
-          <div class="add-plant-sheet__count" role="group" aria-label="How many to add">
-            <span class="add-plant-sheet__count-label">How many?</span>
-            <button type="button" id="addPlantCountMinus" class="add-plant-sheet__count-btn" aria-label="Fewer">−</button>
-            <input
-              id="addPlantCount"
-              class="add-plant-sheet__count-value"
-              type="number"
-              inputmode="numeric"
-              min="1"
-              value="1"
-              aria-label="How many plants to add"
-            />
-            <button type="button" id="addPlantCountPlus" class="add-plant-sheet__count-btn" aria-label="More">+</button>
+          <div class="add-plant-sheet__count" role="group" aria-label="How to add">
+            <div class="add-plant-sheet__mode" role="group" aria-label="Place or paint">
+              <button type="button" id="addPlantModePlaceBtn" class="chip chip--ghost is-active" aria-pressed="true">Place</button>
+              <button type="button" id="addPlantModePaintBtn" class="chip chip--ghost" aria-pressed="false">Paint</button>
+            </div>
+            <span class="add-plant-sheet__count-fields" id="addPlantCountFields">
+              <span class="add-plant-sheet__count-label">How many?</span>
+              <button type="button" id="addPlantCountMinus" class="add-plant-sheet__count-btn" aria-label="Fewer">−</button>
+              <input
+                id="addPlantCount"
+                class="add-plant-sheet__count-value"
+                type="number"
+                inputmode="numeric"
+                min="1"
+                value="1"
+                aria-label="How many plants to add"
+              />
+              <button type="button" id="addPlantCountPlus" class="add-plant-sheet__count-btn" aria-label="More">+</button>
+            </span>
           </div>
           <div class="add-plant-sheet__chips" role="group" aria-label="Filter plants">
             <button
@@ -524,6 +538,52 @@
           <button type="button" class="button pill-button selection-bar__redo-btn" id="driftReviewRedoBtn">Redo</button>
           <button type="button" class="button pill-button pill-button--danger" id="driftReviewStopBtn">Stop</button>
         </div>
+      </div>
+    </div>
+    <!--
+      "Paint a drift along a stroke" (nl-o47.6.6, nl-o47.6's making method 4,
+      src/interaction/paintDriftMode.js): entered from the Add plant sheet's
+      Place | Paint toggle above. Takes the SAME fixed-bottom slot
+      #selectionBar/#driftReviewBar/#phoneEditorBar's idle bar already
+      alternate over — painting clears the ordinary selection and fully locks
+      every drag controller (plan included, unlike a drift review) for its
+      duration, so the three never show at once. Undo sits on the primary row
+      next to Done, exactly like #selectionBar's own layout (unlike
+      #driftReviewBar, which has more to fit); Redo is the one thing in More.
+      #paintHint is a direct child of the bar, not tucked inside #paintMore,
+      so a capped-stroke or outside-the-yard message is visible without
+      opening More on a phone — the same reasoning #driftReviewMovingHint
+      already uses.
+    -->
+    <div class="selection-bar" id="paintBar" hidden role="toolbar" aria-label="Painting a drift">
+      <div class="selection-bar__primary">
+        <span class="selection-bar__name" id="paintBarLabel"></span>
+        <div class="selection-bar__actions">
+          <button
+            type="button"
+            class="selection-bar__nudge selection-bar__undo-btn"
+            id="paintUndoBtn"
+            aria-label="Undo"
+            title="Undo"
+          >
+            ↶
+          </button>
+          <button
+            type="button"
+            class="button pill-button selection-bar__more-btn"
+            id="paintMoreBtn"
+            aria-haspopup="true"
+            aria-expanded="false"
+            aria-controls="paintMore"
+          >
+            More
+          </button>
+          <button type="button" class="button pill-button" id="paintDoneBtn">Done</button>
+        </div>
+      </div>
+      <p class="selection-bar__status" id="paintHint" role="status" hidden></p>
+      <div class="selection-bar__more" id="paintMore">
+        <button type="button" class="button pill-button selection-bar__redo-btn" id="paintRedoBtn">Redo</button>
       </div>
     </div>
     <!--

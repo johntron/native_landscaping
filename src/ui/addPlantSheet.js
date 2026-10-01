@@ -36,18 +36,36 @@ const BADGE_TEXT = Object.freeze({
  * @param {object} deps
  * @param {object} deps.elements  every DOM node the sheet touches: `sheet`,
  *   `panel`, `search`, `nativeChip`, `favoritesChip`, `sort`, `status`, `list`,
- *   plus the "How many?" stepper (nl-o47.6.3): `count`, `countMinus`, `countPlus`
+ *   the "How many?" stepper (nl-o47.6.3): `count`, `countMinus`, `countPlus`,
+ *   `countFields` (the span wrapping the stepper, hidden in Paint mode), and
+ *   the Place | Paint toggle (nl-o47.6.6): `modePlaceBtn`, `modePaintBtn`
  * @param {object} deps.appState  read for the species catalog (`appState.species`)
  * @param {HTMLElement} deps.trigger  the "Add plant" button; focus returns
  *   here on close
- * @param {(speciesId: string, count: number) => void} deps.onPick  called
- *   when a row is tapped, with the stepper's current count (1 when there is
- *   no stepper), then the sheet closes itself
+ * @param {(speciesId: string, count: number, options: { paint: boolean }) => void} deps.onPick
+ *   called when a row is tapped, with the stepper's current count (1 when
+ *   there is no stepper, and meaningless in Paint mode — the caller is
+ *   expected to ignore it there) and whether Paint was chosen, then the sheet
+ *   closes itself
  * @returns {{ open: () => void, close: () => void }}
  */
 export function createAddPlantSheet({ elements, appState, trigger, onPick }) {
-  const { sheet, panel, search, nativeChip, favoritesChip, sort, status, list, count, countMinus, countPlus } =
-    elements;
+  const {
+    sheet,
+    panel,
+    search,
+    nativeChip,
+    favoritesChip,
+    sort,
+    status,
+    list,
+    count,
+    countMinus,
+    countPlus,
+    countFields,
+    modePlaceBtn,
+    modePaintBtn,
+  } = elements;
 
   // "How many?" (nl-o47.6.3): defaults to 1 (today's single-plant behaviour,
   // unchanged) and resets every time the sheet opens, so a forgotten count
@@ -72,6 +90,20 @@ export function createAddPlantSheet({ elements, appState, trigger, onPick }) {
   // Normalize a stray typed value (blank, out of range) once the person is
   // done editing, rather than fighting every keystroke.
   count?.addEventListener('change', () => setCount(count.value));
+
+  // Place | Paint (nl-o47.6.6): resets to Place every time the sheet opens,
+  // same as the count. The count stepper means nothing in Paint — plants drop
+  // along the stroke at the species' own spacing, not a typed-in number — so
+  // it hides the instant Paint is chosen, freeing the row's own width back.
+  let paintMode = false;
+  const setPaintMode = (next) => {
+    paintMode = Boolean(next);
+    setChipPressed(modePlaceBtn, !paintMode);
+    setChipPressed(modePaintBtn, paintMode);
+    if (countFields) countFields.hidden = paintMode;
+  };
+  modePlaceBtn?.addEventListener('click', () => setPaintMode(false));
+  modePaintBtn?.addEventListener('click', () => setPaintMode(true));
 
   // The signed-in person's favorite species (nl-3on). Stars stay off (and the
   // Favorites chip hidden) until this loads; a failed load costs only that.
@@ -121,7 +153,7 @@ export function createAddPlantSheet({ elements, appState, trigger, onPick }) {
     // is already hidden and cannot be told apart from any other outside click.
     pick.addEventListener('click', (event) => {
       event.stopPropagation();
-      onPick(entry.speciesId, getCount());
+      onPick(entry.speciesId, getCount(), { paint: paintMode });
       close();
     });
     li.appendChild(pick);
@@ -221,6 +253,7 @@ export function createAddPlantSheet({ elements, appState, trigger, onPick }) {
     if (!sheet) return;
     sheet.hidden = false;
     setCount(1);
+    setPaintMode(false);
     renderList();
     if (isTouchInput()) {
       // Still move focus into the dialog, so aria-modal is honoured, but onto
