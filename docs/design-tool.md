@@ -1141,8 +1141,123 @@ guard, the document click-away guard) keeps working unchanged. `mode`
 - **Cancel** (the relabelled Skip button) calls the exact same `stop()` a
   suggestion review's own Stop does: leaves review, writes nothing.
 
-Painting a drift along a stroke (the other making method in nl-o47.6's
-"MAKING" list) is a later bead under nl-o47.6.
+**Painting a drift along a stroke** (nl-o47.6.6, making method 4): choose a
+species, then trace along a bed — one finger, or the mouse — and plants drop
+along the stroke at the species' own spacing, sharing one new driftId, one
+stroke at a time, until Done. Edit mode only, never on the read-only example
+yard.
+
+- **Entry**: the Add plant sheet's "How many?" row (nl-o47.6.3) gains a
+  Place | Paint toggle ahead of the count stepper
+  (`src/ui/addPlantSheet.js`) — a toggle rather than a second action per row,
+  since a per-row control would have to compete with the pick button's own
+  name/badge for width at 393px, while the toggle is a one-time cost that
+  scales with neither the list length nor the viewport. Choosing Paint hides
+  the count stepper (`#addPlantCountFields`, `display: contents` so its
+  children share the SAME flex row as the toggle rather than wrapping to a
+  second line of their own) — the count means nothing in Paint, since however
+  many plants a stroke places follows from its length, not a typed-in number.
+  Tapping a species row in Paint closes the sheet and calls
+  `src/interaction/paintDriftMode.js`'s `start(speciesId)` instead of placing
+  anything itself.
+- **The bottom bar** (`#paintBar`) is a FOURTH occupant of the fixed-bottom
+  slot `#selectionBar`/`#driftReviewBar`/`#phoneEditorBar`'s idle bar already
+  alternate over, for the same reason the review bar is a third: painting
+  keeps the ordinary selection empty throughout (every one of `src/app.js`'s
+  `isDriftReviewActive()` guards — `selectPlantsGuarded` and friends, the
+  suggestion banner's own `getSuggestionCount`, the Add plant sheet's own
+  post-add select — is widened to also check `isPaintActive()`, so nothing
+  can repopulate it mid-paint and double-show a bar). The label reads "Paint
+  `<initials>` — trace along the bed" (`buildPlantLabel`,
+  `src/render/labels.js` — the same species-initials text a drift's own label
+  leads with, e.g. "CI" for Callirhoe involucrata); Undo sits on the primary
+  row next to Done, Redo in More, mirroring `#selectionBar`'s own layout
+  (unlike the review bar, which has more competing for the row). A direct
+  child status line, `#paintHint`, shows a capped-stroke or outside-the-yard
+  message without opening More on a phone, the same role
+  `#driftReviewMovingHint` already plays.
+- **Locking**: unlike a drift review, which keeps the plan's own
+  `dragController` alive for its own tap-to-toggle, painting needs it, and
+  every elevation controller, fully locked for its duration — the plan's own
+  paint pointer controller (below) is the only pointer consumer that svg has
+  while a stroke is possible. `src/app.js`'s `syncDragControllerLocks`
+  decides every `dragController`'s locked state from `appState.mode` and
+  `isPaintActive()` together in one place, called both by `applyMode` (so a
+  same-mode re-apply elsewhere, Setup's `rebuildViews` say, cannot silently
+  re-unlock what an open paint session locked) and by
+  `paintDriftMode.js`'s own start/stop.
+- **The pointer controller**, `src/interaction/paintController.js`, is
+  plan-only and shaped like `src/interaction/featureController.js`: bound to
+  one plan view's svg, pointer capture on down, torn down and rebuilt
+  alongside `dragControllers`/`featureControllers` whenever Setup replaces
+  the panel. It turns a one-finger (or mouse) drag into a polyline of
+  plan-feet points, through `src/render/screenPoint.js`'s `getScreenCTM`
+  mapping (so it is right under the phone editor's own pinch-zoom/pan CSS
+  transform) — and knows nothing about species, spacing, or drifts, only
+  "where did the pointer go." A gesture that never moves past
+  `tapSelection.js`'s own `TAP_MOVEMENT_THRESHOLD_PX` is a plain tap: nothing
+  is shown, nothing is placed. **Two fingers always pinch/pan** (nl-o47.4): a
+  second touch/pen finger arriving mid-stroke cancels it outright — the same
+  clean hand-off `dragController.js`'s own `cancelTouchForSecondPointer`
+  gives `canvasGesture.js`'s pinch — abandoning that one stroke without
+  leaving paint mode. `canvasGesture.js` gained a matching `isPaintActive`
+  dependency, checked alongside a real selection's own `getSelectionSize() >
+  0`, so its one-finger pan does not fight the stroke for that same finger
+  even though the ordinary selection stays empty throughout.
+- **The live preview**: every stroke move recomputes, at most once per
+  animation frame, the same `src/state/driftPaint.js` pipeline the eventual
+  edit runs — `resampleStroke` then `dropPositionsOutsideYard` — so the
+  preview and the result can never disagree, and stores it on
+  `appState.paintPreview` (`{ tracePoints, positions, radiusFt }`, plan feet)
+  for `src/render/topView.js`'s `appendPaintPreview` to draw: a thin dashed
+  trace of the stroke so far, plus a dot at every position a plant would land
+  if it ended right now — apparatus for a gesture in progress (the cyan
+  token, new `.paint-stroke-trace`/`.paint-preview-dot` classes in
+  `styles.css`), never committed data, plan-only, drawn last, over
+  everything else.
+- **On release** (`src/state/driftEdits.js`'s `paintDrift`, the pure spacing
+  math in `src/state/driftPaint.js`): plants drop along the stroke's own
+  polyline at spacing = the species' width × `SPACING_FACTOR` (the same
+  fallback `addDriftFromCatalog` uses), starting at the stroke's own first
+  point. Resampled points are clamped to the declared yard PER POINT —
+  `dropPositionsOutsideYard`, dropping any that land outside rather than
+  clamping the whole stroke as a group the way every other drift-making path
+  does: a hand-traced stroke can wander past the fence at either end, and
+  sliding or piling the overflow would bunch plants somewhere the hand never
+  pointed, where cutting the stroke off at the yard edge is the plain reading
+  of "painted along a bed" when the bed's edge is the yard's own edge. Every
+  surviving position becomes a plant, planned, sharing ONE new driftId minted
+  up front — even when only one position survives, since `normalizeDrifts`
+  is what then drops that label if fewer than two plants actually made it
+  (nl-o47.6.12's own invariant, not a special case written here) — as ONE
+  `state.plants` replacement, so the caller's single commit is one history
+  entry ("Painted CI (7x)") regardless of the stroke's length. Paint mode
+  stays on for more strokes until Done; each stroke makes its own drift, and
+  the newly painted drift is drawn with its label like any other, with no
+  extra work (drift labelling in `topView.js` has never depended on
+  selection).
+- **The cap**: `src/state/driftPaint.js`'s `MAX_PAINT_COUNT` (300) is OUR
+  JUDGEMENT, deliberately a different, larger number from the Add plant
+  sheet's own `MAX_DRIFT_COUNT` (50, `src/state/driftEdits.js`) — that cap
+  exists because the sheet is a search-and-tap picker, and its own doc
+  comment already points at painting as the "plant in a few batches"
+  alternative for anyone who wants more than it allows, so painting has to
+  comfortably exceed it. `MAX_PAINT_COUNT` instead guards against one
+  enormous stroke (a trace run the full length of a long fence line)
+  building an unreasonably large single history entry or an unreadable mass
+  of plants in one undo step: a stroke past the cap simply stops
+  contributing plants there (`resampleStroke` reports `capped: true`, and
+  `#paintHint` says so) rather than refusing the gesture; a bed longer than
+  this is painted in two strokes, each its own drift.
+- **Done** (`paintDriftMode.js`'s own `finish(selectLast)`) leaves paint mode
+  and selects the last painted drift — or, for a stroke that only ever
+  placed one plant (no driftId survived `normalizeDrifts`), that plant —
+  unlocking every drag controller BEFORE selecting, since a controller only
+  re-arms `is-selection-active` while unlocked
+  (`dragController.js`'s `setSelectionActive`). A FORCED stop (a real mode
+  change away from Edit, `applyMode`'s own cleanup) selects nothing instead:
+  selection means nothing outside Edit mode, and a mode change already
+  clears it.
 
 ### Species are keyed by id, not by name (nl-3s5.18)
 
