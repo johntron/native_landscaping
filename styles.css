@@ -1636,6 +1636,27 @@ select {
 }
 
 /*
+ * "Paint a drift along a stroke" (nl-o47.6.6, src/render/topView.js's
+ * appendPaintPreview): a live, ephemeral preview of where plants will land as
+ * the stroke is traced — apparatus for a gesture in progress, not committed
+ * data, so the same cyan/apparatus token as the selection ring and a real
+ * drift's outline above, never the amber "only data glows" token.
+ */
+.paint-stroke-trace {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+  opacity: 0.85;
+}
+.paint-preview-dot {
+  fill: var(--accent-wash);
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 3;
+}
+
+/*
  * Everything outside an isolated drift dims and stops being a hit target
  * (nl-o47.6.2): the plan controller filters its OWN proximity-based hit
  * testing separately (src/interaction/dragController.js) since it never
@@ -3207,6 +3228,14 @@ select {
  * movedPastThreshold comment); this class only changes what the BROWSER does
  * with the gesture before either controller sees it.
  *
+ * nl-o47.6.6 adds a fifth, is-paint-enabled (toggled by
+ * src/interaction/paintController.js): "paint a drift along a stroke" claims
+ * every touch outright, like Setup/Features, because the ordinary selection
+ * stays empty throughout painting (dragController's plan controller is fully
+ * locked for painting's duration, src/app.js) and a one-finger stroke must
+ * never be read as a pan either — canvasGesture.js's own isPaintActive guard
+ * is what stops that.
+ *
  * Several controllers share each SVG, so this is driven by a class per
  * controller rather than by svg.style.touchAction, which they used to overwrite
  * in turn.
@@ -3214,7 +3243,8 @@ select {
 .view svg.is-selection-active,
 .view svg.is-setup-enabled,
 .view svg.is-features-enabled,
-.view svg.is-phone-editor-active {
+.view svg.is-phone-editor-active,
+.view svg.is-paint-enabled {
   touch-action: none;
 }
 
@@ -3231,6 +3261,15 @@ select {
   cursor: grab;
 }
 .view svg.is-features-enabled {
+  cursor: crosshair;
+}
+/* nl-o47.6.6: the same crosshair as Features — a clear mode cue that this
+   drag traces a stroke rather than moving anything. src/app.js fully LOCKS
+   the plan's dragController for painting's duration, which drops its own
+   is-drag-enabled class (dragController.js's setLocked), so this is normally
+   the only one of the two present; ordered after is-drag-enabled regardless,
+   so it would still win on the rare frame both are briefly true together. */
+.view svg.is-paint-enabled {
   cursor: crosshair;
 }
 

@@ -61,6 +61,11 @@ const PHONE_QUERY = '(max-width: 960px)';
  *   it, keyed off this rather than off selection size (review keeps the
  *   plant selection empty throughout, which is exactly when the idle bar
  *   would otherwise show).
+ * @param {() => boolean} [deps.isPaintActive]  nl-o47.6.6's "paint a drift
+ *   along a stroke": a FOURTH occupant of the same slot (#paintBar), for
+ *   exactly the same reason as isReviewActive above — painting also keeps the
+ *   plant selection empty throughout. Also forwarded into the pinch/pan
+ *   gesture below, which must not pan on the one finger a stroke is using.
  */
 export function createPhoneEditor({
   elements,
@@ -71,6 +76,7 @@ export function createPhoneEditor({
   applyMode,
   getSelectionSize,
   isReviewActive = () => false,
+  isPaintActive = () => false,
 }) {
   const {
     tabsEl,
@@ -100,6 +106,7 @@ export function createPhoneEditor({
 
   const gesture = createCanvasGesture({
     getSelectionSize,
+    isPaintActive,
     onChange: (_state, atRest) => {
       if (fitBtn) fitBtn.disabled = atRest;
     },
@@ -279,7 +286,7 @@ export function createPhoneEditor({
    */
   function syncBar() {
     if (!idleBarEl) return;
-    idleBarEl.hidden = !(active && getSelectionSize() === 0 && !isReviewActive());
+    idleBarEl.hidden = !(active && getSelectionSize() === 0 && !isReviewActive() && !isPaintActive());
     syncMonthReadout();
   }
 

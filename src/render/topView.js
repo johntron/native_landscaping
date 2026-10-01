@@ -40,6 +40,7 @@ export function renderTopView(svg, plantStates, view, options = {}) {
     selectedPlantIds = null,
     selectedDriftId = '',
     suggestedMemberIds = null,
+    paintPreview = null,
     features = [],
   } = options;
   clearSvg(svg);
@@ -251,6 +252,46 @@ export function renderTopView(svg, plantStates, view, options = {}) {
       .filter((drift) => drift.driftId !== selectedDriftId)
       .forEach((drift) => appendDriftLabel(svg, drift, transform, Boolean(isolatedMemberIds)));
   }
+  if (paintPreview) appendPaintPreview(svg, paintPreview, transform);
+}
+
+/**
+ * "Paint a drift along a stroke"'s live preview (nl-o47.6.6,
+ * src/interaction/paintDriftMode.js): the raw traced path, as a thin dashed
+ * line, plus a dot at every position a plant would land if the stroke ended
+ * right now — both apparatus for a gesture in progress, pointer-events:none
+ * so they can never themselves become a hit target. Drawn last, over every
+ * plant and drift outline, since the whole point is to see where the next
+ * plants are about to go.
+ * @param {SVGSVGElement} svg
+ * @param {{ tracePoints: Array<{x,y}>, positions: Array<{x,y}>, radiusFt: number }} preview plan feet
+ * @param {object} transform
+ */
+function appendPaintPreview(svg, preview, transform) {
+  const { tracePoints = [], positions = [], radiusFt = 0 } = preview || {};
+  if (tracePoints.length > 1) {
+    const pts = tracePoints.map((p) => transform.planToViewBox(p));
+    svg.appendChild(
+      createSvgElement('polyline', {
+        points: pts.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' '),
+        class: 'paint-stroke-trace',
+        'pointer-events': 'none',
+      })
+    );
+  }
+  const radiusPx = Math.max(transform.toPx(radiusFt * 2) / 2, 4);
+  positions.forEach((point) => {
+    const { x: cx, y: cy } = transform.planToViewBox(point);
+    svg.appendChild(
+      createSvgElement('circle', {
+        cx,
+        cy,
+        r: radiusPx,
+        class: 'paint-preview-dot',
+        'pointer-events': 'none',
+      })
+    );
+  });
 }
 
 /**

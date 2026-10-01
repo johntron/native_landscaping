@@ -39,13 +39,20 @@ function midpoint(a, b) {
  * @param {object} deps
  * @param {() => number} [deps.getSelectionSize]  the live Edit-mode selection
  *   size, so a one-finger move pans only while it is 0
+ * @param {() => boolean} [deps.isPaintActive]  nl-o47.6.6's "paint a drift
+ *   along a stroke": while it is open, a one-finger move must not pan either,
+ *   even though the ordinary selection stays empty throughout painting (the
+ *   same reason it must not pan with a real selection) — src/interaction/
+ *   paintController.js owns that same finger instead, tracing the stroke.
+ *   Checked alongside getSelectionSize() in the one place this module decides
+ *   whether to start a pan at all.
  * @param {(state: {scale:number, tx:number, ty:number}, atRest: boolean) => void} [deps.onChange]
  *   called with the new state every time it changes, plus whether it is
  *   already the (possibly letterboxed, so not necessarily FIT_STATE itself
  *   — see canvasZoom.js's isAtFit) resting position, to sync a Fit button's
  *   enabled state
  */
-export function createCanvasGesture({ getSelectionSize = () => 0, onChange = () => {} } = {}) {
+export function createCanvasGesture({ getSelectionSize = () => 0, isPaintActive = () => false, onChange = () => {} } = {}) {
   let panelEl = null;
   let viewEl = null;
   let state = FIT_STATE;
@@ -157,7 +164,10 @@ export function createCanvasGesture({ getSelectionSize = () => 0, onChange = () 
     }
 
     if (mode === 'settled' || pointers.size !== 1) return;
-    if (getSelectionSize() > 0) return; // a 1-finger move with a selection is dragController's drag, not a pan
+    // A 1-finger move with a selection is dragController's drag, not a pan;
+    // a 1-finger move while painting (nl-o47.6.6) is paintController's
+    // stroke, not a pan either.
+    if (getSelectionSize() > 0 || isPaintActive()) return;
     const current = pointers.get(event.pointerId);
     if (!panLast) {
       panLast = current;
