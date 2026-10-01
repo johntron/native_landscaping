@@ -1436,6 +1436,11 @@ test.describe('painting a drift along a stroke by touch (nl-o47.6.6)', () => {
     await row.locator('.add-plant-sheet__pick').click();
     await expect(page.locator('#addPlantSheet')).toBeHidden();
     await expect(page.locator('#paintBar')).toBeVisible();
+    // Undo, More and Done share one row; the buttons never stack on a phone.
+    const paintRowTops = await Promise.all(
+      ['#paintUndoBtn', '#paintMoreBtn', '#paintDoneBtn'].map(async (id) => Math.round((await page.locator(id).boundingBox()).y + (await page.locator(id).boundingBox()).height / 2))
+    );
+    expect(Math.max(...paintRowTops) - Math.min(...paintRowTops), 'Undo, More and Done share one row').toBeLessThan(4);
     await expect(page.locator('#phoneEditorBar')).toBeHidden(); // a fourth occupant of the same slot
     return { speciesId, idsBefore };
   }

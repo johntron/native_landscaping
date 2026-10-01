@@ -93,6 +93,10 @@ export function createExportActions({
     // same kind of apparatus as the drift context above and gets the same
     // blank-and-restore treatment, not just a one-way clear.
     appState.suggestedDriftMemberIds = null;
+    // A paint stroke's live preview (nl-o47.6.6) is cleared one way, like the
+    // hover and target ids: it only exists mid-stroke, and pressing an export
+    // button means the pointer has already been lifted.
+    appState.paintPreview = null;
     appState.month = EXPORT_MONTH;
     if (monthSlider) monthSlider.value = String(EXPORT_MONTH);
     if (monthReadout) monthReadout.textContent = MONTH_NAMES[EXPORT_MONTH - 1] || '';

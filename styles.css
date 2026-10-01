@@ -2376,10 +2376,12 @@ select {
   min-height: 44px;
 }
 
-/* A review's primary row is the label plus Skip, Accept and More. On a phone
+/* A review's primary row is the label plus Skip, Accept and More (the paint
+   bar's: Undo, More and Done). On a phone
    the label ellipsizes; the buttons never wrap under one another, which is
    what the shared flex-wrap above did once the label took its share. */
-#driftReviewBar .selection-bar__actions {
+#driftReviewBar .selection-bar__actions,
+#paintBar .selection-bar__actions {
   flex-wrap: nowrap;
   flex-shrink: 0;
 }
